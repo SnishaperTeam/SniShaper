@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/tls"
 	"encoding/base64"
+	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -27,6 +28,7 @@ type App struct {
 	proxyServer *proxy.ProxyServer
 	certManager *cert.CertManager
 	ruleManager *proxy.RuleManager
+	warpMgr     *proxy.WarpManager
 	certPath    string
 	logPath     string
 	logFile     *os.File
@@ -129,6 +131,7 @@ func NewApp() *App {
 	return &App{
 		proxyServer: proxy.NewProxyServer("127.0.0.1:" + port),
 		ruleManager: ruleManager,
+		warpMgr:     proxy.NewWarpManager(execDir),
 		certPath:    filepath.Join(execDir, "cert"),
 		logPath:     filepath.Join(execDir, "snishaper.log"),
 	}
@@ -156,6 +159,8 @@ func (a *App) startup(ctx context.Context) {
 	a.proxyServer.SetRuleManager(a.ruleManager)
 	a.proxyServer.UpdateCloudflareConfig(a.ruleManager.GetCloudflareConfig())
 	a.proxyServer.SetCertGenerator(a.certManager)
+	a.proxyServer.SetWarpManager(a.warpMgr)
+	a.warpMgr.SetLogCallback(a.appendLog)
 
 	if err := sysproxy.SaveOriginalProxySettings(); err != nil {
 		runtime.LogWarning(ctx, "[startup] Failed to save original proxy settings: "+err.Error())
@@ -174,6 +179,11 @@ func (a *App) startup(ctx context.Context) {
 			a.appendLog("[Cloudflare] Auto update is enabled, fetching initial IPs...")
 			go a.RefreshCloudflareIPPool()
 		}
+
+		if cfg.WarpEnabled {
+			a.appendLog("[Warp] Auto start is enabled, starting Warp...")
+			_ = a.warpMgr.Start()
+		}
 	}()
 }
 
@@ -185,6 +195,11 @@ func (a *App) shutdown(ctx context.Context) {
 		if err := a.proxyServer.Stop(); err != nil {
 			runtime.LogError(ctx, "[shutdown] Failed to stop proxy: "+err.Error())
 		}
+	}
+
+	if a.warpMgr != nil {
+		runtime.LogInfo(ctx, "[shutdown] Stopping Warp manager...")
+		_ = a.warpMgr.Stop()
 	}
 
 	runtime.LogInfo(ctx, "[shutdown] Restoring original system proxy settings...")
@@ -270,7 +285,7 @@ func (a *App) StartProxy() error {
 			msg += " (端口被占用，请检查是否有旧版程序未关闭)"
 		}
 		a.appendLog("[error] StartProxy failed: " + msg)
-		return fmt.Errorf(msg)
+		return fmt.Errorf("%s", msg)
 	}
 	addr := a.proxyServer.GetListenAddr()
 	if err := a.waitForProxyListen(addr, 2*time.Second); err != nil {
@@ -285,10 +300,23 @@ func (a *App) StartProxy() error {
 func (a *App) StopProxy() error {
 	runtime.LogInfo(a.ctx, "Stopping proxy server...")
 	a.appendLog("[action] StopProxy called")
-	err := a.proxyServer.Stop()
-	if err != nil {
+
+	var errs []error
+
+	if err := a.proxyServer.Stop(); err != nil {
 		a.appendLog("[error] StopProxy failed: " + err.Error())
-		return err
+		errs = append(errs, err)
+	}
+
+	if a.warpMgr != nil {
+		if err := a.warpMgr.Stop(); err != nil {
+			a.appendLog("[error] StopWarp during StopProxy failed: " + err.Error())
+			errs = append(errs, err)
+		}
+	}
+
+	if len(errs) > 0 {
+		return errors.Join(errs...)
 	}
 	a.appendLog("[action] StopProxy success")
 	return nil
@@ -481,7 +509,7 @@ func (a *App) UpdateServerConfig(host, auth string) error {
 }
 
 func (a *App) UpdateCloudflareConfig(cfg proxy.CloudflareConfig) error {
-	// Get old config to check if AutoUpdate was toggled
+	// Get old config to check if AutoUpdate or Warp was toggled
 	oldCfg := a.ruleManager.GetCloudflareConfig()
 
 	err := a.ruleManager.UpdateCloudflareConfig(cfg)
@@ -492,8 +520,43 @@ func (a *App) UpdateCloudflareConfig(cfg proxy.CloudflareConfig) error {
 			a.appendLog("[Cloudflare] Auto update enabled, triggering fetch...")
 			go a.RefreshCloudflareIPPool()
 		}
+
+		// Handle Warp toggle
+		if cfg.WarpEnabled && !oldCfg.WarpEnabled {
+			a.appendLog("[Warp] Enabling Warp...")
+			_ = a.warpMgr.SetEndpoint(cfg.WarpEndpoint)
+			_ = a.warpMgr.Start()
+		} else if !cfg.WarpEnabled && oldCfg.WarpEnabled {
+			a.appendLog("[Warp] Disabling Warp...")
+			_ = a.warpMgr.Stop()
+		} else if cfg.WarpEnabled && cfg.WarpEndpoint != oldCfg.WarpEndpoint {
+			a.appendLog(fmt.Sprintf("[Warp] Endpoint changed to %s, restarting...", cfg.WarpEndpoint))
+			_ = a.warpMgr.Stop()
+			_ = a.warpMgr.SetEndpoint(cfg.WarpEndpoint)
+			_ = a.warpMgr.Start()
+		}
 	}
 	return err
+}
+
+func (a *App) StartWarp() error {
+	return a.warpMgr.Start()
+}
+
+func (a *App) StopWarp() error {
+	return a.warpMgr.Stop()
+}
+
+func (a *App) GetWarpStatus() proxy.WarpStatus {
+	return a.warpMgr.GetStatus()
+}
+
+func (a *App) RegisterWarp(deviceName string) (string, error) {
+	return a.warpMgr.Register(deviceName)
+}
+
+func (a *App) EnrollWarp() (string, error) {
+	return a.warpMgr.Enroll()
 }
 
 func (a *App) RefreshCloudflareIPPool() {

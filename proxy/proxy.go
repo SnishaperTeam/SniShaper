@@ -28,6 +28,7 @@ import (
 
 	utls "github.com/refraction-networking/utls"
 	"golang.org/x/net/http2"
+	"golang.org/x/net/proxy"
 )
 
 type CertGenerator interface {
@@ -51,6 +52,7 @@ type ProxyServer struct {
 	dohResolver   *DoHResolver
 	cfPool        *CloudflarePool
 	transport     *http.Transport
+	warpMgr       *WarpManager
 }
 
 type RuleManager struct {
@@ -117,6 +119,9 @@ type CloudflareConfig struct {
 	DoHURL       string   `json:"doh_url"`
 	AutoUpdate   bool     `json:"auto_update"`
 	APIKey       string   `json:"api_key"`
+	WarpEnabled   bool     `json:"warp_enabled"`
+	WarpSocksPort int      `json:"warp_socks_port"`
+	WarpEndpoint  string   `json:"warp_endpoint"`
 }
 
 type trackingListener struct {
@@ -658,6 +663,12 @@ func (p *ProxyServer) SetCertGenerator(cg CertGenerator) {
 	p.certGenerator = cg
 }
 
+func (p *ProxyServer) SetWarpManager(wm *WarpManager) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.warpMgr = wm
+}
+
 func (p *ProxyServer) UpdateCloudflareConfig(cfg CloudflareConfig) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
@@ -759,6 +770,11 @@ func (p *ProxyServer) Start() error {
 	if p.cfPool != nil {
 		p.cfPool.Start()
 	}
+
+	if p.cfPool != nil {
+		p.cfPool.Start()
+	}
+
 	p.mu.Unlock()
 
 	ln, err := net.Listen("tcp", listenAddr)
@@ -857,6 +873,7 @@ func (p *ProxyServer) handleConnect(w http.ResponseWriter, req *http.Request, ru
 	targetAddr := ensureAddrWithPort(targetAuthority, "443")
 	effectiveMode := rule.Mode
 	resolvedUpstream := resolveRuleUpstream(targetHost, rule)
+	isWarpRoute := strings.EqualFold(strings.TrimSpace(rule.Upstream), "warp")
 
 	switch strings.ToLower(strings.TrimSpace(rule.ConnectPolicy)) {
 	case "tunnel_origin":
@@ -871,9 +888,16 @@ func (p *ProxyServer) handleConnect(w http.ResponseWriter, req *http.Request, ru
 		resolvedUpstream = ""
 	}
 
+	// Warp routes should tunnel the original destination via SOCKS5, not enter
+	// the dedicated server-mode path that expects a configured Worker/VPS host.
+	if isWarpRoute && effectiveMode == "server" {
+		effectiveMode = "transparent"
+		resolvedUpstream = ""
+	}
+
 	// Stage-2 match: if stage-1 produced a dynamic upstream host (eg. *.gvt1.com),
 	// allow that upstream host to hit another rule and override policies.
-	if (effectiveMode == "mitm" || effectiveMode == "transparent") && strings.TrimSpace(resolvedUpstream) != "" {
+	if !isWarpRoute && (effectiveMode == "mitm" || effectiveMode == "transparent") && strings.TrimSpace(resolvedUpstream) != "" {
 		upHost := firstUpstreamHost(targetHost, resolvedUpstream)
 		if upHost != "" {
 			upRule := p.rules.matchRule(upHost, effectiveMode)
@@ -928,7 +952,7 @@ func (p *ProxyServer) handleConnect(w http.ResponseWriter, req *http.Request, ru
 	dialCandidates := []string{dialAddr}
 
 	// For MITM/transparent/tls-rf rules, upstream should be respected if configured.
-	if (effectiveMode == "mitm" || effectiveMode == "transparent" || effectiveMode == "tls-rf") && strings.TrimSpace(resolvedUpstream) != "" {
+	if !isWarpRoute && (effectiveMode == "mitm" || effectiveMode == "transparent" || effectiveMode == "tls-rf") && strings.TrimSpace(resolvedUpstream) != "" {
 		dialCandidates = splitUpstreamCandidates(targetHost, resolvedUpstream, "443")
 		if len(dialCandidates) == 0 {
 			dialCandidates = []string{targetAddr}
@@ -958,15 +982,18 @@ func (p *ProxyServer) handleConnect(w http.ResponseWriter, req *http.Request, ru
 		}
 	}
 
-	dialer := &net.Dialer{
-		Timeout:   10 * time.Second,
-		KeepAlive: 30 * time.Second,
+	log.Printf("[Connect] Using candidates %v for host %s", dialCandidates, targetHost)
+
+	// 使用私有 dial 方法以支持 Warp
+	dial := func(network, addr string) (net.Conn, error) {
+		return p.dialWithRule(context.Background(), network, addr, rule)
 	}
+
 	// 单路稳定性优先（结合顺序回退）
 	if len(dialCandidates) > 1 {
 		var lastErr error
 		for _, addr := range dialCandidates {
-			conn, err = dialer.Dial("tcp", addr)
+			conn, err = dial("tcp", addr)
 			if err == nil {
 				dialAddr = addr
 				log.Printf("[Connect] Sequential dial success: %s", dialAddr)
@@ -997,7 +1024,7 @@ func (p *ProxyServer) handleConnect(w http.ResponseWriter, req *http.Request, ru
 		}
 	} else {
 		for _, candidate := range dialCandidates {
-			conn, err = dialer.Dial("tcp", candidate)
+			conn, err = dial("tcp", candidate)
 			if err == nil {
 				dialAddr = candidate
 				break
@@ -1137,9 +1164,10 @@ func (p *ProxyServer) handleHTTP(w http.ResponseWriter, req *http.Request, rule 
 		newReq.Host = newReq.URL.Host
 	}
 
-	// MITM 模式：对于需要 ECH/CF pool 的站点，直接 301 升级到 HTTPS
-	// 避免用直连 transport 访问被封锁的 IP（direct transport 无法用 ECH 或 CF pool IP）
-	if rule.Mode == "mitm" && (rule.ECHEnabled || rule.UseCFPool) && newReq.URL.Scheme == "http" {
+	// MITM rules are designed around HTTPS interception. Redirect plain HTTP to
+	// HTTPS so requests enter the CONNECT/TLS handling path instead of the basic
+	// HTTP forwarder, which does not implement the full MITM feature set.
+	if rule.Mode == "mitm" && newReq.URL.Scheme == "http" {
 		httpsURL := *newReq.URL
 		httpsURL.Scheme = "https"
 		if httpsURL.Host == "" {
@@ -1170,7 +1198,14 @@ func (p *ProxyServer) handleHTTP(w http.ResponseWriter, req *http.Request, rule 
 		return
 	}
 
-	if rule.Upstream != "" {
+	transport := http.RoundTripper(p.transport)
+	if strings.EqualFold(strings.TrimSpace(rule.Upstream), "warp") {
+		t := p.transport.Clone()
+		t.DialContext = func(ctx context.Context, network, addr string) (net.Conn, error) {
+			return p.dialWithRule(ctx, network, addr, rule)
+		}
+		transport = t
+	} else if rule.Upstream != "" {
 		defaultPort := "80"
 		if strings.EqualFold(newReq.URL.Scheme, "https") {
 			defaultPort = "443"
@@ -1181,7 +1216,7 @@ func (p *ProxyServer) handleHTTP(w http.ResponseWriter, req *http.Request, rule 
 		}
 	}
 
-	resp, err := p.transport.RoundTrip(newReq)
+	resp, err := transport.RoundTrip(newReq)
 	if err != nil {
 		log.Printf("[HTTP] HTTPS proxy failed: %v", err)
 		http.Error(w, "Failed to proxy", http.StatusBadGateway)
@@ -1528,6 +1563,12 @@ func (rm *RuleManager) LoadConfig() error {
 	}
 	if rm.listenPort == "" {
 		rm.listenPort = "8080"
+	}
+	if rm.cloudflareConfig.WarpEndpoint == "" {
+		rm.cloudflareConfig.WarpEndpoint = "162.159.199.2"
+	}
+	if rm.cloudflareConfig.WarpSocksPort == 0 {
+		rm.cloudflareConfig.WarpSocksPort = 1080
 	}
 
 	// Sync Cloudflare Config if ProxyServer is linked
@@ -2135,7 +2176,6 @@ func (p *ProxyServer) establishUpstreamConn(host string, rule Rule, dialCandidat
 	}
 
 	// 2. 预计算握手参数（按候选逐个握手重试）
-	baseDialer := &net.Dialer{Timeout: 10 * time.Second, KeepAlive: 30 * time.Second}
 	utlsPolicy := strings.ToLower(strings.TrimSpace(rule.UTLSPolicy))
 	sniPolicy := strings.ToLower(strings.TrimSpace(rule.SniPolicy))
 	sniHost := chooseUpstreamSNI(host, rule)
@@ -2164,7 +2204,7 @@ func (p *ProxyServer) establishUpstreamConn(host string, rule Rule, dialCandidat
 	// 3. 按候选逐个拨号+握手（关键：握手失败也要尝试下一个候选）
 	var errs []string
 	for _, addr := range ordered {
-		rawConn, dialErr := baseDialer.Dial("tcp", addr)
+		rawConn, dialErr := p.dialWithRule(context.Background(), "tcp", addr, rule)
 		if dialErr != nil {
 			errs = append(errs, fmt.Sprintf("%s dial: %v", addr, dialErr))
 			if rule.UseCFPool && p.cfPool != nil {
@@ -2256,7 +2296,68 @@ func (p *ProxyServer) establishUpstreamConn(host string, rule Rule, dialCandidat
 	if len(errs) == 0 {
 		return nil, "", fmt.Errorf("all candidates failed with unknown error")
 	}
-	return nil, "", fmt.Errorf("all candidates failed: %s", strings.Join(errs, " | "))
+	return nil, "", fmt.Errorf("all candidates failed: %s", strings.Join(errs, "; "))
+}
+
+func (p *ProxyServer) dialWithRule(ctx context.Context, network, addr string, rule Rule) (net.Conn, error) {
+	p.mu.RLock()
+	wm := p.warpMgr
+	p.mu.RUnlock()
+
+	useWarp := false
+	if strings.ToLower(strings.TrimSpace(rule.Upstream)) == "warp" {
+		useWarp = true
+	}
+
+	if useWarp && wm != nil && p.rules.GetCloudflareConfig().WarpEnabled {
+		status := wm.GetStatus()
+		if !status.Running || !wm.IsReady() {
+			if !status.Running {
+				log.Printf("[Warp] On-demand starting tunnel for %s...", addr)
+				cfg := p.rules.GetCloudflareConfig()
+				_ = wm.SetEndpoint(cfg.WarpEndpoint)
+				if err := wm.Start(); err != nil {
+					log.Printf("[Dial] Failed to start Warp on-demand: %v", err)
+					return nil, err
+				}
+			}
+			
+			// 循环探测直到就绪 (最多等待约 2 秒)
+			ready := false
+			for i := 0; i < 10; i++ {
+				if wm.IsReady() {
+					ready = true
+					break
+				}
+				time.Sleep(200 * time.Millisecond)
+			}
+			
+			if !ready {
+				log.Printf("[Dial] Warp tunnel NOT ready after wait for %s", addr)
+				return nil, fmt.Errorf("warp tunnel not ready")
+			}
+			status = wm.GetStatus()
+		}
+
+		if status.Running {
+			proxyAddr := fmt.Sprintf("127.0.0.1:%d", wm.SocksPort)
+			dialer, err := proxy.SOCKS5("tcp", proxyAddr, nil, proxy.Direct)
+			if err == nil {
+				log.Printf("[Dial] Routing %s via Warp SOCKS5 (%s)", addr, proxyAddr)
+				return dialer.Dial(network, addr)
+			}
+			log.Printf("[Dial] Warp SOCKS5 dialer creation failed: %v", err)
+		} else {
+			log.Printf("[Dial] Warp is configured but NOT running for %s", addr)
+		}
+	}
+
+	// Default direct dialer
+	dialer := &net.Dialer{
+		Timeout:   10 * time.Second,
+		KeepAlive: 30 * time.Second,
+	}
+	return dialer.DialContext(ctx, network, addr)
 }
 
 // FetchECH performs a one-off ECH resolution via DoH for a specific domain and upstream

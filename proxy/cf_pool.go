@@ -14,10 +14,12 @@ import (
 )
 
 type IPStats struct {
-	IP        string        `json:"ip"`
-	Latency   time.Duration `json:"latency"`
-	Failures  int           `json:"failures"`
-	LastCheck time.Time     `json:"last_check"`
+	IP            string `json:"ip"`
+	Latency       string `json:"latency"`
+	Failures      int    `json:"failures"`
+	LastCheck     string `json:"last_check"`
+	latencyVal    time.Duration
+	lastCheckTime time.Time
 }
 
 type CloudflarePool struct {
@@ -84,12 +86,12 @@ func (p *CloudflarePool) UpdateIPs(ips []string) {
 	// Re-filter activeIPs to remove deleted ones
 	p.activeIPs = make([]*IPStats, 0)
 	for _, stats := range p.allIPs {
-		if stats.Latency > 0 && stats.Failures < 3 {
+		if stats.latencyVal > 0 && stats.Failures < 3 {
 			p.activeIPs = append(p.activeIPs, stats)
 		}
 	}
 	sort.Slice(p.activeIPs, func(i, j int) bool {
-		return p.activeIPs[i].Latency < p.activeIPs[j].Latency
+		return p.activeIPs[i].latencyVal < p.activeIPs[j].latencyVal
 	})
 	
 	// Trigger check if we have new IPs and running? 
@@ -138,13 +140,13 @@ func (p *CloudflarePool) GetAllIPsWithStats() []*IPStats {
 
 	sort.Slice(stats, func(i, j int) bool {
 		// Put 0 latency (unchecked/failed) at end
-		if stats[i].Latency == 0 {
+		if stats[i].latencyVal == 0 {
 			return false
 		}
-		if stats[j].Latency == 0 {
+		if stats[j].latencyVal == 0 {
 			return true
 		}
-		return stats[i].Latency < stats[j].Latency
+		return stats[i].latencyVal < stats[j].latencyVal
 	})
 
 	return stats
@@ -194,7 +196,8 @@ func (p *CloudflarePool) ReportFailure(ip string) {
 	p.mu.Lock()
 	if stats, ok := p.allIPs[ip]; ok {
 		stats.Failures++
-		stats.Latency += 1000 * time.Millisecond // Penalize latency to move it down
+		stats.latencyVal += 1000 * time.Millisecond // Penalize latency
+		stats.Latency = stats.latencyVal.String()
 	}
 	p.mu.Unlock()
 	p.rebuildActiveIPs()
@@ -237,13 +240,16 @@ func (p *CloudflarePool) checkAllIPs() {
 			p.mu.Lock()
 			stats, ok := p.allIPs[targetIP]
 			if ok {
-				stats.LastCheck = time.Now()
+				now := time.Now()
+				stats.LastCheck = now.Format(time.RFC3339)
 				if err != nil {
 					stats.Failures++
-					stats.Latency = 0 // Invalid
+					stats.latencyVal = 0 // Invalid
+					stats.Latency = ""
 				} else {
 					stats.Failures = 0
-					stats.Latency = latency
+					stats.latencyVal = latency
+					stats.Latency = latency.String()
 				}
 			}
 			p.mu.Unlock()
@@ -260,13 +266,13 @@ func (p *CloudflarePool) rebuildActiveIPs() {
 
 	newActive := make([]*IPStats, 0)
 	for _, stats := range p.allIPs {
-		if stats.Latency > 0 && stats.Failures < 3 {
+		if stats.latencyVal > 0 && stats.Failures < 3 {
 			newActive = append(newActive, stats)
 		}
 	}
 
 	sort.Slice(newActive, func(i, j int) bool {
-		return newActive[i].Latency < newActive[j].Latency
+		return newActive[i].latencyVal < newActive[j].latencyVal
 	})
 
 	p.activeIPs = newActive

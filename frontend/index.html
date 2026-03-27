@@ -42,6 +42,10 @@
                     <span class="nav-icon"></span>
                     <span>ECH 管理</span>
                 </a>
+                <a href="#" class="nav-item" data-page="warp">
+                    <span class="nav-icon"></span>
+                    <span>Warp 模式</span>
+                </a>
                 <a href="#" class="nav-item" data-page="server">
                     <span class="nav-icon"></span>
                     <span>Server 节点</span>
@@ -144,6 +148,7 @@
                         <button id="rules-mode-mitm" class="btn btn-secondary active" type="button">MITM</button>
                         <button id="rules-mode-transparent" class="btn btn-secondary" type="button">透传</button>
                         <button id="rules-mode-tls-rf" class="btn btn-secondary" type="button">TLS 分片</button>
+                        <button id="rules-mode-warp" class="btn btn-secondary" type="button">Warp</button>
                     </div>
                     <input id="rules-search" class="rules-search-input" type="text" placeholder="搜索网站/名称/域名/上游...">
                 </div>
@@ -225,6 +230,50 @@
                 </div>
             </div>
 
+            <!-- Warp Page -->
+            <div id="page-warp" class="page" style="display: none;">
+                <div class="page-header">
+                    <h1>Cloudflare Warp (MASQUE)</h1>
+                    <div style="display:flex; gap:8px;">
+                        <button class="btn btn-primary" onclick="startWarp()">启动 Warp</button>
+                        <button class="btn btn-danger" onclick="stopWarp()">停止 Warp</button>
+                    </div>
+                </div>
+                <p class="page-subtitle">使用 MASQUE 协议通过 Cloudflare Warp 网络加速流量。</p>
+
+                <div class="status-cards">
+                    <div class="card">
+                        <div class="card-title">运行时状态</div>
+                        <div id="warp-status-indicator" class="status-indicator">
+                            <div class="status-dot"></div>
+                            <span class="status-text">检查中...</span>
+                        </div>
+                        <div class="status-info">
+                            账号 ID: <span id="warp-account-id">---</span> | 协议: <span id="warp-protocol">MASQUE</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="settings-section">
+                    <h3>账号管理</h3>
+                    <div class="cert-info">如果您还没有 Warp 账号，可以点击下方按钮申请一个新账号。注册过程可能由于 Cloudflare 速率限制需要多次尝试。</div>
+                    <div style="display: flex; gap: 12px; margin-top: 12px;">
+                        <button class="btn btn-primary" id="btn-warp-register">申请新账号</button>
+                        <button class="btn btn-secondary" id="btn-warp-enroll">强制同步 (Enroll)</button>
+                    </div>
+                </div>
+
+                <div class="settings-section">
+                    <h3>使用说明</h3>
+                    <ul style="color: var(--text-secondary); line-height: 1.6; padding-left: 20px;">
+                        <li>Warp 模式依赖独立的进程 <code>usque.exe</code>。</li>
+                        <li><b>全局控制</b>：在“设置”中开启“全局启用 Warp”，代理启动时将自动启动隧道。</li>
+                        <li><b>按需分流</b>：在“规则”中将网站的上游 (Upstream) 设置为关键字 <code>warp</code>。</li>
+                        <li>MASQUE 协议在抗封锁和性能上优于传统的 WireGuard。</li>
+                    </ul>
+                </div>
+            </div>
+
             <!-- Server Page -->
             <div id="page-server" class="page" style="display: none;">
                 <div class="page-header">
@@ -302,6 +351,14 @@
                         <input type="checkbox" id="setting-cf-auto-update">
                     </div>
                     <div class="setting-item">
+                        <label>启用 Warp 代理功能</label>
+                        <input type="checkbox" id="setting-warp-enabled">
+                    </div>
+                    <div class="setting-item">
+                        <label>Warp Endpoint (MASQUE 对端)</label>
+                        <input type="text" id="setting-warp-endpoint" placeholder="默认: 162.159.199.2">
+                    </div>
+                    <div class="setting-item">
                         <label>API 密钥 (wetest.vip)</label>
                         <input type="text" id="setting-cf-api-key" placeholder="默认: o1zrmHAF">
                     </div>
@@ -367,11 +424,12 @@
                             <option value="mitm">MITM 中间人</option>
                             <option value="transparent">透传模式</option>
                             <option value="tls-rf">TLS 分片</option>
+                            <option value="warp">Warp</option>
                         </select>
                     </div>
                     <div class="form-group">
                         <label>上游服务器</label>
-                        <input type="text" id="input-upstream" placeholder="例如: 8.137.102.117:443">
+                        <input type="text" id="input-upstream" placeholder="例如: 8.137.102.117:443 或填 warp (对于 Warp 分流)">
                     </div>
                     <div class="form-group form-span-2">
                         <label>SNI 伪造（Fake SNI）</label>

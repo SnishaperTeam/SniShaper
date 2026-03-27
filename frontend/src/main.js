@@ -1,4 +1,4 @@
-import { StartProxy, StopProxy, IsProxyRunning, GetSiteGroups, AddSiteGroup, DeleteSiteGroup, UpdateSiteGroup, ExportConfig, ImportConfigWithSummary, GetCAInstallStatus, OpenCAFile, GetCACertPEM, GetSystemProxyStatus, EnableSystemProxy, DisableSystemProxy, RegenerateCert, ExportCert, GetListenPort, SetListenPort, SetProxyMode, GetProxyMode, GetRecentLogs, ClearLogs, ProxySelfCheck, GetProxyDiagnostics, GetCloudflareConfig, UpdateCloudflareConfig, TriggerCFHealthCheck, RemoveInvalidCFIPs, GetCloudflareIPStats, ForceFetchCloudflareIPs, GetServerConfig, UpdateServerConfig, InstallCA, GetECHProfiles, UpsertECHProfile, DeleteECHProfile, FetchECHConfig } from '../wailsjs/go/main/App.js';
+import { StartProxy, StopProxy, IsProxyRunning, GetSiteGroups, AddSiteGroup, DeleteSiteGroup, UpdateSiteGroup, ExportConfig, ImportConfigWithSummary, GetCAInstallStatus, OpenCAFile, GetCACertPEM, GetSystemProxyStatus, EnableSystemProxy, DisableSystemProxy, RegenerateCert, ExportCert, GetListenPort, SetListenPort, SetProxyMode, GetProxyMode, GetRecentLogs, ClearLogs, ProxySelfCheck, GetProxyDiagnostics, GetCloudflareConfig, UpdateCloudflareConfig, TriggerCFHealthCheck, RemoveInvalidCFIPs, GetCloudflareIPStats, ForceFetchCloudflareIPs, GetServerConfig, UpdateServerConfig, InstallCA, GetECHProfiles, UpsertECHProfile, DeleteECHProfile, FetchECHConfig, StartWarp, StopWarp, GetWarpStatus, RegisterWarp, EnrollWarp } from '../wailsjs/go/main/App.js';
 import { WindowMinimise, WindowToggleMaximise, Quit } from '../wailsjs/runtime/runtime.js';
 
 let isRunning = false;
@@ -9,6 +9,7 @@ let backendLogPoll = null;
 let rulesSearchQuery = '';
 let rulesViewMode = 'mitm';
 let echProfiles = [];
+let warpStatusPoll = null;
 
 function getModeLabel(mode) {
     switch ((mode || '').toLowerCase()) {
@@ -135,8 +136,9 @@ window.toggleSystemProxy = async function () {
                 }
             }
             // 代理启动成功（或已运行），再设置系统代理
-            const port = await GetListenPort();
-            await EnableSystemProxy();
+            const portStr = await GetListenPort();
+            const port = parseInt(portStr);
+            await EnableSystemProxy(port);
             systemProxyEnabled = true;
             addLog('info', `系统代理已开启 (127.0.0.1:${port})`);
         }
@@ -248,6 +250,15 @@ window.showPage = function (pageId) {
     if (pageId === 'cloudflare') {
         loadECHProfiles();
     }
+    if (pageId === 'warp') {
+        refreshWarpStatus();
+        if (!warpStatusPoll) {
+            warpStatusPoll = setInterval(refreshWarpStatus, 2000);
+        }
+    } else if (warpStatusPoll) {
+        clearInterval(warpStatusPoll);
+        warpStatusPoll = null;
+    }
 }
 
 function guessLogLevel(line) {
@@ -327,9 +338,16 @@ async function loadSiteGroups() {
 
         container.innerHTML = '';
 
-        const buildModeColumn = (mode, title) => {
+        const buildModeColumn = (targetMode, title) => {
             const modeGroups = groups
-                .filter(g => (g.mode || '').toLowerCase() === mode)
+                .filter(g => {
+                    const isWarp = (g.upstream || '').toLowerCase() === 'warp';
+                    if (targetMode === 'warp') {
+                        return isWarp;
+                    }
+                    // 其他模式下，排除掉已经是 warp 的规则，避免重复显示
+                    return (g.mode || '').toLowerCase() === targetMode && !isWarp;
+                })
                 .filter(g => {
                     if (!query) return true;
                     const haystack = [
@@ -432,7 +450,9 @@ async function loadSiteGroups() {
             ? 'Server 节点规则'
             : (rulesViewMode === 'transparent'
                 ? '透传规则'
-                : (rulesViewMode === 'tls-rf' ? 'TLS 分片规则' : 'MITM 规则'));
+                : (rulesViewMode === 'tls-rf' 
+                    ? 'TLS 分片规则' 
+                    : (rulesViewMode === 'warp' ? 'Warp 隧道加速' : 'MITM 规则')));
         container.appendChild(buildModeColumn(rulesViewMode, title));
     } catch (err) {
         console.error('Load site groups error:', err);
@@ -534,12 +554,19 @@ window.confirmModal = async function () {
     }
 
     try {
+        let finalUpstream = upstream;
+        let finalMode = mode;
+        if (mode === 'warp') {
+            finalMode = 'transparent';
+            finalUpstream = 'warp';
+        }
+
         const groupData = {
             name,
             website,
             domains,
-            mode,
-            upstream,
+            mode: finalMode,
+            upstream: finalUpstream,
             sni_fake: snifake,
             ech_domain: echDomain,
             ech_profile_id: echProfileId,
@@ -730,6 +757,12 @@ async function loadCloudflareConfig() {
         const apiKeyEl = document.getElementById('setting-cf-api-key');
         if (apiKeyEl) apiKeyEl.value = config.api_key || '';
 
+        const warpEnabledEl = document.getElementById('setting-warp-enabled');
+        if (warpEnabledEl) warpEnabledEl.checked = !!config.warp_enabled;
+
+        const warpEndpointEl = document.getElementById('setting-warp-endpoint');
+        if (warpEndpointEl) warpEndpointEl.value = config.warp_endpoint || '162.159.199.2';
+
         // Load generic server config as well
         if (typeof GetServerConfig === 'function') {
             const serverConfig = await GetServerConfig();
@@ -756,6 +789,48 @@ async function loadCloudflareConfig() {
 }
 
 let lastIpGridData = '';
+
+function parseLatencyMs(latency) {
+    if (typeof latency === 'number' && Number.isFinite(latency)) {
+        return Math.round(latency / 1000000);
+    }
+    if (typeof latency !== 'string') {
+        return 0;
+    }
+
+    const value = latency.trim();
+    if (!value) {
+        return 0;
+    }
+
+    const match = value.match(/^([\d.]+)(ns|us|µs|ms|s|m|h)$/i);
+    if (!match) {
+        return 0;
+    }
+
+    const amount = Number.parseFloat(match[1]);
+    if (!Number.isFinite(amount)) {
+        return 0;
+    }
+
+    switch (match[2].toLowerCase()) {
+    case 'ns':
+        return Math.round(amount / 1e6);
+    case 'us':
+    case 'µs':
+        return Math.round(amount / 1e3);
+    case 'ms':
+        return Math.round(amount);
+    case 's':
+        return Math.round(amount * 1000);
+    case 'm':
+        return Math.round(amount * 60 * 1000);
+    case 'h':
+        return Math.round(amount * 60 * 60 * 1000);
+    default:
+        return 0;
+    }
+}
 
 function renderIpGrid() {
     const container = document.getElementById('ip-tag-container');
@@ -793,14 +868,17 @@ function renderIpGrid() {
     const list = Array.from(displayIPs);
 
     if (list.length === 0) {
-        // Remove grid class for empty state to center text
         container.className = 'tag-container';
         container.innerHTML = '<span style="color: var(--text-secondary); font-size: 13px; font-style: italic; padding: 20px;">池中暂无 IP，请在上方输入或点击“手动更新”</span>';
         return;
     }
 
+    container.className = 'tag-container ip-pool-panel';
+    container.innerHTML = '';
+
     // 批量生成卡片，减少 Reflow
-    const fragment = document.createDocumentFragment();
+    const grid = document.createElement('div');
+    grid.className = 'ip-grid';
 
     // 计算统计信息
     let goodCount = 0;
@@ -815,7 +893,7 @@ function renderIpGrid() {
         } else if (stat.failures >= 3) {
             poorCount++;
         } else {
-            const ms = Math.round(stat.latency / 1000000);
+            const ms = parseLatencyMs(stat.latency);
             if (ms > 0 && ms < 100) goodCount++;
             else if (ms > 0 && ms < 300) fairCount++;
             else if (ms > 0) poorCount++;
@@ -849,14 +927,14 @@ function renderIpGrid() {
     list.forEach((ip) => {
         const stat = statsMap[ip];
         let latencyClass = 'checking';
-        let latencyText = 'pending';
+        let latencyText = '测速中';
 
         if (stat) {
             if (stat.failures >= 3) {
                 latencyClass = 'poor';
-                latencyText = 'failed';
+                latencyText = '失败';
             } else {
-                const ms = Math.round(stat.latency / 1000000); // ns to ms
+                const ms = parseLatencyMs(stat.latency);
                 if (ms > 0) {
                     if (ms < 100) latencyClass = 'good';
                     else if (ms < 300) latencyClass = 'fair';
@@ -873,13 +951,13 @@ function renderIpGrid() {
             <div class="ip-address">${ip}</div>
             <div class="ip-meta">
                 <span class="ip-latency ${latencyClass}">${latencyText}</span>
-                ${isInPool ? '<span class="ip-pool-badge">池</span>' : ''}
+                ${isInPool ? '<span class="ip-pool-badge">已入池</span>' : ''}
             </div>
             <div class="ip-remove" onclick="removeIpTag('${ip}')" title="移除 IP">×</div>
         `;
-        fragment.appendChild(card);
+        grid.appendChild(card);
     });
-    container.appendChild(fragment);
+    container.appendChild(grid);
 }
 
 window.removeIpTag = async function (ip) {
@@ -930,11 +1008,16 @@ async function saveCloudflareConfig() {
     const api_key = document.getElementById('setting-cf-api-key')?.value.trim();
 
     try {
+        const warpEnabled = document.getElementById('setting-warp-enabled')?.checked;
+        const warpEndpoint = document.getElementById('setting-warp-endpoint')?.value.trim();
+
         await UpdateCloudflareConfig({
             doh_url,
             preferred_ips: currentIpPool,
             auto_update: !!auto_update,
-            api_key: api_key || ""
+            api_key: api_key || "",
+            warp_enabled: !!warpEnabled,
+            warp_endpoint: warpEndpoint || "162.159.199.2"
         });
 
         addLog('info', '配置已更新');
@@ -1227,11 +1310,13 @@ document.addEventListener('DOMContentLoaded', async () => {
     const modeMitmBtn = document.getElementById('rules-mode-mitm');
     const modeTransBtn = document.getElementById('rules-mode-transparent');
     const modeTLSRFBtn = document.getElementById('rules-mode-tls-rf');
+    const modeWarpBtn = document.getElementById('rules-mode-warp');
     const updateRulesModeButtons = () => {
         if (modeServerBtn) modeServerBtn.classList.toggle('active', rulesViewMode === 'server');
         if (modeMitmBtn) modeMitmBtn.classList.toggle('active', rulesViewMode === 'mitm');
         if (modeTransBtn) modeTransBtn.classList.toggle('active', rulesViewMode === 'transparent');
         if (modeTLSRFBtn) modeTLSRFBtn.classList.toggle('active', rulesViewMode === 'tls-rf');
+        if (modeWarpBtn) modeWarpBtn.classList.toggle('active', rulesViewMode === 'warp');
     };
     if (modeServerBtn) {
         modeServerBtn.addEventListener('click', () => {
@@ -1257,6 +1342,13 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (modeTLSRFBtn) {
         modeTLSRFBtn.addEventListener('click', () => {
             rulesViewMode = 'tls-rf';
+            updateRulesModeButtons();
+            loadSiteGroups();
+        });
+    }
+    if (modeWarpBtn) {
+        modeWarpBtn.addEventListener('click', () => {
+            rulesViewMode = 'warp';
             updateRulesModeButtons();
             loadSiteGroups();
         });
@@ -1338,6 +1430,23 @@ document.addEventListener('DOMContentLoaded', async () => {
     bindServerAuthToggle();
     
     document.getElementById('setting-cf-doh')?.addEventListener('change', saveCloudflareConfig);
+    document.getElementById('setting-cf-auto-update')?.addEventListener('change', saveCloudflareConfig);
+    document.getElementById('setting-warp-enabled')?.addEventListener('change', saveCloudflareConfig);
+    document.getElementById('setting-warp-endpoint')?.addEventListener('change', saveCloudflareConfig);
+    document.getElementById('setting-cf-api-key')?.addEventListener('change', saveCloudflareConfig);
+
+    // Warp Page Controls
+    document.getElementById('btn-warp-start')?.addEventListener('click', startWarp);
+    document.getElementById('btn-warp-stop')?.addEventListener('click', stopWarp);
+    document.getElementById('btn-warp-register')?.addEventListener('click', registerWarp);
+    document.getElementById('btn-warp-enroll')?.addEventListener('click', enrollWarp);
+
+    // Modal behavior for Warp
+    document.getElementById('input-mode')?.addEventListener('change', (e) => {
+        if (e.target.value === 'warp') {
+            document.getElementById('input-upstream').value = 'warp';
+        }
+    });
 });
 
 window.saveServerConfig = async function () {
@@ -1623,3 +1732,90 @@ async function updateECHProfileDropdown() {
         select.value = currentVal;
     });
 }
+
+// --- Warp Management ---
+window.refreshWarpStatus = async function() {
+    try {
+        const status = await GetWarpStatus();
+        const indicator = document.getElementById('warp-status-indicator');
+        if (!indicator) return;
+
+        const dot = indicator.querySelector('.status-dot');
+        const text = indicator.querySelector('.status-text');
+        const accountEl = document.getElementById('warp-account-id');
+        const protocolEl = document.getElementById('warp-protocol');
+
+        if (status.running) {
+            dot.style.background = 'var(--success)';
+            text.textContent = '运行中';
+        } else {
+            dot.style.background = 'var(--danger)';
+            text.textContent = '已停止' + (status.error ? `: ${status.error}` : '');
+        }
+
+        if (accountEl) accountEl.textContent = status.account || '未登录';
+        if (protocolEl) protocolEl.textContent = status.mode || 'MASQUE';
+    } catch (err) {
+        console.error('Refresh warp status error:', err);
+    }
+};
+
+window.startWarp = async function() {
+    try {
+        await StartWarp();
+        addLog('info', '正在启动 Warp 隧道...');
+        refreshWarpStatus();
+    } catch (err) {
+        addLog('error', '启动 Warp 失败: ' + err);
+    }
+};
+
+window.stopWarp = async function() {
+    try {
+        await StopWarp();
+        addLog('info', '正在停止 Warp 隧道...');
+        refreshWarpStatus();
+    } catch (err) {
+        addLog('error', '停止 Warp 失败: ' + err);
+    }
+};
+
+window.registerWarp = async function() {
+    const btn = document.getElementById('btn-warp-register');
+    const originalText = btn.innerText;
+    
+    try {
+        btn.disabled = true;
+        btn.innerText = '注册中...';
+        addLog('info', '正在向 Cloudflare 申请新账号...');
+        const result = await RegisterWarp("");
+        addLog('success', 'Warp 注册成功！');
+        console.log('Register result:', result);
+        refreshWarpStatus();
+    } catch (err) {
+        addLog('error', 'Warp 注册失败: ' + err);
+    } finally {
+        btn.disabled = false;
+        btn.innerText = originalText;
+    }
+};
+
+window.enrollWarp = async function() {
+    const btn = document.getElementById('btn-warp-enroll');
+    const originalText = btn.innerText;
+    
+    try {
+        btn.disabled = true;
+        btn.innerText = '同步中...';
+        addLog('info', '正在同步设备密钥信息 (Enroll)...');
+        const result = await EnrollWarp();
+        addLog('success', 'Warp 密钥同步成功！');
+        console.log('Enroll result:', result);
+        refreshWarpStatus();
+    } catch (err) {
+        addLog('error', 'Warp 同步失败: ' + err);
+    } finally {
+        btn.disabled = false;
+        btn.innerText = originalText;
+    }
+};

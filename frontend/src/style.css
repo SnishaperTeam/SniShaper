@@ -1314,6 +1314,13 @@ html[data-theme="dark"] .theme-toggle::before {
     width: 100%;
 }
 
+.ip-pool-panel {
+    display: flex;
+    flex-direction: column;
+    flex-wrap: nowrap;
+    align-items: stretch;
+}
+
 .ip-tag {
     display: inline-flex;
     align-items: center;
@@ -1402,7 +1409,7 @@ html[data-theme="dark"] .theme-toggle::before {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
     gap: 10px;
-    margin-top: 12px;
+    width: 100%;
     max-height: 320px;
     overflow-y: auto;
     align-content: start;

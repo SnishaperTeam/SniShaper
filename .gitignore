@@ -16,6 +16,8 @@ frontend/dist/
 frontend/wailsjs/
 
 # Runtime generated data
+warp/config.json
+build/bin/warp/config.json
 # Go code - keep these files
 !cert/cert.go
 !cert/exec_windows.go
