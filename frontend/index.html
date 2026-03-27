@@ -182,12 +182,11 @@
                         <button class="btn btn-primary" onclick="showECHProfileModal()">添加配置文件</button>
                     </div>
                 </div>
-                <p class="page-subtitle">把优选加速规则、ECH Profile 和已启用站点放在同一页，减少来回切换。</p>
+                <p class="page-subtitle">管理已启用的 ECH 规则和 Profile。</p>
 
                 <div class="cloudflare-workspace">
                     <div class="card">
                         <div class="card-title">Cloudflare 优选加速</div>
-                        <div class="workspace-lead">快速为一批站点开启 MITM + ECH，并可指定单独优选 IP 或复用已有 profile。</div>
                         <div class="form-group" style="margin-bottom: 14px;">
                             <textarea id="cf-input-domains" placeholder="输入要加速的域名，每行一个&#10;例如：linux.do" rows="4"></textarea>
                         </div>
@@ -207,23 +206,6 @@
                             <input type="hidden" id="cf-input-ech-domain" value="crypto.cloudflare.com">
                         </div>
                         <button class="btn btn-primary" onclick="addCloudflareRule()" style="width: 100%;">立即开启加速</button>
-                    </div>
-
-                    <div class="card cloudflare-sidecard">
-                        <div class="card-title">专页说明</div>
-                        <div class="mini-stat-grid">
-                            <div class="mini-stat">
-                                <span class="mini-stat-value">规则</span>
-                                <span class="mini-stat-label">批量新增后会出现在下方列表</span>
-                            </div>
-                            <div class="mini-stat">
-                                <span class="mini-stat-value">Profile</span>
-                                <span class="mini-stat-label">可绑定规则，也可开启自动更新</span>
-                            </div>
-                        </div>
-                        <div class="workspace-note">
-                            默认旧规则会逐步迁移到显式 profile。专页里看规则和 profile 会更直观。
-                        </div>
                     </div>
                 </div>
 
@@ -263,7 +245,10 @@
                     </div>
                     <div class="setting-item" style="flex-direction: column; align-items: flex-start; gap: 8px;">
                         <label>鉴权密钥 (AUTH_SECRET)</label>
-                        <input type="password" id="setting-server-auth" placeholder="输入服务端配置的加密令牌" style="width: 100%;">
+                        <div class="input-with-button" style="width: 100%;">
+                            <input type="password" id="setting-server-auth" placeholder="输入服务端配置的加密令牌" autocomplete="new-password" spellcheck="false" style="width: 100%;">
+                            <button class="btn btn-secondary btn-sm" type="button" id="toggle-server-auth">显示</button>
+                        </div>
                     </div>
                 </div>
 
@@ -446,7 +431,6 @@
             <div class="modal-header">
                 <div>
                     <h3 id="ech-modal-title">添加 ECH 配置文件</h3>
-                    <div class="modal-subtitle">支持静态 ConfigList，也支持按 discovery domain 自动刷新。</div>
                 </div>
                 <button class="modal-close-btn" onclick="closeECHProfileModal()">&times;</button>
             </div>
@@ -458,11 +442,6 @@
                         <input type="text" id="ech-input-name" placeholder="请输入配置名称">
                     </div>
                     <div class="form-group form-span-2">
-                        <div class="workspace-note">
-                            推荐做法：填 discovery domain 并开启自动更新，手动保存的 ConfigList 仅作为回退。
-                        </div>
-                    </div>
-                    <div class="form-group">
                         <label>自动发现域名 (可选)</label>
                         <input type="text" id="ech-input-discovery-domain" placeholder="如: x.com">
                     </div>
@@ -477,9 +456,6 @@
                         <label class="inline-check">
                             <input type="checkbox" id="ech-input-auto-update"> 自动更新配置
                         </label>
-                        <small style="color: var(--text-secondary); font-size: 12px; margin-top: 6px; display: block;">
-                            握手前会优先按自动发现域名重新获取 ECH，失败时回退到已保存配置。
-                        </small>
                     </div>
                     <div class="form-group form-span-2">
                         <label>配置列表 (ConfigList Base64)</label>

@@ -4,8 +4,13 @@ on:
   push:
     branches:
       - main
+    tags:
+      - 'v*'
   pull_request:
   workflow_dispatch:
+
+permissions:
+  contents: write
 
 jobs:
   windows-build:
@@ -49,3 +54,21 @@ jobs:
             build/bin/snishaper.exe
             build/bin/rules/config.json
           if-no-files-found: error
+
+      - name: Package release bundle
+        if: startsWith(github.ref, 'refs/tags/')
+        shell: pwsh
+        run: |
+          $tag = "${{ github.ref_name }}"
+          $bundleDir = Join-Path $env:RUNNER_TEMP "snishaper-$tag-windows-amd64"
+          $rulesDir = Join-Path $bundleDir "rules"
+          New-Item -ItemType Directory -Path $rulesDir -Force | Out-Null
+          Copy-Item build/bin/snishaper.exe $bundleDir
+          Copy-Item build/bin/rules/config.json $rulesDir
+          Compress-Archive -Path "$bundleDir\*" -DestinationPath "build/bin/snishaper-$tag-windows-amd64.zip" -Force
+
+      - name: Create GitHub Release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: build/bin/snishaper-${{ github.ref_name }}-windows-amd64.zip

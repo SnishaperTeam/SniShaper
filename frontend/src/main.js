@@ -937,17 +937,28 @@ async function saveCloudflareConfig() {
             api_key: api_key || ""
         });
 
-        // Sync to server config inputs if they are visible in settings (legacy support)
-        const serverHost = document.getElementById('setting-server-host')?.value.trim();
-        const serverAuth = document.getElementById('setting-server-auth')?.value.trim();
-        if (serverHost !== undefined && typeof UpdateServerConfig === 'function') {
-            await UpdateServerConfig(serverHost || "", serverAuth || "");
-        }
-
         addLog('info', '配置已更新');
     } catch (err) {
         addLog('error', '保存配置失败: ' + err);
     }
+}
+
+function bindServerAuthToggle() {
+    const authInput = document.getElementById('setting-server-auth');
+    const toggleBtn = document.getElementById('toggle-server-auth');
+    if (!authInput || !toggleBtn) return;
+
+    const syncToggleLabel = () => {
+        toggleBtn.textContent = authInput.type === 'password' ? '显示' : '隐藏';
+    };
+
+    toggleBtn.addEventListener('click', () => {
+        authInput.type = authInput.type === 'password' ? 'text' : 'password';
+        syncToggleLabel();
+        authInput.focus();
+    });
+
+    syncToggleLabel();
 }
 
 
@@ -1324,10 +1335,9 @@ document.addEventListener('DOMContentLoaded', async () => {
     await loadCloudflareConfig();
     await loadCloudflareRules();
     await updateECHProfileDropdown();
+    bindServerAuthToggle();
     
     document.getElementById('setting-cf-doh')?.addEventListener('change', saveCloudflareConfig);
-    document.getElementById('setting-server-host')?.addEventListener('change', saveCloudflareConfig);
-    document.getElementById('setting-server-auth')?.addEventListener('change', saveCloudflareConfig);
 });
 
 window.saveServerConfig = async function () {

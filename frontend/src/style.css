@@ -1378,7 +1378,8 @@ html[data-theme="dark"] .theme-toggle::before {
     margin-bottom: 0;
 }
 
-.settings-section .setting-item input[type="text"] {
+.settings-section .setting-item input[type="text"],
+.settings-section .setting-item input[type="password"] {
     width: 100%;
     padding: 12px 16px;
 }
