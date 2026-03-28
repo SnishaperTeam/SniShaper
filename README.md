@@ -40,10 +40,15 @@
 直接执行：
 
 ```powershell
-wails build
+cd frontend
+npm run build
+cd ..
+go build -ldflags="-H windowsgui" -o build\bin\snishaper.exe .
 ```
 
-发布流程会在 GitHub Actions 中自动把仓库内的 `rules/config.json` 与构建产物一起打包。
+当前 `wails/v3` 版本直接通过 Go 构建入口生成桌面程序，不再依赖 `wails build`。
+
+发布流程会在 GitHub Actions 中把仓库内的 `rules/config.json`、`proxy/usque.exe` 与构建产物一起打包。
 ### 2. 安装证书（MITM 模式必需）
 点击界面「证书管理」按钮，点击一键按照，自动安装生成的根证书到「受信任的根证书颁发机构」。
 

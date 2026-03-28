@@ -3,10 +3,18 @@ package sysproxy
 import (
 	"fmt"
 	"strings"
+	"syscall"
 )
 
 const (
 	proxySettingsKey = `Software\Microsoft\Windows\CurrentVersion\Internet Settings`
+	internetOptionRefresh         = 37
+	internetOptionSettingsChanged = 39
+)
+
+var (
+	wininetDLL             = syscall.NewLazyDLL("wininet.dll")
+	internetSetOptionProc  = wininetDLL.NewProc("InternetSetOptionW")
 )
 
 type SystemProxyStatus struct {
@@ -15,10 +23,22 @@ type SystemProxyStatus struct {
 	Override string
 }
 
-func notifyProxyChange() {
-	// 使用 WM_SETTINGCHANGE 广播通知系统设置已更改
-	// 通过执行一个轻量级的命令来触发系统刷新
-	startHiddenCommand("cmd", "/c", "echo", "proxy_changed")
+func notifyProxyChange() error {
+	if err := callInternetSetOption(internetOptionSettingsChanged); err != nil {
+		return err
+	}
+	return callInternetSetOption(internetOptionRefresh)
+}
+
+func callInternetSetOption(option uintptr) error {
+	ret, _, callErr := internetSetOptionProc.Call(0, option, 0, 0)
+	if ret != 0 {
+		return nil
+	}
+	if callErr != syscall.Errno(0) {
+		return callErr
+	}
+	return fmt.Errorf("InternetSetOptionW failed for option %d", option)
 }
 
 func GetSystemProxyStatus() SystemProxyStatus {
@@ -85,8 +105,7 @@ func SetSystemProxy(enable bool, server string) error {
 		}
 	}
 
-	notifyProxyChange()
-	return nil
+	return notifyProxyChange()
 }
 
 func EnableSystemProxy(port int) error {
@@ -135,8 +154,7 @@ func RestoreOriginalProxySettings() error {
 		}
 	}
 
-	notifyProxyChange()
-	return nil
+	return notifyProxyChange()
 }
 
 // SetSystemProxyManual 允许用户通过 Windows 设置界面手动配置代理

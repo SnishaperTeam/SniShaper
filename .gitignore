@@ -50,3 +50,10 @@ Thumbs.db
 doc/
 shaper-next/
 snishaper.zip
+
+# Custom ignores - added for mitmverify and cmd
+mitmverify.exe
+mitmverify-report.json
+cmd/
+frontend/bindings/
+\

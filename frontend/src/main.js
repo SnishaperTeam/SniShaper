@@ -1,5 +1,5 @@
-import { StartProxy, StopProxy, IsProxyRunning, GetSiteGroups, AddSiteGroup, DeleteSiteGroup, UpdateSiteGroup, ExportConfig, ImportConfigWithSummary, GetCAInstallStatus, OpenCAFile, GetCACertPEM, GetSystemProxyStatus, EnableSystemProxy, DisableSystemProxy, RegenerateCert, ExportCert, GetListenPort, SetListenPort, SetProxyMode, GetProxyMode, GetRecentLogs, ClearLogs, ProxySelfCheck, GetProxyDiagnostics, GetCloudflareConfig, UpdateCloudflareConfig, TriggerCFHealthCheck, RemoveInvalidCFIPs, GetCloudflareIPStats, ForceFetchCloudflareIPs, GetServerConfig, UpdateServerConfig, InstallCA, GetECHProfiles, UpsertECHProfile, DeleteECHProfile, FetchECHConfig, StartWarp, StopWarp, GetWarpStatus, RegisterWarp, EnrollWarp } from '../wailsjs/go/main/App.js';
-import { WindowMinimise, WindowToggleMaximise, Quit } from '../wailsjs/runtime/runtime.js';
+import { AddSiteGroup, ClearLogs, DeleteECHProfile, DeleteSiteGroup, DisableSystemProxy, EnableSystemProxy, EnrollWarp, ExportConfig, FetchECHConfig, ForceFetchCloudflareIPs, GetCAInstallStatus, GetCACertPEM, GetCloudflareConfig, GetCloudflareIPStats, GetCloseToTray, GetECHProfiles, GetInstalledCerts, GetListenPort, GetProxyDiagnostics, GetProxyMode, GetRecentLogs, GetServerConfig, GetSiteGroups, GetSystemProxyStatus, GetWarpStatus, HandleWindowClose, ImportConfigWithSummary, InstallCA, IsProxyRunning, OpenCAFile, OpenCertDir, ProxySelfCheck, RegenerateCert, RegisterWarp, RemoveInvalidCFIPs, SetCloseToTray, SetListenPort, SetProxyMode, StartProxy, StartWarp, StopProxy, StopWarp, TriggerCFHealthCheck, UninstallCert, UpdateCloudflareConfig, UpdateServerConfig, UpdateSiteGroup, UpsertECHProfile } from '../bindings/snishaper/app.js';
+import { Events, Window } from '/wails/runtime.js';
 
 let isRunning = false;
 let systemProxyEnabled = false;
@@ -10,6 +10,8 @@ let rulesSearchQuery = '';
 let rulesViewMode = 'mitm';
 let echProfiles = [];
 let warpStatusPoll = null;
+let lastBackendLogSnapshot = '';
+let pendingRenameWebsiteGroup = null;
 
 function getModeLabel(mode) {
     switch ((mode || '').toLowerCase()) {
@@ -27,15 +29,15 @@ function getModeLabel(mode) {
 }
 
 window.windowMinimise = function () {
-    WindowMinimise();
+    Window.Minimise();
 };
 
 window.windowToggleMaximise = function () {
-    WindowToggleMaximise();
+    Window.ToggleMaximise();
 };
 
 window.windowCloseApp = function () {
-    Quit();
+    HandleWindowClose();
 };
 
 function getWebsiteKey(group) {
@@ -45,6 +47,14 @@ function getWebsiteKey(group) {
     if (name) return name;
     const firstDomain = (group.domains || [])[0] || '';
     return firstDomain.trim() || '未分组';
+}
+
+function groupMatchesMode(group, targetMode) {
+    const isWarp = (group.upstream || '').toLowerCase() === 'warp';
+    if (targetMode === 'warp') {
+        return isWarp;
+    }
+    return (group.mode || '').toLowerCase() === targetMode && !isWarp;
 }
 
 // 生成 Fake SNI 映射
@@ -102,6 +112,36 @@ function updateStatus() {
     }
 }
 
+async function syncListenPortDisplay() {
+    try {
+        const port = await GetListenPort();
+        const normalizedPort = Number.parseInt(port, 10);
+        if (!Number.isInteger(normalizedPort) || normalizedPort < 1 || normalizedPort > 65535) {
+            return null;
+        }
+
+        const listenPortEl = document.getElementById('listen-port');
+        if (listenPortEl) {
+            listenPortEl.textContent = String(normalizedPort);
+        }
+
+        const proxyAddrEl = document.getElementById('proxy-addr-display');
+        if (proxyAddrEl) {
+            proxyAddrEl.textContent = `127.0.0.1:${normalizedPort}`;
+        }
+
+        const portInput = document.getElementById('setting-port');
+        if (portInput) {
+            portInput.value = String(normalizedPort);
+        }
+
+        return normalizedPort;
+    } catch (err) {
+        console.error('Sync listen port display error:', err);
+        return null;
+    }
+}
+
 async function loadSystemProxyStatus() {
     try {
         const status = await GetSystemProxyStatus();
@@ -127,6 +167,7 @@ window.toggleSystemProxy = async function () {
                     await SetProxyMode(mode);
                     await StartProxy();
                     isRunning = true;
+                    await syncListenPortDisplay();
                     addLog('success', '代理服务器已启动');
                 } catch (e) {
                     addLog('error', '前置代理启动失败: ' + e);
@@ -136,9 +177,11 @@ window.toggleSystemProxy = async function () {
                 }
             }
             // 代理启动成功（或已运行），再设置系统代理
-            const portStr = await GetListenPort();
-            const port = parseInt(portStr);
-            await EnableSystemProxy(port);
+            const port = await syncListenPortDisplay();
+            if (!port) {
+                throw new Error('无法获取当前监听端口');
+            }
+            await EnableSystemProxy();
             systemProxyEnabled = true;
             addLog('info', `系统代理已开启 (127.0.0.1:${port})`);
         }
@@ -170,6 +213,7 @@ window.startProxy = async function () {
         await SetProxyMode(mode);
         await StartProxy();
         isRunning = true;
+        await syncListenPortDisplay();
         addLog('info', '代理已启动');
     } catch (err) {
         console.error('Start proxy error:', err);
@@ -230,6 +274,7 @@ window.showPage = function (pageId) {
 
     if (pageId === 'settings') {
         loadCloudflareConfig();
+        loadCloseBehaviorSetting();
     }
     if (pageId === 'cloudflare') {
         loadECHProfiles();
@@ -239,12 +284,6 @@ window.showPage = function (pageId) {
     }
     if (pageId === 'logs') {
         refreshBackendLogs();
-        if (!backendLogPoll) {
-            backendLogPoll = setInterval(refreshBackendLogs, 1200);
-        }
-    } else if (backendLogPoll) {
-        clearInterval(backendLogPoll);
-        backendLogPoll = null;
     }
 
     if (pageId === 'cloudflare') {
@@ -268,12 +307,29 @@ function guessLogLevel(line) {
     return 'info';
 }
 
+function parseBackendLogLine(line) {
+    const text = String(line || '');
+    const match = text.match(/^(\d{4}\/\d{2}\/\d{2}) (\d{2}:\d{2}:\d{2})(?:\.\d+)?\s+(.*)$/);
+    if (!match) {
+        return { time: '--:--:--', message: text };
+    }
+    return {
+        time: match[2],
+        message: match[3]
+    };
+}
+
 async function refreshBackendLogs() {
     const container = document.getElementById('log-container');
     if (!container) return;
     try {
         const text = await GetRecentLogs(400);
-        const lines = (text || '').split('\n').filter(Boolean);
+        const snapshot = text || '';
+        if (snapshot === lastBackendLogSnapshot && container.children.length > 0) {
+            return;
+        }
+        lastBackendLogSnapshot = snapshot;
+        const lines = snapshot.split('\n').filter(Boolean);
         container.innerHTML = '';
         if (lines.length === 0) {
             const entry = document.createElement('div');
@@ -283,13 +339,14 @@ async function refreshBackendLogs() {
             return;
         }
         lines.forEach(line => {
-            const level = guessLogLevel(line);
+            const parsed = parseBackendLogLine(line);
+            const level = guessLogLevel(parsed.message);
             const entry = document.createElement('div');
             entry.className = 'log-entry';
 
             const time = document.createElement('span');
             time.className = 'log-time';
-            time.textContent = '--:--:--';
+            time.textContent = parsed.time;
 
             const levelEl = document.createElement('span');
             levelEl.className = `log-level ${level}`;
@@ -297,14 +354,13 @@ async function refreshBackendLogs() {
 
             const msg = document.createElement('span');
             msg.style.whiteSpace = 'pre-wrap';
-            msg.textContent = line;
+            msg.textContent = parsed.message;
 
             entry.appendChild(time);
             entry.appendChild(levelEl);
             entry.appendChild(msg);
             container.appendChild(entry);
         });
-        container.scrollTop = container.scrollHeight;
 
         const diag = await GetProxyDiagnostics();
         const ingressEl = document.getElementById('ingress-list');
@@ -340,14 +396,7 @@ async function loadSiteGroups() {
 
         const buildModeColumn = (targetMode, title) => {
             const modeGroups = groups
-                .filter(g => {
-                    const isWarp = (g.upstream || '').toLowerCase() === 'warp';
-                    if (targetMode === 'warp') {
-                        return isWarp;
-                    }
-                    // 其他模式下，排除掉已经是 warp 的规则，避免重复显示
-                    return (g.mode || '').toLowerCase() === targetMode && !isWarp;
-                })
+                .filter(g => groupMatchesMode(g, targetMode))
                 .filter(g => {
                     if (!query) return true;
                     const haystack = [
@@ -410,12 +459,21 @@ async function loadSiteGroups() {
                     countEl.className = 'website-group-count';
                     countEl.textContent = `${websiteRules.length} 条规则`;
 
+                    const renameBtn = document.createElement('button');
+                    renameBtn.className = 'icon-btn';
+                    renameBtn.type = 'button';
+                    renameBtn.title = '重命名网站分组';
+                    renameBtn.setAttribute('aria-label', '重命名网站分组');
+                    renameBtn.textContent = '✎';
+                    renameBtn.onclick = () => window.renameWebsiteGroup(website, targetMode);
+
                     const addBtn = document.createElement('button');
                     addBtn.className = 'btn btn-secondary';
                     addBtn.textContent = '+ 本网站规则';
-                    addBtn.onclick = () => window.showAddRuleModal({ website, mode });
+                    addBtn.onclick = () => window.showAddRuleModal({ website, mode: targetMode });
 
                     tools.appendChild(countEl);
+                    tools.appendChild(renameBtn);
                     tools.appendChild(addBtn);
                     header.appendChild(titleEl);
                     header.appendChild(tools);
@@ -459,6 +517,82 @@ async function loadSiteGroups() {
     }
 }
 
+window.renameWebsiteGroup = function (websiteKey, targetMode) {
+    const currentName = String(websiteKey || '').trim();
+    const overlay = document.getElementById('rename-group-modal-overlay');
+    const input = document.getElementById('rename-group-input');
+    if (!overlay || !input) {
+        addLog('error', '重命名弹窗未初始化');
+        return;
+    }
+
+    pendingRenameWebsiteGroup = {
+        websiteKey: currentName,
+        targetMode
+    };
+    input.value = currentName;
+    overlay.style.display = 'flex';
+    setTimeout(() => {
+        input.focus();
+        input.select();
+    }, 0);
+};
+
+window.closeRenameWebsiteGroupModal = function () {
+    const overlay = document.getElementById('rename-group-modal-overlay');
+    const input = document.getElementById('rename-group-input');
+    pendingRenameWebsiteGroup = null;
+    if (input) {
+        input.value = '';
+    }
+    if (overlay) {
+        overlay.style.display = 'none';
+    }
+};
+
+window.saveRenameWebsiteGroup = async function () {
+    if (!pendingRenameWebsiteGroup) {
+        return;
+    }
+
+    const input = document.getElementById('rename-group-input');
+    const currentName = pendingRenameWebsiteGroup.websiteKey;
+    const targetMode = pendingRenameWebsiteGroup.targetMode;
+    const normalizedName = input ? input.value.trim() : '';
+    if (!normalizedName) {
+        addLog('warn', '网站分组名称不能为空');
+        return;
+    }
+
+    if (normalizedName === currentName) {
+        return;
+    }
+
+    try {
+        const groups = await GetSiteGroups();
+        const matchedGroups = (groups || []).filter(group =>
+            groupMatchesMode(group, targetMode) && getWebsiteKey(group) === currentName
+        );
+
+        if (matchedGroups.length === 0) {
+            addLog('warn', '未找到可重命名的网站分组');
+            return;
+        }
+
+        await Promise.all(matchedGroups.map(group => UpdateSiteGroup({
+            ...group,
+            website: normalizedName
+        })));
+
+        addLog('success', `已将网站分组“${currentName}”重命名为“${normalizedName}”`);
+        window.closeRenameWebsiteGroupModal();
+        await loadSiteGroups();
+    } catch (err) {
+        console.error('Rename website group error:', err);
+        addLog('error', '重命名网站分组失败: ' + err);
+    }
+};
+
 window.deleteSiteGroup = async function (id) {
     try {
         await DeleteSiteGroup(id);
@@ -479,11 +613,10 @@ window.showAddRuleModal = function () {
     document.getElementById('input-name').value = '';
     document.getElementById('input-website').value = defaults.website || '';
     document.getElementById('input-domains').value = '';
-    document.getElementById('input-mode').value = defaults.mode || 'server';
+    document.getElementById('input-mode').value = defaults.mode || rulesViewMode || 'mitm';
     document.getElementById('input-upstream').value = '';
     document.getElementById('input-snifake').value = '';
     document.getElementById('input-ech-domain').value = '';
-    document.getElementById('input-utls-policy').value = '';
     document.getElementById('input-ech-enabled').checked = false;
     document.getElementById('input-ech-profile-id').value = '';
     document.getElementById('input-use-cf-pool').checked = false;
@@ -510,7 +643,6 @@ window.showEditRuleModal = async function (id) {
         document.getElementById('input-upstream').value = group.upstream || '';
         document.getElementById('input-snifake').value = group.sni_fake || '';
         document.getElementById('input-ech-domain').value = group.ech_domain || '';
-        document.getElementById('input-utls-policy').value = group.utls_policy || '';
         document.getElementById('input-ech-enabled').checked = !!group.ech_enabled;
         
         await updateECHProfileDropdown();
@@ -537,7 +669,6 @@ window.confirmModal = async function () {
     const upstream = document.getElementById('input-upstream').value;
     const snifake = document.getElementById('input-snifake').value;
     const echDomain = document.getElementById('input-ech-domain').value.trim();
-    const utlsPolicy = document.getElementById('input-utls-policy').value;
     const echEnabled = document.getElementById('input-ech-enabled').checked;
     const echProfileId = document.getElementById('input-ech-profile-id').value;
     const useCfPool = document.getElementById('input-use-cf-pool').checked;
@@ -570,7 +701,6 @@ window.confirmModal = async function () {
             sni_fake: snifake,
             ech_domain: echDomain,
             ech_profile_id: echProfileId,
-            utls_policy: utlsPolicy,
             ech_enabled: echEnabled,
             use_cf_pool: useCfPool,
             enabled
@@ -661,29 +791,138 @@ window.importConfig = function () {
     input.click();
 };
 
+window.showCustomConfirm = function (message, onConfirm) {
+    const overlay = document.getElementById('confirm-modal-overlay');
+    const msgEl = document.getElementById('confirm-modal-message');
+    const btnOk = document.getElementById('confirm-modal-ok');
+    const btnCancel = document.getElementById('confirm-modal-cancel');
+
+    if (!overlay || !msgEl || !btnOk || !btnCancel) return;
+
+    msgEl.textContent = message;
+    overlay.style.display = 'flex';
+
+    // Clean up previous event listeners
+    const newBtnOk = btnOk.cloneNode(true);
+    const newBtnCancel = btnCancel.cloneNode(true);
+    btnOk.parentNode.replaceChild(newBtnOk, btnOk);
+    btnCancel.parentNode.replaceChild(newBtnCancel, btnCancel);
+
+    newBtnOk.onclick = () => {
+        overlay.style.display = 'none';
+        if (onConfirm) onConfirm();
+    };
+
+    newBtnCancel.onclick = () => {
+        overlay.style.display = 'none';
+    };
+};
+
 window.regenerateCert = async function () {
+    showCustomConfirm('重新生成证书将导致所有之前的拦截会话失效，并自动清理旧证书和安装新证书。是否继续？', async () => {
+        try {
+            await RegenerateCert();
+            addLog('success', '证书已重新生成并自动安装到系统');
+        } catch (err) {
+            addLog('error', '重新生成/安装证书失败: ' + err);
+        }
+    });
+};
+
+window.openCertDir = async function () {
     try {
-        await RegenerateCert();
-        addLog('info', '证书已重新生成，请重新安装到系统信任库');
+        await OpenCertDir();
+        addLog('info', '已打开证书存储目录');
     } catch (err) {
-        addLog('error', '重新生成证书失败: ' + err);
+        addLog('error', '打开目录失败: ' + err);
     }
 };
 
-window.exportCert = async function () {
+window.showManageCerts = async function () {
+    const modal = document.getElementById('cert-manage-overlay');
+    if (!modal) return;
+    modal.style.display = 'flex';
+    await renderInstalledCerts();
+};
+
+window.closeManageCerts = function () {
+    document.getElementById('cert-manage-overlay').style.display = 'none';
+};
+
+async function renderInstalledCerts() {
+    const container = document.getElementById('installed-certs-list');
+    if (!container) return;
+    
+    container.innerHTML = '<div style="padding: 20px; text-align: center; color: var(--text-secondary);">加载中...</div>';
+    
     try {
-        const pem = await ExportCert();
-        const blob = new Blob([pem], { type: 'application/x-pem-file' });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = 'snishaper-ca.crt';
-        a.click();
-        URL.revokeObjectURL(url);
-        addLog('info', '证书已导出');
+        const certs = await GetInstalledCerts();
+        if (!certs || certs.length === 0) {
+            container.innerHTML = '<div style="padding: 40px; text-align: center; color: var(--text-secondary);">未发现已安装的 SniShaper 证书</div>';
+            return;
+        }
+        
+        container.innerHTML = '';
+        certs.forEach(c => {
+            const item = document.createElement('div');
+            item.className = 'rule-item';
+            item.style.padding = '12px';
+            const info = document.createElement('div');
+            info.className = 'rule-info';
+
+            const thumbprintLine = document.createElement('div');
+            thumbprintLine.className = 'rule-name';
+            thumbprintLine.style.fontFamily = 'monospace';
+            thumbprintLine.style.fontSize = '12px';
+            thumbprintLine.textContent = c.thumbprint;
+
+            const locationLine = document.createElement('div');
+            locationLine.className = 'rule-domains';
+            locationLine.style.fontSize = '11px';
+            locationLine.style.opacity = '0.7';
+            locationLine.textContent = `证书库: ${c.storeLocation || 'CurrentUser'} / ${c.storeName || 'Root'}`;
+
+            const expiryLine = document.createElement('div');
+            expiryLine.className = 'rule-domains';
+            expiryLine.style.fontSize = '11px';
+            expiryLine.style.opacity = '0.7';
+            expiryLine.textContent = `有效期至: ${c.notAfter}`;
+
+            info.appendChild(thumbprintLine);
+            info.appendChild(locationLine);
+            info.appendChild(expiryLine);
+
+            const actions = document.createElement('div');
+            actions.className = 'rule-actions';
+
+            const uninstallButton = document.createElement('button');
+            uninstallButton.className = 'btn btn-danger btn-sm';
+            uninstallButton.type = 'button';
+            uninstallButton.textContent = '卸载';
+            uninstallButton.addEventListener('click', () => {
+                uninstallCert(c.token || c.thumbprint);
+            });
+
+            actions.appendChild(uninstallButton);
+            item.appendChild(info);
+            item.appendChild(actions);
+            container.appendChild(item);
+        });
     } catch (err) {
-        addLog('error', '导出证书失败: ' + err);
+        container.innerHTML = `<div style="padding: 20px; color: var(--danger);">加载失败: ${err}</div>`;
     }
+}
+
+window.uninstallCert = async function (thumbprint) {
+    showCustomConfirm('确定要从系统信任库中卸载此证书吗？卸载后对应的 HTTPS 流量解密将失效。', async () => {
+        try {
+            await UninstallCert(thumbprint);
+            addLog('info', '证书已卸载: ' + thumbprint);
+            await renderInstalledCerts();
+        } catch (err) {
+            addLog('error', '卸载失败: ' + err);
+        }
+    });
 };
 
 async function loadCloudflareRules() {
@@ -785,6 +1024,29 @@ async function loadCloudflareConfig() {
         renderIpGrid();
     } catch (err) {
         console.error('Load CF config error:', err);
+    }
+}
+
+async function loadCloseBehaviorSetting() {
+    try {
+        const closeToTray = await GetCloseToTray();
+        const closeToTrayEl = document.getElementById('setting-close-to-tray');
+        if (closeToTrayEl) closeToTrayEl.checked = !!closeToTray;
+    } catch (err) {
+        console.error('Load close behavior setting error:', err);
+    }
+}
+
+async function saveCloseBehaviorSetting() {
+    const closeToTrayEl = document.getElementById('setting-close-to-tray');
+    if (!closeToTrayEl) return;
+
+    try {
+        await SetCloseToTray(!!closeToTrayEl.checked);
+        addLog('info', closeToTrayEl.checked ? '已启用关闭到托盘' : '已启用关闭时退出应用');
+    } catch (err) {
+        addLog('error', '保存关闭行为失败: ' + err);
+        await loadCloseBehaviorSetting();
     }
 }
 
@@ -951,7 +1213,6 @@ function renderIpGrid() {
             <div class="ip-address">${ip}</div>
             <div class="ip-meta">
                 <span class="ip-latency ${latencyClass}">${latencyText}</span>
-                ${isInPool ? '<span class="ip-pool-badge">已入池</span>' : ''}
             </div>
             <div class="ip-remove" onclick="removeIpTag('${ip}')" title="移除 IP">×</div>
         `;
@@ -1166,7 +1427,6 @@ window.addCloudflareRule = async function () {
         ech_profile_id: echProfileId,
         use_cf_pool: !ipInput, // If no specific IP entered, use pool
         sni_policy: "fake",    // Force fake SNI policy (ECH handles outer)
-        utls_policy: "auto",
         enabled: true
     };
 
@@ -1184,14 +1444,15 @@ window.addCloudflareRule = async function () {
 };
 
 window.deleteCfRule = async function (id) {
-    if (!window.confirm("确定要删除此加速规则吗？")) return;
-    try {
-        await DeleteSiteGroup(id);
-        loadCloudflareRules();
-        addLog('info', '删除 Cloudflare 规则: ' + id);
-    } catch (err) {
-        addLog('error', "删除失败: " + err);
-    }
+    showCustomConfirm("确定要删除此加速规则吗？", async () => {
+        try {
+            await DeleteSiteGroup(id);
+            loadCloudflareRules();
+            addLog('info', '删除 Cloudflare 规则: ' + id);
+        } catch (err) {
+            addLog('error', "删除失败: " + err);
+        }
+    });
 };
 
 window.loadCloudflareRules = loadCloudflareRules;
@@ -1268,6 +1529,20 @@ async function checkCertAndPrompt() {
 }
 
 document.addEventListener('DOMContentLoaded', async () => {
+    Events.On('app:state', async (event) => {
+        const state = event?.data || {};
+        if (typeof state.proxyRunning === 'boolean') {
+            isRunning = state.proxyRunning;
+        }
+        if (typeof state.systemProxyEnabled === 'boolean') {
+            systemProxyEnabled = state.systemProxyEnabled;
+        }
+        updateStatus();
+        if (typeof state.warpRunning === 'boolean') {
+            await refreshWarpStatus();
+        }
+    });
+
     const theme = localStorage.getItem('theme') || 'light';
     document.documentElement.setAttribute('data-theme', theme);
     updateThemeIcon(theme);
@@ -1373,16 +1648,13 @@ document.addEventListener('DOMContentLoaded', async () => {
             closeModal();
         }
     });
-
-    const portInput = document.getElementById('setting-port');
-    if (portInput) {
-        try {
-            const port = await GetListenPort();
-            portInput.value = port || 8080;
-        } catch (err) {
-            console.error('Get listen port error:', err);
+    document.getElementById('rename-group-modal-overlay')?.addEventListener('click', (e) => {
+        if (e.target === document.getElementById('rename-group-modal-overlay')) {
+            window.closeRenameWebsiteGroupModal();
         }
-    }
+    });
+
+    await syncListenPortDisplay();
 
     window.applyPort = async function() {
         const portInput = document.getElementById('setting-port');
@@ -1392,11 +1664,11 @@ document.addEventListener('DOMContentLoaded', async () => {
         if (newPort >= 1 && newPort <= 65535) {
             try {
                 await SetListenPort(newPort);
-                document.getElementById('listen-port').textContent = newPort;
+                await syncListenPortDisplay();
                 addLog('info', '监听端口已设置为 ' + newPort);
             } catch (err) {
                 addLog('error', '设置端口失败: ' + err);
-                portInput.value = await GetListenPort();
+                await syncListenPortDisplay();
             }
         } else {
             addLog('error', '端口号无效 (1-65535)');
@@ -1425,6 +1697,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     await checkCertAndPrompt();
 
     await loadCloudflareConfig();
+    await loadCloseBehaviorSetting();
     await loadCloudflareRules();
     await updateECHProfileDropdown();
     bindServerAuthToggle();
@@ -1434,6 +1707,12 @@ document.addEventListener('DOMContentLoaded', async () => {
     document.getElementById('setting-warp-enabled')?.addEventListener('change', saveCloudflareConfig);
     document.getElementById('setting-warp-endpoint')?.addEventListener('change', saveCloudflareConfig);
     document.getElementById('setting-cf-api-key')?.addEventListener('change', saveCloudflareConfig);
+    document.getElementById('setting-close-to-tray')?.addEventListener('change', saveCloseBehaviorSetting);
+
+    if (!backendLogPoll) {
+        backendLogPoll = setInterval(refreshBackendLogs, 1200);
+    }
+    await refreshBackendLogs();
 
     // Warp Page Controls
     document.getElementById('btn-warp-start')?.addEventListener('click', startWarp);
@@ -1445,6 +1724,12 @@ document.addEventListener('DOMContentLoaded', async () => {
     document.getElementById('input-mode')?.addEventListener('change', (e) => {
         if (e.target.value === 'warp') {
             document.getElementById('input-upstream').value = 'warp';
+        }
+    });
+    document.getElementById('rename-group-input')?.addEventListener('keydown', async (e) => {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            await window.saveRenameWebsiteGroup();
         }
     });
 });
@@ -1514,7 +1799,6 @@ window.addServerRule = async function () {
                 sni_fake: '',
                 ech_domain: '',
                 ech_profile_id: echProfileId,
-                utls_policy: 'auto',
                 ech_enabled: true,
                 use_cf_pool: true,
                 enabled: true

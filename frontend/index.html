@@ -87,7 +87,7 @@
                         </div>
                     </div>
 
-                    <div class="card mode-card">
+                    <div class="card mode-card" hidden>
                         <div class="card-title">代理模式</div>
                         <div class="mode-selector">
                             <label class="mode-option">
@@ -333,6 +333,13 @@
                             <button class="btn btn-primary" onclick="applyPort()">应用</button>
                         </div>
                     </div>
+                    <div class="setting-item">
+                        <div class="setting-copy">
+                            <label for="setting-close-to-tray">关闭时最小化到托盘</label>
+                            <small>关闭主窗口时仅隐藏到系统托盘，从托盘菜单可重新打开或退出。</small>
+                        </div>
+                        <input type="checkbox" id="setting-close-to-tray">
+                    </div>
                 </div>
 
                 <div class="settings-section">
@@ -341,7 +348,8 @@
                         CA 证书用于 MITM 模式解密 HTTPS 流量
                     </div>
                     <button class="btn btn-primary" onclick="regenerateCert()">重新生成证书</button>
-                    <button class="btn btn-secondary" onclick="exportCert()">导出证书</button>
+                    <button class="btn btn-secondary" onclick="openCertDir()">打开证书目录</button>
+                    <button class="btn btn-secondary" onclick="showManageCerts()">管理已安装证书</button>
                 </div>
 
                 <div class="settings-section">
@@ -453,14 +461,6 @@
                         <input type="text" id="input-ech-domain"
                             placeholder="可选 (留空则使用目标域名查询 ECH)">
                     </div>
-                    <div class="form-group">
-                        <label>uTLS 策略</label>
-                        <select id="input-utls-policy">
-                            <option value="">自动 (auto)</option>
-                            <option value="on">强制开启 (on)</option>
-                            <option value="off">关闭 (off)</option>
-                        </select>
-                    </div>
                     <div class="form-group form-span-2">
                         <div class="checkbox-group">
                             <label class="inline-check">
@@ -524,6 +524,70 @@
             <div class="modal-footer">
                 <button class="btn btn-secondary" onclick="closeECHProfileModal()">取消</button>
                 <button class="btn btn-primary" onclick="saveECHProfile()">保存</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Managed Installed Certs Modal -->
+    <div id="cert-manage-overlay" class="modal-overlay" style="display: none;">
+        <div class="modal rule-modal" style="max-width: 600px;">
+            <div class="modal-header">
+                <div>
+                    <h3>管理系统已安装证书</h3>
+                    <div class="modal-subtitle">查看并卸载系统信任库中的 SniShaper 证书</div>
+                </div>
+                <button class="modal-close-btn" onclick="closeManageCerts()" title="关闭">×</button>
+            </div>
+            <div class="modal-body">
+                <div id="installed-certs-list" class="rules-list" style="max-height: 400px; overflow-y: auto;">
+                    <!-- Installed certs will be rendered here -->
+                </div>
+                <div style="margin-top: 15px; color: var(--text-secondary); font-size: 12px; background: var(--bg-dark); padding: 10px; border-radius: 6px;">
+                    [!NOTE] 卸载证书可能需要管理员权限。如果卸载失败，请尝试以管理员身份运行本程序。
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="closeManageCerts()">关闭</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Custom Confirm Modal -->
+    <div id="confirm-modal-overlay" class="modal-overlay" style="display: none; z-index: 9999;">
+        <div class="modal rule-modal" style="max-width: 400px;">
+            <div class="modal-header">
+                <div>
+                    <h3 id="confirm-modal-title">确认操作</h3>
+                </div>
+            </div>
+            <div class="modal-body">
+                <p id="confirm-modal-message" style="line-height: 1.6; color: var(--text-primary);"></p>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" id="confirm-modal-cancel">取消</button>
+                <button class="btn btn-primary" id="confirm-modal-ok">确定</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="rename-group-modal-overlay" class="modal-overlay" style="display: none; z-index: 9999;">
+        <div class="modal rule-modal rename-group-modal" style="max-width: 420px;">
+            <div class="modal-header">
+                <div>
+                    <h3>重命名网站分组</h3>
+                    <div class="modal-subtitle">批量更新当前分组下所有规则的 website 字段</div>
+                </div>
+                <button class="modal-close-btn" onclick="closeRenameWebsiteGroupModal()" title="关闭">×</button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group" style="margin-bottom: 0;">
+                    <label>新分组名称</label>
+                    <input type="text" id="rename-group-input" placeholder="输入新的分组名称">
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="closeRenameWebsiteGroupModal()">取消</button>
+                <button class="btn btn-primary" onclick="saveRenameWebsiteGroup()">保存</button>
             </div>
         </div>
     </div>

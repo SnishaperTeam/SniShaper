@@ -42,11 +42,30 @@ func NewWarpManager(execDir string) *WarpManager {
 		binName = "usque"
 	}
 
+	configDir := resolveRuntimeDir(execDir, "proxy", binName)
+
 	return &WarpManager{
-		BinPath:   filepath.Join(execDir, "warp", binName),
-		ConfigDir: filepath.Join(execDir, "warp"),
+		BinPath:   filepath.Join(configDir, binName),
+		ConfigDir: configDir,
 		SocksPort: 1080,
 	}
+}
+
+func resolveRuntimeDir(execDir, dirName, markerFile string) string {
+	candidates := []string{
+		filepath.Join(execDir, dirName),
+		filepath.Join(execDir, "..", dirName),
+		filepath.Join(execDir, "..", "..", dirName),
+	}
+
+	for _, candidate := range candidates {
+		markerPath := filepath.Join(candidate, markerFile)
+		if _, err := os.Stat(markerPath); err == nil {
+			return candidate
+		}
+	}
+
+	return filepath.Join(execDir, dirName)
 }
 
 func (m *WarpManager) SetEndpoint(endpoint string) error {

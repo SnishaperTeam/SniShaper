@@ -2,10 +2,9 @@ package main
 
 import (
 	"embed"
+	"log"
 
-	"github.com/wailsapp/wails/v2"
-	"github.com/wailsapp/wails/v2/pkg/options"
-	"github.com/wailsapp/wails/v2/pkg/options/assetserver"
+	"github.com/wailsapp/wails/v3/pkg/application"
 )
 
 //go:embed all:frontend/dist
@@ -14,23 +13,104 @@ var assets embed.FS
 func main() {
 	app := NewApp()
 
-	err := wails.Run(&options.App{
-		Title:     "snishaper",
-		Width:     1024,
-		Height:    768,
-		Frameless: true,
-		AssetServer: &assetserver.Options{
-			Assets: assets,
+	wailsApp := application.New(application.Options{
+		Name:        "snishaper",
+		Description: "SniShaper - Cloudflare IP Shaper",
+		Assets: application.AssetOptions{
+			Handler: application.BundledAssetFileServer(assets),
 		},
-		BackgroundColour: &options.RGBA{R: 27, G: 38, B: 54, A: 1},
-		OnStartup:        app.startup,
-		OnShutdown:       app.shutdown,
-		Bind: []interface{}{
-			app,
+		Services: []application.Service{
+			application.NewService(app),
+		},
+		SingleInstance: &application.SingleInstanceOptions{
+			UniqueID: "com.snishaper.desktop",
+			OnSecondInstanceLaunch: func(data application.SecondInstanceData) {
+				app.RevealMainWindow()
+			},
+			ExitCode: 0,
 		},
 	})
 
+	app.wailsApp = wailsApp
+
+	// Create Tray
+	tray := wailsApp.SystemTray.New()
+	app.systemTray = tray
+
+	// Define Tray Menu
+	trayMenu := application.NewMenu()
+	trayMenu.Add("仪表盘").OnClick(func(ctx *application.Context) {
+		app.RevealMainWindow()
+	})
+	trayMenu.AddSeparator()
+
+	app.proxyItemV3 = trayMenu.AddCheckbox("代理运行", app.IsProxyRunning())
+	app.proxyItemV3.OnClick(func(ctx *application.Context) {
+		app.runSafeAsync("tray proxy toggle", func() {
+			if app.IsProxyRunning() {
+				_ = app.StopProxy()
+			} else {
+				_ = app.StartProxy()
+			}
+		})
+	})
+
+	systemProxyLabel := "系统代理: 关"
+	if app.GetSystemProxyStatus().Enabled {
+		systemProxyLabel = "系统代理: 开"
+	}
+	app.systemProxyItemV3 = trayMenu.Add(systemProxyLabel)
+	app.systemProxyItemV3.OnClick(func(ctx *application.Context) {
+		app.runSafeAsync("tray system proxy toggle", func() {
+			if app.GetSystemProxyStatus().Enabled {
+				_ = app.DisableSystemProxy()
+				return
+			}
+			if !app.IsProxyRunning() {
+				if err := app.StartProxy(); err != nil {
+					return
+				}
+			}
+			_ = app.EnableSystemProxy()
+		})
+	})
+
+	app.warpItemV3 = trayMenu.AddCheckbox("Warp 开启", app.GetWarpStatus().Running)
+	app.warpItemV3.OnClick(func(ctx *application.Context) {
+		app.runSafeAsync("tray warp toggle", func() {
+			status := app.GetWarpStatus()
+			if status.Running {
+				_ = app.StopWarp()
+			} else {
+				_ = app.StartWarp()
+			}
+		})
+	})
+
+	trayMenu.AddSeparator()
+	trayMenu.Add("退出").OnClick(func(ctx *application.Context) {
+		app.QuitApp()
+	})
+
+	tray.SetMenu(trayMenu)
+	app.trayMenuV3 = trayMenu
+
+	// Create Main Window
+	app.mainWindow = wailsApp.Window.NewWithOptions(application.WebviewWindowOptions{
+		Name:             "main",
+		Title:            "snishaper",
+		Width:            1024,
+		Height:           768,
+		URL:              "/",
+		Frameless:        true,
+		BackgroundColour: application.NewRGB(27, 38, 54),
+	})
+	tray.OnClick(func() {
+		app.RevealMainWindow()
+	})
+
+	err := wailsApp.Run()
 	if err != nil {
-		println("Error:", err.Error())
+		log.Fatal(err)
 	}
 }

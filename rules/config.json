@@ -1,5 +1,5 @@
 {
-  "listen_port": "800",
+  "listen_port": "8080",
   "site_groups": [
     {
       "id": "linux-do",
@@ -54,22 +54,6 @@
       "mode": "mitm",
       "upstream": "18.66.145.15:443",
       "sni_fake": "amazon.com",
-      "sni_policy": "fake",
-      "enabled": true,
-      "ech_enabled": false,
-      "use_cf_pool": false
-    },
-    {
-      "id": "sg-1771319670672-5",
-      "name": "android.com",
-      "website": "android",
-      "domains": [
-        "android.com",
-        "gmail.com"
-      ],
-      "mode": "mitm",
-      "upstream": "34.49.133.3:443",
-      "sni_fake": "g.cn",
       "sni_policy": "fake",
       "enabled": true,
       "ech_enabled": false,
@@ -153,7 +137,6 @@
       "mode": "mitm",
       "upstream": "20.205.243.168:443,20.27.177.116:443,20.200.245.245:443",
       "sni_fake": "api-github-com.mapped",
-      "utls_policy": "off",
       "enabled": true,
       "ech_enabled": false,
       "use_cf_pool": false
@@ -218,7 +201,6 @@
       "sni_fake": "",
       "sni_policy": "none",
       "alpn_policy": "h2_h1",
-      "utls_policy": "on",
       "enabled": true,
       "ech_enabled": false,
       "use_cf_pool": false
@@ -255,7 +237,6 @@
       "connect_policy": "mitm",
       "sni_policy": "fake",
       "alpn_policy": "h1_only",
-      "utls_policy": "off",
       "enabled": true,
       "ech_enabled": false,
       "use_cf_pool": false
@@ -263,7 +244,7 @@
     {
       "id": "sg-1771319670672-17",
       "name": "business.whatsapp.com",
-      "website": "whatsapp",
+      "website": "meta",
       "domains": [
         "business.whatsapp.com",
         "facebook.com",
@@ -309,7 +290,7 @@
     {
       "id": "sg-1771319670672-21",
       "name": "cdn1.cdn-telegram.org",
-      "website": "cdn-telegram",
+      "website": "Telegram",
       "domains": [
         "cdn1.cdn-telegram.org"
       ],
@@ -319,7 +300,6 @@
       "connect_policy": "mitm",
       "sni_policy": "fake",
       "alpn_policy": "h1_only",
-      "utls_policy": "off",
       "enabled": true,
       "ech_enabled": false,
       "use_cf_pool": false
@@ -327,7 +307,7 @@
     {
       "id": "sg-1771319670672-22",
       "name": "cdn4.cdn-telegram.org",
-      "website": "cdn-telegram",
+      "website": "Telegram",
       "domains": [
         "cdn4.cdn-telegram.org"
       ],
@@ -337,7 +317,6 @@
       "connect_policy": "mitm",
       "sni_policy": "fake",
       "alpn_policy": "h1_only",
-      "utls_policy": "off",
       "enabled": true,
       "ech_enabled": false,
       "use_cf_pool": false
@@ -345,7 +324,7 @@
     {
       "id": "sg-1771319670672-23",
       "name": "cdn5.cdn-telegram.org",
-      "website": "cdn-telegram",
+      "website": "Telegram",
       "domains": [
         "cdn5.cdn-telegram.org"
       ],
@@ -355,26 +334,26 @@
       "connect_policy": "mitm",
       "sni_policy": "fake",
       "alpn_policy": "h1_only",
-      "utls_policy": "off",
       "enabled": true,
       "ech_enabled": false,
       "use_cf_pool": false
     },
     {
       "id": "sg-1771319670672-24",
-      "name": "cdninstagram.com",
-      "website": "cdninstagram",
+      "name": "instagram",
+      "website": "meta",
       "domains": [
         "cdninstagram.com",
         "ig.me",
         "instagr.am",
         "instagram.com",
-        "static.cdninstagram.com"
+        "static.cdninstagram.com",
+        "threads.net",
+        "threads.com"
       ],
       "mode": "mitm",
       "upstream": "157.240.236.174:443",
-      "sni_fake": "",
-      "sni_policy": "fake",
+      "sni_fake": "fa.aq",
       "enabled": true,
       "ech_enabled": false,
       "use_cf_pool": false
@@ -393,7 +372,6 @@
       "mode": "mitm",
       "upstream": "140.82.112.21:443,140.82.112.22:443,140.82.113.21:443,140.82.113.22:443,140.82.114.21:443,140.82.114.22:443",
       "sni_fake": "centr.map",
-      "utls_policy": "off",
       "enabled": true,
       "ech_enabled": false,
       "use_cf_pool": false
@@ -408,7 +386,6 @@
       "mode": "mitm",
       "upstream": "20.205.243.165:443,20.27.177.114:443,20.200.245.246:443",
       "sni_fake": "codeload-github-com.mapped",
-      "utls_policy": "off",
       "enabled": true,
       "ech_enabled": false,
       "use_cf_pool": false
@@ -427,7 +404,6 @@
       "mode": "mitm",
       "upstream": "140.82.112.17:443,140.82.113.17:443,140.82.114.17:443,140.82.112.18:443,140.82.113.18:443,140.82.114.18:443",
       "sni_fake": "community-github-com.mapped",
-      "utls_policy": "off",
       "enabled": true,
       "ech_enabled": false,
       "use_cf_pool": false
@@ -491,7 +467,6 @@
       "mode": "mitm",
       "upstream": "185.199.109.154:443,185.199.108.154:443,185.199.110.154:443,185.199.111.154:443",
       "sni_fake": "docs-github-com.mapped",
-      "utls_policy": "off",
       "enabled": true,
       "ech_enabled": false,
       "use_cf_pool": false
@@ -742,7 +717,6 @@
       "connect_policy": "mitm",
       "sni_policy": "fake",
       "alpn_policy": "h1_only",
-      "utls_policy": "off",
       "enabled": true,
       "ech_enabled": false,
       "use_cf_pool": false
@@ -761,7 +735,6 @@
       "connect_policy": "mitm",
       "sni_policy": "fake",
       "alpn_policy": "h1_only",
-      "utls_policy": "off",
       "enabled": true,
       "ech_enabled": false,
       "use_cf_pool": false
@@ -876,7 +849,6 @@
       "mode": "mitm",
       "upstream": "20.205.243.166:443,20.27.177.113:443,20.200.245.247:443",
       "sni_fake": "gist-github-com.mapped",
-      "utls_policy": "off",
       "enabled": true,
       "ech_enabled": false,
       "use_cf_pool": false
@@ -896,7 +868,6 @@
       "sni_fake": "",
       "sni_policy": "none",
       "alpn_policy": "h1_only",
-      "utls_policy": "on",
       "enabled": true,
       "ech_enabled": false,
       "use_cf_pool": false
@@ -1049,7 +1020,6 @@
       "connect_policy": "mitm",
       "sni_policy": "fake",
       "alpn_policy": "h1_only",
-      "utls_policy": "off",
       "enabled": true,
       "ech_enabled": false,
       "use_cf_pool": false
@@ -1074,7 +1044,6 @@
       "connect_policy": "mitm",
       "sni_policy": "fake",
       "alpn_policy": "h1_only",
-      "utls_policy": "off",
       "enabled": true,
       "ech_enabled": false,
       "use_cf_pool": false
@@ -1082,7 +1051,7 @@
     {
       "id": "sg-1771319670672-65",
       "name": "wikipedia",
-      "website": "mediawiki",
+      "website": "wikipedia",
       "domains": [
         "m.mediawiki.org",
         "m.wikibooks.org",
@@ -1113,7 +1082,6 @@
       "sni_fake": "wikipedia-org",
       "connect_policy": "mitm",
       "sni_policy": "fake",
-      "utls_policy": "off",
       "enabled": true,
       "ech_enabled": false,
       "use_cf_pool": false
@@ -1286,7 +1254,7 @@
     {
       "id": "sg-1771319670672-79",
       "name": "prod-publishers-content.s3.us-east-1.amazonaws.com",
-      "website": "amazonaws",
+      "website": "amazon",
       "domains": [
         "prod-publishers-content.s3.us-east-1.amazonaws.com"
       ],
@@ -1454,7 +1422,6 @@
       "connect_policy": "mitm",
       "sni_policy": "fake",
       "alpn_policy": "h1_only",
-      "utls_policy": "off",
       "enabled": true,
       "ech_enabled": false,
       "use_cf_pool": false
@@ -1508,7 +1475,7 @@
     {
       "id": "sg-1771319670672-95",
       "name": "upload.wikimedia.org",
-      "website": "wikimedia",
+      "website": "wikipedia",
       "domains": [
         "upload.wikimedia.org"
       ],
@@ -1517,7 +1484,6 @@
       "sni_fake": "upload-wikipedia-org",
       "connect_policy": "mitm",
       "sni_policy": "fake",
-      "utls_policy": "off",
       "enabled": true,
       "ech_enabled": false,
       "use_cf_pool": false
@@ -1540,7 +1506,7 @@
     {
       "id": "sg-1771319670673-98",
       "name": "whatsapp.com",
-      "website": "whatsapp",
+      "website": "meta",
       "domains": [
         "whatsapp.com",
         "whatsapp.net"
@@ -1797,7 +1763,6 @@
       "connect_policy": "mitm",
       "sni_policy": "fake",
       "alpn_policy": "h1_only",
-      "utls_policy": "off",
       "enabled": true,
       "ech_enabled": false,
       "use_cf_pool": false
@@ -1816,7 +1781,6 @@
       "connect_policy": "mitm",
       "sni_policy": "fake",
       "alpn_policy": "h1_only",
-      "utls_policy": "off",
       "enabled": true,
       "ech_enabled": false,
       "use_cf_pool": false
@@ -1928,7 +1892,6 @@
       "upstream": "",
       "sni_fake": "",
       "sni_policy": "fake",
-      "utls_policy": "auto",
       "enabled": true,
       "ech_enabled": true,
       "ech_profile_id": "legacy-cloudflare",
@@ -1945,7 +1908,6 @@
       "upstream": "",
       "sni_fake": "",
       "sni_policy": "fake",
-      "utls_policy": "auto",
       "enabled": true,
       "ech_enabled": true,
       "ech_profile_id": "legacy-cloudflare",
@@ -1979,7 +1941,6 @@
       "upstream": "",
       "sni_fake": "",
       "sni_policy": "fake",
-      "utls_policy": "auto",
       "enabled": true,
       "ech_enabled": true,
       "ech_profile_id": "legacy-cloudflare",
@@ -1995,7 +1956,6 @@
       "mode": "server",
       "upstream": "",
       "sni_fake": "",
-      "utls_policy": "on",
       "enabled": true,
       "ech_enabled": true,
       "use_cf_pool": true
@@ -2011,7 +1971,6 @@
       "upstream": "",
       "sni_fake": "",
       "sni_policy": "fake",
-      "utls_policy": "auto",
       "enabled": true,
       "ech_enabled": true,
       "ech_profile_id": "legacy-cloudflare",
@@ -2028,7 +1987,6 @@
       "upstream": "",
       "sni_fake": "",
       "sni_policy": "fake",
-      "utls_policy": "auto",
       "enabled": true,
       "ech_enabled": true,
       "ech_profile_id": "legacy-cloudflare",
@@ -2045,7 +2003,6 @@
       "upstream": "",
       "sni_fake": "",
       "sni_policy": "fake",
-      "utls_policy": "auto",
       "enabled": true,
       "ech_enabled": true,
       "ech_profile_id": "legacy-cloudflare",
@@ -2152,7 +2109,6 @@
       "upstream": "",
       "sni_fake": "",
       "sni_policy": "fake",
-      "utls_policy": "auto",
       "enabled": true,
       "ech_enabled": true,
       "ech_profile_id": "legacy-cloudflare",
@@ -2169,7 +2125,6 @@
       "upstream": "",
       "sni_fake": "",
       "sni_policy": "fake",
-      "utls_policy": "auto",
       "enabled": true,
       "ech_enabled": true,
       "ech_profile_id": "legacy-cloudflare",
@@ -2213,7 +2168,6 @@
       "mode": "mitm",
       "upstream": "20.207.73.81:443",
       "sni_fake": "uploads-github-com.mapped",
-      "utls_policy": "off",
       "enabled": true,
       "ech_enabled": false,
       "use_cf_pool": false
@@ -2228,7 +2182,6 @@
       "mode": "mitm",
       "upstream": "140.82.112.26:443",
       "sni_fake": "alive-github-com.mapped",
-      "utls_policy": "off",
       "enabled": true,
       "ech_enabled": false,
       "use_cf_pool": false
@@ -2243,7 +2196,6 @@
       "mode": "mitm",
       "upstream": "140.82.113.22:443",
       "sni_fake": "objects-origin-githubusercontent-com.mapped",
-      "utls_policy": "off",
       "enabled": true,
       "ech_enabled": false,
       "use_cf_pool": false
@@ -2348,6 +2300,34 @@
       "enabled": true,
       "ech_enabled": false,
       "use_cf_pool": false
+    },
+    {
+      "id": "1774688438366047300",
+      "name": "Android",
+      "website": "google",
+      "domains": [
+        "android.com"
+      ],
+      "mode": "mitm",
+      "upstream": "android.com",
+      "sni_fake": "g.cn",
+      "enabled": true,
+      "ech_enabled": false,
+      "use_cf_pool": false
+    },
+    {
+      "id": "1774697448523203200",
+      "name": "hacker news",
+      "website": "hacker news",
+      "domains": [
+        "news.ycombinator.com"
+      ],
+      "mode": "transparent",
+      "upstream": "209.216.230.207:443",
+      "sni_fake": "",
+      "enabled": true,
+      "ech_enabled": false,
+      "use_cf_pool": false
     }
   ],
   "upstreams": [],
@@ -2362,26 +2342,26 @@
   ],
   "cloudflare_config": {
     "preferred_ips": [
-      "104.18.93.146",
-      "104.18.82.145",
-      "104.17.145.194",
-      "104.19.36.34",
-      "104.17.161.245",
-      "198.41.202.164",
-      "198.41.205.43",
-      "162.159.24.15",
-      "198.41.203.227",
-      "162.159.20.20",
-      "172.64.34.245",
-      "162.159.60.248",
-      "108.162.196.17",
-      "162.159.4.9",
-      "162.159.18.157",
-      "108.162.198.222",
-      "108.162.198.27",
-      "162.159.45.92",
-      "108.162.198.83",
-      "162.159.45.224"
+      "104.19.56.220",
+      "104.19.33.132",
+      "104.19.56.167",
+      "104.25.241.149",
+      "104.25.248.141",
+      "104.17.140.219",
+      "104.17.131.91",
+      "104.17.152.75",
+      "104.17.140.224",
+      "104.17.152.122",
+      "162.159.44.125",
+      "162.159.44.51",
+      "162.159.45.190",
+      "162.159.39.136",
+      "162.159.39.254",
+      "108.162.198.22",
+      "162.159.45.51",
+      "162.159.45.9",
+      "162.159.45.120",
+      "162.159.45.54"
     ],
     "doh_url": "",
     "auto_update": true,

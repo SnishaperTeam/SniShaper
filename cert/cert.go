@@ -1,43 +1,42 @@
 package cert
 
 import (
-	"crypto/sha1"
+	"bufio"
+	"bytes"
 	"crypto/rand"
 	"crypto/rsa"
-	"crypto/tls"
+	"crypto/sha1"
 	"crypto/x509"
 	"crypto/x509/pkix"
+	"encoding/json"
 	"encoding/hex"
 	"encoding/pem"
 	"fmt"
 	"math/big"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"sync"
 	"time"
 )
 
 type CertManager struct {
-	caCert     *x509.Certificate
-	caKey      *rsa.PrivateKey
-	certCache  map[string]*tls.Certificate
-	certMu     sync.RWMutex
-	caPath     string
-	certPath   string
-	keyPath    string
+	caCert  *x509.Certificate
+	caKey   *rsa.PrivateKey
+	certMu  sync.RWMutex
+	caPath  string
+	keyPath string
 }
 
-func NewCertManager(caPath, certPath, keyPath string) *CertManager {
+func NewCertManager(caPath, keyPath string) *CertManager {
 	return &CertManager{
-		certCache: make(map[string]*tls.Certificate),
-		caPath:    caPath,
-		certPath:  certPath,
-		keyPath:   keyPath,
+		caPath:  caPath,
+		keyPath: keyPath,
 	}
 }
 
-func (cm *CertManager) GenerateCA() error {
+func (cm *CertManager) generateCAUnlocked() error {
 	privateKey, err := rsa.GenerateKey(rand.Reader, 2048)
 	if err != nil {
 		return fmt.Errorf("failed to generate CA private key: %w", err)
@@ -77,6 +76,12 @@ func (cm *CertManager) GenerateCA() error {
 	return nil
 }
 
+func (cm *CertManager) GenerateCA() error {
+	cm.certMu.Lock()
+	defer cm.certMu.Unlock()
+	return cm.generateCAUnlocked()
+}
+
 func (cm *CertManager) saveCA() error {
 	caFile, err := os.Create(cm.caPath)
 	if err != nil {
@@ -103,10 +108,13 @@ func (cm *CertManager) saveCA() error {
 }
 
 func (cm *CertManager) LoadCA() error {
+	cm.certMu.Lock()
+	defer cm.certMu.Unlock()
+
 	caData, err := os.ReadFile(cm.caPath)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return cm.GenerateCA()
+			return cm.generateCAUnlocked()
 		}
 		return err
 	}
@@ -134,67 +142,6 @@ func (cm *CertManager) LoadCA() error {
 	return nil
 }
 
-func (cm *CertManager) GenerateDomainCert(domains []string) error {
-	if cm.caCert == nil || cm.caKey == nil {
-		if err := cm.LoadCA(); err != nil {
-			return err
-		}
-	}
-
-	privateKey, err := rsa.GenerateKey(rand.Reader, 2048)
-	if err != nil {
-		return fmt.Errorf("failed to generate private key: %w", err)
-	}
-
-	serial := big.NewInt(time.Now().UnixNano())
-	template := &x509.Certificate{
-		SerialNumber: serial,
-		Subject: pkix.Name{
-			CommonName: domains[0],
-		},
-		NotBefore:             time.Now(),
-		NotAfter:              time.Now().Add(365 * 24 * time.Hour),
-		KeyUsage:              x509.KeyUsageDigitalSignature | x509.KeyUsageKeyEncipherment,
-		ExtKeyUsage:           []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
-		BasicConstraintsValid: true,
-		DNSNames:              domains,
-	}
-
-	certDER, err := x509.CreateCertificate(rand.Reader, template, cm.caCert, &privateKey.PublicKey, cm.caKey)
-	if err != nil {
-		return fmt.Errorf("failed to create certificate: %w", err)
-	}
-
-	_, err = x509.ParseCertificate(certDER)
-	if err != nil {
-		return err
-	}
-
-	certPEM := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: certDER})
-	keyPEM := pem.EncodeToMemory(&pem.Block{Type: "RSA PRIVATE KEY", Bytes: x509.MarshalPKCS1PrivateKey(privateKey)})
-
-	tlsCert, err := tls.X509KeyPair(certPEM, keyPEM)
-	if err != nil {
-		return err
-	}
-
-	cm.certMu.Lock()
-	cm.certCache["default"] = &tlsCert
-	cm.certMu.Unlock()
-
-	certFile, err := os.Create(cm.certPath)
-	if err != nil {
-		return err
-	}
-	defer certFile.Close()
-
-	certFile.Write(certPEM)
-	certFile.Write(keyPEM)
-
-	fmt.Printf("[Cert] Domain certificate generated for: %v\n", domains)
-	return nil
-}
-
 func (cm *CertManager) GetCACertPath() string {
 	return cm.caPath
 }
@@ -207,26 +154,21 @@ func (cm *CertManager) GetCertPool() *x509.CertPool {
 	return pool
 }
 
-func (cm *CertManager) GetDomainCert() (*tls.Certificate, error) {
+func (cm *CertManager) GetCA() *x509.Certificate {
 	cm.certMu.RLock()
 	defer cm.certMu.RUnlock()
-
-	if cert, ok := cm.certCache["default"]; ok {
-		return cert, nil
-	}
-
-	return nil, fmt.Errorf("no certificate loaded")
-}
-
-func (cm *CertManager) GetCA() *x509.Certificate {
 	return cm.caCert
 }
 
 func (cm *CertManager) GetCACert() *x509.Certificate {
+	cm.certMu.RLock()
+	defer cm.certMu.RUnlock()
 	return cm.caCert
 }
 
 func (cm *CertManager) GetCAKey() interface{} {
+	cm.certMu.RLock()
+	defer cm.certMu.RUnlock()
 	return cm.caKey
 }
 
@@ -285,11 +227,22 @@ func (cm *CertManager) GetCAInstallStatus() CAInstallStatus {
 }
 
 func (cm *CertManager) InstallCA() error {
+	if cm.caCert == nil || cm.caKey == nil {
+		if err := cm.LoadCA(); err != nil {
+			return err
+		}
+	}
 	if cm.caPath == "" {
 		return fmt.Errorf("CA certificate path is empty")
 	}
 
-	// Use certutil to install to CurrentUser Root store. 
+	if certs, err := cm.GetInstalledCertificates(); err == nil {
+		for _, c := range certs {
+			_ = cm.UninstallCertificate(c.Token)
+		}
+	}
+
+	// Use certutil to install to CurrentUser Root store.
 	// This will pop up a standard Windows security warning.
 	err := runHiddenCommand("certutil", "-user", "-addstore", "root", cm.caPath)
 	if err != nil {
@@ -299,11 +252,185 @@ func (cm *CertManager) InstallCA() error {
 	fmt.Println("[Cert] CA certificate installed successfully to CurrentUser Root store")
 	return nil
 }
+
+type InstalledCert struct {
+	Subject       string `json:"subject"`
+	Thumbprint    string `json:"thumbprint"`
+	NotAfter      string `json:"notAfter"`
+	StoreName     string `json:"storeName"`
+	StoreLocation string `json:"storeLocation"`
+	Token         string `json:"token"`
+}
+
+func (cm *CertManager) GetInstalledCertificates() ([]InstalledCert, error) {
+	psScript := `
+$stores = @(
+  @{ Location = 'CurrentUser'; Name = 'Root' },
+  @{ Location = 'CurrentUser'; Name = 'CA' },
+  @{ Location = 'LocalMachine'; Name = 'Root' },
+  @{ Location = 'LocalMachine'; Name = 'CA' }
+)
+$result = @()
+foreach ($spec in $stores) {
+  $store = New-Object System.Security.Cryptography.X509Certificates.X509Store($spec.Name, $spec.Location)
+  try {
+    $store.Open([System.Security.Cryptography.X509Certificates.OpenFlags]::ReadOnly)
+    foreach ($cert in $store.Certificates) {
+      if ($cert.Subject -match 'SniShaper' -or $cert.Issuer -match 'SniShaper') {
+        $result += [PSCustomObject]@{
+          subject = $cert.Subject
+          thumbprint = $cert.Thumbprint
+          notAfter = $cert.NotAfter.ToString('yyyy-MM-dd HH:mm:ss')
+          storeName = $spec.Name
+          storeLocation = $spec.Location
+          token = "$($spec.Location)|$($spec.Name)|$($cert.Thumbprint)"
+        }
+      }
+    }
+  } finally {
+    $store.Close()
+  }
+}
+$result | ConvertTo-Json -Compress
+`
+	output, err := outputHiddenCommand("powershell", "-NoProfile", "-Command", psScript)
+	if err != nil {
+		return nil, fmt.Errorf("failed to enumerate certificate stores: %w", err)
+	}
+
+	text := strings.TrimSpace(string(output))
+	if text == "" {
+		return []InstalledCert{}, nil
+	}
+
+	var certs []InstalledCert
+	if strings.HasPrefix(text, "[") {
+		if err := json.Unmarshal(output, &certs); err != nil {
+			return nil, fmt.Errorf("failed to parse installed certificates: %w", err)
+		}
+		return certs, nil
+	}
+
+	var single InstalledCert
+	if err := json.Unmarshal(output, &single); err != nil {
+		return nil, fmt.Errorf("failed to parse installed certificate: %w", err)
+	}
+	return []InstalledCert{single}, nil
+}
+
+var sha1ThumbprintPattern = regexp.MustCompile(`(?i)[A-F0-9]{40}`)
+
+func parseCertutilStoreOutput(output []byte, storeLocation, storeName string) []InstalledCert {
+	scanner := bufio.NewScanner(bytes.NewReader(output))
+	var blocks [][]string
+	var current []string
+
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+		if strings.Contains(line, "====") {
+			if len(current) > 0 {
+				blocks = append(blocks, current)
+			}
+			current = []string{line}
+			continue
+		}
+		if len(current) > 0 {
+			current = append(current, line)
+		}
+	}
+	if len(current) > 0 {
+		blocks = append(blocks, current)
+	}
+
+	var certs []InstalledCert
+	for _, block := range blocks {
+		joined := strings.Join(block, "\n")
+		if !strings.Contains(strings.ToLower(joined), "snishaper") {
+			continue
+		}
+
+		var subject string
+		var notAfter string
+		var thumbprint string
+
+		for _, line := range block {
+			lower := strings.ToLower(line)
+			if subject == "" && strings.Contains(lower, "snishaper") {
+				if idx := strings.Index(line, ":"); idx >= 0 && idx+1 < len(line) {
+					subject = strings.TrimSpace(line[idx+1:])
+				}
+			}
+			if notAfter == "" && strings.Contains(lower, "notafter:") {
+				if idx := strings.Index(line, ":"); idx >= 0 && idx+1 < len(line) {
+					notAfter = strings.TrimSpace(line[idx+1:])
+				}
+			}
+			if thumbprint == "" {
+				if match := sha1ThumbprintPattern.FindString(line); match != "" {
+					thumbprint = strings.ToUpper(match)
+				}
+			}
+		}
+
+		if thumbprint == "" {
+			continue
+		}
+		if subject == "" {
+			subject = "SniShaper CA"
+		}
+
+		certs = append(certs, InstalledCert{
+			Subject:       subject,
+			Thumbprint:    thumbprint,
+			NotAfter:      notAfter,
+			StoreName:     storeName,
+			StoreLocation: storeLocation,
+			Token:         storeLocation + "|" + storeName + "|" + thumbprint,
+		})
+	}
+
+	return certs
+}
+
+func (cm *CertManager) UninstallCertificate(thumbprint string) error {
+	if thumbprint == "" {
+		return fmt.Errorf("thumbprint is empty")
+	}
+
+	storeLocation := "CurrentUser"
+	storeName := "Root"
+	certThumbprint := thumbprint
+
+	if parts := strings.SplitN(thumbprint, "|", 3); len(parts) == 3 {
+		storeLocation = parts[0]
+		storeName = parts[1]
+		certThumbprint = parts[2]
+	}
+
+	args := []string{}
+	if strings.EqualFold(storeLocation, "CurrentUser") {
+		args = append(args, "-user")
+	}
+	args = append(args, "-delstore", storeName, certThumbprint)
+
+	if strings.EqualFold(storeLocation, "LocalMachine") {
+		return runElevatedCommand("certutil", args...)
+	}
+
+	return runHiddenCommand("certutil", args...)
+}
+
+func (cm *CertManager) OpenCertDir() error {
+	dir := filepath.Dir(cm.caPath)
+	return startVisibleCommand("explorer.exe", dir)
+}
 func (cm *CertManager) OpenCAFile() error {
-	return startHiddenCommand("cmd", "/c", "start", "", cm.caPath)
+	return startVisibleCommand("explorer.exe", "/select,"+cm.caPath)
 }
 
 func (cm *CertManager) GetCACertPEM() string {
+	cm.certMu.RLock()
+	defer cm.certMu.RUnlock()
 	if cm.caCert == nil {
 		return ""
 	}
@@ -314,17 +441,29 @@ func (cm *CertManager) RegenerateCA() error {
 	cm.certMu.Lock()
 	defer cm.certMu.Unlock()
 
-	if err := cm.GenerateCA(); err != nil {
+	// 1. Try to clean up existing certificates from system store
+	certs, err := cm.GetInstalledCertificates()
+	if err == nil {
+		for _, c := range certs {
+			fmt.Printf("[Cert] Cleaning up old cert: %s\n", c.Thumbprint)
+			_ = cm.UninstallCertificate(c.Thumbprint)
+		}
+	}
+
+	// 2. Generate new CA
+	if err := cm.generateCAUnlocked(); err != nil {
 		return err
 	}
 
-	cm.certCache = make(map[string]*tls.Certificate)
-
 	fmt.Println("[Cert] CA certificate regenerated successfully")
-	return nil
+
+	// 3. Install the new one
+	return cm.InstallCA()
 }
 
 func (cm *CertManager) ExportCert() ([]byte, error) {
+	cm.certMu.RLock()
+	defer cm.certMu.RUnlock()
 	if cm.caCert == nil {
 		return nil, fmt.Errorf("no CA certificate available")
 	}
@@ -336,23 +475,15 @@ func InitCertManager(certDir string) (*CertManager, error) {
 
 	cm := NewCertManager(
 		filepath.Join(certDir, "ca.crt"),
-		filepath.Join(certDir, "domain.crt"),
-		filepath.Join(certDir, "domain.key"),
+		filepath.Join(certDir, "ca.key"),
 	)
 
 	if err := cm.LoadCA(); err != nil {
-		return nil, err
-	}
-
-	defaultDomains := []string{
-		"google.com",
-		"youtube.com",
-		"github.com",
-		"gstatic.com",
-	}
-
-	if err := cm.GenerateDomainCert(defaultDomains); err != nil {
-		fmt.Printf("[Cert] Warning: failed to generate default cert: %v\n", err)
+		_ = os.Remove(cm.caPath)
+		_ = os.Remove(cm.keyPath)
+		if genErr := cm.GenerateCA(); genErr != nil {
+			return nil, fmt.Errorf("load existing CA failed: %v; regenerate failed: %w", err, genErr)
+		}
 	}
 
 	return cm, nil

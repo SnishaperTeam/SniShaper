@@ -53,6 +53,7 @@ type ProxyServer struct {
 	cfPool        *CloudflarePool
 	transport     *http.Transport
 	warpMgr       *WarpManager
+	logCallback   func(string)
 }
 
 type RuleManager struct {
@@ -61,6 +62,7 @@ type RuleManager struct {
 	upstreams        []Upstream
 	configPath       string
 	cloudflareConfig CloudflareConfig
+	closeToTray      bool
 	serverHost       string
 	serverAuth       string
 	listenPort       string
@@ -80,7 +82,6 @@ type SiteGroup struct {
 	ConnectPolicy string   `json:"connect_policy,omitempty"` // "", "tunnel_origin", "tunnel_upstream", "mitm", "direct"
 	SniPolicy     string   `json:"sni_policy,omitempty"`     // "", "auto", "original", "fake", "upstream", "none"
 	AlpnPolicy    string   `json:"alpn_policy,omitempty"`    // "", "auto", "h1_only", "h2_h1"
-	UTLSPolicy    string   `json:"utls_policy,omitempty"`    // "", "auto", "on", "off"
 	Enabled       bool     `json:"enabled"`
 	ECHEnabled    bool     `json:"ech_enabled"`
 	ECHProfileID  string   `json:"ech_profile_id,omitempty"`
@@ -108,6 +109,7 @@ type Config struct {
 	ListenPort       string           `json:"listen_port"`
 	ServerHost       string           `json:"server_host,omitempty"`
 	ServerAuth       string           `json:"server_auth,omitempty"`
+	CloseToTray      *bool            `json:"close_to_tray,omitempty"`
 	SiteGroups       []SiteGroup      `json:"site_groups"`
 	Upstreams        []Upstream       `json:"upstreams"`
 	ECHProfiles      []ECHProfile     `json:"ech_profiles,omitempty"`
@@ -115,10 +117,10 @@ type Config struct {
 }
 
 type CloudflareConfig struct {
-	PreferredIPs []string `json:"preferred_ips"`
-	DoHURL       string   `json:"doh_url"`
-	AutoUpdate   bool     `json:"auto_update"`
-	APIKey       string   `json:"api_key"`
+	PreferredIPs  []string `json:"preferred_ips"`
+	DoHURL        string   `json:"doh_url"`
+	AutoUpdate    bool     `json:"auto_update"`
+	APIKey        string   `json:"api_key"`
 	WarpEnabled   bool     `json:"warp_enabled"`
 	WarpSocksPort int      `json:"warp_socks_port"`
 	WarpEndpoint  string   `json:"warp_endpoint"`
@@ -189,7 +191,6 @@ type Rule struct {
 	ConnectPolicy      string // "", "tunnel_origin", "tunnel_upstream", "mitm", "direct"
 	SniPolicy          string // "", "auto", "original", "fake", "upstream", "none"
 	AlpnPolicy         string // "", "auto", "h1_only", "h2_h1"
-	UTLSPolicy         string // "", "auto", "on", "off"
 	Enabled            bool
 	SiteID             string
 	ECHEnabled         bool
@@ -221,9 +222,6 @@ func mergeRule(base, overlay Rule) Rule {
 	}
 	if strings.TrimSpace(overlay.AlpnPolicy) != "" {
 		out.AlpnPolicy = overlay.AlpnPolicy
-	}
-	if strings.TrimSpace(overlay.UTLSPolicy) != "" {
-		out.UTLSPolicy = overlay.UTLSPolicy
 	}
 	return out
 }
@@ -669,6 +667,24 @@ func (p *ProxyServer) SetWarpManager(wm *WarpManager) {
 	p.warpMgr = wm
 }
 
+func (p *ProxyServer) SetLogCallback(cb func(string)) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.logCallback = cb
+}
+
+func (p *ProxyServer) tracef(format string, args ...interface{}) {
+	msg := fmt.Sprintf(format, args...)
+	log.Printf("%s", msg)
+
+	p.mu.RLock()
+	cb := p.logCallback
+	p.mu.RUnlock()
+	if cb != nil {
+		cb(msg)
+	}
+}
+
 func (p *ProxyServer) UpdateCloudflareConfig(cfg CloudflareConfig) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
@@ -853,7 +869,7 @@ func (p *ProxyServer) handleRequest(w http.ResponseWriter, req *http.Request) {
 		p.rules.incrementRuleHit(rule.SiteID)
 	}
 
-	log.Printf("[Proxy] Request: %s -> %s (match: %s, runtime-mode: %s, rule-mode: %s)", req.Method, host, matchHost, mode, rule.Mode)
+	p.tracef("[Proxy] Request: %s -> %s (match: %s, runtime-mode: %s, rule-mode: %s)", req.Method, host, matchHost, mode, rule.Mode)
 
 	switch req.Method {
 	case http.MethodConnect:
@@ -912,7 +928,7 @@ func (p *ProxyServer) handleConnect(w http.ResponseWriter, req *http.Request, ru
 		}
 	}
 
-	log.Printf("[Connect] target=%s host=%s mode=%s->%s upstream=%s sni_fake=%s", targetAddr, targetHost, rule.Mode, effectiveMode, resolvedUpstream, rule.SniFake)
+	p.tracef("[Connect] target=%s host=%s mode=%s->%s upstream=%s sni_fake=%s", targetAddr, targetHost, rule.Mode, effectiveMode, resolvedUpstream, rule.SniFake)
 
 	// 对于 direct 模式，直接连接目标
 	if effectiveMode == "direct" {
@@ -946,8 +962,6 @@ func (p *ProxyServer) handleConnect(w http.ResponseWriter, req *http.Request, ru
 		return
 	}
 
-	var conn net.Conn
-	var err error
 	dialAddr := targetAddr
 	dialCandidates := []string{dialAddr}
 
@@ -984,58 +998,112 @@ func (p *ProxyServer) handleConnect(w http.ResponseWriter, req *http.Request, ru
 
 	log.Printf("[Connect] Using candidates %v for host %s", dialCandidates, targetHost)
 
-	// 使用私有 dial 方法以支持 Warp
-	dial := func(network, addr string) (net.Conn, error) {
-		return p.dialWithRule(context.Background(), network, addr, rule)
-	}
+	var conn net.Conn
+	var err error
 
-	// 单路稳定性优先（结合顺序回退）
-	if len(dialCandidates) > 1 {
-		var lastErr error
-		for _, addr := range dialCandidates {
-			conn, err = dial("tcp", addr)
-			if err == nil {
-				dialAddr = addr
-				log.Printf("[Connect] Sequential dial success: %s", dialAddr)
+	if effectiveMode != "mitm" {
+		// 使用私有 dial 方法以支持 Warp
+		dial := func(network, addr string) (net.Conn, error) {
+			return p.dialWithRule(context.Background(), network, addr, rule)
+		}
 
-				// 如果使用了 CF 优选池，回馈成功状态
+		// 单路稳定性优先（结合顺序回退）
+		if len(dialCandidates) > 1 {
+			var lastErr error
+			for _, addr := range dialCandidates {
+				conn, err = dial("tcp", addr)
+				if err == nil {
+					dialAddr = addr
+					log.Printf("[Connect] Sequential dial success: %s", dialAddr)
+
+					// 如果使用了 CF 优选池，回馈成功状态
+					if rule.UseCFPool && p.cfPool != nil {
+						host, _, _ := net.SplitHostPort(addr)
+						if host != "" {
+							p.cfPool.ReportSuccess(host)
+						}
+					}
+					break
+				}
+
+				log.Printf("[Connect] Connect failed to %s: %v", addr, err)
+				lastErr = err
+
+				// 如果该候选节点连通失败，且来自于 CF 优选池，上报失败实施惩罚
 				if rule.UseCFPool && p.cfPool != nil {
 					host, _, _ := net.SplitHostPort(addr)
 					if host != "" {
-						p.cfPool.ReportSuccess(host)
+						p.cfPool.ReportFailure(host)
 					}
 				}
-				break
 			}
-
-			log.Printf("[Connect] Connect failed to %s: %v", addr, err)
-			lastErr = err
-
-			// 如果该候选节点连通失败，且来自于 CF 优选池，上报失败实施惩罚
-			if rule.UseCFPool && p.cfPool != nil {
-				host, _, _ := net.SplitHostPort(addr)
-				if host != "" {
-					p.cfPool.ReportFailure(host)
+			if conn == nil {
+				err = lastErr
+			}
+		} else {
+			for _, candidate := range dialCandidates {
+				conn, err = dial("tcp", candidate)
+				if err == nil {
+					dialAddr = candidate
+					break
 				}
+				log.Printf("[Connect] Connect failed to %s: %v", candidate, err)
 			}
 		}
-		if conn == nil {
-			err = lastErr
+		if err != nil || conn == nil {
+			http.Error(w, "Failed to connect to upstream", http.StatusBadGateway)
+			p.tracef("[Connect] All upstream connect attempts failed: %v", dialCandidates)
+			return
 		}
 	} else {
-		for _, candidate := range dialCandidates {
-			conn, err = dial("tcp", candidate)
-			if err == nil {
-				dialAddr = candidate
-				break
-			}
-			log.Printf("[Connect] Connect failed to %s: %v", candidate, err)
+		// For MITM we only need a raw TCP connect here so the browser can receive
+		// CONNECT 200 quickly; upstream TLS is established inside handleMITM.
+		dial := func(network, addr string) (net.Conn, error) {
+			return p.dialWithRule(context.Background(), network, addr, rule)
 		}
-	}
-	if err != nil || conn == nil {
-		http.Error(w, "Failed to connect to upstream", http.StatusBadGateway)
-		log.Printf("[Connect] All upstream connect attempts failed: %v", dialCandidates)
-		return
+		if len(dialCandidates) > 1 {
+			var lastErr error
+			for _, addr := range dialCandidates {
+				conn, err = dial("tcp", addr)
+				if err == nil {
+					dialAddr = addr
+					log.Printf("[Connect] Sequential dial success: %s", dialAddr)
+					if rule.UseCFPool && p.cfPool != nil {
+						host, _, _ := net.SplitHostPort(addr)
+						if host != "" {
+							p.cfPool.ReportSuccess(host)
+						}
+					}
+					break
+				}
+
+				log.Printf("[Connect] Connect failed to %s: %v", addr, err)
+				lastErr = err
+				if rule.UseCFPool && p.cfPool != nil {
+					host, _, _ := net.SplitHostPort(addr)
+					if host != "" {
+						p.cfPool.ReportFailure(host)
+					}
+				}
+			}
+			if conn == nil {
+				err = lastErr
+			}
+		} else {
+			for _, candidate := range dialCandidates {
+				conn, err = dial("tcp", candidate)
+				if err == nil {
+					dialAddr = candidate
+					break
+				}
+				log.Printf("[Connect] Connect failed to %s: %v", candidate, err)
+			}
+		}
+		if err != nil || conn == nil {
+			http.Error(w, "Failed to connect to upstream", http.StatusBadGateway)
+			p.tracef("[Connect] All upstream connect attempts failed: %v", dialCandidates)
+			return
+		}
 	}
 
 	hijacker, ok := w.(http.Hijacker)
@@ -1235,24 +1303,36 @@ func (p *ProxyServer) handleHTTP(w http.ResponseWriter, req *http.Request, rule 
 }
 
 func (p *ProxyServer) handleMITM(clientConn net.Conn, host string, rule Rule, dialCandidates []string, initialDialAddr string) {
-	log.Printf("[MITM] Handling %s with SNI: %s", host, rule.SniFake)
+	defer func() {
+		if r := recover(); r != nil {
+			p.tracef("[MITM] Panic: %v", r)
+			_ = clientConn.Close()
+		}
+	}()
+
+	p.tracef("[MITM] Handling %s with SNI: %s", host, rule.SniFake)
 
 	if p.certGenerator == nil {
-		log.Printf("[MITM] No cert generator, falling back to direct")
+		p.tracef("[MITM] No cert generator, falling back to direct")
 		p.directTunnel(clientConn, clientConn)
 		return
 	}
 
+	p.tracef("[MITM] Cert generator present")
+	p.tracef("[MITM] Fetching CA cert")
 	caCert := p.certGenerator.GetCACert()
+	p.tracef("[MITM] Fetching CA key")
 	caKey := p.certGenerator.GetCAKey()
+	p.tracef("[MITM] CA fetch done cert=%t key=%t", caCert != nil, caKey != nil)
 	if caCert == nil || caKey == nil {
-		log.Printf("[MITM] CA cert/key not available")
+		p.tracef("[MITM] CA cert/key not available")
 		clientConn.Close()
 		return
 	}
 
+	p.tracef("[MITM] Choosing upstream SNI for host=%s", host)
 	sniHost := chooseUpstreamSNI(host, rule)
-	log.Printf("[MITM] Upstream handshake SNI selected: %s", sniHost)
+	p.tracef("[MITM] Upstream handshake SNI selected: %s", sniHost)
 
 	orderedCandidates := make([]string, 0, len(dialCandidates)+1)
 	if strings.TrimSpace(initialDialAddr) != "" {
@@ -1265,9 +1345,11 @@ func (p *ProxyServer) handleMITM(clientConn net.Conn, host string, rule Rule, di
 		orderedCandidates = append(orderedCandidates, c)
 	}
 
-	upstreamRW, upstreamProtocol, err := p.establishUpstreamConn(host, rule, orderedCandidates, "")
+	// Keep MITM on HTTP/1.1 to avoid protocol translation between client and upstream.
+	p.tracef("[MITM] Establishing upstream via candidates=%v", orderedCandidates)
+	upstreamRW, upstreamProtocol, err := p.establishUpstreamConn(host, rule, orderedCandidates, "http/1.1")
 	if err != nil {
-		log.Printf("[MITM] Failed to establish upstream: %v", err)
+		p.tracef("[MITM] Failed to establish upstream: %v", err)
 		clientConn.Close()
 		return
 	}
@@ -1279,7 +1361,7 @@ func (p *ProxyServer) handleMITM(clientConn net.Conn, host string, rule Rule, di
 		return
 	}
 
-	log.Printf("[MITM] Upstream negotiated protocol: %s", upstreamProtocol)
+	p.tracef("[MITM] Upstream negotiated protocol: %s", upstreamProtocol)
 
 	cert, err := p.generateCert(host, caCert, caKey)
 	if err != nil {
@@ -1289,54 +1371,45 @@ func (p *ProxyServer) handleMITM(clientConn net.Conn, host string, rule Rule, di
 		return
 	}
 
-	clientNextProtos := []string{upstreamProtocol}
-	if upstreamProtocol == "" {
-		clientNextProtos = []string{"http/1.1"}
-	} else if upstreamProtocol == "h2" {
-		clientNextProtos = []string{"h2", "http/1.1"}
-	} else {
-		clientNextProtos = []string{"http/1.1"}
-	}
-
 	tlsConfig := &tls.Config{
 		Certificates: []tls.Certificate{*cert},
-		NextProtos:   clientNextProtos,
+		NextProtos:   []string{"http/1.1"},
 	}
 
 	clientTls := tls.Server(clientConn, tlsConfig)
 	if err := clientTls.Handshake(); err != nil {
-		log.Printf("[MITM] Client TLS handshake failed: %v", err)
+		p.tracef("[MITM] Client TLS handshake failed: %v", err)
 		clientConn.Close()
 		upstreamRW.Close()
 		return
 	}
 
 	clientALPN := clientTls.ConnectionState().NegotiatedProtocol
-	log.Printf("[MITM] Client ALPN: %s, Upstream Protocol: %s", clientALPN, upstreamProtocol)
+	p.tracef("[MITM] Client ALPN: %s, Upstream Protocol: %s", clientALPN, upstreamProtocol)
 
 	p.directTunnel(clientTls, upstreamRW)
 }
 
 func (p *ProxyServer) directTunnel(clientConn, upstreamConn net.Conn) {
-	log.Printf("[Tunnel] Starting direct tunnel")
+	p.tracef("[Tunnel] Starting direct tunnel")
 	var wg sync.WaitGroup
 	wg.Add(2)
 	go func() {
 		defer wg.Done()
 		buf := make([]byte, 128*1024)
 		n, err := io.CopyBuffer(upstreamConn, clientConn, buf)
-		log.Printf("[Tunnel] Client -> Upstream: %d bytes, err: %v", n, err)
+		p.tracef("[Tunnel] Client -> Upstream: %d bytes, err: %v", n, err)
 		upstreamConn.Close()
 	}()
 	go func() {
 		defer wg.Done()
 		buf := make([]byte, 128*1024)
 		n, err := io.CopyBuffer(clientConn, upstreamConn, buf)
-		log.Printf("[Tunnel] Upstream -> Client: %d bytes, err: %v", n, err)
+		p.tracef("[Tunnel] Upstream -> Client: %d bytes, err: %v", n, err)
 		clientConn.Close()
 	}()
 	wg.Wait()
-	log.Printf("[Tunnel] Tunnel closed")
+	p.tracef("[Tunnel] Tunnel closed")
 }
 
 func (p *ProxyServer) generateCert(host string, caCert *x509.Certificate, caKey interface{}) (*tls.Certificate, error) {
@@ -1464,8 +1537,9 @@ func (p *ProxyServer) GetDiagnostics() (int64, int64, int64, []string) {
 
 func NewRuleManager(configPath string) *RuleManager {
 	return &RuleManager{
-		configPath: configPath,
-		rules:      []Rule{},
+		configPath:  configPath,
+		rules:       []Rule{},
+		closeToTray: true,
 	}
 }
 
@@ -1555,6 +1629,10 @@ func (rm *RuleManager) LoadConfig() error {
 	rm.serverAuth = config.ServerAuth
 	rm.listenPort = config.ListenPort
 	rm.echProfiles = config.ECHProfiles
+	rm.closeToTray = true
+	if config.CloseToTray != nil {
+		rm.closeToTray = *config.CloseToTray
+	}
 	if rm.echProfiles == nil {
 		rm.echProfiles = []ECHProfile{}
 	}
@@ -1672,7 +1750,6 @@ func (rm *RuleManager) buildRules() {
 				ConnectPolicy:      strings.TrimSpace(sg.ConnectPolicy),
 				SniPolicy:          strings.TrimSpace(sg.SniPolicy),
 				AlpnPolicy:         strings.TrimSpace(sg.AlpnPolicy),
-				UTLSPolicy:         strings.TrimSpace(sg.UTLSPolicy),
 				Enabled:            true,
 				SiteID:             sg.ID,
 				ECHEnabled:         sg.ECHEnabled,
@@ -1733,10 +1810,12 @@ func (rm *RuleManager) SaveConfig() error {
 	if rm.listenPort == "" {
 		rm.listenPort = "8080"
 	}
+	closeToTray := rm.closeToTray
 	config := Config{
 		ListenPort:       rm.listenPort,
 		ServerHost:       rm.serverHost,
 		ServerAuth:       rm.serverAuth,
+		CloseToTray:      &closeToTray,
 		SiteGroups:       rm.siteGroups,
 		Upstreams:        rm.upstreams,
 		ECHProfiles:      rm.echProfiles,
@@ -1767,6 +1846,19 @@ func (rm *RuleManager) GetCloudflareConfig() CloudflareConfig {
 	rm.mu.RLock()
 	defer rm.mu.RUnlock()
 	return rm.cloudflareConfig
+}
+
+func (rm *RuleManager) GetCloseToTray() bool {
+	rm.mu.RLock()
+	defer rm.mu.RUnlock()
+	return rm.closeToTray
+}
+
+func (rm *RuleManager) SetCloseToTray(enabled bool) error {
+	rm.mu.Lock()
+	rm.closeToTray = enabled
+	rm.mu.Unlock()
+	return rm.saveConfig()
 }
 
 func (rm *RuleManager) UpdateCloudflareConfig(cfg CloudflareConfig) error {
@@ -1933,6 +2025,28 @@ func generateID() string {
 	return fmt.Sprintf("%d", time.Now().UnixNano())
 }
 
+func chooseUTLSClientHelloID(alpn string) utls.ClientHelloID {
+	if strings.EqualFold(strings.TrimSpace(alpn), "http/1.1") {
+		return utls.HelloFirefox_120
+	}
+	return utls.HelloChrome_120
+}
+
+func rewriteUTLSALPN(spec *utls.ClientHelloSpec, nextProtos []string) {
+	if spec == nil {
+		return
+	}
+	for _, ext := range spec.Extensions {
+		if alpnExt, ok := ext.(*utls.ALPNExtension); ok {
+			alpnExt.AlpnProtocols = append([]string(nil), nextProtos...)
+			return
+		}
+	}
+	spec.Extensions = append(spec.Extensions, &utls.ALPNExtension{
+		AlpnProtocols: append([]string(nil), nextProtos...),
+	})
+}
+
 func (p *ProxyServer) GetUConn(conn net.Conn, sni string, allowInsecure bool, alpn string, echConfig []byte) *utls.UConn {
 	nextProtos := []string{"h2", "http/1.1"}
 	if strings.EqualFold(strings.TrimSpace(alpn), "http/1.1") {
@@ -1955,11 +2069,15 @@ func (p *ProxyServer) GetUConn(conn net.Conn, sni string, allowInsecure bool, al
 		}
 	}
 
-	clientHelloID := utls.HelloChrome_120
-	if strings.EqualFold(strings.TrimSpace(alpn), "http/1.1") {
-		clientHelloID = utls.HelloFirefox_120
+	clientHelloID := chooseUTLSClientHelloID(alpn)
+	uconn := utls.UClient(conn, config, utls.HelloCustom)
+	if spec, err := utls.UTLSIdToSpec(clientHelloID); err == nil {
+		rewriteUTLSALPN(&spec, nextProtos)
+		if err := uconn.ApplyPreset(&spec); err == nil {
+			return uconn
+		}
 	}
-	uconn := utls.UClient(conn, config, clientHelloID)
+	uconn = utls.UClient(conn, config, clientHelloID)
 	return uconn
 }
 
@@ -2176,20 +2294,7 @@ func (p *ProxyServer) establishUpstreamConn(host string, rule Rule, dialCandidat
 	}
 
 	// 2. 预计算握手参数（按候选逐个握手重试）
-	utlsPolicy := strings.ToLower(strings.TrimSpace(rule.UTLSPolicy))
-	sniPolicy := strings.ToLower(strings.TrimSpace(rule.SniPolicy))
 	sniHost := chooseUpstreamSNI(host, rule)
-	effectiveFakeSNI := strings.TrimSpace(rule.SniFake) != "" || (sniPolicy == "fake" && strings.TrimSpace(sniHost) != "" && !strings.EqualFold(strings.TrimSpace(sniHost), strings.TrimSpace(host)))
-
-	useUTLS := false
-	switch utlsPolicy {
-	case "off":
-		useUTLS = false
-	case "on":
-		useUTLS = true
-	default:
-		useUTLS = effectiveFakeSNI || rule.ECHEnabled
-	}
 
 	upstreamALPN := initialALPN
 	if upstreamALPN == "" {
@@ -2197,7 +2302,7 @@ func (p *ProxyServer) establishUpstreamConn(host string, rule Rule, dialCandidat
 	}
 
 	var echConfig []byte
-	if useUTLS && rule.ECHEnabled {
+	if rule.ECHEnabled {
 		echConfig = p.resolveRuleECHConfig(host, rule)
 	}
 
@@ -2216,39 +2321,20 @@ func (p *ProxyServer) establishUpstreamConn(host string, rule Rule, dialCandidat
 			continue
 		}
 
-		if useUTLS {
-			targetSNI := sniHost
-			// [ECH 挪用专用] 如果获取到了 ECH 公钥，说明我们要开启隐身模式。
-			// 此时 targetSNI 不应是业务域名，而应是 ECH 公钥的主人域名，
-			// 这样握手过程中的 inner-client-hello 才能通过 cloudflare 的校验。
-			if len(echConfig) > 0 {
-				targetSNI = host
-				log.Printf("[Upstream] ECH ACTIVE: Setting Inner SNI = %s for addr %s", targetSNI, addr)
-			} else if rule.ECHEnabled {
-				log.Printf("[Upstream] WARNING: ECH is enabled for %s but NO ECH config available. Handshake will LEAK domain!", host)
-			}
+		targetSNI := sniHost
+		// [ECH 挪用专用] 如果获取到了 ECH 公钥，说明我们要开启隐身模式。
+		// 此时 targetSNI 不应是业务域名，而应是 ECH 公钥的主人域名，
+		// 这样握手过程中的 inner-client-hello 才能通过 cloudflare 的校验。
+		if len(echConfig) > 0 {
+			targetSNI = host
+			log.Printf("[Upstream] ECH ACTIVE: Setting Inner SNI = %s for addr %s", targetSNI, addr)
+		} else if rule.ECHEnabled {
+			log.Printf("[Upstream] WARNING: ECH is enabled for %s but NO ECH config available. Handshake will LEAK domain!", host)
+		}
 
-			uconn := p.GetUConn(rawConn, targetSNI, true, upstreamALPN, echConfig)
-			utlsErr := uconn.Handshake()
-			if utlsErr == nil {
-				cs := uconn.ConnectionState()
-				peerCN := ""
-				peerSAN := ""
-				if len(cs.PeerCertificates) > 0 {
-					peerCN = cs.PeerCertificates[0].Subject.CommonName
-					if len(cs.PeerCertificates[0].DNSNames) > 0 {
-						peerSAN = cs.PeerCertificates[0].DNSNames[0]
-					}
-				}
-				log.Printf("[Upstream] uTLS handshake ok host=%s addr=%s targetSNI=%s alpn=%s echAccepted=%v peerCN=%s peerSAN0=%s", host, addr, targetSNI, cs.NegotiatedProtocol, cs.ECHAccepted, peerCN, peerSAN)
-				if rule.UseCFPool && p.cfPool != nil {
-					h, _, _ := net.SplitHostPort(addr)
-					if h != "" {
-						p.cfPool.ReportSuccess(h)
-					}
-				}
-				return uconn, cs.NegotiatedProtocol, nil
-			}
+		uconn := p.GetUConn(rawConn, targetSNI, true, upstreamALPN, echConfig)
+		utlsErr := uconn.Handshake()
+		if utlsErr != nil {
 			rawConn.Close()
 			errs = append(errs, fmt.Sprintf("%s utls: %v", addr, utlsErr))
 			if rule.UseCFPool && p.cfPool != nil {
@@ -2260,37 +2346,23 @@ func (p *ProxyServer) establishUpstreamConn(host string, rule Rule, dialCandidat
 			continue
 		}
 
-		// 标准 TLS Fallback（逐候选）
-		upTLSConfig := &tls.Config{
-			ServerName:         sniHost,
-			InsecureSkipVerify: true,
-			NextProtos:         []string{"h2", "http/1.1"},
-		}
-		upstreamTLS := tls.Client(rawConn, upTLSConfig)
-		if err := upstreamTLS.Handshake(); err != nil {
-			rawConn.Close()
-			errs = append(errs, fmt.Sprintf("%s tls: %v", addr, err))
-			if rule.UseCFPool && p.cfPool != nil {
-				h, _, _ := net.SplitHostPort(addr)
-				if h != "" {
-					p.cfPool.ReportFailure(h)
-				}
-			}
-			continue
-		}
-		stdCS := upstreamTLS.ConnectionState()
+		cs := uconn.ConnectionState()
 		peerCN := ""
-		if len(stdCS.PeerCertificates) > 0 {
-			peerCN = stdCS.PeerCertificates[0].Subject.CommonName
+		peerSAN := ""
+		if len(cs.PeerCertificates) > 0 {
+			peerCN = cs.PeerCertificates[0].Subject.CommonName
+			if len(cs.PeerCertificates[0].DNSNames) > 0 {
+				peerSAN = cs.PeerCertificates[0].DNSNames[0]
+			}
 		}
-		log.Printf("[Upstream] std TLS handshake ok host=%s addr=%s sni=%s alpn=%s peerCN=%s", host, addr, sniHost, stdCS.NegotiatedProtocol, peerCN)
+		log.Printf("[Upstream] uTLS handshake ok host=%s addr=%s targetSNI=%s alpn=%s echAccepted=%v peerCN=%s peerSAN0=%s", host, addr, targetSNI, cs.NegotiatedProtocol, cs.ECHAccepted, peerCN, peerSAN)
 		if rule.UseCFPool && p.cfPool != nil {
 			h, _, _ := net.SplitHostPort(addr)
 			if h != "" {
 				p.cfPool.ReportSuccess(h)
 			}
 		}
-		return upstreamTLS, stdCS.NegotiatedProtocol, nil
+		return uconn, cs.NegotiatedProtocol, nil
 	}
 
 	if len(errs) == 0 {
@@ -2321,7 +2393,7 @@ func (p *ProxyServer) dialWithRule(ctx context.Context, network, addr string, ru
 					return nil, err
 				}
 			}
-			
+
 			// 循环探测直到就绪 (最多等待约 2 秒)
 			ready := false
 			for i := 0; i < 10; i++ {
@@ -2331,7 +2403,7 @@ func (p *ProxyServer) dialWithRule(ctx context.Context, network, addr string, ru
 				}
 				time.Sleep(200 * time.Millisecond)
 			}
-			
+
 			if !ready {
 				log.Printf("[Dial] Warp tunnel NOT ready after wait for %s", addr)
 				return nil, fmt.Errorf("warp tunnel not ready")

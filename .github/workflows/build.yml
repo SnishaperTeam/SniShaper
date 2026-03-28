@@ -32,19 +32,19 @@ jobs:
           cache: npm
           cache-dependency-path: frontend/package-lock.json
 
-      - name: Install Wails CLI
+      - name: Install frontend dependencies
         shell: pwsh
-        run: go install github.com/wailsapp/wails/v2/cmd/wails@v2.11.0
-
-      - name: Add Go bin to PATH
-        shell: pwsh
-        run: |
-          $gobin = Join-Path $env:USERPROFILE "go\bin"
-          Add-Content -Path $env:GITHUB_PATH -Value $gobin
+        working-directory: frontend
+        run: npm ci
 
       - name: Build application
         shell: pwsh
-        run: wails build
+        run: |
+          Set-Location frontend
+          npm run build
+          Set-Location ..
+          New-Item -ItemType Directory -Path build/bin -Force | Out-Null
+          go build -ldflags="-H windowsgui" -o build/bin/snishaper.exe .
 
       - name: Package bundle
         shell: pwsh
@@ -57,9 +57,15 @@ jobs:
 
           $bundleDir = Join-Path $env:RUNNER_TEMP "snishaper-windows-amd64"
           $rulesDir = Join-Path $bundleDir "rules"
+          $proxyDir = Join-Path $bundleDir "proxy"
           New-Item -ItemType Directory -Path $rulesDir -Force | Out-Null
+          New-Item -ItemType Directory -Path $proxyDir -Force | Out-Null
           Copy-Item build/bin/snishaper.exe $bundleDir
           Copy-Item rules/config.json $rulesDir
+          Copy-Item proxy/usque.exe $proxyDir
+          if (Test-Path proxy/config.json) {
+            Copy-Item proxy/config.json $proxyDir
+          }
           Compress-Archive -Path "$bundleDir\\*" -DestinationPath (Join-Path "build/bin" $archiveName) -Force
 
       - name: Upload build artifacts

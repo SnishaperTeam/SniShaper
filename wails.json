@@ -7,6 +7,7 @@
   "frontend:dev:watcher": "npm run dev",
   "frontend:dev:serverUrl": "auto",
   "devtools": true,
+  "note": "legacy v2 config only; current v3 build path is frontend npm build + go build",
   "author": {
     "name": "gamelatest",
     "email": "gamelatest@example.com"
