@@ -1155,6 +1155,32 @@ html[data-theme="dark"] .theme-toggle::before {
     margin-bottom: 0;
 }
 
+.form-section {
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    background: linear-gradient(180deg, rgba(127, 146, 166, 0.08), transparent);
+    padding: 18px;
+}
+
+.form-section.is-disabled {
+    opacity: 0.6;
+}
+
+.form-section-header {
+    margin-bottom: 14px;
+}
+
+.form-section-hint {
+    color: var(--text-secondary);
+    font-size: 12px;
+    margin-top: 4px;
+}
+
+.compact-grid {
+    gap: 16px 20px;
+    padding: 0;
+}
+
 .form-group label {
     display: block;
     margin-bottom: 8px;
@@ -1283,6 +1309,17 @@ select:focus {
     cursor: pointer;
     margin: 0;
     accent-color: var(--accent);
+}
+
+.inline-check-compact {
+    width: 100%;
+    min-height: 44px;
+    justify-content: center;
+    margin-top: 24px;
+}
+
+.cert-verify-fields[hidden] {
+    display: none !important;
 }
 
 @media (max-width: 768px) {

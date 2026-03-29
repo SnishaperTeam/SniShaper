@@ -15,20 +15,21 @@ type ConfigFile struct {
 }
 
 type ConfigRule struct {
-	Name          string   `json:"name"`
-	Website       string   `json:"website,omitempty"`
-	Enabled       bool     `json:"enabled"`
-	Domains       []string `json:"domains"`
-	Upstream      string   `json:"upstream,omitempty"`
-	Upstreams     []string `json:"upstreams,omitempty"`
-	SniFake       string   `json:"sni_fake,omitempty"`
-	ConnectPolicy string   `json:"connect_policy,omitempty"`
-	SniPolicy     string   `json:"sni_policy,omitempty"`
-	AlpnPolicy    string   `json:"alpn_policy,omitempty"`
-	ECHEnabled    bool     `json:"ech_enabled,omitempty"`
-	ECHProfileID  string   `json:"ech_profile_id,omitempty"`
-	ECHDomain     string   `json:"ech_domain,omitempty"`
-	UseCFPool     bool     `json:"use_cf_pool,omitempty"`
+	Name          string           `json:"name"`
+	Website       string           `json:"website,omitempty"`
+	Enabled       bool             `json:"enabled"`
+	Domains       []string         `json:"domains"`
+	Upstream      string           `json:"upstream,omitempty"`
+	Upstreams     []string         `json:"upstreams,omitempty"`
+	SniFake       string           `json:"sni_fake,omitempty"`
+	ConnectPolicy string           `json:"connect_policy,omitempty"`
+	SniPolicy     string           `json:"sni_policy,omitempty"`
+	AlpnPolicy    string           `json:"alpn_policy,omitempty"`
+	ECHEnabled    bool             `json:"ech_enabled,omitempty"`
+	ECHProfileID  string           `json:"ech_profile_id,omitempty"`
+	ECHDomain     string           `json:"ech_domain,omitempty"`
+	UseCFPool     bool             `json:"use_cf_pool,omitempty"`
+	CertVerify    CertVerifyConfig `json:"cert_verify,omitempty"`
 }
 
 type ImportSummary struct {
@@ -58,6 +59,7 @@ func (rm *RuleManager) ExportConfig() (string, error) {
 			ECHProfileID:  sg.ECHProfileID,
 			ECHDomain:     sg.ECHDomain,
 			UseCFPool:     sg.UseCFPool,
+			CertVerify:    sg.CertVerify,
 		}
 
 		if sg.Mode == "mitm" {
@@ -174,6 +176,7 @@ func (rm *RuleManager) ImportConfigWithSummary(content string) (ImportSummary, e
 				ECHProfileID:  rule.ECHProfileID,
 				ECHDomain:     rule.ECHDomain,
 				UseCFPool:     rule.UseCFPool,
+				CertVerify:    rule.CertVerify,
 			}
 			if sg.Name == "" {
 				sg.Name = sg.Domains[0]

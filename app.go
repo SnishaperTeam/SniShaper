@@ -150,18 +150,6 @@ func NewApp() *App {
 }
 
 func resolveRuntimeFile(execDir, relativePath string) string {
-	candidates := []string{
-		filepath.Join(execDir, relativePath),
-		filepath.Join(execDir, "..", relativePath),
-		filepath.Join(execDir, "..", "..", relativePath),
-	}
-
-	for _, candidate := range candidates {
-		if _, err := os.Stat(candidate); err == nil {
-			return candidate
-		}
-	}
-
 	return filepath.Join(execDir, relativePath)
 }
 

@@ -28,7 +28,17 @@
       "sni_fake": "account-api-proton-me.mapped",
       "enabled": true,
       "ech_enabled": false,
-      "use_cf_pool": false
+      "use_cf_pool": false,
+      "cert_verify": {
+        "mode": "allow_names",
+        "names": [
+          "*.pr.tn",
+          "*.proton.me",
+          "*.storage.proton.me",
+          "pr.tn",
+          "proton.me"
+        ]
+      }
     },
     {
       "id": "sg-1771319670672-2",
@@ -42,7 +52,17 @@
       "sni_fake": "account-proton-me.mapped",
       "enabled": true,
       "ech_enabled": false,
-      "use_cf_pool": false
+      "use_cf_pool": false,
+      "cert_verify": {
+        "mode": "allow_names",
+        "names": [
+          "*.pr.tn",
+          "*.proton.me",
+          "*.storage.proton.me",
+          "pr.tn",
+          "proton.me"
+        ]
+      }
     },
     {
       "id": "sg-1771319670672-3",
@@ -54,10 +74,16 @@
       "mode": "mitm",
       "upstream": "18.66.145.15:443",
       "sni_fake": "amazon.com",
-      "sni_policy": "fake",
       "enabled": true,
       "ech_enabled": false,
-      "use_cf_pool": false
+      "use_cf_pool": false,
+      "cert_verify": {
+        "mode": "allow_names",
+        "names": [
+          "amazon.com",
+          "www.amazon.com"
+        ]
+      }
     },
     {
       "id": "sg-1771319670672-6",
@@ -74,11 +100,17 @@
       ],
       "mode": "mitm",
       "upstream": "23.77.21.232:443",
-      "sni_fake": "",
-      "sni_policy": "fake",
+      "sni_fake": "bh.lk",
       "enabled": true,
       "ech_enabled": false,
-      "use_cf_pool": false
+      "use_cf_pool": false,
+      "cert_verify": {
+        "mode": "allow_names",
+        "names": [
+          "*.cdn.cyberarena.at",
+          "cdn.cyberarena.at"
+        ]
+      }
     },
     {
       "id": "sg-1771319670672-7",
@@ -90,11 +122,38 @@
       ],
       "mode": "mitm",
       "upstream": "146.75.36.81:443",
-      "sni_fake": "",
-      "sni_policy": "fake",
+      "sni_fake": "bh.lk",
       "enabled": true,
       "ech_enabled": false,
-      "use_cf_pool": false
+      "use_cf_pool": false,
+      "cert_verify": {
+        "mode": "allow_names",
+        "names": [
+          "*.bbc.com",
+          "*.bbcrussian.com",
+          "account.bbc.com",
+          "bbc.co.uk",
+          "bbc.com",
+          "bbcrussian.com",
+          "cdnedge.bbc.co.uk",
+          "news.bbc.co.uk",
+          "news.bbcimg.co.uk",
+          "newsimg.bbc.co.uk",
+          "newsrss.bbc.co.uk",
+          "newsvote.bbc.co.uk",
+          "node1.bbcimg.co.uk",
+          "open.live.bbc.co.uk",
+          "playlists.bbc.co.uk",
+          "r.bbci.co.uk",
+          "search.bbc.co.uk",
+          "session.bbc.co.uk",
+          "session.bbc.com",
+          "www.bbc.co.uk",
+          "www.bbc.com",
+          "www.bbcrussian.com",
+          "wwwnews.live.bbc.co.uk"
+        ]
+      }
     },
     {
       "id": "sg-1771319670672-8",
@@ -109,22 +168,14 @@
       "sni_policy": "fake",
       "enabled": true,
       "ech_enabled": false,
-      "use_cf_pool": false
-    },
-    {
-      "id": "sg-1771319670672-9",
-      "name": "api.fanbox.cc",
-      "website": "fanbox",
-      "domains": [
-        "api.fanbox.cc"
-      ],
-      "mode": "mitm",
-      "upstream": "104.18.41.140:443",
-      "sni_fake": "",
-      "sni_policy": "fake",
-      "enabled": true,
-      "ech_enabled": false,
-      "use_cf_pool": false
+      "use_cf_pool": false,
+      "cert_verify": {
+        "mode": "allow_names",
+        "names": [
+          "*.e-hentai.org",
+          "e-hentai.org"
+        ]
+      }
     },
     {
       "id": "sg-1771319670672-10",
@@ -139,7 +190,14 @@
       "sni_fake": "api-github-com.mapped",
       "enabled": true,
       "ech_enabled": false,
-      "use_cf_pool": false
+      "use_cf_pool": false,
+      "cert_verify": {
+        "mode": "allow_names",
+        "names": [
+          "*.github.com",
+          "github.com"
+        ]
+      }
     },
     {
       "id": "sg-1771319670672-11",
@@ -154,7 +212,14 @@
       "sni_policy": "fake",
       "enabled": true,
       "ech_enabled": false,
-      "use_cf_pool": false
+      "use_cf_pool": false,
+      "cert_verify": {
+        "mode": "allow_names",
+        "names": [
+          "*.api.mega.co.nz",
+          "api.mega.co.nz"
+        ]
+      }
     },
     {
       "id": "sg-1771319670672-12",
@@ -169,7 +234,14 @@
       "sni_policy": "fake",
       "enabled": true,
       "ech_enabled": false,
-      "use_cf_pool": false
+      "use_cf_pool": false,
+      "cert_verify": {
+        "mode": "allow_names",
+        "names": [
+          "*.apkmirror.com",
+          "apkmirror.com"
+        ]
+      }
     },
     {
       "id": "sg-1771319670672-13",
@@ -184,7 +256,14 @@
       "sni_policy": "fake",
       "enabled": true,
       "ech_enabled": false,
-      "use_cf_pool": false
+      "use_cf_pool": false,
+      "cert_verify": {
+        "mode": "allow_names",
+        "names": [
+          "*.archiveofourown.org",
+          "archiveofourown.org"
+        ]
+      }
     },
     {
       "id": "sg-1771319670672-14",
@@ -203,7 +282,14 @@
       "alpn_policy": "h2_h1",
       "enabled": true,
       "ech_enabled": false,
-      "use_cf_pool": false
+      "use_cf_pool": false,
+      "cert_verify": {
+        "mode": "allow_names",
+        "names": [
+          "twitch.tv",
+          "*.twitch.tv"
+        ]
+      }
     },
     {
       "id": "sg-1771319670672-15",
@@ -219,27 +305,14 @@
       "sni_policy": "none",
       "enabled": true,
       "ech_enabled": false,
-      "use_cf_pool": false
-    },
-    {
-      "id": "sg-1771319670672-16",
-      "name": "aurora-1.web.telegram.org",
-      "website": "telegram",
-      "domains": [
-        "aurora-1.web.telegram.org",
-        "aurora.web.telegram.org",
-        "pluto-1.web.telegram.org",
-        "pluto.web.telegram.org"
-      ],
-      "mode": "mitm",
-      "upstream": "[2001:b28:f23d:8007::805:531]:443",
-      "sni_fake": "g.cn",
-      "connect_policy": "mitm",
-      "sni_policy": "fake",
-      "alpn_policy": "h1_only",
-      "enabled": true,
-      "ech_enabled": false,
-      "use_cf_pool": false
+      "use_cf_pool": false,
+      "cert_verify": {
+        "mode": "allow_names",
+        "names": [
+          "cloudfront.net",
+          "*.cloudfront.net"
+        ]
+      }
     },
     {
       "id": "sg-1771319670672-17",
@@ -256,7 +329,27 @@
       "sni_policy": "fake",
       "enabled": true,
       "ech_enabled": false,
-      "use_cf_pool": false
+      "use_cf_pool": false,
+      "cert_verify": {
+        "mode": "allow_names",
+        "names": [
+          "*.facebook.com",
+          "*.facebook.net",
+          "*.fbcdn.net",
+          "*.fbsbx.com",
+          "*.m.facebook.com",
+          "*.messenger.com",
+          "*.xx.fbcdn.net",
+          "*.xy.fbcdn.net",
+          "*.xz.fbcdn.net",
+          "facebook.com",
+          "facebook.net",
+          "fbcdn.net",
+          "fbsbx.com",
+          "m.facebook.com",
+          "messenger.com"
+        ]
+      }
     },
     {
       "id": "sg-1771319670672-18",
@@ -270,7 +363,17 @@
       "sni_fake": "calendar-proton-me.mapped",
       "enabled": true,
       "ech_enabled": false,
-      "use_cf_pool": false
+      "use_cf_pool": false,
+      "cert_verify": {
+        "mode": "allow_names",
+        "names": [
+          "*.pr.tn",
+          "*.proton.me",
+          "*.storage.proton.me",
+          "pr.tn",
+          "proton.me"
+        ]
+      }
     },
     {
       "id": "sg-1771319670672-20",
@@ -285,7 +388,14 @@
       "sni_fake": "cdn-jsdelivr-net.mapped",
       "enabled": true,
       "ech_enabled": false,
-      "use_cf_pool": false
+      "use_cf_pool": false,
+      "cert_verify": {
+        "mode": "allow_names",
+        "names": [
+          "*.jsdelivr.net",
+          "jsdelivr.net"
+        ]
+      }
     },
     {
       "id": "sg-1771319670672-21",
@@ -356,7 +466,18 @@
       "sni_fake": "fa.aq",
       "enabled": true,
       "ech_enabled": false,
-      "use_cf_pool": false
+      "use_cf_pool": false,
+      "cert_verify": {
+        "mode": "allow_names",
+        "names": [
+          "*.instagram.com",
+          "*.cdninstagram.com",
+          "*.igsonar.com",
+          "instagram.com",
+          "cdninstagram.com",
+          "igsonar.com"
+        ]
+      }
     },
     {
       "id": "sg-1771319670672-25",
@@ -374,7 +495,14 @@
       "sni_fake": "centr.map",
       "enabled": true,
       "ech_enabled": false,
-      "use_cf_pool": false
+      "use_cf_pool": false,
+      "cert_verify": {
+        "mode": "allow_names",
+        "names": [
+          "actions.githubusercontent.com",
+          "*.actions.githubusercontent.com"
+        ]
+      }
     },
     {
       "id": "sg-1771319670672-26",
@@ -388,7 +516,14 @@
       "sni_fake": "codeload-github-com.mapped",
       "enabled": true,
       "ech_enabled": false,
-      "use_cf_pool": false
+      "use_cf_pool": false,
+      "cert_verify": {
+        "mode": "allow_names",
+        "names": [
+          "*.github.com",
+          "github.com"
+        ]
+      }
     },
     {
       "id": "sg-1771319670672-27",
@@ -406,22 +541,14 @@
       "sni_fake": "community-github-com.mapped",
       "enabled": true,
       "ech_enabled": false,
-      "use_cf_pool": false
-    },
-    {
-      "id": "sg-1771319670672-29",
-      "name": "dailymotion.com",
-      "website": "dailymotion",
-      "domains": [
-        "dailymotion.com"
-      ],
-      "mode": "mitm",
-      "upstream": "34.84.14.157:443",
-      "sni_fake": "",
-      "sni_policy": "fake",
-      "enabled": true,
-      "ech_enabled": false,
-      "use_cf_pool": false
+      "use_cf_pool": false,
+      "cert_verify": {
+        "mode": "allow_names",
+        "names": [
+          "*.github.com",
+          "github.com"
+        ]
+      }
     },
     {
       "id": "sg-1771319670672-30",
@@ -437,22 +564,44 @@
       "sni_policy": "fake",
       "enabled": true,
       "ech_enabled": false,
-      "use_cf_pool": false
-    },
-    {
-      "id": "sg-1771319670672-31",
-      "name": "dmads.dailymotion.com",
-      "website": "dailymotion",
-      "domains": [
-        "dmads.dailymotion.com"
-      ],
-      "mode": "mitm",
-      "upstream": "65.8.161.92:443",
-      "sni_fake": "",
-      "sni_policy": "fake",
-      "enabled": true,
-      "ech_enabled": false,
-      "use_cf_pool": false
+      "use_cf_pool": false,
+      "cert_verify": {
+        "mode": "allow_names",
+        "names": [
+          "*.dl-au.dropboxusercontent.com",
+          "*.dl-eu.dropboxusercontent.com",
+          "*.dl-jp.dropboxusercontent.com",
+          "*.dl-uk.dropboxusercontent.com",
+          "*.dl.dropboxusercontent.com",
+          "*.dropbox.com",
+          "dl-au.dropbox.com",
+          "dl-au.dropboxusercontent.com",
+          "dl-eu.dropbox.com",
+          "dl-eu.dropboxusercontent.com",
+          "dl-jp.dropbox.com",
+          "dl-jp.dropboxusercontent.com",
+          "dl-uk.dropbox.com",
+          "dl-uk.dropboxusercontent.com",
+          "dl-web-au.dropbox.com",
+          "dl-web-eu.dropbox.com",
+          "dl-web-jp.dropbox.com",
+          "dl-web-uk.dropbox.com",
+          "dl-web.dropbox.com",
+          "dl.dropbox.com",
+          "dl.dropboxusercontent.com",
+          "dropbox.com",
+          "files-au.dropbox.com",
+          "files-eu.dropbox.com",
+          "files-jp.dropbox.com",
+          "files-uk.dropbox.com",
+          "files.dropbox.com",
+          "showbox-au.dropbox.com",
+          "showbox-eu.dropbox.com",
+          "showbox-jp.dropbox.com",
+          "showbox-uk.dropbox.com",
+          "showbox.dropbox.com"
+        ]
+      }
     },
     {
       "id": "sg-1771319670672-32",
@@ -469,7 +618,14 @@
       "sni_fake": "docs-github-com.mapped",
       "enabled": true,
       "ech_enabled": false,
-      "use_cf_pool": false
+      "use_cf_pool": false,
+      "cert_verify": {
+        "mode": "allow_names",
+        "names": [
+          "*.githubassets.com",
+          "githubassets.com"
+        ]
+      }
     },
     {
       "id": "sg-1771319670672-33",
@@ -484,7 +640,13 @@
       "sni_policy": "fake",
       "enabled": true,
       "ech_enabled": false,
-      "use_cf_pool": false
+      "use_cf_pool": false,
+      "cert_verify": {
+        "mode": "allow_names",
+        "names": [
+          "deb.tails.boum.org"
+        ]
+      }
     },
     {
       "id": "sg-1771319670672-34",
@@ -498,7 +660,17 @@
       "sni_fake": "drive-proton-me.mapped",
       "enabled": true,
       "ech_enabled": false,
-      "use_cf_pool": false
+      "use_cf_pool": false,
+      "cert_verify": {
+        "mode": "allow_names",
+        "names": [
+          "*.pr.tn",
+          "*.proton.me",
+          "*.storage.proton.me",
+          "pr.tn",
+          "proton.me"
+        ]
+      }
     },
     {
       "id": "sg-1771319670672-35",
@@ -513,7 +685,14 @@
       "sni_policy": "fake",
       "enabled": true,
       "ech_enabled": false,
-      "use_cf_pool": false
+      "use_cf_pool": false,
+      "cert_verify": {
+        "mode": "allow_names",
+        "names": [
+          "*.duckduckgo.com",
+          "duckduckgo.com"
+        ]
+      }
     },
     {
       "id": "sg-1771319670672-36",
@@ -523,12 +702,12 @@
         "e-hentai.org"
       ],
       "mode": "mitm",
-      "upstream": "172.66.132.196:443",
+      "upstream": "",
       "sni_fake": "",
-      "sni_policy": "fake",
       "enabled": true,
-      "ech_enabled": false,
-      "use_cf_pool": false
+      "ech_enabled": true,
+      "ech_profile_id": "legacy-cloudflare",
+      "use_cf_pool": true
     },
     {
       "id": "sg-1771319670672-37",
@@ -543,7 +722,14 @@
       "sni_policy": "fake",
       "enabled": true,
       "ech_enabled": false,
-      "use_cf_pool": false
+      "use_cf_pool": false,
+      "cert_verify": {
+        "mode": "allow_names",
+        "names": [
+          "ehgt.org",
+          "www.ehgt.org"
+        ]
+      }
     },
     {
       "id": "sg-1771319670672-38",
@@ -560,7 +746,23 @@
       "sni_policy": "fake",
       "enabled": true,
       "ech_enabled": false,
-      "use_cf_pool": false
+      "use_cf_pool": false,
+      "cert_verify": {
+        "mode": "allow_names",
+        "names": [
+          "*.api.dev.nytimes.com",
+          "*.api.nytimes.com",
+          "*.api.stg.nytimes.com",
+          "*.blogs.nytimes.com",
+          "*.nytimes.com",
+          "api.dev.nytimes.com",
+          "api.nytimes.com",
+          "api.stg.nytimes.com",
+          "blogs.nytimes.com",
+          "nytimes.com",
+          "www.homedelivery.nytimes.com"
+        ]
+      }
     },
     {
       "id": "sg-1771319670672-39",
@@ -575,7 +777,21 @@
       "sni_policy": "fake",
       "enabled": true,
       "ech_enabled": false,
-      "use_cf_pool": false
+      "use_cf_pool": false,
+      "cert_verify": {
+        "mode": "allow_names",
+        "names": [
+          "*.etsy.com",
+          "*.etsystatic.com",
+          "api-origin.etsy.com",
+          "api.etsy.com",
+          "etsy.com",
+          "etsystatic.com",
+          "m.etsy.com",
+          "openapi.etsy.com",
+          "www.etsy.com"
+        ]
+      }
     },
     {
       "id": "sg-1771319670672-40",
@@ -585,12 +801,12 @@
         "exhentai.org"
       ],
       "mode": "mitm",
-      "upstream": "178.175.132.22:443",
+      "upstream": "",
       "sni_fake": "",
-      "sni_policy": "fake",
       "enabled": true,
-      "ech_enabled": false,
-      "use_cf_pool": false
+      "ech_enabled": true,
+      "ech_profile_id": "legacy-cloudflare",
+      "use_cf_pool": true
     },
     {
       "id": "sg-1771319670672-41",
@@ -605,7 +821,20 @@
       "sni_policy": "fake",
       "enabled": true,
       "ech_enabled": false,
-      "use_cf_pool": false
+      "use_cf_pool": false,
+      "cert_verify": {
+        "mode": "allow_names",
+        "names": [
+          "*.f-droid.com",
+          "*.f-droid.org",
+          "f-droid.com",
+          "f-droid.org",
+          "fdroid.com",
+          "fdroid.org",
+          "www.f-droid.com",
+          "www.f-droid.org"
+        ]
+      }
     },
     {
       "id": "sg-1771319670672-42",
@@ -615,12 +844,12 @@
         "fanbox.cc"
       ],
       "mode": "mitm",
-      "upstream": "104.18.41.140:443",
+      "upstream": "",
       "sni_fake": "",
-      "sni_policy": "none",
       "enabled": true,
-      "ech_enabled": false,
-      "use_cf_pool": false
+      "ech_enabled": true,
+      "ech_profile_id": "legacy-cloudflare",
+      "use_cf_pool": true
     },
     {
       "id": "sg-pixiv-001",
@@ -639,7 +868,22 @@
       "sni_policy": "none",
       "enabled": true,
       "ech_enabled": false,
-      "use_cf_pool": false
+      "use_cf_pool": false,
+      "cert_verify": {
+        "mode": "allow_names",
+        "names": [
+          "*.fanbox.cc",
+          "*.pixiv.net",
+          "*.pixivision.net",
+          "fanbox.cc",
+          "oauth.secure.pixiv.net",
+          "pixiv.me",
+          "pixiv.net",
+          "pixivision.net",
+          "public-api.secure.pixiv.net",
+          "www.pixivision.net"
+        ]
+      }
     },
     {
       "id": "sg-pixiv-002",
@@ -656,7 +900,14 @@
       "sni_policy": "none",
       "enabled": true,
       "ech_enabled": false,
-      "use_cf_pool": false
+      "use_cf_pool": false,
+      "cert_verify": {
+        "mode": "allow_names",
+        "names": [
+          "*.pximg.net",
+          "pximg.net"
+        ]
+      }
     },
     {
       "id": "sg-pixiv-003",
@@ -672,7 +923,14 @@
       "sni_policy": "none",
       "enabled": true,
       "ech_enabled": false,
-      "use_cf_pool": false
+      "use_cf_pool": false,
+      "cert_verify": {
+        "mode": "allow_names",
+        "names": [
+          "*.pixiv.org",
+          "pixiv.org"
+        ]
+      }
     },
     {
       "id": "sg-pixiv-004",
@@ -687,7 +945,20 @@
       "sni_policy": "none",
       "enabled": true,
       "ech_enabled": false,
-      "use_cf_pool": false
+      "use_cf_pool": false,
+      "cert_verify": {
+        "mode": "allow_names",
+        "names": [
+          "*.pixiv.net",
+          "*.pixivision.net",
+          "oauth.secure.pixiv.net",
+          "pixiv.me",
+          "pixiv.net",
+          "pixivision.net",
+          "public-api.secure.pixiv.net",
+          "www.pixivision.net"
+        ]
+      }
     },
     {
       "id": "sg-1771319670672-43",
@@ -702,24 +973,15 @@
       "sni_policy": "fake",
       "enabled": true,
       "ech_enabled": false,
-      "use_cf_pool": false
-    },
-    {
-      "id": "sg-1771319670672-44",
-      "name": "flora-1.web.telegram.org",
-      "website": "telegram",
-      "domains": [
-        "flora-1.web.telegram.org"
-      ],
-      "mode": "mitm",
-      "upstream": "149.154.171.236:443",
-      "sni_fake": "g.cn",
-      "connect_policy": "mitm",
-      "sni_policy": "fake",
-      "alpn_policy": "h1_only",
-      "enabled": true,
-      "ech_enabled": false,
-      "use_cf_pool": false
+      "use_cf_pool": false,
+      "cert_verify": {
+        "mode": "allow_names",
+        "names": [
+          "*.flickr.com",
+          "flic.kr",
+          "flickr.com"
+        ]
+      }
     },
     {
       "id": "sg-1771319670672-45",
@@ -729,12 +991,9 @@
         "flora.web.telegram.org",
         "web.telegram.org"
       ],
-      "mode": "mitm",
-      "upstream": "149.154.170.200:443",
-      "sni_fake": "g.cn",
-      "connect_policy": "mitm",
-      "sni_policy": "fake",
-      "alpn_policy": "h1_only",
+      "mode": "tls-rf",
+      "upstream": "149.154.167.99:443",
+      "sni_fake": "telegram.org",
       "enabled": true,
       "ech_enabled": false,
       "use_cf_pool": false
@@ -752,7 +1011,13 @@
       "sni_policy": "fake",
       "enabled": true,
       "ech_enabled": false,
-      "use_cf_pool": false
+      "use_cf_pool": false,
+      "cert_verify": {
+        "mode": "allow_names",
+        "names": [
+          "forum.f-droid.org"
+        ]
+      }
     },
     {
       "id": "sg-1771319670672-47",
@@ -762,12 +1027,12 @@
         "forums.e-hentai.org"
       ],
       "mode": "mitm",
-      "upstream": "172.66.140.62:443",
+      "upstream": "",
       "sni_fake": "",
-      "sni_policy": "fake",
       "enabled": true,
-      "ech_enabled": false,
-      "use_cf_pool": false
+      "ech_enabled": true,
+      "ech_profile_id": "legacy-cloudflare",
+      "use_cf_pool": true
     },
     {
       "id": "sg-1771319670672-48",
@@ -799,12 +1064,12 @@
         "gelbooru.com"
       ],
       "mode": "mitm",
-      "upstream": "108.181.143.72:443",
+      "upstream": "",
       "sni_fake": "",
-      "sni_policy": "fake",
       "enabled": true,
-      "ech_enabled": false,
-      "use_cf_pool": false
+      "ech_enabled": true,
+      "ech_profile_id": "legacy-cloudflare",
+      "use_cf_pool": true
     },
     {
       "id": "sg-1771319670672-50",
@@ -816,22 +1081,6 @@
       "mode": "mitm",
       "upstream": "47.102.115.14:443",
       "sni_fake": "g.cn",
-      "sni_policy": "fake",
-      "enabled": true,
-      "ech_enabled": false,
-      "use_cf_pool": false
-    },
-    {
-      "id": "sg-1771319670672-51",
-      "name": "geo.dailymotion.com",
-      "website": "dailymotion",
-      "domains": [
-        "geo.dailymotion.com",
-        "geo.player.dailymotion.com"
-      ],
-      "mode": "mitm",
-      "upstream": "35.82.199.74:443",
-      "sni_fake": "",
       "sni_policy": "fake",
       "enabled": true,
       "ech_enabled": false,
@@ -851,7 +1100,14 @@
       "sni_fake": "gist-github-com.mapped",
       "enabled": true,
       "ech_enabled": false,
-      "use_cf_pool": false
+      "use_cf_pool": false,
+      "cert_verify": {
+        "mode": "allow_names",
+        "names": [
+          "github.com",
+          "www.github.com"
+        ]
+      }
     },
     {
       "id": "sg-1771319670672-53",
@@ -870,22 +1126,14 @@
       "alpn_policy": "h1_only",
       "enabled": true,
       "ech_enabled": false,
-      "use_cf_pool": false
-    },
-    {
-      "id": "sg-1771319670672-54",
-      "name": "graphql.api.dailymotion.com",
-      "website": "dailymotion",
-      "domains": [
-        "graphql.api.dailymotion.com"
-      ],
-      "mode": "mitm",
-      "upstream": "34.84.14.157:443",
-      "sni_fake": "",
-      "sni_policy": "fake",
-      "enabled": true,
-      "ech_enabled": false,
-      "use_cf_pool": false
+      "use_cf_pool": false,
+      "cert_verify": {
+        "mode": "allow_names",
+        "names": [
+          "*.twitch.tv",
+          "twitch.tv"
+        ]
+      }
     },
     {
       "id": "sg-1771319670672-55",
@@ -900,7 +1148,14 @@
       "sni_policy": "fake",
       "enabled": true,
       "ech_enabled": false,
-      "use_cf_pool": false
+      "use_cf_pool": false,
+      "cert_verify": {
+        "mode": "allow_names",
+        "names": [
+          "*.gravatar.com",
+          "gravatar.com"
+        ]
+      }
     },
     {
       "id": "sg-1771319670672-56",
@@ -915,25 +1170,30 @@
       "sni_policy": "fake",
       "enabled": true,
       "ech_enabled": false,
-      "use_cf_pool": false
+      "use_cf_pool": false,
+      "cert_verify": {
+        "mode": "allow_names",
+        "names": [
+          "*.cn-greasyfork.org",
+          "*.greasyfork.org",
+          "*.sleazyfork.org",
+          "api.cn-greasyfork.org",
+          "api.greasyfork.org",
+          "api.sleazyfork.org",
+          "cn-greasyfork.org",
+          "greasyfork.org",
+          "sleazyfork.org"
+        ]
+      }
     },
     {
       "id": "sg-1771319670672-57",
       "name": "gstatic.com",
       "website": "google",
       "domains": [
-        "android.com",
         "ggpht.com",
         "gmail.com",
-        "google.com",
-        "google.com.*",
-        "googleapis.com",
-        "youtubei.googleapis.com",
-        "www.googleapis.com",
-        "googleusercontent.com",
-        "*.googleusercontent.com",
-        "gstatic.com",
-        "blogger.com"
+        "youtubei.googleapis.com"
       ],
       "mode": "mitm",
       "upstream": "142.250.20.90:443",
@@ -950,12 +1210,12 @@
         "hub.docker.com"
       ],
       "mode": "mitm",
-      "upstream": "54.163.142.90:443",
+      "upstream": "",
       "sni_fake": "",
-      "sni_policy": "fake",
       "enabled": true,
-      "ech_enabled": false,
-      "use_cf_pool": false
+      "ech_enabled": true,
+      "ech_profile_id": "legacy-cloudflare",
+      "use_cf_pool": true
     },
     {
       "id": "sg-1771319670672-59",
@@ -970,7 +1230,13 @@
       "sni_policy": "fake",
       "enabled": true,
       "ech_enabled": false,
-      "use_cf_pool": false
+      "use_cf_pool": false,
+      "cert_verify": {
+        "mode": "allow_names",
+        "names": [
+          "*.dev.madsense.io"
+        ]
+      }
     },
     {
       "id": "sg-1771319670672-60",
@@ -985,7 +1251,16 @@
       "sni_policy": "fake",
       "enabled": true,
       "ech_enabled": false,
-      "use_cf_pool": false
+      "use_cf_pool": false,
+      "cert_verify": {
+        "mode": "allow_names",
+        "names": [
+          "*.imgix.com",
+          "*.imgix.net",
+          "imgix.com",
+          "imgix.net"
+        ]
+      }
     },
     {
       "id": "sg-1771319670672-61",
@@ -1000,53 +1275,14 @@
       "sni_policy": "fake",
       "enabled": true,
       "ech_enabled": false,
-      "use_cf_pool": false
-    },
-    {
-      "id": "sg-1771319670672-62",
-      "name": "kws1-1.web.telegram.org",
-      "website": "telegram",
-      "domains": [
-        "kws1-1.web.telegram.org",
-        "kws1.web.telegram.org",
-        "kws3-1.web.telegram.org",
-        "kws3.web.telegram.org",
-        "kws5-1.web.telegram.org",
-        "kws5.web.telegram.org"
-      ],
-      "mode": "mitm",
-      "upstream": "[2001:b28:f23d:8007::805:531]:443",
-      "sni_fake": "g.cn",
-      "connect_policy": "mitm",
-      "sni_policy": "fake",
-      "alpn_policy": "h1_only",
-      "enabled": true,
-      "ech_enabled": false,
-      "use_cf_pool": false
-    },
-    {
-      "id": "sg-1771319670672-63",
-      "name": "kws2-1.web.telegram.org",
-      "website": "telegram",
-      "domains": [
-        "kws2-1.web.telegram.org",
-        "kws2.web.telegram.org",
-        "kws4-1.web.telegram.org",
-        "kws4.web.telegram.org",
-        "venus-1.web.telegram.org",
-        "venus.web.telegram.org",
-        "vesta-1.web.telegram.org",
-        "vesta.web.telegram.org"
-      ],
-      "mode": "mitm",
-      "upstream": "[2001:67c:4e8:f004::9]:443",
-      "sni_fake": "g.cn",
-      "connect_policy": "mitm",
-      "sni_policy": "fake",
-      "alpn_policy": "h1_only",
-      "enabled": true,
-      "ech_enabled": false,
-      "use_cf_pool": false
+      "use_cf_pool": false,
+      "cert_verify": {
+        "mode": "allow_names",
+        "names": [
+          "*.imgur.com",
+          "imgur.com"
+        ]
+      }
     },
     {
       "id": "sg-1771319670672-65",
@@ -1084,7 +1320,24 @@
       "sni_policy": "fake",
       "enabled": true,
       "ech_enabled": false,
-      "use_cf_pool": false
+      "use_cf_pool": false,
+      "cert_verify": {
+        "mode": "allow_names",
+        "names": [
+          "*.m.mediawiki.org",
+          "*.m.wikibooks.org",
+          "*.m.wikidata.org",
+          "*.m.wikimedia.org",
+          "*.m.wikinews.org",
+          "*.m.wikipedia.org",
+          "m.mediawiki.org",
+          "m.wikibooks.org",
+          "m.wikidata.org",
+          "m.wikimedia.org",
+          "m.wikinews.org",
+          "m.wikipedia.org"
+        ]
+      }
     },
     {
       "id": "sg-1771319670672-66",
@@ -1098,7 +1351,17 @@
       "sni_fake": "mail-proton-me.mapped",
       "enabled": true,
       "ech_enabled": false,
-      "use_cf_pool": false
+      "use_cf_pool": false,
+      "cert_verify": {
+        "mode": "allow_names",
+        "names": [
+          "*.pr.tn",
+          "*.proton.me",
+          "*.storage.proton.me",
+          "pr.tn",
+          "proton.me"
+        ]
+      }
     },
     {
       "id": "sg-1771319670672-67",
@@ -1113,7 +1376,14 @@
       "sni_policy": "fake",
       "enabled": true,
       "ech_enabled": false,
-      "use_cf_pool": false
+      "use_cf_pool": false,
+      "cert_verify": {
+        "mode": "allow_names",
+        "names": [
+          "*.static.mega.co.nz",
+          "static.mega.co.nz"
+        ]
+      }
     },
     {
       "id": "sg-1771319670672-68",
@@ -1128,7 +1398,14 @@
       "sni_policy": "fake",
       "enabled": true,
       "ech_enabled": false,
-      "use_cf_pool": false
+      "use_cf_pool": false,
+      "cert_verify": {
+        "mode": "allow_names",
+        "names": [
+          "mega.nz",
+          "www.mega.nz"
+        ]
+      }
     },
     {
       "id": "sg-1771319670672-69",
@@ -1144,7 +1421,22 @@
       "sni_policy": "fake",
       "enabled": true,
       "ech_enabled": false,
-      "use_cf_pool": false
+      "use_cf_pool": false,
+      "cert_verify": {
+        "mode": "allow_names",
+        "names": [
+          "*.dating.ok.ru",
+          "*.m.ok.ru",
+          "*.ms.ok.ru",
+          "*.mscu.ok.ru",
+          "*.ok.ru",
+          "dating.ok.ru",
+          "m.ok.ru",
+          "ms.ok.ru",
+          "mscu.ok.ru",
+          "ok.ru"
+        ]
+      }
     },
     {
       "id": "sg-1771319670672-70",
@@ -1159,7 +1451,11 @@
       "sni_policy": "fake",
       "enabled": true,
       "ech_enabled": false,
-      "use_cf_pool": false
+      "use_cf_pool": false,
+      "cert_verify": {
+        "mode": "chain_only",
+        "allow_unknown_authority": true
+      }
     },
     {
       "id": "sg-1771319670672-71",
@@ -1174,7 +1470,10 @@
       "sni_policy": "fake",
       "enabled": true,
       "ech_enabled": false,
-      "use_cf_pool": false
+      "use_cf_pool": false,
+      "cert_verify": {
+        "mode": "chain_only"
+      }
     },
     {
       "id": "sg-1771319670672-72",
@@ -1203,7 +1502,17 @@
       "sni_fake": "pass-proton-me.mapped",
       "enabled": true,
       "ech_enabled": false,
-      "use_cf_pool": false
+      "use_cf_pool": false,
+      "cert_verify": {
+        "mode": "allow_names",
+        "names": [
+          "*.pr.tn",
+          "*.proton.me",
+          "*.storage.proton.me",
+          "pr.tn",
+          "proton.me"
+        ]
+      }
     },
     {
       "id": "sg-1771319670672-74",
@@ -1218,7 +1527,14 @@
       "sni_policy": "fake",
       "enabled": true,
       "ech_enabled": false,
-      "use_cf_pool": false
+      "use_cf_pool": false,
+      "cert_verify": {
+        "mode": "allow_names",
+        "names": [
+          "*.patreon.com",
+          "patreon.com"
+        ]
+      }
     },
     {
       "id": "sg-1771319670672-75",
@@ -1233,7 +1549,14 @@
       "sni_policy": "fake",
       "enabled": true,
       "ech_enabled": false,
-      "use_cf_pool": false
+      "use_cf_pool": false,
+      "cert_verify": {
+        "mode": "allow_names",
+        "names": [
+          "*.patreonusercontent.com",
+          "patreonusercontent.com"
+        ]
+      }
     },
     {
       "id": "sg-1771319670672-76",
@@ -1249,7 +1572,24 @@
       "sni_policy": "fake",
       "enabled": true,
       "ech_enabled": false,
-      "use_cf_pool": false
+      "use_cf_pool": false,
+      "cert_verify": {
+        "mode": "allow_names",
+        "names": [
+          "*.pinimg.com",
+          "*.pinterest.at",
+          "*.pinterest.com",
+          "*.pinterest.engineering",
+          "*.pinterest.info",
+          "*.pinterestmail.com",
+          "pinimg.com",
+          "pinterest.at",
+          "pinterest.com",
+          "pinterest.engineering",
+          "pinterest.info",
+          "pinterestmail.com"
+        ]
+      }
     },
     {
       "id": "sg-1771319670672-79",
@@ -1258,10 +1598,9 @@
       "domains": [
         "prod-publishers-content.s3.us-east-1.amazonaws.com"
       ],
-      "mode": "mitm",
-      "upstream": "52.217.230.98:443",
+      "mode": "tls-rf",
+      "upstream": "52.217.230.98:443,52.216.63.42:443",
       "sni_fake": "",
-      "sni_policy": "fake",
       "enabled": true,
       "ech_enabled": false,
       "use_cf_pool": false
@@ -1278,7 +1617,17 @@
       "sni_fake": "proton-me.mapped",
       "enabled": true,
       "ech_enabled": false,
-      "use_cf_pool": false
+      "use_cf_pool": false,
+      "cert_verify": {
+        "mode": "allow_names",
+        "names": [
+          "*.pr.tn",
+          "*.proton.me",
+          "*.storage.proton.me",
+          "pr.tn",
+          "proton.me"
+        ]
+      }
     },
     {
       "id": "sg-1771319670672-81",
@@ -1293,7 +1642,14 @@
       "sni_policy": "none",
       "enabled": true,
       "ech_enabled": false,
-      "use_cf_pool": false
+      "use_cf_pool": false,
+      "cert_verify": {
+        "mode": "allow_names",
+        "names": [
+          "*.pximg.net",
+          "pximg.net"
+        ]
+      }
     },
     {
       "id": "sg-1771319670672-82",
@@ -1311,7 +1667,13 @@
       "sni_policy": "fake",
       "enabled": true,
       "ech_enabled": false,
-      "use_cf_pool": false
+      "use_cf_pool": false,
+      "cert_verify": {
+        "mode": "allow_names",
+        "names": [
+          "*.us-east-1.cloudsearch.amazonaws.com"
+        ]
+      }
     },
     {
       "id": "sg-1771319670672-83",
@@ -1329,7 +1691,14 @@
       "sni_policy": "fake",
       "enabled": true,
       "ech_enabled": false,
-      "use_cf_pool": false
+      "use_cf_pool": false,
+      "cert_verify": {
+        "mode": "allow_names",
+        "names": [
+          "reddit.com",
+          "*.reddit.com"
+        ]
+      }
     },
     {
       "id": "sg-1771319670672-84",
@@ -1344,7 +1713,20 @@
       "sni_policy": "fake",
       "enabled": true,
       "ech_enabled": false,
-      "use_cf_pool": false
+      "use_cf_pool": false,
+      "cert_verify": {
+        "mode": "allow_names",
+        "names": [
+          "*.rfi.fr",
+          "alexa.voice-api.rfi.fr",
+          "amp.rfi.fr",
+          "api2.rfi.fr",
+          "apis.fle.rfi.fr",
+          "apis.rfi.fr",
+          "rfi.fr",
+          "www.rfi.fr"
+        ]
+      }
     },
     {
       "id": "sg-1771319670672-85",
@@ -1359,7 +1741,14 @@
       "sni_policy": "fake",
       "enabled": true,
       "ech_enabled": false,
-      "use_cf_pool": false
+      "use_cf_pool": false,
+      "cert_verify": {
+        "mode": "allow_names",
+        "names": [
+          "*.rumble.com",
+          "rumble.com"
+        ]
+      }
     },
     {
       "id": "sg-1771319670672-86",
@@ -1374,7 +1763,14 @@
       "sni_fake": "rutub.io",
       "enabled": true,
       "ech_enabled": false,
-      "use_cf_pool": false
+      "use_cf_pool": false,
+      "cert_verify": {
+        "mode": "allow_names",
+        "names": [
+          "*.rutube.ru",
+          "rutube.ru"
+        ]
+      }
     },
     {
       "id": "sg-steam-store-1",
@@ -1403,7 +1799,11 @@
       "sni_policy": "fake",
       "enabled": true,
       "ech_enabled": false,
-      "use_cf_pool": false
+      "use_cf_pool": false,
+      "cert_verify": {
+        "mode": "chain_only",
+        "allow_unknown_authority": true
+      }
     },
     {
       "id": "sg-1771319670672-91",
@@ -1424,7 +1824,14 @@
       "alpn_policy": "h1_only",
       "enabled": true,
       "ech_enabled": false,
-      "use_cf_pool": false
+      "use_cf_pool": false,
+      "cert_verify": {
+        "mode": "allow_names",
+        "names": [
+          "*.telegram.org",
+          "telegram.org"
+        ]
+      }
     },
     {
       "id": "sg-1771319670672-92",
@@ -1439,7 +1846,16 @@
       "sni_policy": "fake",
       "enabled": true,
       "ech_enabled": false,
-      "use_cf_pool": false
+      "use_cf_pool": false,
+      "cert_verify": {
+        "mode": "allow_names",
+        "names": [
+          "*.beta.thetvdb.com",
+          "*.prod.thetvdb.com",
+          "*.thetvdb.com",
+          "thetvdb.com"
+        ]
+      }
     },
     {
       "id": "sg-1771319670672-93",
@@ -1454,7 +1870,16 @@
       "sni_policy": "fake",
       "enabled": true,
       "ech_enabled": false,
-      "use_cf_pool": false
+      "use_cf_pool": false,
+      "cert_verify": {
+        "mode": "allow_names",
+        "names": [
+          "*.twimg.com",
+          "cdn.syndication.twimg.com",
+          "platform.twitter.com",
+          "twimg.com"
+        ]
+      }
     },
     {
       "id": "sg-1771319670672-94",
@@ -1486,7 +1911,14 @@
       "sni_policy": "fake",
       "enabled": true,
       "ech_enabled": false,
-      "use_cf_pool": false
+      "use_cf_pool": false,
+      "cert_verify": {
+        "mode": "allow_names",
+        "names": [
+          "maps.wikimedia.org",
+          "upload.wikimedia.org"
+        ]
+      }
     },
     {
       "id": "sg-1771319670672-97",
@@ -1501,7 +1933,14 @@
       "sni_policy": "fake",
       "enabled": true,
       "ech_enabled": false,
-      "use_cf_pool": false
+      "use_cf_pool": false,
+      "cert_verify": {
+        "mode": "allow_names",
+        "names": [
+          "vercel.com",
+          "*.vercel.com"
+        ]
+      }
     },
     {
       "id": "sg-1771319670673-98",
@@ -1517,7 +1956,21 @@
       "sni_policy": "fake",
       "enabled": true,
       "ech_enabled": false,
-      "use_cf_pool": false
+      "use_cf_pool": false,
+      "cert_verify": {
+        "mode": "allow_names",
+        "names": [
+          "*.cdn.whatsapp.net",
+          "*.snr.whatsapp.net",
+          "*.whatsapp.com",
+          "*.whatsapp.net",
+          "cdn.whatsapp.net",
+          "snr.whatsapp.net",
+          "wa.me",
+          "whatsapp.com",
+          "whatsapp.net"
+        ]
+      }
     },
     {
       "id": "sg-1771319670673-99",
@@ -1531,7 +1984,11 @@
       "sni_fake": "xm.mapped",
       "enabled": true,
       "ech_enabled": false,
-      "use_cf_pool": false
+      "use_cf_pool": false,
+      "cert_verify": {
+        "mode": "chain_only",
+        "allow_unknown_authority": true
+      }
     },
     {
       "id": "1771408944930",
@@ -1545,7 +2002,14 @@
       "sni_fake": "www-dropbox-com.mapped",
       "enabled": true,
       "ech_enabled": false,
-      "use_cf_pool": false
+      "use_cf_pool": false,
+      "cert_verify": {
+        "mode": "allow_names",
+        "names": [
+          "*.dropbox.com",
+          "dropbox.com"
+        ]
+      }
     },
     {
       "id": "1771408944931",
@@ -1559,7 +2023,18 @@
       "sni_fake": "bolt-dropbox-com.mapped",
       "enabled": true,
       "ech_enabled": false,
-      "use_cf_pool": false
+      "use_cf_pool": false,
+      "cert_verify": {
+        "mode": "allow_names",
+        "names": [
+          "api-notify.dropbox.com",
+          "api-notify0.dropbox.com",
+          "beacon.dropbox.com",
+          "bolt.dropbox.com",
+          "notify.dropboxapi.com",
+          "thunder.dropbox.com"
+        ]
+      }
     },
     {
       "id": "1771408944932",
@@ -1573,7 +2048,14 @@
       "sni_fake": "d-dropbox-com.mapped",
       "enabled": true,
       "ech_enabled": false,
-      "use_cf_pool": false
+      "use_cf_pool": false,
+      "cert_verify": {
+        "mode": "allow_names",
+        "names": [
+          "*.dropbox.com",
+          "dropbox.com"
+        ]
+      }
     },
     {
       "id": "1771408944933",
@@ -1587,7 +2069,21 @@
       "sni_fake": "previews-dropbox-com.mapped",
       "enabled": true,
       "ech_enabled": false,
-      "use_cf_pool": false
+      "use_cf_pool": false,
+      "cert_verify": {
+        "mode": "allow_names",
+        "names": [
+          "*.dropbox.com",
+          "*.previews.dropboxusercontent.com",
+          "api-content-photos.dropbox.com",
+          "dropbox.com",
+          "photos-1.dropbox.com",
+          "photos-2.dropbox.com",
+          "photos-3.dropbox.com",
+          "photos-4.dropbox.com",
+          "previews.dropboxusercontent.com"
+        ]
+      }
     },
     {
       "id": "1771408944934",
@@ -1601,7 +2097,18 @@
       "sni_fake": "beacon-dropbox-com.mapped",
       "enabled": true,
       "ech_enabled": false,
-      "use_cf_pool": false
+      "use_cf_pool": false,
+      "cert_verify": {
+        "mode": "allow_names",
+        "names": [
+          "api-notify.dropbox.com",
+          "api-notify0.dropbox.com",
+          "beacon.dropbox.com",
+          "bolt.dropbox.com",
+          "notify.dropboxapi.com",
+          "thunder.dropbox.com"
+        ]
+      }
     },
     {
       "id": "1771408944935",
@@ -1615,7 +2122,18 @@
       "sni_fake": "thunder-dropbox-com.mapped",
       "enabled": true,
       "ech_enabled": false,
-      "use_cf_pool": false
+      "use_cf_pool": false,
+      "cert_verify": {
+        "mode": "allow_names",
+        "names": [
+          "api-notify.dropbox.com",
+          "api-notify0.dropbox.com",
+          "beacon.dropbox.com",
+          "bolt.dropbox.com",
+          "notify.dropboxapi.com",
+          "thunder.dropbox.com"
+        ]
+      }
     },
     {
       "id": "1771408944936",
@@ -1624,9 +2142,9 @@
       "domains": [
         "fp.dropbox.com"
       ],
-      "mode": "mitm",
-      "upstream": "18.154.206.82:443",
-      "sni_fake": "fp-dropbox-com.mapped",
+      "mode": "tls-rf",
+      "upstream": "3.164.85.85:443",
+      "sni_fake": "",
       "enabled": true,
       "ech_enabled": false,
       "use_cf_pool": false
@@ -1657,7 +2175,14 @@
       "sni_fake": "dropbox-com.mapped",
       "enabled": true,
       "ech_enabled": false,
-      "use_cf_pool": false
+      "use_cf_pool": false,
+      "cert_verify": {
+        "mode": "allow_names",
+        "names": [
+          "*.dropbox.com",
+          "dropbox.com"
+        ]
+      }
     },
     {
       "id": "sg-1771319670673-103",
@@ -1672,7 +2197,14 @@
       "sni_policy": "fake",
       "enabled": true,
       "ech_enabled": false,
-      "use_cf_pool": false
+      "use_cf_pool": false,
+      "cert_verify": {
+        "mode": "allow_names",
+        "names": [
+          "*.duckduckgo.com",
+          "duckduckgo.com"
+        ]
+      }
     },
     {
       "id": "sg-1771319670673-104",
@@ -1687,7 +2219,14 @@
       "sni_policy": "fake",
       "enabled": true,
       "ech_enabled": false,
-      "use_cf_pool": false
+      "use_cf_pool": false,
+      "cert_verify": {
+        "mode": "allow_names",
+        "names": [
+          "*.discord.com",
+          "discord.com"
+        ]
+      }
     },
     {
       "id": "sg-1771319670673-105",
@@ -1702,7 +2241,14 @@
       "sni_policy": "fake",
       "enabled": true,
       "ech_enabled": false,
-      "use_cf_pool": false
+      "use_cf_pool": false,
+      "cert_verify": {
+        "mode": "allow_names",
+        "names": [
+          "*.discord.gg",
+          "discord.gg"
+        ]
+      }
     },
     {
       "id": "sg-1771319670673-106",
@@ -1717,7 +2263,14 @@
       "sni_policy": "fake",
       "enabled": true,
       "ech_enabled": false,
-      "use_cf_pool": false
+      "use_cf_pool": false,
+      "cert_verify": {
+        "mode": "allow_names",
+        "names": [
+          "*.discordapp.com",
+          "discordapp.com"
+        ]
+      }
     },
     {
       "id": "sg-1771319670673-107",
@@ -1732,7 +2285,14 @@
       "sni_policy": "fake",
       "enabled": true,
       "ech_enabled": false,
-      "use_cf_pool": false
+      "use_cf_pool": false,
+      "cert_verify": {
+        "mode": "allow_names",
+        "names": [
+          "discordapp.net",
+          "media.discordapp.net"
+        ]
+      }
     },
     {
       "id": "sg-1771319670673-108",
@@ -1747,43 +2307,13 @@
       "sni_policy": "fake",
       "enabled": true,
       "ech_enabled": false,
-      "use_cf_pool": false
-    },
-    {
-      "id": "sg-1771319670673-109",
-      "name": "zws2.web.telegram.org",
-      "website": "telegram",
-      "domains": [
-        "zws2.web.telegram.org",
-        "zws4.web.telegram.org"
-      ],
-      "mode": "mitm",
-      "upstream": "136.244.94.246:443",
-      "sni_fake": "g.cn",
-      "connect_policy": "mitm",
-      "sni_policy": "fake",
-      "alpn_policy": "h1_only",
-      "enabled": true,
-      "ech_enabled": false,
-      "use_cf_pool": false
-    },
-    {
-      "id": "sg-1771319670673-110",
-      "name": "zws1.web.telegram.org",
-      "website": "telegram",
-      "domains": [
-        "zws1.web.telegram.org",
-        "zws3.web.telegram.org"
-      ],
-      "mode": "mitm",
-      "upstream": "149.154.174.200:443",
-      "sni_fake": "g.cn",
-      "connect_policy": "mitm",
-      "sni_policy": "fake",
-      "alpn_policy": "h1_only",
-      "enabled": true,
-      "ech_enabled": false,
-      "use_cf_pool": false
+      "use_cf_pool": false,
+      "cert_verify": {
+        "mode": "allow_names",
+        "names": [
+          "mta-sts.tails.net"
+        ]
+      }
     },
     {
       "id": "sg-1771319670673-111",
@@ -1840,28 +2370,14 @@
         "google.com",
         "google.com.*",
         "googleapis.com",
-        "youtubei.googleapis.com",
-        "www.googleapis.com",
         "googleusercontent.com",
         "lh3.googleusercontent.com",
-        "antigravity.google"
+        "antigravity.google",
+        "*.googleapis.com",
+        "blogger.com"
       ],
       "mode": "mitm",
-      "upstream": "142.250.20.90:443",
-      "sni_fake": "g.cn",
-      "enabled": true,
-      "ech_enabled": false,
-      "use_cf_pool": false
-    },
-    {
-      "id": "sg-1771320583113-mitm-lh3-googleusercontent",
-      "name": "lh3.googleusercontent.com",
-      "website": "google",
-      "domains": [
-        "lh3.googleusercontent.com"
-      ],
-      "mode": "mitm",
-      "upstream": "142.250.20.90:443",
+      "upstream": "34.49.133.3:443",
       "sni_fake": "g.cn",
       "enabled": true,
       "ech_enabled": false,
@@ -2032,10 +2548,14 @@
       ],
       "mode": "mitm",
       "upstream": "94.231.223.5:443",
-      "sni_fake": "z-library-sk.mapped",
+      "sni_fake": "z.lo",
       "enabled": true,
       "ech_enabled": false,
-      "use_cf_pool": false
+      "use_cf_pool": false,
+      "cert_verify": {
+        "mode": "chain_only",
+        "allow_unknown_authority": true
+      }
     },
     {
       "id": "1773135185399537900",
@@ -2049,7 +2569,22 @@
       "sni_fake": "steamcom.mapped",
       "enabled": true,
       "ech_enabled": false,
-      "use_cf_pool": false
+      "use_cf_pool": false,
+      "cert_verify": {
+        "mode": "allow_names",
+        "names": [
+          "*.steamgames.com",
+          "*.steampowered.com",
+          "api.steampowered.com",
+          "help.steampowered.com",
+          "login.steampowered.com",
+          "partner.steamgames.com",
+          "partner.steampowered.com",
+          "steamgames.com",
+          "steampowered.com",
+          "store.steampowered.com"
+        ]
+      }
     },
     {
       "id": "1773135753390794800",
@@ -2063,7 +2598,13 @@
       "sni_fake": "comm.mapped",
       "enabled": true,
       "ech_enabled": false,
-      "use_cf_pool": false
+      "use_cf_pool": false,
+      "cert_verify": {
+        "mode": "allow_names",
+        "names": [
+          "t.sni-820-default.ssl.fastly.net"
+        ]
+      }
     },
     {
       "id": "1773135933462451200",
@@ -2082,7 +2623,14 @@
       "sni_policy": "none",
       "enabled": true,
       "ech_enabled": false,
-      "use_cf_pool": false
+      "use_cf_pool": false,
+      "cert_verify": {
+        "mode": "allow_names",
+        "names": [
+          "cloudfront.net",
+          "*.cloudfront.net"
+        ]
+      }
     },
     {
       "id": "1773137564101408100",
@@ -2170,7 +2718,14 @@
       "sni_fake": "uploads-github-com.mapped",
       "enabled": true,
       "ech_enabled": false,
-      "use_cf_pool": false
+      "use_cf_pool": false,
+      "cert_verify": {
+        "mode": "allow_names",
+        "names": [
+          "githubusercontent.com",
+          "*.githubusercontent.com"
+        ]
+      }
     },
     {
       "id": "sg-manual-alive-github",
@@ -2184,7 +2739,14 @@
       "sni_fake": "alive-github-com.mapped",
       "enabled": true,
       "ech_enabled": false,
-      "use_cf_pool": false
+      "use_cf_pool": false,
+      "cert_verify": {
+        "mode": "allow_names",
+        "names": [
+          "*.github.com",
+          "github.com"
+        ]
+      }
     },
     {
       "id": "sg-manual-objects-origin-githubusercontent",
@@ -2198,7 +2760,14 @@
       "sni_fake": "objects-origin-githubusercontent-com.mapped",
       "enabled": true,
       "ech_enabled": false,
-      "use_cf_pool": false
+      "use_cf_pool": false,
+      "cert_verify": {
+        "mode": "allow_names",
+        "names": [
+          "actions.githubusercontent.com",
+          "*.actions.githubusercontent.com"
+        ]
+      }
     },
     {
       "id": "sg-manual-skyapi-onedrive",
@@ -2227,7 +2796,16 @@
       "sni_policy": "fake",
       "enabled": true,
       "ech_enabled": false,
-      "use_cf_pool": false
+      "use_cf_pool": false,
+      "cert_verify": {
+        "mode": "allow_names",
+        "names": [
+          "*.twimg.com",
+          "cdn.syndication.twimg.com",
+          "platform.twitter.com",
+          "twimg.com"
+        ]
+      }
     },
     {
       "id": "sg-manual-abs0-twimg",
@@ -2242,7 +2820,16 @@
       "sni_policy": "fake",
       "enabled": true,
       "ech_enabled": false,
-      "use_cf_pool": false
+      "use_cf_pool": false,
+      "cert_verify": {
+        "mode": "allow_names",
+        "names": [
+          "*.twimg.com",
+          "cdn.syndication.twimg.com",
+          "platform.twitter.com",
+          "twimg.com"
+        ]
+      }
     },
     {
       "id": "sg-manual-video-pscp",
@@ -2257,7 +2844,14 @@
       "sni_policy": "fake",
       "enabled": true,
       "ech_enabled": false,
-      "use_cf_pool": false
+      "use_cf_pool": false,
+      "cert_verify": {
+        "mode": "allow_names",
+        "names": [
+          "*.video.pscp.tv",
+          "video.pscp.tv"
+        ]
+      }
     },
     {
       "id": "1774600041438876400",
@@ -2285,7 +2879,11 @@
       "sni_fake": "xv.os",
       "enabled": true,
       "ech_enabled": false,
-      "use_cf_pool": false
+      "use_cf_pool": false,
+      "cert_verify": {
+        "mode": "chain_only",
+        "allow_unknown_authority": true
+      }
     },
     {
       "id": "1774612556644002400",
@@ -2297,20 +2895,6 @@
       "mode": "transparent",
       "upstream": "warp",
       "sni_fake": "",
-      "enabled": true,
-      "ech_enabled": false,
-      "use_cf_pool": false
-    },
-    {
-      "id": "1774688438366047300",
-      "name": "Android",
-      "website": "google",
-      "domains": [
-        "android.com"
-      ],
-      "mode": "mitm",
-      "upstream": "android.com",
-      "sni_fake": "g.cn",
       "enabled": true,
       "ech_enabled": false,
       "use_cf_pool": false
@@ -2328,6 +2912,100 @@
       "enabled": true,
       "ech_enabled": false,
       "use_cf_pool": false
+    },
+    {
+      "id": "1774704297710082600",
+      "name": "poe.com",
+      "website": "poe",
+      "domains": [
+        "poe.com"
+      ],
+      "mode": "mitm",
+      "upstream": "",
+      "sni_fake": "",
+      "sni_policy": "fake",
+      "enabled": true,
+      "ech_enabled": true,
+      "ech_profile_id": "legacy-cloudflare",
+      "ech_domain": "crypto.cloudflare.com",
+      "use_cf_pool": true
+    },
+    {
+      "id": "1774755148574888600",
+      "name": "android",
+      "website": "google",
+      "domains": [
+        "android.com",
+        "gstatic.com"
+      ],
+      "mode": "mitm",
+      "upstream": "47.102.115.14:443",
+      "sni_fake": "g.cn",
+      "enabled": true,
+      "ech_enabled": false,
+      "use_cf_pool": false,
+      "cert_verify": {
+        "mode": "allow_names",
+        "names": [
+          "*.appengine.google.com",
+          "*.bdn.dev",
+          "*.cloud.google.com",
+          "*.crowdsource.google.com",
+          "*.google.com",
+          "*.origin-test.bdn.dev",
+          "appengine.google.com",
+          "bdn.dev",
+          "cloud.google.com",
+          "crowdsource.google.com",
+          "google.com",
+          "origin-test.bdn.dev"
+        ]
+      }
+    },
+    {
+      "id": "1774756254331082900",
+      "name": "googleapi",
+      "website": "google",
+      "domains": [
+        "googleapis.com"
+      ],
+      "mode": "mitm",
+      "upstream": "180.163.150.34:443",
+      "sni_fake": "g.cn",
+      "enabled": true,
+      "ech_enabled": false,
+      "use_cf_pool": false
+    },
+    {
+      "id": "1774782086542746000",
+      "name": "rule34",
+      "website": "rule34",
+      "domains": [
+        "rule34.com"
+      ],
+      "mode": "tls-rf",
+      "upstream": "194.1.140.1:443",
+      "sni_fake": "",
+      "enabled": true,
+      "ech_enabled": false,
+      "use_cf_pool": false
+    },
+    {
+      "id": "1774782223908304500",
+      "name": "assets.chapturist.com",
+      "website": "assets",
+      "domains": [
+        "assets.chapturist.com"
+      ],
+      "mode": "mitm",
+      "upstream": "",
+      "sni_fake": "",
+      "sni_policy": "fake",
+      "enabled": true,
+      "ech_enabled": true,
+      "ech_profile_id": "legacy-cloudflare",
+      "ech_domain": "crypto.cloudflare.com",
+      "use_cf_pool": true
     }
   ],
   "upstreams": [],
@@ -2342,31 +3020,31 @@
   ],
   "cloudflare_config": {
     "preferred_ips": [
-      "104.19.56.220",
-      "104.19.33.132",
-      "104.19.56.167",
-      "104.25.241.149",
+      "104.25.252.161",
       "104.25.248.141",
-      "104.17.140.219",
-      "104.17.131.91",
-      "104.17.152.75",
-      "104.17.140.224",
-      "104.17.152.122",
-      "162.159.44.125",
-      "162.159.44.51",
-      "162.159.45.190",
-      "162.159.39.136",
-      "162.159.39.254",
-      "108.162.198.22",
-      "162.159.45.51",
-      "162.159.45.9",
-      "162.159.45.120",
-      "162.159.45.54"
+      "104.25.242.226",
+      "104.25.246.76",
+      "104.25.248.220",
+      "104.17.142.74",
+      "104.17.144.171",
+      "104.17.157.21",
+      "104.17.143.10",
+      "104.17.156.98",
+      "162.159.39.38",
+      "162.159.12.26",
+      "162.159.44.82",
+      "162.159.45.202",
+      "162.159.45.218",
+      "104.17.150.50",
+      "172.64.145.208",
+      "104.18.34.244",
+      "104.17.152.15",
+      "172.64.146.233"
     ],
     "doh_url": "",
-    "auto_update": true,
+    "auto_update": false,
     "api_key": "",
-    "warp_enabled": true,
+    "warp_enabled": false,
     "warp_socks_port": 1080,
     "warp_endpoint": "162.159.199.2"
   }

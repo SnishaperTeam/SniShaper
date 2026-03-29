@@ -71,22 +71,23 @@ type RuleManager struct {
 }
 
 type SiteGroup struct {
-	ID            string   `json:"id"`
-	Name          string   `json:"name"`
-	Website       string   `json:"website,omitempty"`
-	Domains       []string `json:"domains"`
-	Mode          string   `json:"mode"`
-	Upstream      string   `json:"upstream"`
-	Upstreams     []string `json:"upstreams,omitempty"`
-	SniFake       string   `json:"sni_fake"`
-	ConnectPolicy string   `json:"connect_policy,omitempty"` // "", "tunnel_origin", "tunnel_upstream", "mitm", "direct"
-	SniPolicy     string   `json:"sni_policy,omitempty"`     // "", "auto", "original", "fake", "upstream", "none"
-	AlpnPolicy    string   `json:"alpn_policy,omitempty"`    // "", "auto", "h1_only", "h2_h1"
-	Enabled       bool     `json:"enabled"`
-	ECHEnabled    bool     `json:"ech_enabled"`
-	ECHProfileID  string   `json:"ech_profile_id,omitempty"`
-	ECHDomain     string   `json:"ech_domain,omitempty"` // Domain used for ECH DoH lookup
-	UseCFPool     bool     `json:"use_cf_pool"`
+	ID            string           `json:"id"`
+	Name          string           `json:"name"`
+	Website       string           `json:"website,omitempty"`
+	Domains       []string         `json:"domains"`
+	Mode          string           `json:"mode"`
+	Upstream      string           `json:"upstream"`
+	Upstreams     []string         `json:"upstreams,omitempty"`
+	SniFake       string           `json:"sni_fake"`
+	ConnectPolicy string           `json:"connect_policy,omitempty"` // "", "tunnel_origin", "tunnel_upstream", "mitm", "direct"
+	SniPolicy     string           `json:"sni_policy,omitempty"`     // "", "auto", "original", "fake", "upstream", "none"
+	AlpnPolicy    string           `json:"alpn_policy,omitempty"`    // "", "auto", "h1_only", "h2_h1"
+	Enabled       bool             `json:"enabled"`
+	ECHEnabled    bool             `json:"ech_enabled"`
+	ECHProfileID  string           `json:"ech_profile_id,omitempty"`
+	ECHDomain     string           `json:"ech_domain,omitempty"` // Domain used for ECH DoH lookup
+	UseCFPool     bool             `json:"use_cf_pool"`
+	CertVerify    CertVerifyConfig `json:"cert_verify,omitempty"`
 }
 
 type Upstream struct {
@@ -201,6 +202,7 @@ type Rule struct {
 	ECHDiscoveryDomain string
 	ECHDoHUpstream     string
 	ECHAutoUpdate      bool
+	CertVerify         CertVerifyConfig
 }
 
 func mergeRule(base, overlay Rule) Rule {
@@ -222,6 +224,9 @@ func mergeRule(base, overlay Rule) Rule {
 	}
 	if strings.TrimSpace(overlay.AlpnPolicy) != "" {
 		out.AlpnPolicy = overlay.AlpnPolicy
+	}
+	if !overlay.CertVerify.IsZero() {
+		out.CertVerify = overlay.CertVerify
 	}
 	return out
 }
@@ -1760,6 +1765,7 @@ func (rm *RuleManager) buildRules() {
 				ECHDiscoveryDomain: echProfile.DiscoveryDomain,
 				ECHDoHUpstream:     echProfile.DoHUpstream,
 				ECHAutoUpdate:      echProfile.AutoUpdate,
+				CertVerify:         sg.CertVerify,
 			}
 			rm.rules = append(rm.rules, rule)
 		}
@@ -2047,11 +2053,13 @@ func rewriteUTLSALPN(spec *utls.ClientHelloSpec, nextProtos []string) {
 	})
 }
 
-func (p *ProxyServer) GetUConn(conn net.Conn, sni string, allowInsecure bool, alpn string, echConfig []byte) *utls.UConn {
+func (p *ProxyServer) GetUConn(conn net.Conn, sni string, verifyName string, rule Rule, allowInsecure bool, alpn string, echConfig []byte) *utls.UConn {
 	nextProtos := []string{"h2", "http/1.1"}
 	if strings.EqualFold(strings.TrimSpace(alpn), "http/1.1") {
 		nextProtos = []string{"http/1.1"}
 	}
+
+	verifyConn := buildVerifyConnection(verifyName, rule.CertVerify)
 
 	config := &utls.Config{
 		// ECH 下这里必须是内层真实 SNI。外层公开名由 ECHConfig 的 PublicName 驱动。
@@ -2059,6 +2067,7 @@ func (p *ProxyServer) GetUConn(conn net.Conn, sni string, allowInsecure bool, al
 		InsecureSkipVerify:             allowInsecure,
 		EncryptedClientHelloConfigList: echConfig,
 		NextProtos:                     nextProtos,
+		VerifyConnection:               verifyConn,
 	}
 
 	if allowInsecure && len(echConfig) > 0 {
@@ -2067,6 +2076,7 @@ func (p *ProxyServer) GetUConn(conn net.Conn, sni string, allowInsecure bool, al
 		config.VerifyPeerCertificate = func(rawCerts [][]byte, verifiedChains [][]*x509.Certificate) error {
 			return nil
 		}
+		config.VerifyConnection = nil
 	}
 
 	clientHelloID := chooseUTLSClientHelloID(alpn)
@@ -2332,7 +2342,7 @@ func (p *ProxyServer) establishUpstreamConn(host string, rule Rule, dialCandidat
 			log.Printf("[Upstream] WARNING: ECH is enabled for %s but NO ECH config available. Handshake will LEAK domain!", host)
 		}
 
-		uconn := p.GetUConn(rawConn, targetSNI, true, upstreamALPN, echConfig)
+		uconn := p.GetUConn(rawConn, targetSNI, host, rule, true, upstreamALPN, echConfig)
 		utlsErr := uconn.Handshake()
 		if utlsErr != nil {
 			rawConn.Close()

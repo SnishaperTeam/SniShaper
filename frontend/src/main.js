@@ -4,6 +4,7 @@ import { Events, Window } from '/wails/runtime.js';
 let isRunning = false;
 let systemProxyEnabled = false;
 let editingGroupId = null;
+let editingGroupData = null;
 let loggingEnabled = true;
 let backendLogPoll = null;
 let rulesSearchQuery = '';
@@ -55,6 +56,114 @@ function groupMatchesMode(group, targetMode) {
         return isWarp;
     }
     return (group.mode || '').toLowerCase() === targetMode && !isWarp;
+}
+
+function splitLines(value) {
+    return String(value || '')
+        .split('\n')
+        .map(item => item.trim())
+        .filter(Boolean);
+}
+
+function getCertVerifySummary(certVerify) {
+    if (!certVerify) return '';
+    const mode = (certVerify.mode || '').trim();
+    const parts = [];
+    switch (mode) {
+    case 'allow_names':
+        parts.push(`证书名白名单 ${((certVerify.names || []).length)} 项`);
+        break;
+    case 'allow_suffixes':
+        parts.push(`证书后缀 ${((certVerify.suffixes || []).length)} 项`);
+        break;
+    case 'allow_spki':
+        parts.push(`SPKI 指纹 ${((certVerify.spki_sha256 || []).length)} 项`);
+        break;
+    case 'chain_only':
+        parts.push('仅校验证书链');
+        break;
+    default:
+        if ((certVerify.names || []).length) parts.push(`证书名白名单 ${certVerify.names.length} 项`);
+        if ((certVerify.suffixes || []).length) parts.push(`证书后缀 ${certVerify.suffixes.length} 项`);
+        if ((certVerify.spki_sha256 || []).length) parts.push(`SPKI 指纹 ${certVerify.spki_sha256.length} 项`);
+        break;
+    }
+    if (certVerify.allow_unknown_authority) {
+        parts.push('允许未知签发者');
+    }
+    return parts.join(' · ');
+}
+
+function syncCertVerifyFormState() {
+    const modeEl = document.getElementById('input-mode');
+    const verifyModeEl = document.getElementById('input-cert-verify-mode');
+    const panel = document.getElementById('cert-verify-panel');
+    const isMitm = (modeEl?.value || '').toLowerCase() === 'mitm';
+    const verifyMode = (verifyModeEl?.value || '').trim();
+
+    if (panel) {
+        panel.classList.toggle('is-disabled', !isMitm);
+    }
+
+    const groups = {
+        names: document.getElementById('cert-verify-names-group'),
+        suffixes: document.getElementById('cert-verify-suffixes-group'),
+        spki: document.getElementById('cert-verify-spki-group')
+    };
+
+    if (groups.names) groups.names.hidden = verifyMode !== 'allow_names';
+    if (groups.suffixes) groups.suffixes.hidden = verifyMode !== 'allow_suffixes';
+    if (groups.spki) groups.spki.hidden = verifyMode !== 'allow_spki';
+}
+
+function resetCertVerifyForm() {
+    document.getElementById('input-cert-verify-mode').value = '';
+    document.getElementById('input-cert-verify-names').value = '';
+    document.getElementById('input-cert-verify-suffixes').value = '';
+    document.getElementById('input-cert-verify-spki').value = '';
+    document.getElementById('input-cert-verify-allow-unknown-authority').checked = false;
+    syncCertVerifyFormState();
+}
+
+function fillCertVerifyForm(certVerify) {
+    const cfg = certVerify || {};
+    document.getElementById('input-cert-verify-mode').value = cfg.mode || '';
+    document.getElementById('input-cert-verify-names').value = (cfg.names || []).join('\n');
+    document.getElementById('input-cert-verify-suffixes').value = (cfg.suffixes || []).join('\n');
+    document.getElementById('input-cert-verify-spki').value = (cfg.spki_sha256 || []).join('\n');
+    document.getElementById('input-cert-verify-allow-unknown-authority').checked = !!cfg.allow_unknown_authority;
+    syncCertVerifyFormState();
+}
+
+function readCertVerifyForm() {
+    const mode = document.getElementById('input-cert-verify-mode').value.trim();
+    const names = splitLines(document.getElementById('input-cert-verify-names').value);
+    const suffixes = splitLines(document.getElementById('input-cert-verify-suffixes').value);
+    const spkiSha256 = splitLines(document.getElementById('input-cert-verify-spki').value);
+    const allowUnknownAuthority = document.getElementById('input-cert-verify-allow-unknown-authority').checked;
+    const isMitm = (document.getElementById('input-mode').value || '').toLowerCase() === 'mitm';
+
+    if (!isMitm) {
+        return {};
+    }
+
+    const finalMode = mode || (
+        names.length ? 'allow_names'
+            : (suffixes.length ? 'allow_suffixes'
+                : (spkiSha256.length ? 'allow_spki' : ''))
+    );
+
+    if (!finalMode && !allowUnknownAuthority) {
+        return {};
+    }
+
+    return {
+        mode: finalMode,
+        names,
+        suffixes,
+        spki_sha256: spkiSha256,
+        allow_unknown_authority: allowUnknownAuthority
+    };
 }
 
 // 生成 Fake SNI 映射
@@ -482,12 +591,14 @@ async function loadSiteGroups() {
                     websiteRules.forEach(group => {
                         const item = document.createElement('div');
                         item.className = 'rule-item';
+                        const certVerifySummary = getCertVerifySummary(group.cert_verify);
                         item.innerHTML = `
                             <div class="rule-info">
                                 <div class="rule-name">${group.name || '未命名'}</div>
                                 <div class="rule-domains">${(group.domains || []).join(', ')}</div>
                                 <div class="rule-domains">${group.ech_enabled ? '<span style="color:var(--success)">ECH开启</span>' : ''} ${group.use_cf_pool ? '<span style="color:var(--primary)">优选IP</span>' : ''}</div>
                                 <div class="rule-mode">${getModeLabel(group.mode)}${group.upstream ? ' → ' + (group.upstream.length > 40 ? group.upstream.substring(0, 40) + '...' : group.upstream) : ''}</div>
+                                ${certVerifySummary ? `<div class="rule-domains">证书验证: ${certVerifySummary}</div>` : ''}
                             </div>
                             <div class="rule-actions">
                                 <button class="btn btn-secondary" onclick="showEditRuleModal('${group.id}')">编辑</button>
@@ -604,6 +715,7 @@ window.deleteSiteGroup = async function (id) {
 };
 
 window.showAddRuleModal = function () {
+    editingGroupData = null;
     let defaults = {};
     if (arguments.length > 0 && typeof arguments[0] === 'object' && arguments[0] !== null) {
         defaults = arguments[0];
@@ -621,7 +733,9 @@ window.showAddRuleModal = function () {
     document.getElementById('input-ech-profile-id').value = '';
     document.getElementById('input-use-cf-pool').checked = false;
     document.getElementById('input-enabled').checked = true;
+    resetCertVerifyForm();
     updateECHProfileDropdown();
+    syncCertVerifyFormState();
     document.getElementById('modal-overlay').style.display = 'flex';
 };
 
@@ -635,6 +749,7 @@ window.showEditRuleModal = async function (id) {
         }
 
         editingGroupId = id;
+        editingGroupData = group;
         document.getElementById('modal-title').textContent = '编辑规则';
         document.getElementById('input-name').value = group.name || '';
         document.getElementById('input-website').value = group.website || '';
@@ -650,6 +765,8 @@ window.showEditRuleModal = async function (id) {
         
         document.getElementById('input-use-cf-pool').checked = !!group.use_cf_pool;
         document.getElementById('input-enabled').checked = group.enabled !== false;
+        fillCertVerifyForm(group.cert_verify);
+        syncCertVerifyFormState();
         document.getElementById('modal-overlay').style.display = 'flex';
     } catch (err) {
         console.error('Edit rule error:', err);
@@ -659,6 +776,7 @@ window.showEditRuleModal = async function (id) {
 
 window.closeModal = function () {
     document.getElementById('modal-overlay').style.display = 'none';
+    editingGroupData = null;
 };
 
 window.confirmModal = async function () {
@@ -673,6 +791,7 @@ window.confirmModal = async function () {
     const echProfileId = document.getElementById('input-ech-profile-id').value;
     const useCfPool = document.getElementById('input-use-cf-pool').checked;
     const enabled = document.getElementById('input-enabled').checked;
+    const certVerify = readCertVerifyForm();
 
     if (!name || domains.length === 0) {
         addLog('warn', '请填写名称和域名');
@@ -693,6 +812,7 @@ window.confirmModal = async function () {
         }
 
         const groupData = {
+            ...(editingGroupId && editingGroupData ? editingGroupData : {}),
             name,
             website,
             domains,
@@ -703,7 +823,8 @@ window.confirmModal = async function () {
             ech_profile_id: echProfileId,
             ech_enabled: echEnabled,
             use_cf_pool: useCfPool,
-            enabled
+            enabled,
+            cert_verify: certVerify
         };
 
         if (editingGroupId) {
@@ -1725,7 +1846,9 @@ document.addEventListener('DOMContentLoaded', async () => {
         if (e.target.value === 'warp') {
             document.getElementById('input-upstream').value = 'warp';
         }
+        syncCertVerifyFormState();
     });
+    document.getElementById('input-cert-verify-mode')?.addEventListener('change', syncCertVerifyFormState);
     document.getElementById('rename-group-input')?.addEventListener('keydown', async (e) => {
         if (e.key === 'Enter') {
             e.preventDefault();
