@@ -1,5 +1,7 @@
 {
-  "listen_port": "8080",
+  "listen_port": "",
+  "server_host": "",
+  "server_auth": "",
   "site_groups": [
     {
       "id": "linux-do",
@@ -14,7 +16,8 @@
       "enabled": true,
       "ech_enabled": true,
       "ech_profile_id": "legacy-cloudflare",
-      "use_cf_pool": true
+      "use_cf_pool": true,
+      "cert_verify": {}
     },
     {
       "id": "sg-1771319670668-1",
@@ -279,7 +282,6 @@
       "upstream": "151.101.194.167:443",
       "sni_fake": "",
       "sni_policy": "none",
-      "alpn_policy": "h2_h1",
       "enabled": true,
       "ech_enabled": false,
       "use_cf_pool": false,
@@ -409,10 +411,10 @@
       "sni_fake": "g.cn",
       "connect_policy": "mitm",
       "sni_policy": "fake",
-      "alpn_policy": "h1_only",
       "enabled": true,
       "ech_enabled": false,
-      "use_cf_pool": false
+      "use_cf_pool": false,
+      "cert_verify": {}
     },
     {
       "id": "sg-1771319670672-22",
@@ -426,10 +428,10 @@
       "sni_fake": "g.cn",
       "connect_policy": "mitm",
       "sni_policy": "fake",
-      "alpn_policy": "h1_only",
       "enabled": true,
       "ech_enabled": false,
-      "use_cf_pool": false
+      "use_cf_pool": false,
+      "cert_verify": {}
     },
     {
       "id": "sg-1771319670672-23",
@@ -443,10 +445,10 @@
       "sni_fake": "g.cn",
       "connect_policy": "mitm",
       "sni_policy": "fake",
-      "alpn_policy": "h1_only",
       "enabled": true,
       "ech_enabled": false,
-      "use_cf_pool": false
+      "use_cf_pool": false,
+      "cert_verify": {}
     },
     {
       "id": "sg-1771319670672-24",
@@ -707,7 +709,8 @@
       "enabled": true,
       "ech_enabled": true,
       "ech_profile_id": "legacy-cloudflare",
-      "use_cf_pool": true
+      "use_cf_pool": true,
+      "cert_verify": {}
     },
     {
       "id": "sg-1771319670672-37",
@@ -806,7 +809,8 @@
       "enabled": true,
       "ech_enabled": true,
       "ech_profile_id": "legacy-cloudflare",
-      "use_cf_pool": true
+      "use_cf_pool": true,
+      "cert_verify": {}
     },
     {
       "id": "sg-1771319670672-41",
@@ -849,7 +853,8 @@
       "enabled": true,
       "ech_enabled": true,
       "ech_profile_id": "legacy-cloudflare",
-      "use_cf_pool": true
+      "use_cf_pool": true,
+      "cert_verify": {}
     },
     {
       "id": "sg-pixiv-001",
@@ -996,7 +1001,8 @@
       "sni_fake": "telegram.org",
       "enabled": true,
       "ech_enabled": false,
-      "use_cf_pool": false
+      "use_cf_pool": false,
+      "cert_verify": {}
     },
     {
       "id": "sg-1771319670672-46",
@@ -1032,12 +1038,13 @@
       "enabled": true,
       "ech_enabled": true,
       "ech_profile_id": "legacy-cloudflare",
-      "use_cf_pool": true
+      "use_cf_pool": true,
+      "cert_verify": {}
     },
     {
       "id": "sg-1771319670672-48",
-      "name": "gdata.youtube.com",
-      "website": "youtube",
+      "name": "youtube",
+      "website": "google",
       "domains": [
         "gdata.youtube.com",
         "ggpht.com",
@@ -1049,12 +1056,13 @@
         "youtube.com",
         "ytimg.com"
       ],
-      "mode": "transparent",
-      "upstream": "warp",
-      "sni_fake": "",
+      "mode": "mitm",
+      "upstream": "34.49.133.3:443",
+      "sni_fake": "g.cn",
       "enabled": true,
       "ech_enabled": false,
-      "use_cf_pool": false
+      "use_cf_pool": false,
+      "cert_verify": {}
     },
     {
       "id": "sg-1771319670672-49",
@@ -1069,7 +1077,8 @@
       "enabled": true,
       "ech_enabled": true,
       "ech_profile_id": "legacy-cloudflare",
-      "use_cf_pool": true
+      "use_cf_pool": true,
+      "cert_verify": {}
     },
     {
       "id": "sg-1771319670672-50",
@@ -1084,7 +1093,8 @@
       "sni_policy": "fake",
       "enabled": true,
       "ech_enabled": false,
-      "use_cf_pool": false
+      "use_cf_pool": false,
+      "cert_verify": {}
     },
     {
       "id": "sg-1771319670672-52",
@@ -1123,7 +1133,6 @@
       "upstream": "151.101.194.167:443",
       "sni_fake": "",
       "sni_policy": "none",
-      "alpn_policy": "h1_only",
       "enabled": true,
       "ech_enabled": false,
       "use_cf_pool": false,
@@ -1196,11 +1205,12 @@
         "youtubei.googleapis.com"
       ],
       "mode": "mitm",
-      "upstream": "142.250.20.90:443",
+      "upstream": "34.49.133.3:443",
       "sni_fake": "g.cn",
       "enabled": true,
       "ech_enabled": false,
-      "use_cf_pool": false
+      "use_cf_pool": false,
+      "cert_verify": {}
     },
     {
       "id": "sg-1771319670672-58",
@@ -1215,7 +1225,8 @@
       "enabled": true,
       "ech_enabled": true,
       "ech_profile_id": "legacy-cloudflare",
-      "use_cf_pool": true
+      "use_cf_pool": true,
+      "cert_verify": {}
     },
     {
       "id": "sg-1771319670672-59",
@@ -1488,7 +1499,8 @@
       "sni_policy": "fake",
       "enabled": true,
       "ech_enabled": false,
-      "use_cf_pool": false
+      "use_cf_pool": false,
+      "cert_verify": {}
     },
     {
       "id": "sg-1771319670672-73",
@@ -1603,7 +1615,8 @@
       "sni_fake": "",
       "enabled": true,
       "ech_enabled": false,
-      "use_cf_pool": false
+      "use_cf_pool": false,
+      "cert_verify": {}
     },
     {
       "id": "sg-1771319670672-80",
@@ -1784,7 +1797,8 @@
       "sni_fake": "",
       "enabled": true,
       "ech_enabled": false,
-      "use_cf_pool": false
+      "use_cf_pool": false,
+      "cert_verify": {}
     },
     {
       "id": "sg-1771319670672-89",
@@ -1821,7 +1835,6 @@
       "sni_fake": "g.cn",
       "connect_policy": "mitm",
       "sni_policy": "fake",
-      "alpn_policy": "h1_only",
       "enabled": true,
       "ech_enabled": false,
       "use_cf_pool": false,
@@ -1895,7 +1908,8 @@
       "sni_policy": "fake",
       "enabled": true,
       "ech_enabled": false,
-      "use_cf_pool": false
+      "use_cf_pool": false,
+      "cert_verify": {}
     },
     {
       "id": "sg-1771319670672-95",
@@ -2147,7 +2161,8 @@
       "sni_fake": "",
       "enabled": true,
       "ech_enabled": false,
-      "use_cf_pool": false
+      "use_cf_pool": false,
+      "cert_verify": {}
     },
     {
       "id": "1771408944937",
@@ -2161,7 +2176,8 @@
       "sni_fake": "assets-dropbox-com.mapped",
       "enabled": true,
       "ech_enabled": false,
-      "use_cf_pool": false
+      "use_cf_pool": false,
+      "cert_verify": {}
     },
     {
       "id": "sg-1771319670673-102",
@@ -2322,12 +2338,13 @@
       "domains": [
         "googlevideo.com"
       ],
-      "mode": "transparent",
-      "upstream": "warp",
+      "mode": "tls-rf",
+      "upstream": "2607:f8b0:4007:36::9",
       "sni_fake": "",
       "enabled": true,
       "ech_enabled": false,
-      "use_cf_pool": false
+      "use_cf_pool": false,
+      "cert_verify": {}
     },
     {
       "id": "1771318798329720400",
@@ -2346,7 +2363,8 @@
       "sni_fake": "g.cn",
       "enabled": true,
       "ech_enabled": false,
-      "use_cf_pool": false
+      "use_cf_pool": false,
+      "cert_verify": {}
     },
     {
       "id": "sg-1771319670673-113",
@@ -2360,7 +2378,8 @@
       "sni_fake": "g.cn",
       "enabled": true,
       "ech_enabled": false,
-      "use_cf_pool": false
+      "use_cf_pool": false,
+      "cert_verify": {}
     },
     {
       "id": "sg-1771319670676-mitm-google",
@@ -2381,7 +2400,8 @@
       "sni_fake": "g.cn",
       "enabled": true,
       "ech_enabled": false,
-      "use_cf_pool": false
+      "use_cf_pool": false,
+      "cert_verify": {}
     },
     {
       "id": "sg-1771320583118-transparent-lh3-googleusercontent",
@@ -2395,7 +2415,8 @@
       "sni_fake": "g.cn",
       "enabled": true,
       "ech_enabled": false,
-      "use_cf_pool": false
+      "use_cf_pool": false,
+      "cert_verify": {}
     },
     {
       "id": "1771487404518161800",
@@ -2411,7 +2432,8 @@
       "enabled": true,
       "ech_enabled": true,
       "ech_profile_id": "legacy-cloudflare",
-      "use_cf_pool": true
+      "use_cf_pool": true,
+      "cert_verify": {}
     },
     {
       "id": "1771487490110047700",
@@ -2427,7 +2449,8 @@
       "enabled": true,
       "ech_enabled": true,
       "ech_profile_id": "legacy-cloudflare",
-      "use_cf_pool": true
+      "use_cf_pool": true,
+      "cert_verify": {}
     },
     {
       "id": "1771493426332470400",
@@ -2444,7 +2467,8 @@
       "enabled": true,
       "ech_enabled": true,
       "ech_profile_id": "legacy-cloudflare",
-      "use_cf_pool": true
+      "use_cf_pool": true,
+      "cert_verify": {}
     },
     {
       "id": "1771497628324832100",
@@ -2460,21 +2484,8 @@
       "enabled": true,
       "ech_enabled": true,
       "ech_profile_id": "legacy-cloudflare",
-      "use_cf_pool": true
-    },
-    {
-      "id": "1771760581149971100",
-      "name": "Server: arena.ai",
-      "website": "server-batch",
-      "domains": [
-        "arena.ai"
-      ],
-      "mode": "server",
-      "upstream": "",
-      "sni_fake": "",
-      "enabled": true,
-      "ech_enabled": true,
-      "use_cf_pool": true
+      "use_cf_pool": true,
+      "cert_verify": {}
     },
     {
       "id": "1772874326617342400",
@@ -2490,7 +2501,8 @@
       "enabled": true,
       "ech_enabled": true,
       "ech_profile_id": "legacy-cloudflare",
-      "use_cf_pool": true
+      "use_cf_pool": true,
+      "cert_verify": {}
     },
     {
       "id": "1772957139849754000",
@@ -2506,7 +2518,8 @@
       "enabled": true,
       "ech_enabled": true,
       "ech_profile_id": "legacy-cloudflare",
-      "use_cf_pool": true
+      "use_cf_pool": true,
+      "cert_verify": {}
     },
     {
       "id": "1773039435005990500",
@@ -2522,7 +2535,8 @@
       "enabled": true,
       "ech_enabled": true,
       "ech_profile_id": "legacy-cloudflare",
-      "use_cf_pool": true
+      "use_cf_pool": true,
+      "cert_verify": {}
     },
     {
       "id": "1773045366962644100",
@@ -2537,7 +2551,8 @@
       "enabled": true,
       "ech_enabled": true,
       "ech_profile_id": "legacy-cloudflare",
-      "use_cf_pool": true
+      "use_cf_pool": true,
+      "cert_verify": {}
     },
     {
       "id": "1773045498089020200",
@@ -2644,7 +2659,8 @@
       "sni_fake": "",
       "enabled": true,
       "ech_enabled": true,
-      "use_cf_pool": true
+      "use_cf_pool": true,
+      "cert_verify": {}
     },
     {
       "id": "1773138255645400300",
@@ -2660,7 +2676,8 @@
       "enabled": true,
       "ech_enabled": true,
       "ech_profile_id": "legacy-cloudflare",
-      "use_cf_pool": true
+      "use_cf_pool": true,
+      "cert_verify": {}
     },
     {
       "id": "1774165664863940200",
@@ -2676,7 +2693,8 @@
       "enabled": true,
       "ech_enabled": true,
       "ech_profile_id": "legacy-cloudflare",
-      "use_cf_pool": true
+      "use_cf_pool": true,
+      "cert_verify": {}
     },
     {
       "id": "sg-manual-archive-org",
@@ -2690,7 +2708,8 @@
       "sni_fake": "",
       "enabled": true,
       "ech_enabled": false,
-      "use_cf_pool": false
+      "use_cf_pool": false,
+      "cert_verify": {}
     },
     {
       "id": "sg-manual-web-archive-org",
@@ -2704,7 +2723,8 @@
       "sni_fake": "",
       "enabled": true,
       "ech_enabled": false,
-      "use_cf_pool": false
+      "use_cf_pool": false,
+      "cert_verify": {}
     },
     {
       "id": "sg-manual-uploads-github",
@@ -2781,7 +2801,8 @@
       "sni_fake": "",
       "enabled": true,
       "ech_enabled": false,
-      "use_cf_pool": false
+      "use_cf_pool": false,
+      "cert_verify": {}
     },
     {
       "id": "sg-manual-platform-twitter",
@@ -2865,7 +2886,8 @@
       "sni_fake": "",
       "enabled": true,
       "ech_enabled": false,
-      "use_cf_pool": false
+      "use_cf_pool": false,
+      "cert_verify": {}
     },
     {
       "id": "1774600064500732300",
@@ -2897,7 +2919,8 @@
       "sni_fake": "",
       "enabled": true,
       "ech_enabled": false,
-      "use_cf_pool": false
+      "use_cf_pool": false,
+      "cert_verify": {}
     },
     {
       "id": "1774697448523203200",
@@ -2911,7 +2934,8 @@
       "sni_fake": "",
       "enabled": true,
       "ech_enabled": false,
-      "use_cf_pool": false
+      "use_cf_pool": false,
+      "cert_verify": {}
     },
     {
       "id": "1774704297710082600",
@@ -2928,7 +2952,8 @@
       "ech_enabled": true,
       "ech_profile_id": "legacy-cloudflare",
       "ech_domain": "crypto.cloudflare.com",
-      "use_cf_pool": true
+      "use_cf_pool": true,
+      "cert_verify": {}
     },
     {
       "id": "1774755148574888600",
@@ -2970,11 +2995,12 @@
         "googleapis.com"
       ],
       "mode": "mitm",
-      "upstream": "180.163.150.34:443",
+      "upstream": "34.49.133.3:443",
       "sni_fake": "g.cn",
       "enabled": true,
       "ech_enabled": false,
-      "use_cf_pool": false
+      "use_cf_pool": false,
+      "cert_verify": {}
     },
     {
       "id": "1774782086542746000",
@@ -2988,7 +3014,8 @@
       "sni_fake": "",
       "enabled": true,
       "ech_enabled": false,
-      "use_cf_pool": false
+      "use_cf_pool": false,
+      "cert_verify": {}
     },
     {
       "id": "1774782223908304500",
@@ -3005,7 +3032,23 @@
       "ech_enabled": true,
       "ech_profile_id": "legacy-cloudflare",
       "ech_domain": "crypto.cloudflare.com",
-      "use_cf_pool": true
+      "use_cf_pool": true,
+      "cert_verify": {}
+    },
+    {
+      "id": "1774856207350032000",
+      "name": "arena",
+      "website": "arena",
+      "domains": [
+        "arena.ai"
+      ],
+      "mode": "transparent",
+      "upstream": "warp",
+      "sni_fake": "",
+      "enabled": true,
+      "ech_enabled": false,
+      "use_cf_pool": false,
+      "cert_verify": {}
     }
   ],
   "upstreams": [],
@@ -3044,7 +3087,7 @@
     "doh_url": "",
     "auto_update": false,
     "api_key": "",
-    "warp_enabled": false,
+    "warp_enabled": true,
     "warp_socks_port": 1080,
     "warp_endpoint": "162.159.199.2"
   }

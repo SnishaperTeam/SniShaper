@@ -22,6 +22,8 @@ function getModeLabel(mode) {
         return 'MITM';
     case 'transparent':
         return '透传';
+    case 'quic':
+        return 'QUIC 直连';
     case 'tls-rf':
         return 'TLS 分片';
     default:
@@ -65,33 +67,19 @@ function splitLines(value) {
         .filter(Boolean);
 }
 
-function getCertVerifySummary(certVerify) {
-    if (!certVerify) return '';
-    const mode = (certVerify.mode || '').trim();
-    const parts = [];
-    switch (mode) {
-    case 'allow_names':
-        parts.push(`证书名白名单 ${((certVerify.names || []).length)} 项`);
-        break;
-    case 'allow_suffixes':
-        parts.push(`证书后缀 ${((certVerify.suffixes || []).length)} 项`);
-        break;
-    case 'allow_spki':
-        parts.push(`SPKI 指纹 ${((certVerify.spki_sha256 || []).length)} 项`);
-        break;
-    case 'chain_only':
-        parts.push('仅校验证书链');
-        break;
+function formatDNSModeLabel(mode) {
+    switch ((mode || '').trim().toLowerCase()) {
+    case 'prefer_ipv4':
+        return 'DNS: 优先 IPv4';
+    case 'prefer_ipv6':
+        return 'DNS: 优先 IPv6';
+    case 'ipv4_only':
+        return 'DNS: 仅 IPv4';
+    case 'ipv6_only':
+        return 'DNS: 仅 IPv6';
     default:
-        if ((certVerify.names || []).length) parts.push(`证书名白名单 ${certVerify.names.length} 项`);
-        if ((certVerify.suffixes || []).length) parts.push(`证书后缀 ${certVerify.suffixes.length} 项`);
-        if ((certVerify.spki_sha256 || []).length) parts.push(`SPKI 指纹 ${certVerify.spki_sha256.length} 项`);
-        break;
+        return '';
     }
-    if (certVerify.allow_unknown_authority) {
-        parts.push('允许未知签发者');
-    }
-    return parts.join(' · ');
 }
 
 function syncCertVerifyFormState() {
@@ -591,14 +579,13 @@ async function loadSiteGroups() {
                     websiteRules.forEach(group => {
                         const item = document.createElement('div');
                         item.className = 'rule-item';
-                        const certVerifySummary = getCertVerifySummary(group.cert_verify);
+                        const dnsModeLabel = formatDNSModeLabel(group.dns_mode);
                         item.innerHTML = `
                             <div class="rule-info">
                                 <div class="rule-name">${group.name || '未命名'}</div>
                                 <div class="rule-domains">${(group.domains || []).join(', ')}</div>
-                                <div class="rule-domains">${group.ech_enabled ? '<span style="color:var(--success)">ECH开启</span>' : ''} ${group.use_cf_pool ? '<span style="color:var(--primary)">优选IP</span>' : ''}</div>
+                                <div class="rule-domains">${group.ech_enabled ? '<span style="color:var(--success)">ECH开启</span>' : ''} ${group.use_cf_pool ? '<span style="color:var(--primary)">优选IP</span>' : ''} ${dnsModeLabel ? `<span style="color:var(--accent)">${dnsModeLabel}</span>` : ''}</div>
                                 <div class="rule-mode">${getModeLabel(group.mode)}${group.upstream ? ' → ' + (group.upstream.length > 40 ? group.upstream.substring(0, 40) + '...' : group.upstream) : ''}</div>
-                                ${certVerifySummary ? `<div class="rule-domains">证书验证: ${certVerifySummary}</div>` : ''}
                             </div>
                             <div class="rule-actions">
                                 <button class="btn btn-secondary" onclick="showEditRuleModal('${group.id}')">编辑</button>
@@ -619,9 +606,11 @@ async function loadSiteGroups() {
             ? 'Server 节点规则'
             : (rulesViewMode === 'transparent'
                 ? '透传规则'
+                : (rulesViewMode === 'quic'
+                    ? 'QUIC 直连规则'
                 : (rulesViewMode === 'tls-rf' 
                     ? 'TLS 分片规则' 
-                    : (rulesViewMode === 'warp' ? 'Warp 隧道加速' : 'MITM 规则')));
+                    : (rulesViewMode === 'warp' ? 'Warp 隧道加速' : 'MITM 规则'))));
         container.appendChild(buildModeColumn(rulesViewMode, title));
     } catch (err) {
         console.error('Load site groups error:', err);
@@ -727,6 +716,7 @@ window.showAddRuleModal = function () {
     document.getElementById('input-domains').value = '';
     document.getElementById('input-mode').value = defaults.mode || rulesViewMode || 'mitm';
     document.getElementById('input-upstream').value = '';
+    document.getElementById('input-dns-mode').value = '';
     document.getElementById('input-snifake').value = '';
     document.getElementById('input-ech-domain').value = '';
     document.getElementById('input-ech-enabled').checked = false;
@@ -756,6 +746,7 @@ window.showEditRuleModal = async function (id) {
         document.getElementById('input-domains').value = (group.domains || []).join('\n');
         document.getElementById('input-mode').value = group.mode || 'mitm';
         document.getElementById('input-upstream').value = group.upstream || '';
+        document.getElementById('input-dns-mode').value = group.dns_mode || '';
         document.getElementById('input-snifake').value = group.sni_fake || '';
         document.getElementById('input-ech-domain').value = group.ech_domain || '';
         document.getElementById('input-ech-enabled').checked = !!group.ech_enabled;
@@ -785,6 +776,7 @@ window.confirmModal = async function () {
     const domains = document.getElementById('input-domains').value.split('\n').filter(d => d.trim());
     const mode = document.getElementById('input-mode').value;
     const upstream = document.getElementById('input-upstream').value;
+    const dnsMode = document.getElementById('input-dns-mode').value;
     const snifake = document.getElementById('input-snifake').value;
     const echDomain = document.getElementById('input-ech-domain').value.trim();
     const echEnabled = document.getElementById('input-ech-enabled').checked;
@@ -818,6 +810,7 @@ window.confirmModal = async function () {
             domains,
             mode: finalMode,
             upstream: finalUpstream,
+            dns_mode: dnsMode,
             sni_fake: snifake,
             ech_domain: echDomain,
             ech_profile_id: echProfileId,
@@ -1074,18 +1067,20 @@ async function loadCloudflareRules() {
 
             let ip = group.upstream || (group.use_cf_pool ? '全局优选池' : '自动');
             if (ip.length > 20) ip = ip.substring(0, 20) + '...';
+            const dnsModeLabel = formatDNSModeLabel(group.dns_mode) || 'DNS: 默认';
 
             let echSource = group.ech_domain;
             const isDefaultECH = !echSource || echSource === 'crypto.cloudflare.com';
 
             card.innerHTML = `
-                <div class="card-info">
-                    <div class="card-title">${domains}</div>
-                    <div class="card-meta">
-                        <span class="card-badge">${ip}</span>
-                        <span class="card-badge" style="${isDefaultECH ? 'opacity: 0.6;' : 'color: var(--accent);'}">
-                            ECH: ${isDefaultECH ? '自动' : echSource}
-                        </span>
+                    <div class="card-info">
+                        <div class="card-title">${domains}</div>
+                        <div class="card-meta">
+                            <span class="card-badge">${ip}</span>
+                            <span class="card-badge">${dnsModeLabel}</span>
+                            <span class="card-badge" style="${isDefaultECH ? 'opacity: 0.6;' : 'color: var(--accent);'}">
+                                ECH: ${isDefaultECH ? '自动' : echSource}
+                            </span>
                     </div>
                 </div>
                 <div style="display: flex; gap: 8px;">
@@ -1705,12 +1700,14 @@ document.addEventListener('DOMContentLoaded', async () => {
     const modeServerBtn = document.getElementById('rules-mode-server');
     const modeMitmBtn = document.getElementById('rules-mode-mitm');
     const modeTransBtn = document.getElementById('rules-mode-transparent');
+    const modeQuicBtn = document.getElementById('rules-mode-quic');
     const modeTLSRFBtn = document.getElementById('rules-mode-tls-rf');
     const modeWarpBtn = document.getElementById('rules-mode-warp');
     const updateRulesModeButtons = () => {
         if (modeServerBtn) modeServerBtn.classList.toggle('active', rulesViewMode === 'server');
         if (modeMitmBtn) modeMitmBtn.classList.toggle('active', rulesViewMode === 'mitm');
         if (modeTransBtn) modeTransBtn.classList.toggle('active', rulesViewMode === 'transparent');
+        if (modeQuicBtn) modeQuicBtn.classList.toggle('active', rulesViewMode === 'quic');
         if (modeTLSRFBtn) modeTLSRFBtn.classList.toggle('active', rulesViewMode === 'tls-rf');
         if (modeWarpBtn) modeWarpBtn.classList.toggle('active', rulesViewMode === 'warp');
     };
@@ -1731,6 +1728,13 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (modeTransBtn) {
         modeTransBtn.addEventListener('click', () => {
             rulesViewMode = 'transparent';
+            updateRulesModeButtons();
+            loadSiteGroups();
+        });
+    }
+    if (modeQuicBtn) {
+        modeQuicBtn.addEventListener('click', () => {
+            rulesViewMode = 'quic';
             updateRulesModeButtons();
             loadSiteGroups();
         });
@@ -1801,7 +1805,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     try {
         isRunning = await IsProxyRunning();
         const backendMode = await GetProxyMode();
-        if (backendMode === 'mitm' || backendMode === 'transparent' || backendMode === 'tls-rf') {
+        if (backendMode === 'mitm' || backendMode === 'transparent' || backendMode === 'tls-rf' || backendMode === 'quic') {
             const radio = document.querySelector(`input[name="mode"][value="${backendMode}"]`);
             if (radio) radio.checked = true;
         } else {

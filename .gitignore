@@ -28,7 +28,6 @@ cert/*.key
 cert/*.pem
 *.log
 /config.json
-diag_report_*.txt
 diag_report_*.json
 
 # Local temp / backups

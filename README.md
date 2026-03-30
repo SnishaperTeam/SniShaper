@@ -3,19 +3,20 @@
 [![Go Version](https://img.shields.io/badge/Go-1.21+-00ADD8?style=flat-square&logo=go)](https://golang.org)
 [![License](https://img.shields.io/badge/License-MIT-blue?style=flat-square)]()
 
-通过透传、本地中间人重写、TLS 分片、Warp 分流和反代中转绕过复杂网络环境阻断的代理工具，支持域前置和 ECH。
+通过透传、本地中间人重写、QUIC 直连重放、TLS 分片、Warp 分流和反代中转绕过复杂网络环境阻断的代理工具，支持域前置、ECH 与 HTTP/3 上游直连。
 
 ## 特性
 
-- **五模式代理**
+- **六模式代理**
   - `transparent`：透明透传（自定义 host，仅DNS污染时）
   - `mitm`：中间人模式（本地 CA 解密，修改 sni 绕过阻断，针对可域前置/ECH网站）
+  - `quic`：QUIC 直连模式（浏览器到本地仍为 MITM，本地将明文 HTTP 请求重放为 HTTP/3/QUIC 直连，利用 `quic-go` 的 QUIC ClientHello scrambling）
   - `tls-rf`：TLS 分片模式（在 ClientHello 阶段做分片发送，）
   - `server`：服务端模式（连接上游动态反代服务器，无特征中转）
-  - `warp`：WARP 分流（使用usque作为warp隧道，可选分流）
+  - `warp`：WARP Masque分流（使用usque作为warp隧道，可选分流）
 
 - **Warp 分流**
-  - 完全使用了 https://github.com/Diniboy1123/usque 作为本地WARP子进程，启用后会启动本地 `usque` SOCKS5 隧道
+  - 使用 https://github.com/Diniboy1123/usque 作为本地WARP子进程，启用后会启动本地 `usque` SOCKS5 隧道，使用WARP Masque连接上游网站
   - 规则 `upstream` 设为 `warp` 时，该站点流量可按需经 Cloudflare Warp 转发
   - 默认不开启，需要时手动开启
   - 可解决少量网站如ChatGPT的连接问题
@@ -27,7 +28,7 @@
 ## 工作原理
 
 ```
-浏览器 → SniShaper(127.0.0.1:port) → 规则匹配 → [模式选择: transparent/mitm/tls-rf/server 或 Warp 分流] → 上游握手 (ECH/Domain Fronting/TLS Fragment/Warp) → 目标直连
+浏览器 → SniShaper(127.0.0.1:port) → 规则匹配 → [模式选择: transparent/mitm/quic/tls-rf/server 或 Warp 分流] → 上游握手 (ECH/Domain Fronting/QUIC H3/TLS Fragment/Warp) → 目标直连
 ```
 
 ## 快速开始
@@ -65,13 +66,27 @@ go build -ldflags="-H windowsgui" -o build\bin\snishaper.exe .
 |------|------|
 | `domains` | 域名匹配列表 |
 | `website` | 网站分组名（用于 UI 聚合展示） |
-| `mode` | `transparent`、`mitm`、`tls-rf` 或 `server` |
+| `mode` | `transparent`、`mitm`、`quic`、`tls-rf` 或 `server` |
 | `upstream` | 上游地址（`IP:443`），或特殊值 `warp` |
+| `dns_mode` | 域名解析策略：默认、优先 IPv4/IPv6、仅 IPv4/IPv6 |
 | `sni_policy` | SNI 处理策略 |
 | `ech_enabled` | 是否开启 ECH  |
 | `use_cf_pool` | 是否启用优选 IP 池平衡负载与稳定性 |
 | `cloudflare_config.warp_enabled` | 是否启用 Warp 功能 |
 | `cloudflare_config.warp_endpoint` | Warp MASQUE 对端地址 |
+
+## QUIC 直连说明
+
+`quic` 模式不是透明 QUIC 透传，而是“入站 MITM，出站 H3 replay”：
+
+- 浏览器到本地：仍然是常规 HTTPS，经本地 CA 解密
+- 本地到目标站点：使用 `quic-go/http3` 发起 HTTP/3/QUIC 直连
+- 符合规则时可利用 `quic-go` 默认的 QUIC ClientHello scrambling
+
+适用场景：
+- 已知目标站点支持 HTTP/3
+- 站点被sni阻断，不接受域前置
+- TLS分片不稳定
 
 ## TLS 分片说明
 
@@ -142,7 +157,7 @@ bash <(curl -sSL https://github.com/sky22333/shell/raw/main/dev/cf-tunnel.sh)
 
 本项目在开发过程中参考并受益于以下优秀开源项目：
 
-- [SNIBypassGUI](https://github.com/coolapijust/SniViewer)(https://github.com/racpast/SNIBypassGUI)
+- [SNIBypassGUI](https://github.com/coolapijust/SniViewer)
 - [DoH-ECH-Demo](https://github.com/0xCaner/DoH-ECH-Demo)
 - [lumine](https://github.com/moi-si/lumine)
 - [usque](https://github.com/Diniboy1123/usque)

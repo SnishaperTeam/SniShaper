@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"sync"
 	"time"
@@ -56,23 +57,62 @@ func (r *DoHResolver) ResolveECH(ctx context.Context, domain string) ([]byte, er
 	return nil, fmt.Errorf("no ECH config found for %s", domain)
 }
 
-// ResolveIPs fetches A records via DoH
+// ResolveIPs fetches IP records via DoH.
 func (r *DoHResolver) ResolveIPs(ctx context.Context, domain string) ([]string, error) {
-	msg := new(dns.Msg)
-	msg.SetQuestion(dns.Fqdn(domain), dns.TypeA)
-
-	resp, err := r.exchange(ctx, msg)
+	ipAddrs, err := r.ResolveIPAddrs(ctx, domain)
 	if err != nil {
 		return nil, err
 	}
 
-	ips := []string{}
-	for _, ans := range resp.Answer {
-		if a, ok := ans.(*dns.A); ok {
-			ips = append(ips, a.A.String())
+	ips := make([]string, 0, len(ipAddrs))
+	for _, ip := range ipAddrs {
+		if ip == nil {
+			continue
 		}
+		ips = append(ips, ip.String())
 	}
 	return ips, nil
+}
+
+// ResolveIPAddrs fetches both A and AAAA records via DoH.
+func (r *DoHResolver) ResolveIPAddrs(ctx context.Context, domain string) ([]net.IP, error) {
+	var ips []net.IP
+
+	lookup := func(qtype uint16) error {
+		msg := new(dns.Msg)
+		msg.SetQuestion(dns.Fqdn(domain), qtype)
+
+		resp, err := r.exchange(ctx, msg)
+		if err != nil {
+			return err
+		}
+
+		for _, ans := range resp.Answer {
+			switch rr := ans.(type) {
+			case *dns.A:
+				ips = append(ips, rr.A)
+			case *dns.AAAA:
+				ips = append(ips, rr.AAAA)
+			}
+		}
+		return nil
+	}
+
+	var errs []error
+	if err := lookup(dns.TypeA); err != nil {
+		errs = append(errs, err)
+	}
+	if err := lookup(dns.TypeAAAA); err != nil {
+		errs = append(errs, err)
+	}
+
+	if len(ips) > 0 {
+		return ips, nil
+	}
+	if len(errs) > 0 {
+		return nil, errs[0]
+	}
+	return nil, fmt.Errorf("no IP records found for %s", domain)
 }
 
 func (r *DoHResolver) exchange(ctx context.Context, msg *dns.Msg) (*dns.Msg, error) {

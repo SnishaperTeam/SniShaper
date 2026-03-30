@@ -19,6 +19,7 @@ import (
 	"math/big"
 	"net"
 	"net/http"
+	"net/textproto"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -26,6 +27,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/quic-go/quic-go"
+	"github.com/quic-go/quic-go/http3"
 	utls "github.com/refraction-networking/utls"
 	"golang.org/x/net/http2"
 	"golang.org/x/net/proxy"
@@ -42,7 +45,7 @@ type ProxyServer struct {
 	listenAddr    string
 	rules         *RuleManager
 	running       bool
-	mode          string // global runtime mode: "mitm" | "transparent"
+	mode          string // global runtime mode: "mitm" | "transparent" | "tls-rf" | "quic"
 	mu            sync.RWMutex
 	certCacheMu   sync.RWMutex
 	certCache     map[string]*tls.Certificate
@@ -78,10 +81,10 @@ type SiteGroup struct {
 	Mode          string           `json:"mode"`
 	Upstream      string           `json:"upstream"`
 	Upstreams     []string         `json:"upstreams,omitempty"`
+	DNSMode       string           `json:"dns_mode,omitempty"`
 	SniFake       string           `json:"sni_fake"`
 	ConnectPolicy string           `json:"connect_policy,omitempty"` // "", "tunnel_origin", "tunnel_upstream", "mitm", "direct"
 	SniPolicy     string           `json:"sni_policy,omitempty"`     // "", "auto", "original", "fake", "upstream", "none"
-	AlpnPolicy    string           `json:"alpn_policy,omitempty"`    // "", "auto", "h1_only", "h2_h1"
 	Enabled       bool             `json:"enabled"`
 	ECHEnabled    bool             `json:"ech_enabled"`
 	ECHProfileID  string           `json:"ech_profile_id,omitempty"`
@@ -175,6 +178,34 @@ type roundTripperFunc func(*http.Request) (*http.Response, error)
 
 func (f roundTripperFunc) RoundTrip(req *http.Request) (*http.Response, error) { return f(req) }
 
+var hopByHopHeaders = []string{
+	"Connection",
+	"Proxy-Connection",
+	"Keep-Alive",
+	"Proxy-Authenticate",
+	"Proxy-Authorization",
+	"Te",
+	"Trailer",
+	"Transfer-Encoding",
+	"Upgrade",
+}
+
+func removeHopByHopHeaders(h http.Header) {
+	if h == nil {
+		return
+	}
+	if c := h.Get("Connection"); c != "" {
+		for _, f := range strings.Split(c, ",") {
+			if name := textproto.TrimString(f); name != "" {
+				h.Del(name)
+			}
+		}
+	}
+	for _, name := range hopByHopHeaders {
+		h.Del(name)
+	}
+}
+
 func (l *trackingListener) Accept() (net.Conn, error) {
 	conn, err := l.Listener.Accept()
 	if err != nil {
@@ -187,11 +218,11 @@ type Rule struct {
 	Domain             string
 	Upstream           string
 	Upstreams          []string
-	Mode               string // "mitm", "transparent", "tls-rf", "direct"
+	DNSMode            string
+	Mode               string // "mitm", "transparent", "tls-rf", "quic", "server", "direct"
 	SniFake            string
 	ConnectPolicy      string // "", "tunnel_origin", "tunnel_upstream", "mitm", "direct"
 	SniPolicy          string // "", "auto", "original", "fake", "upstream", "none"
-	AlpnPolicy         string // "", "auto", "h1_only", "h2_h1"
 	Enabled            bool
 	SiteID             string
 	ECHEnabled         bool
@@ -213,6 +244,9 @@ func mergeRule(base, overlay Rule) Rule {
 	if len(overlay.Upstreams) > 0 {
 		out.Upstreams = append([]string(nil), overlay.Upstreams...)
 	}
+	if strings.TrimSpace(overlay.DNSMode) != "" {
+		out.DNSMode = overlay.DNSMode
+	}
 	if strings.TrimSpace(overlay.SniFake) != "" {
 		out.SniFake = overlay.SniFake
 	}
@@ -221,9 +255,6 @@ func mergeRule(base, overlay Rule) Rule {
 	}
 	if strings.TrimSpace(overlay.SniPolicy) != "" {
 		out.SniPolicy = overlay.SniPolicy
-	}
-	if strings.TrimSpace(overlay.AlpnPolicy) != "" {
-		out.AlpnPolicy = overlay.AlpnPolicy
 	}
 	if !overlay.CertVerify.IsZero() {
 		out.CertVerify = overlay.CertVerify
@@ -572,6 +603,153 @@ func isLiteralIP(host string) bool {
 	return net.ParseIP(strings.Trim(host, "[]")) != nil
 }
 
+func normalizeDNSMode(mode string) string {
+	switch strings.ToLower(strings.TrimSpace(mode)) {
+	case "", "system":
+		return ""
+	case "prefer_ipv4", "prefer_ipv6", "ipv4_only", "ipv6_only":
+		return strings.ToLower(strings.TrimSpace(mode))
+	default:
+		return ""
+	}
+}
+
+func reorderIPsByDNSMode(ips []net.IP, mode string) []net.IP {
+	if len(ips) == 0 {
+		return nil
+	}
+
+	mode = normalizeDNSMode(mode)
+	if mode == "" {
+		out := make([]net.IP, len(ips))
+		copy(out, ips)
+		return out
+	}
+
+	var v4s, v6s []net.IP
+	for _, ip := range ips {
+		if ip == nil {
+			continue
+		}
+		if ip.To4() != nil {
+			v4s = append(v4s, ip)
+		} else {
+			v6s = append(v6s, ip)
+		}
+	}
+
+	switch mode {
+	case "prefer_ipv4":
+		return append(append([]net.IP{}, v4s...), v6s...)
+	case "prefer_ipv6":
+		return append(append([]net.IP{}, v6s...), v4s...)
+	case "ipv4_only":
+		return append([]net.IP{}, v4s...)
+	case "ipv6_only":
+		return append([]net.IP{}, v6s...)
+	default:
+		out := make([]net.IP, len(ips))
+		copy(out, ips)
+		return out
+	}
+}
+
+func dedupeDialCandidates(candidates []string) []string {
+	if len(candidates) == 0 {
+		return nil
+	}
+	out := make([]string, 0, len(candidates))
+	seen := make(map[string]struct{}, len(candidates))
+	for _, candidate := range candidates {
+		candidate = strings.TrimSpace(candidate)
+		if candidate == "" {
+			continue
+		}
+		if _, ok := seen[candidate]; ok {
+			continue
+		}
+		seen[candidate] = struct{}{}
+		out = append(out, candidate)
+	}
+	return out
+}
+
+func (p *ProxyServer) resolveDomainCandidates(ctx context.Context, host, port, dnsMode string) []string {
+	host = normalizeHost(host)
+	if host == "" || isLiteralIP(host) {
+		return nil
+	}
+	if p.dohResolver == nil {
+		return nil
+	}
+
+	ips, err := p.dohResolver.ResolveIPAddrs(ctx, host)
+	if err != nil {
+		log.Printf("[DNS] Resolve failed for %s via %s: %v", host, p.dohResolver.ServerURL, err)
+		return nil
+	}
+
+	ordered := reorderIPsByDNSMode(ips, dnsMode)
+	if len(ordered) == 0 {
+		log.Printf("[DNS] Resolve returned no usable addresses for %s (mode=%s)", host, normalizeDNSMode(dnsMode))
+		return nil
+	}
+
+	candidates := make([]string, 0, len(ordered))
+	for _, ip := range ordered {
+		candidates = append(candidates, net.JoinHostPort(ip.String(), port))
+	}
+	log.Printf("[DNS] Resolved %s via DoH (%s) mode=%s -> %v", host, p.dohResolver.ServerURL, normalizeDNSMode(dnsMode), candidates)
+	return dedupeDialCandidates(candidates)
+}
+
+func (p *ProxyServer) buildDialCandidates(ctx context.Context, targetHost, targetAddr string, rule Rule, effectiveMode string) []string {
+	resolvedUpstream := resolveRuleUpstream(targetHost, rule)
+	isWarpRoute := strings.EqualFold(strings.TrimSpace(rule.Upstream), "warp")
+	defaultPort := "443"
+
+	if isWarpRoute {
+		if resolved := p.resolveDomainCandidates(ctx, targetHost, defaultPort, rule.DNSMode); len(resolved) > 0 {
+			return resolved
+		}
+		return []string{targetAddr}
+	}
+
+	if effectiveMode == "mitm" || effectiveMode == "transparent" || effectiveMode == "tls-rf" || effectiveMode == "quic" {
+		if strings.TrimSpace(resolvedUpstream) != "" {
+			upstreamCandidates := splitUpstreamCandidates(targetHost, resolvedUpstream, defaultPort)
+			if len(upstreamCandidates) == 0 {
+				return []string{targetAddr}
+			}
+
+			firstHost := firstUpstreamHost(targetHost, resolvedUpstream)
+			if firstHost != "" && !isLiteralIP(firstHost) {
+				if resolved := p.resolveDomainCandidates(ctx, firstHost, defaultPort, rule.DNSMode); len(resolved) > 0 {
+					return resolved
+				}
+			}
+			return upstreamCandidates
+		}
+
+		if rule.UseCFPool && p.cfPool != nil {
+			topIPs := p.cfPool.GetTopIPs(5)
+			if len(topIPs) > 0 {
+				prefs := make([]string, 0, len(topIPs))
+				for _, ip := range topIPs {
+					prefs = append(prefs, net.JoinHostPort(ip, defaultPort))
+				}
+				return dedupeDialCandidates(prefs)
+			}
+		}
+
+		if resolved := p.resolveDomainCandidates(ctx, targetHost, defaultPort, rule.DNSMode); len(resolved) > 0 {
+			return resolved
+		}
+	}
+
+	return []string{targetAddr}
+}
+
 func chooseUpstreamSNI(targetHost string, rule Rule) string {
 	targetHost = normalizeHost(targetHost)
 	hostAsToken := strings.Trim(targetHost, "[]")
@@ -756,7 +934,7 @@ func (p *ProxyServer) GetListenAddr() string {
 
 func (p *ProxyServer) SetMode(mode string) error {
 	mode = strings.ToLower(strings.TrimSpace(mode))
-	if mode != "mitm" && mode != "transparent" && mode != "tls-rf" {
+	if mode != "mitm" && mode != "transparent" && mode != "tls-rf" && mode != "quic" {
 		return fmt.Errorf("invalid proxy mode: %s", mode)
 	}
 	p.mu.Lock()
@@ -967,39 +1145,36 @@ func (p *ProxyServer) handleConnect(w http.ResponseWriter, req *http.Request, ru
 		return
 	}
 
-	dialAddr := targetAddr
-	dialCandidates := []string{dialAddr}
-
-	// For MITM/transparent/tls-rf rules, upstream should be respected if configured.
-	if !isWarpRoute && (effectiveMode == "mitm" || effectiveMode == "transparent" || effectiveMode == "tls-rf") && strings.TrimSpace(resolvedUpstream) != "" {
-		dialCandidates = splitUpstreamCandidates(targetHost, resolvedUpstream, "443")
-		if len(dialCandidates) == 0 {
-			dialCandidates = []string{targetAddr}
+	if effectiveMode == "quic" {
+		hijacker, ok := w.(http.Hijacker)
+		if !ok {
+			http.Error(w, "Hijack not supported", http.StatusInternalServerError)
+			return
 		}
-		dialAddr = dialCandidates[0]
-		log.Printf("[Connect] Using upstream candidates %v for host %s (mode: %s)", dialCandidates, targetHost, effectiveMode)
+		clientConn, rw, err := hijacker.Hijack()
+		if err != nil {
+			log.Printf("[Connect] QUIC hijack failed: %v", err)
+			return
+		}
+		if _, err := rw.WriteString("HTTP/1.1 200 Connection Established\r\n\r\n"); err != nil {
+			clientConn.Close()
+			return
+		}
+		if err := rw.Flush(); err != nil {
+			clientConn.Close()
+			return
+		}
+		clientConn = wrapHijackedConn(clientConn, rw)
+		_ = clientConn.SetDeadline(time.Time{})
+		p.handleQUICMITM(clientConn, targetHost, rule)
+		return
 	}
 
-	// Cloudflare Preferred IP Pool integration
-	if rule.UseCFPool && p.cfPool != nil {
-		topIPs := p.cfPool.GetTopIPs(5)
-		if len(topIPs) > 0 {
-			var prefs []string
-			for _, ip := range topIPs {
-				prefs = append(prefs, net.JoinHostPort(ip, "443"))
-			}
-
-			if strings.TrimSpace(resolvedUpstream) == "" {
-				// upstream 为空，只用 CF pool IP
-				dialCandidates = prefs
-			} else {
-				// 有配置 upstream，CF pool 作为首选加速项
-				dialCandidates = append(prefs, dialCandidates...)
-			}
-			dialAddr = prefs[0]
-			log.Printf("[Connect] Using %d preferred Cloudflare IPs (best: %s) for %s", len(topIPs), topIPs[0], targetHost)
-		}
+	dialCandidates := p.buildDialCandidates(context.Background(), targetHost, targetAddr, rule, effectiveMode)
+	if len(dialCandidates) == 0 {
+		dialCandidates = []string{targetAddr}
 	}
+	dialAddr := dialCandidates[0]
 
 	log.Printf("[Connect] Using candidates %v for host %s", dialCandidates, targetHost)
 
@@ -1240,7 +1415,7 @@ func (p *ProxyServer) handleHTTP(w http.ResponseWriter, req *http.Request, rule 
 	// MITM rules are designed around HTTPS interception. Redirect plain HTTP to
 	// HTTPS so requests enter the CONNECT/TLS handling path instead of the basic
 	// HTTP forwarder, which does not implement the full MITM feature set.
-	if rule.Mode == "mitm" && newReq.URL.Scheme == "http" {
+	if (rule.Mode == "mitm" || rule.Mode == "quic") && newReq.URL.Scheme == "http" {
 		httpsURL := *newReq.URL
 		httpsURL.Scheme = "https"
 		if httpsURL.Host == "" {
@@ -1283,9 +1458,32 @@ func (p *ProxyServer) handleHTTP(w http.ResponseWriter, req *http.Request, rule 
 		if strings.EqualFold(newReq.URL.Scheme, "https") {
 			defaultPort = "443"
 		}
-		candidates := splitUpstreamCandidates(normalizeHost(newReq.Host), rule.Upstream, defaultPort)
+		candidates := p.buildDialCandidates(req.Context(), normalizeHost(newReq.Host), ensureAddrWithPort(newReq.URL.Host, defaultPort), rule, rule.Mode)
 		if len(candidates) > 0 {
 			newReq.URL.Host = candidates[0]
+		}
+	} else {
+		defaultPort := "80"
+		if strings.EqualFold(newReq.URL.Scheme, "https") {
+			defaultPort = "443"
+		}
+		targetAddr := ensureAddrWithPort(newReq.URL.Host, defaultPort)
+		dialCandidates := p.buildDialCandidates(req.Context(), normalizeHost(newReq.Host), targetAddr, rule, rule.Mode)
+		if len(dialCandidates) > 0 && dialCandidates[0] != targetAddr {
+			t := p.transport.Clone()
+			candidateSet := dedupeDialCandidates(dialCandidates)
+			t.DialContext = func(ctx context.Context, network, _ string) (net.Conn, error) {
+				var lastErr error
+				for _, candidate := range candidateSet {
+					conn, err := p.dialWithRule(ctx, network, candidate, rule)
+					if err == nil {
+						return conn, nil
+					}
+					lastErr = err
+				}
+				return nil, lastErr
+			}
+			transport = t
 		}
 	}
 
@@ -1350,9 +1548,8 @@ func (p *ProxyServer) handleMITM(clientConn net.Conn, host string, rule Rule, di
 		orderedCandidates = append(orderedCandidates, c)
 	}
 
-	// Keep MITM on HTTP/1.1 to avoid protocol translation between client and upstream.
 	p.tracef("[MITM] Establishing upstream via candidates=%v", orderedCandidates)
-	upstreamRW, upstreamProtocol, err := p.establishUpstreamConn(host, rule, orderedCandidates, "http/1.1")
+	upstreamRW, upstreamProtocol, err := p.establishUpstreamConn(host, rule, orderedCandidates, "")
 	if err != nil {
 		p.tracef("[MITM] Failed to establish upstream: %v", err)
 		clientConn.Close()
@@ -1378,7 +1575,7 @@ func (p *ProxyServer) handleMITM(clientConn net.Conn, host string, rule Rule, di
 
 	tlsConfig := &tls.Config{
 		Certificates: []tls.Certificate{*cert},
-		NextProtos:   []string{"http/1.1"},
+		NextProtos:   nextProtosForNegotiatedALPN(upstreamProtocol),
 	}
 
 	clientTls := tls.Server(clientConn, tlsConfig)
@@ -1625,6 +1822,9 @@ func (rm *RuleManager) LoadConfig() error {
 	}
 
 	rm.siteGroups = config.SiteGroups
+	for i := range rm.siteGroups {
+		rm.siteGroups[i].DNSMode = normalizeDNSMode(rm.siteGroups[i].DNSMode)
+	}
 	rm.upstreams = config.Upstreams
 	if rm.upstreams == nil {
 		rm.upstreams = []Upstream{}
@@ -1751,10 +1951,10 @@ func (rm *RuleManager) buildRules() {
 				Mode:               sg.Mode,
 				Upstream:           resolvedUpstream,
 				Upstreams:          resolvedUpstreams,
+				DNSMode:            normalizeDNSMode(sg.DNSMode),
 				SniFake:            sg.SniFake,
 				ConnectPolicy:      strings.TrimSpace(sg.ConnectPolicy),
 				SniPolicy:          strings.TrimSpace(sg.SniPolicy),
-				AlpnPolicy:         strings.TrimSpace(sg.AlpnPolicy),
 				Enabled:            true,
 				SiteID:             sg.ID,
 				ECHEnabled:         sg.ECHEnabled,
@@ -2038,6 +2238,13 @@ func chooseUTLSClientHelloID(alpn string) utls.ClientHelloID {
 	return utls.HelloChrome_120
 }
 
+func nextProtosForNegotiatedALPN(alpn string) []string {
+	if strings.EqualFold(strings.TrimSpace(alpn), "h2") {
+		return []string{"h2"}
+	}
+	return []string{"http/1.1"}
+}
+
 func rewriteUTLSALPN(spec *utls.ClientHelloSpec, nextProtos []string) {
 	if spec == nil {
 		return
@@ -2140,6 +2347,157 @@ func (p *ProxyServer) resolveRuleECHConfig(host string, rule Rule) []byte {
 	return echConfig
 }
 
+func (p *ProxyServer) newQUICRoundTripper(host string, rule Rule) (*http3.Transport, error) {
+	targetAddr := net.JoinHostPort(host, "443")
+	dialCandidates := p.buildDialCandidates(context.Background(), host, targetAddr, rule, "quic")
+	if len(dialCandidates) == 0 {
+		dialCandidates = []string{targetAddr}
+	}
+
+	sniHost := chooseUpstreamSNI(host, rule)
+	if strings.TrimSpace(sniHost) == "" {
+		sniHost = host
+	}
+
+	verifyConn := buildVerifyConnection(host, rule.CertVerify)
+	tlsConfig := &tls.Config{
+		ServerName:         sniHost,
+		NextProtos:         []string{"h3", "h3-29", "h3-32"},
+		InsecureSkipVerify: true,
+	}
+	if verifyConn != nil {
+		tlsConfig.VerifyConnection = func(cs tls.ConnectionState) error {
+			peer := make([]*x509.Certificate, len(cs.PeerCertificates))
+			copy(peer, cs.PeerCertificates)
+			return verifyConn(utls.ConnectionState{
+				Version:                     cs.Version,
+				HandshakeComplete:           cs.HandshakeComplete,
+				DidResume:                   cs.DidResume,
+				CipherSuite:                 cs.CipherSuite,
+				NegotiatedProtocol:          cs.NegotiatedProtocol,
+				NegotiatedProtocolIsMutual:  cs.NegotiatedProtocolIsMutual,
+				ServerName:                  cs.ServerName,
+				PeerCertificates:            peer,
+				VerifiedChains:              cs.VerifiedChains,
+				SignedCertificateTimestamps: cs.SignedCertificateTimestamps,
+				OCSPResponse:                cs.OCSPResponse,
+				TLSUnique:                   cs.TLSUnique,
+				ECHAccepted:                 cs.ECHAccepted,
+			})
+		}
+	}
+
+	return &http3.Transport{
+		TLSClientConfig: tlsConfig,
+		QUICConfig: &quic.Config{
+			HandshakeIdleTimeout: 10 * time.Second,
+		},
+		Dial: func(ctx context.Context, _ string, tlsCfg *tls.Config, cfg *quic.Config) (*quic.Conn, error) {
+			var errs []string
+			for _, candidate := range dialCandidates {
+				conn, err := quic.DialAddr(ctx, candidate, tlsCfg, cfg)
+				if err == nil {
+					log.Printf("[QUIC] H3 dial success host=%s addr=%s sni=%s alpn=%s", host, candidate, tlsCfg.ServerName, conn.ConnectionState().TLS.NegotiatedProtocol)
+					return conn, nil
+				}
+				errs = append(errs, fmt.Sprintf("%s: %v", candidate, err))
+				log.Printf("[QUIC] H3 dial failed host=%s addr=%s err=%v", host, candidate, err)
+			}
+			if len(errs) == 0 {
+				return nil, fmt.Errorf("no QUIC dial candidates for %s", host)
+			}
+			return nil, fmt.Errorf("all QUIC dial candidates failed for %s: %s", host, strings.Join(errs, "; "))
+		},
+	}, nil
+}
+
+func (p *ProxyServer) handleQUICMITM(clientConn net.Conn, host string, rule Rule) {
+	defer clientConn.Close()
+	log.Printf("[QUICMode] Handling %s via local H3 replay", host)
+
+	if p.certGenerator == nil {
+		log.Printf("[QUICMode] No cert generator available")
+		return
+	}
+	caCert := p.certGenerator.GetCACert()
+	caKey := p.certGenerator.GetCAKey()
+	cert, err := p.generateCert(host, caCert, caKey)
+	if err != nil {
+		log.Printf("[QUICMode] Cert error: %v", err)
+		return
+	}
+
+	tlsConfig := &tls.Config{
+		Certificates: []tls.Certificate{*cert},
+		NextProtos:   []string{"http/1.1"},
+	}
+	clientTLS := tls.Server(clientConn, tlsConfig)
+	if err := clientTLS.Handshake(); err != nil {
+		log.Printf("[QUICMode] Client TLS handshake failed: %v", err)
+		return
+	}
+
+	quicTransport, err := p.newQUICRoundTripper(host, rule)
+	if err != nil {
+		log.Printf("[QUICMode] Failed to create HTTP/3 transport: %v", err)
+		return
+	}
+	defer quicTransport.Close()
+
+	client := &http.Client{
+		Transport: quicTransport,
+		CheckRedirect: func(req *http.Request, via []*http.Request) error {
+			return http.ErrUseLastResponse
+		},
+	}
+
+	srv := &http.Server{
+		Handler: http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+			path := req.URL.EscapedPath()
+			if path == "" || !strings.HasPrefix(path, "/") {
+				path = "/" + strings.TrimPrefix(path, "/")
+			}
+
+			targetURL := "https://" + host + path
+			if req.URL.RawQuery != "" {
+				targetURL += "?" + req.URL.RawQuery
+			}
+
+			newReq, err := http.NewRequestWithContext(req.Context(), req.Method, targetURL, req.Body)
+			if err != nil {
+				http.Error(w, "Bad request", http.StatusInternalServerError)
+				return
+			}
+			for k, vv := range req.Header {
+				for _, v := range vv {
+					newReq.Header.Add(k, v)
+				}
+			}
+			removeHopByHopHeaders(newReq.Header)
+			newReq.Host = host
+
+			resp, err := client.Do(newReq)
+			if err != nil {
+				log.Printf("[QUICMode] Forwarding error method=%s host=%s target=%s err=%v", req.Method, host, targetURL, err)
+				http.Error(w, "Proxy error", http.StatusBadGateway)
+				return
+			}
+			defer resp.Body.Close()
+
+			removeHopByHopHeaders(resp.Header)
+			for k, vv := range resp.Header {
+				for _, v := range vv {
+					w.Header().Add(k, v)
+				}
+			}
+			w.WriteHeader(resp.StatusCode)
+			_, _ = io.Copy(w, resp.Body)
+		}),
+	}
+
+	_ = srv.Serve(&singleConnListener{conn: clientTLS, done: make(chan struct{})})
+}
+
 func (p *ProxyServer) handleServerMITM(clientConn net.Conn, host string, rule Rule) {
 	defer clientConn.Close()
 	log.Printf("[ServerMode] Handling %s via Server", host)
@@ -2156,7 +2514,6 @@ func (p *ProxyServer) handleServerMITM(clientConn net.Conn, host string, rule Ru
 		return
 	}
 
-	// 强制客户端侧使用 HTTP/1.1，避免单连接被升级为 HTTP/2 后的多路复用处理复杂化
 	tlsConfig := &tls.Config{
 		Certificates: []tls.Certificate{*cert},
 		NextProtos:   []string{"http/1.1"},
@@ -2191,7 +2548,7 @@ func (p *ProxyServer) handleServerMITM(clientConn net.Conn, host string, rule Ru
 		dialCandidates = append(dialCandidates, serverAddr)
 	}
 
-	upstreamConn, upstreamProtocol, err := p.establishUpstreamConn(serverHost, rule, dialCandidates, "http/1.1")
+	upstreamConn, upstreamProtocol, err := p.establishUpstreamConn(serverHost, rule, dialCandidates, "")
 	if err != nil {
 		log.Printf("[ServerMode] Failed to establish upstream connection: %v", err)
 		return
@@ -2268,10 +2625,7 @@ func (p *ProxyServer) handleServerMITM(clientConn net.Conn, host string, rule Ru
 			newReq.Host = serverHost
 			log.Printf("[ServerMode] Forward request method=%s workerURL=%s host=%s target=%s contentLength=%d", req.Method, workerUrlStr, newReq.Host, targetUrl, req.ContentLength)
 
-			hopByHop := []string{"Connection", "Proxy-Connection", "Keep-Alive", "Proxy-Authenticate", "Proxy-Authorization", "Te", "Trailer", "Transfer-Encoding", "Upgrade"}
-			for _, h := range hopByHop {
-				newReq.Header.Del(h)
-			}
+			removeHopByHopHeaders(newReq.Header)
 
 			resp, err := client.Do(newReq)
 			if err != nil {
@@ -2282,6 +2636,7 @@ func (p *ProxyServer) handleServerMITM(clientConn net.Conn, host string, rule Ru
 			defer resp.Body.Close()
 			log.Printf("[ServerMode] Upstream response status=%d target=%s", resp.StatusCode, targetUrl)
 
+			removeHopByHopHeaders(resp.Header)
 			for k, vv := range resp.Header {
 				for _, v := range vv {
 					w.Header().Add(k, v)
@@ -2291,7 +2646,6 @@ func (p *ProxyServer) handleServerMITM(clientConn net.Conn, host string, rule Ru
 			io.Copy(w, resp.Body)
 		}),
 	}
-
 	_ = srv.Serve(&singleConnListener{conn: clientTls, done: make(chan struct{})})
 }
 

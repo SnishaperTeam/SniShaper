@@ -147,6 +147,7 @@
                         <button id="rules-mode-server" class="btn btn-secondary" type="button">Server</button>
                         <button id="rules-mode-mitm" class="btn btn-secondary active" type="button">MITM</button>
                         <button id="rules-mode-transparent" class="btn btn-secondary" type="button">透传</button>
+                        <button id="rules-mode-quic" class="btn btn-secondary" type="button">QUIC</button>
                         <button id="rules-mode-tls-rf" class="btn btn-secondary" type="button">TLS 分片</button>
                         <button id="rules-mode-warp" class="btn btn-secondary" type="button">Warp</button>
                     </div>
@@ -431,6 +432,7 @@
                             <option value="server">Server 节点</option>
                             <option value="mitm">MITM 中间人</option>
                             <option value="transparent">透传模式</option>
+                            <option value="quic">QUIC 直连</option>
                             <option value="tls-rf">TLS 分片</option>
                             <option value="warp">Warp</option>
                         </select>
@@ -438,6 +440,19 @@
                     <div class="form-group">
                         <label>上游服务器</label>
                         <input type="text" id="input-upstream" placeholder="例如: 8.137.102.117:443 或填 warp (对于 Warp 分流)">
+                    </div>
+                    <div class="form-group">
+                        <label>DNS 解析策略</label>
+                        <select id="input-dns-mode">
+                            <option value="">默认 / 系统顺序</option>
+                            <option value="prefer_ipv4">优先 IPv4</option>
+                            <option value="prefer_ipv6">优先 IPv6</option>
+                            <option value="ipv4_only">仅 IPv4</option>
+                            <option value="ipv6_only">仅 IPv6</option>
+                        </select>
+                        <small style="color: var(--text-secondary); font-size: 12px; margin-top: 4px; display: block;">
+                            仅对域名解析生效。固定 IP 不解析，Warp 与优选 IP 池也不会被此项覆盖。
+                        </small>
                     </div>
                     <div class="form-group form-span-2">
                         <label>SNI 伪造（Fake SNI）</label>
