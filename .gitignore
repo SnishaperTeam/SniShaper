@@ -1,6 +1,7 @@
 # Build outputs
 build/bin/
 *.exe
+!proxy/usque.exe
 *.dll
 *.msi
 *.syso
@@ -54,5 +55,4 @@ snishaper.zip
 mitmverify.exe
 mitmverify-report.json
 cmd/
-frontend/bindings/
-\
+scripts/

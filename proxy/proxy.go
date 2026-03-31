@@ -13,6 +13,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"encoding/pem"
+	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -1564,19 +1565,7 @@ func (p *ProxyServer) handleMITM(clientConn net.Conn, host string, rule Rule, di
 	}
 
 	p.tracef("[MITM] Upstream negotiated protocol: %s", upstreamProtocol)
-
-	cert, err := p.generateCert(host, caCert, caKey)
-	if err != nil {
-		log.Printf("[MITM] Failed to generate cert: %v", err)
-		clientConn.Close()
-		upstreamRW.Close()
-		return
-	}
-
-	tlsConfig := &tls.Config{
-		Certificates: []tls.Certificate{*cert},
-		NextProtos:   nextProtosForNegotiatedALPN(upstreamProtocol),
-	}
+	tlsConfig := p.makeMITMTLSConfig(host, caCert, caKey, nextProtosForNegotiatedALPN(upstreamProtocol), "[MITM]")
 
 	clientTls := tls.Server(clientConn, tlsConfig)
 	if err := clientTls.Handshake(); err != nil {
@@ -1663,6 +1652,34 @@ func (p *ProxyServer) generateCert(host string, caCert *x509.Certificate, caKey 
 	p.certCache[host] = &cert
 	p.certCacheMu.Unlock()
 	return &cert, nil
+}
+
+func (p *ProxyServer) makeMITMTLSConfig(connectHost string, caCert *x509.Certificate, caKey interface{}, nextProtos []string, logPrefix string) *tls.Config {
+	connectHost = normalizeHost(connectHost)
+	return &tls.Config{
+		NextProtos: append([]string(nil), nextProtos...),
+		GetCertificate: func(hello *tls.ClientHelloInfo) (*tls.Certificate, error) {
+			clientSNI := normalizeHost(hello.ServerName)
+			certHost := connectHost
+			if clientSNI != "" {
+				certHost = clientSNI
+			}
+
+			if clientSNI != "" && connectHost != "" && clientSNI != connectHost {
+				log.Printf("%s ClientHello SNI mismatch: connect_host=%s client_sni=%s remote=%s", logPrefix, connectHost, clientSNI, hello.Conn.RemoteAddr())
+			} else {
+				log.Printf("%s ClientHello: connect_host=%s client_sni=%s remote=%s", logPrefix, connectHost, clientSNI, hello.Conn.RemoteAddr())
+			}
+
+			cert, err := p.generateCert(certHost, caCert, caKey)
+			if err != nil {
+				log.Printf("%s Generate cert failed: cert_host=%s err=%v", logPrefix, certHost, err)
+				return nil, err
+			}
+			log.Printf("%s Serving MITM cert: cert_host=%s alpn=%v", logPrefix, certHost, hello.SupportedProtos)
+			return cert, nil
+		},
+	}
 }
 
 func (p *ProxyServer) handleTransparent(clientConn, upstreamConn net.Conn, host string, rule Rule) {
@@ -2277,13 +2294,14 @@ func (p *ProxyServer) GetUConn(conn net.Conn, sni string, verifyName string, rul
 		VerifyConnection:               verifyConn,
 	}
 
-	if allowInsecure && len(echConfig) > 0 {
-		// ECH 成功后证书可能呈现 public_name 相关名称，跳过 hostname 验证避免误报。
-		config.InsecureServerNameToVerify = "*"
-		config.VerifyPeerCertificate = func(rawCerts [][]byte, verifiedChains [][]*x509.Certificate) error {
+	if len(echConfig) > 0 {
+		// ECH 模式下，如果服务器拒绝 ECH，会呈现 Public Name 的证书而非真实主机的。
+		// 我们通过此钩子允许验证过程继续，以便提取重试配置。
+		config.EncryptedClientHelloRejectionVerify = func(cs utls.ConnectionState) error {
+			// 返回 nil 表示允许在 ECH 被拒时验证外层 Public Name 证书。
+			// utls 内部会根据 RootCAs 验证证书的合法性，因此仍保持安全性。
 			return nil
 		}
-		config.VerifyConnection = nil
 	}
 
 	clientHelloID := chooseUTLSClientHelloID(alpn)
@@ -2299,6 +2317,20 @@ func (p *ProxyServer) GetUConn(conn net.Conn, sni string, verifyName string, rul
 }
 
 func (p *ProxyServer) resolveRuleECHConfig(host string, rule Rule) []byte {
+	// 1. 优先检查内存中是否已有纠错后的热配置
+	if p.dohResolver != nil {
+		cacheKey := strings.TrimSpace(rule.ECHDomain)
+		if cacheKey == "" {
+			cacheKey = host
+		}
+		if val, ok := p.dohResolver.echCache.Load(cacheKey); ok {
+			if ech, ok := val.([]byte); ok && len(ech) > 0 {
+				log.Printf("[Upstream] Using hot-patched ECH config for %s (via %s)", host, cacheKey)
+				return ech
+			}
+		}
+	}
+
 	if rule.ECHAutoUpdate {
 		lookupDomain := strings.TrimSpace(rule.ECHDiscoveryDomain)
 		if lookupDomain == "" {
@@ -2421,16 +2453,7 @@ func (p *ProxyServer) handleQUICMITM(clientConn net.Conn, host string, rule Rule
 	}
 	caCert := p.certGenerator.GetCACert()
 	caKey := p.certGenerator.GetCAKey()
-	cert, err := p.generateCert(host, caCert, caKey)
-	if err != nil {
-		log.Printf("[QUICMode] Cert error: %v", err)
-		return
-	}
-
-	tlsConfig := &tls.Config{
-		Certificates: []tls.Certificate{*cert},
-		NextProtos:   []string{"http/1.1"},
-	}
+	tlsConfig := p.makeMITMTLSConfig(host, caCert, caKey, []string{"http/1.1"}, "[QUICMode]")
 	clientTLS := tls.Server(clientConn, tlsConfig)
 	if err := clientTLS.Handshake(); err != nil {
 		log.Printf("[QUICMode] Client TLS handshake failed: %v", err)
@@ -2508,16 +2531,7 @@ func (p *ProxyServer) handleServerMITM(clientConn net.Conn, host string, rule Ru
 	}
 	caCert := p.certGenerator.GetCACert()
 	caKey := p.certGenerator.GetCAKey()
-	cert, err := p.generateCert(host, caCert, caKey)
-	if err != nil {
-		log.Printf("[ServerMode] Cert error: %v", err)
-		return
-	}
-
-	tlsConfig := &tls.Config{
-		Certificates: []tls.Certificate{*cert},
-		NextProtos:   []string{"http/1.1"},
-	}
+	tlsConfig := p.makeMITMTLSConfig(host, caCert, caKey, []string{"http/1.1"}, "[ServerMode]")
 	clientTls := tls.Server(clientConn, tlsConfig)
 	if err := clientTls.Handshake(); err != nil {
 		log.Printf("[ServerMode] TLS handshake failed: %v", err)
@@ -2664,42 +2678,86 @@ func (p *ProxyServer) establishUpstreamConn(host string, rule Rule, dialCandidat
 	if upstreamALPN == "" {
 		upstreamALPN = "h2_h1"
 	}
-
-	var echConfig []byte
-	if rule.ECHEnabled {
-		echConfig = p.resolveRuleECHConfig(host, rule)
-	}
-
 	// 3. 按候选逐个拨号+握手（关键：握手失败也要尝试下一个候选）
 	var errs []string
 	for _, addr := range ordered {
-		rawConn, dialErr := p.dialWithRule(context.Background(), "tcp", addr, rule)
-		if dialErr != nil {
-			errs = append(errs, fmt.Sprintf("%s dial: %v", addr, dialErr))
-			if rule.UseCFPool && p.cfPool != nil {
-				h, _, _ := net.SplitHostPort(addr)
-				if h != "" {
-					p.cfPool.ReportFailure(h)
+		// [修正] 每个 IP 候选人都有 2 次机会（初始尝试 + 1 次原地纠错重试）
+		for attempt := 0; attempt < 2; attempt++ {
+			// [修正] 动态解析 ECH 配置，以便吃到上一次尝试产生的纠错缓存
+			var echConfig []byte
+			if rule.ECHEnabled {
+				echConfig = p.resolveRuleECHConfig(host, rule)
+			}
+
+			rawConn, dialErr := p.dialWithRule(context.Background(), "tcp", addr, rule)
+			if dialErr != nil {
+				errs = append(errs, fmt.Sprintf("%s dial: %v", addr, dialErr))
+				if rule.UseCFPool && p.cfPool != nil {
+					h, _, _ := net.SplitHostPort(addr)
+					if h != "" {
+						p.cfPool.ReportFailure(h)
+					}
+				}
+				break // 拨号失败换下一个 IP，不重试
+			}
+
+			targetSNI := sniHost
+			if len(echConfig) > 0 {
+				targetSNI = host
+				if attempt == 0 {
+					log.Printf("[Upstream] ECH ACTIVE: Setting Inner SNI = %s for addr %s", targetSNI, addr)
+				}
+			} else if rule.ECHEnabled {
+				log.Printf("[Upstream] WARNING: ECH is enabled for %s but NO ECH config available. Handshake will LEAK domain!", host)
+			}
+
+			allowInsecure := len(echConfig) == 0
+			uconn := p.GetUConn(rawConn, targetSNI, host, rule, allowInsecure, upstreamALPN, echConfig)
+			utlsErr := uconn.Handshake()
+			if utlsErr == nil {
+				// 握手成功，记录日志并返回
+				cs := uconn.ConnectionState()
+				peerCN := ""
+				peerSAN := ""
+				if len(cs.PeerCertificates) > 0 {
+					peerCN = cs.PeerCertificates[0].Subject.CommonName
+					if len(cs.PeerCertificates[0].DNSNames) > 0 {
+						peerSAN = cs.PeerCertificates[0].DNSNames[0]
+					}
+				}
+				log.Printf("[Upstream] uTLS handshake ok host=%s addr=%s targetSNI=%s alpn=%s echAccepted=%v peerCN=%s peerSAN0=%s", host, addr, targetSNI, cs.NegotiatedProtocol, cs.ECHAccepted, peerCN, peerSAN)
+				if rule.UseCFPool && p.cfPool != nil {
+					h, _, _ := net.SplitHostPort(addr)
+					if h != "" {
+						p.cfPool.ReportSuccess(h)
+					}
+				}
+				return uconn, cs.NegotiatedProtocol, nil
+			}
+
+			// 握手失败，清理资源
+			rawConn.Close()
+
+			// [ECH 纠错与原地重试逻辑]
+			var echErr *utls.ECHRejectionError
+			if errors.As(utlsErr, &echErr) && len(echErr.RetryConfigList) > 0 {
+				cacheKey := strings.TrimSpace(rule.ECHDomain)
+				if cacheKey == "" {
+					cacheKey = host
+				}
+				if p.dohResolver != nil {
+					log.Printf("[Upstream] ECH REJECTED by %s. Server provided RetryConfigs. Hot-patching cache for %s...", addr, cacheKey)
+					p.dohResolver.echCache.Store(cacheKey, echErr.RetryConfigList)
+
+					// 如果还有重试机会，且是由于 ECH 被拒，则原 IP 原地重试
+					if attempt == 0 {
+						log.Printf("[Upstream] Retrying connection to %s with updated ECH config (Attempt 2)...", addr)
+						continue
+					}
 				}
 			}
-			continue
-		}
 
-		targetSNI := sniHost
-		// [ECH 挪用专用] 如果获取到了 ECH 公钥，说明我们要开启隐身模式。
-		// 此时 targetSNI 不应是业务域名，而应是 ECH 公钥的主人域名，
-		// 这样握手过程中的 inner-client-hello 才能通过 cloudflare 的校验。
-		if len(echConfig) > 0 {
-			targetSNI = host
-			log.Printf("[Upstream] ECH ACTIVE: Setting Inner SNI = %s for addr %s", targetSNI, addr)
-		} else if rule.ECHEnabled {
-			log.Printf("[Upstream] WARNING: ECH is enabled for %s but NO ECH config available. Handshake will LEAK domain!", host)
-		}
-
-		uconn := p.GetUConn(rawConn, targetSNI, host, rule, true, upstreamALPN, echConfig)
-		utlsErr := uconn.Handshake()
-		if utlsErr != nil {
-			rawConn.Close()
+			// 最终失败处理
 			errs = append(errs, fmt.Sprintf("%s utls: %v", addr, utlsErr))
 			if rule.UseCFPool && p.cfPool != nil {
 				h, _, _ := net.SplitHostPort(addr)
@@ -2707,26 +2765,8 @@ func (p *ProxyServer) establishUpstreamConn(host string, rule Rule, dialCandidat
 					p.cfPool.ReportFailure(h)
 				}
 			}
-			continue
+			break // 换下一个 IP
 		}
-
-		cs := uconn.ConnectionState()
-		peerCN := ""
-		peerSAN := ""
-		if len(cs.PeerCertificates) > 0 {
-			peerCN = cs.PeerCertificates[0].Subject.CommonName
-			if len(cs.PeerCertificates[0].DNSNames) > 0 {
-				peerSAN = cs.PeerCertificates[0].DNSNames[0]
-			}
-		}
-		log.Printf("[Upstream] uTLS handshake ok host=%s addr=%s targetSNI=%s alpn=%s echAccepted=%v peerCN=%s peerSAN0=%s", host, addr, targetSNI, cs.NegotiatedProtocol, cs.ECHAccepted, peerCN, peerSAN)
-		if rule.UseCFPool && p.cfPool != nil {
-			h, _, _ := net.SplitHostPort(addr)
-			if h != "" {
-				p.cfPool.ReportSuccess(h)
-			}
-		}
-		return uconn, cs.NegotiatedProtocol, nil
 	}
 
 	if len(errs) == 0 {

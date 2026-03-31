@@ -1,7 +1,5 @@
 {
-  "listen_port": "",
-  "server_host": "",
-  "server_auth": "",
+  "listen_port": "8080",
   "site_groups": [
     {
       "id": "linux-do",
@@ -98,65 +96,30 @@
         "bbc.co.uk",
         "bbci.co.uk",
         "files.bbci.co.uk",
-        "live.bbc.co.uk",
-        "static.bbci.co.uk"
+        "live.bbc.co.uk"
       ],
-      "mode": "mitm",
-      "upstream": "23.77.21.232:443",
-      "sni_fake": "bh.lk",
+      "mode": "tls-rf",
+      "upstream": "151.101.0.81:443",
+      "sni_fake": "",
       "enabled": true,
       "ech_enabled": false,
       "use_cf_pool": false,
-      "cert_verify": {
-        "mode": "allow_names",
-        "names": [
-          "*.cdn.cyberarena.at",
-          "cdn.cyberarena.at"
-        ]
-      }
+      "cert_verify": {}
     },
     {
       "id": "sg-1771319670672-7",
       "name": "api.bbc.com",
       "website": "bbc",
       "domains": [
-        "api.bbc.com",
-        "bbc.com"
+        "api.bbc.com"
       ],
-      "mode": "mitm",
-      "upstream": "146.75.36.81:443",
-      "sni_fake": "bh.lk",
+      "mode": "tls-rf",
+      "upstream": "13.35.186.119:443",
+      "sni_fake": "",
       "enabled": true,
       "ech_enabled": false,
       "use_cf_pool": false,
-      "cert_verify": {
-        "mode": "allow_names",
-        "names": [
-          "*.bbc.com",
-          "*.bbcrussian.com",
-          "account.bbc.com",
-          "bbc.co.uk",
-          "bbc.com",
-          "bbcrussian.com",
-          "cdnedge.bbc.co.uk",
-          "news.bbc.co.uk",
-          "news.bbcimg.co.uk",
-          "newsimg.bbc.co.uk",
-          "newsrss.bbc.co.uk",
-          "newsvote.bbc.co.uk",
-          "node1.bbcimg.co.uk",
-          "open.live.bbc.co.uk",
-          "playlists.bbc.co.uk",
-          "r.bbci.co.uk",
-          "search.bbc.co.uk",
-          "session.bbc.co.uk",
-          "session.bbc.com",
-          "www.bbc.co.uk",
-          "www.bbc.com",
-          "www.bbcrussian.com",
-          "wwwnews.live.bbc.co.uk"
-        ]
-      }
+      "cert_verify": {}
     },
     {
       "id": "sg-1771319670672-8",
@@ -323,7 +286,8 @@
       "domains": [
         "business.whatsapp.com",
         "facebook.com",
-        "fbcdn.net"
+        "fbcdn.net",
+        "connect.facebook.net"
       ],
       "mode": "mitm",
       "upstream": "157.240.22.169:443",
@@ -987,22 +951,6 @@
           "flickr.com"
         ]
       }
-    },
-    {
-      "id": "sg-1771319670672-45",
-      "name": "flora.web.telegram.org",
-      "website": "telegram",
-      "domains": [
-        "flora.web.telegram.org",
-        "web.telegram.org"
-      ],
-      "mode": "tls-rf",
-      "upstream": "149.154.167.99:443",
-      "sni_fake": "telegram.org",
-      "enabled": true,
-      "ech_enabled": false,
-      "use_cf_pool": false,
-      "cert_verify": {}
     },
     {
       "id": "sg-1771319670672-46",
@@ -1674,19 +1622,14 @@
         "www.quora.com",
         "www.tch.quora.com"
       ],
-      "mode": "mitm",
-      "upstream": "18.233.40.74:443",
-      "sni_fake": "fs.quoracdn.net",
+      "mode": "tls-rf",
+      "upstream": "",
+      "sni_fake": "",
       "sni_policy": "fake",
       "enabled": true,
       "ech_enabled": false,
       "use_cf_pool": false,
-      "cert_verify": {
-        "mode": "allow_names",
-        "names": [
-          "*.us-east-1.cloudsearch.amazonaws.com"
-        ]
-      }
+      "cert_verify": {}
     },
     {
       "id": "sg-1771319670672-83",
@@ -2338,9 +2281,10 @@
       "domains": [
         "googlevideo.com"
       ],
-      "mode": "tls-rf",
-      "upstream": "2607:f8b0:4007:36::9",
-      "sni_fake": "",
+      "mode": "mitm",
+      "upstream": "",
+      "dns_mode": "prefer_ipv6",
+      "sni_fake": "g.cn",
       "enabled": true,
       "ech_enabled": false,
       "use_cf_pool": false,
@@ -3049,6 +2993,159 @@
       "ech_enabled": false,
       "use_cf_pool": false,
       "cert_verify": {}
+    },
+    {
+      "id": "1774858914753778200",
+      "name": "geph.io",
+      "website": "geph",
+      "domains": [
+        "geph.io"
+      ],
+      "mode": "server",
+      "upstream": "",
+      "sni_fake": "",
+      "enabled": true,
+      "ech_enabled": true,
+      "use_cf_pool": true,
+      "cert_verify": {}
+    },
+    {
+      "id": "1774860463481796800",
+      "name": "dailymotion",
+      "website": "dailymotion",
+      "domains": [
+        "dailymotion.com"
+      ],
+      "mode": "transparent",
+      "upstream": "warp",
+      "sni_fake": "",
+      "enabled": true,
+      "ech_enabled": false,
+      "use_cf_pool": false,
+      "cert_verify": {}
+    },
+    {
+      "id": "1774863525617398100",
+      "name": "telegram",
+      "website": "telegram",
+      "domains": [
+        "web.telegram.org"
+      ],
+      "mode": "transparent",
+      "upstream": "warp",
+      "sni_fake": "",
+      "enabled": true,
+      "ech_enabled": false,
+      "use_cf_pool": false,
+      "cert_verify": {}
+    },
+    {
+      "id": "1774881339213612300",
+      "name": "M365 Copilot",
+      "website": "M365 Copilot",
+      "domains": [
+        "m365.cloud.microsoft"
+      ],
+      "mode": "transparent",
+      "upstream": "warp",
+      "sni_fake": "",
+      "enabled": true,
+      "ech_enabled": false,
+      "use_cf_pool": false,
+      "cert_verify": {}
+    },
+    {
+      "id": "1774925504423577200",
+      "name": "matrix",
+      "website": "matrix",
+      "domains": [
+        "matrix.org"
+      ],
+      "mode": "tls-rf",
+      "upstream": "",
+      "sni_fake": "",
+      "enabled": true,
+      "ech_enabled": false,
+      "use_cf_pool": false,
+      "cert_verify": {}
+    },
+    {
+      "id": "1774948737736012100",
+      "name": "optimizely",
+      "website": "cdn",
+      "domains": [
+        "cdn.optimizely.com"
+      ],
+      "mode": "mitm",
+      "upstream": "",
+      "sni_fake": "",
+      "enabled": true,
+      "ech_enabled": true,
+      "ech_profile_id": "legacy-cloudflare",
+      "use_cf_pool": true,
+      "cert_verify": {}
+    },
+    {
+      "id": "1774951766458996400",
+      "name": "ichef",
+      "website": "bbc",
+      "domains": [
+        "ichef.bbci.co.uk",
+        "static.bbci.co.uk"
+      ],
+      "mode": "tls-rf",
+      "upstream": "23.56.24.175:443",
+      "sni_fake": "",
+      "enabled": true,
+      "ech_enabled": false,
+      "use_cf_pool": false,
+      "cert_verify": {}
+    },
+    {
+      "id": "1774952077943977400",
+      "name": "bbc",
+      "website": "bbc",
+      "domains": [
+        "bbc.com",
+        "www.bbc.com"
+      ],
+      "mode": "tls-rf",
+      "upstream": "146.75.36.81:443",
+      "sni_fake": "",
+      "enabled": true,
+      "ech_enabled": false,
+      "use_cf_pool": false,
+      "cert_verify": {}
+    },
+    {
+      "id": "1774953793009945300",
+      "name": "meta",
+      "website": "meta",
+      "domains": [
+        "meta.com"
+      ],
+      "mode": "mitm",
+      "upstream": "57.144.144.141:443",
+      "sni_fake": "sdk.eu.org",
+      "enabled": true,
+      "ech_enabled": false,
+      "use_cf_pool": false,
+      "cert_verify": {}
+    },
+    {
+      "id": "1774953956497541500",
+      "name": "fbsbx",
+      "website": "meta",
+      "domains": [
+        "fbsbx.com"
+      ],
+      "mode": "mitm",
+      "upstream": "57.144.44.128:443",
+      "sni_fake": "sdff",
+      "enabled": true,
+      "ech_enabled": false,
+      "use_cf_pool": false,
+      "cert_verify": {}
     }
   ],
   "upstreams": [],
@@ -3084,7 +3181,7 @@
       "104.17.152.15",
       "172.64.146.233"
     ],
-    "doh_url": "",
+    "doh_url": "https://xwfpeb16ii.cloudflare-gateway.com/dns-query",
     "auto_update": false,
     "api_key": "",
     "warp_enabled": true,
