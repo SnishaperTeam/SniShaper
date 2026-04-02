@@ -34,7 +34,7 @@
 
 ## 文档 
 
-更详细的技术原理、部署教程和自定义指南，请参阅**[GitHub Wiki](https://github.com/coolapijust/snishaper/wiki)**：
+想要了解更详细的技术原理、部署教程和自定义指南，请参阅 [**GitHub Wiki**](https://github.com/coolapijust/snishaper/wiki)：
 
 -  **[核心模式介绍](https://github.com/coolapijust/snishaper/wiki/Core-Proxy-Modes)**：了解 TLS-RF、QUIC 与 Server 模式的运行原理。
 -  **[规则自定义指南](https://github.com/coolapijust/snishaper/wiki/Custom-Rules-Guide)**：了解如何开发针对性的规则。
