@@ -1,3 +1,5 @@
+[中文](README.md) | [English](README_EN.md) | [Русский](README_RU.md)
+
 # SniShaper
 
 [![Go Version](https://img.shields.io/badge/Go-1.24+-00ADD8?style=flat-square&logo=go)](https://golang.org)
