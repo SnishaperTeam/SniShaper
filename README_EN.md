@@ -18,6 +18,7 @@
   - **QUIC Replay**: Bypasses conventional SNI detection using quic-go's obfuscation features.
   - **ECH Injection**: Automatically fetches and injects echconfig.
 - **IP Optimization and WARP**: Integrated Cloudflare IP pool optimization and WARP Masque tunnel.
+- **Smart Routing**: Automatically identifying blocked domains based on GFWList, allowing connection to most sites outside rules without manual configuration.
 
 ---
 
