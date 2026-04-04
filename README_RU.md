@@ -55,11 +55,28 @@
 git clone https://github.com/coolapijust/snishaper.git
 cd snishaper
 
-# Сборка фронтенда
-cd frontend && npm run build && cd ..
-# Сборка бэкенда
+# Установка зависимостей фронтенда
+cd frontend
+npm install
+
+# Сборка фронтенд-ресурсов
+npm run build
+cd ..
+
+# Сборка Windows GUI исполняемого файла
 go build -ldflags="-H windowsgui" -o build/bin/snishaper.exe .
 ```
+
+Рекомендуемое окружение:
+
+- `Go 1.25+`
+- `Node.js 24+`
+- `npm 11+`
+
+Результат сборки:
+
+- Ресурсы фронтенда: `frontend/dist`
+- Исполняемый файл: `build/bin/snishaper.exe`
 
 ---
 

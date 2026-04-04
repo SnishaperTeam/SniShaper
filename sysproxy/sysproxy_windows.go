@@ -3,7 +3,9 @@ package sysproxy
 import (
 	"fmt"
 	"strings"
+	"sync"
 	"syscall"
+	"time"
 )
 
 const (
@@ -15,6 +17,11 @@ const (
 var (
 	wininetDLL             = syscall.NewLazyDLL("wininet.dll")
 	internetSetOptionProc  = wininetDLL.NewProc("InternetSetOptionW")
+	
+	// Cache for system proxy status
+	cachedStatus SystemProxyStatus
+	lastCheck    time.Time
+	cacheMu      sync.Mutex
 )
 
 type SystemProxyStatus struct {
@@ -42,6 +49,14 @@ func callInternetSetOption(option uintptr) error {
 }
 
 func GetSystemProxyStatus() SystemProxyStatus {
+	cacheMu.Lock()
+	if !lastCheck.IsZero() && time.Since(lastCheck) < 2*time.Second {
+		status := cachedStatus
+		cacheMu.Unlock()
+		return status
+	}
+	cacheMu.Unlock()
+
 	status := SystemProxyStatus{}
 
 	// 查询 ProxyEnable
@@ -63,6 +78,11 @@ func GetSystemProxyStatus() SystemProxyStatus {
 	if err == nil && len(out) > 0 {
 		status.Override = parseRegValue(string(out))
 	}
+
+	cacheMu.Lock()
+	cachedStatus = status
+	lastCheck = time.Now()
+	cacheMu.Unlock()
 
 	return status
 }
@@ -105,6 +125,10 @@ func SetSystemProxy(enable bool, server string) error {
 		}
 	}
 
+	cacheMu.Lock()
+	lastCheck = time.Time{}
+	cacheMu.Unlock()
+
 	return notifyProxyChange()
 }
 
@@ -133,6 +157,11 @@ func SaveOriginalProxySettings() error {
 	return nil
 }
 
+func SetOriginalProxySettings(status SystemProxyStatus) {
+	copy := status
+	originalProxySettings = &copy
+}
+
 func RestoreOriginalProxySettings() error {
 	if originalProxySettings == nil {
 		return nil
@@ -153,6 +182,10 @@ func RestoreOriginalProxySettings() error {
 			runHiddenCommand("reg", "add", "HKCU\\"+proxySettingsKey, "/v", "ProxyOverride", "/t", "REG_SZ", "/d", originalProxySettings.Override, "/f")
 		}
 	}
+
+	cacheMu.Lock()
+	lastCheck = time.Time{}
+	cacheMu.Unlock()
 
 	return notifyProxyChange()
 }

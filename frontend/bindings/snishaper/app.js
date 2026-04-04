@@ -478,7 +478,64 @@ export function UpdateUpstream(u) {
  * @returns {$CancellablePromise<void>}
  */
 export function UpsertECHProfile(p) {
-    return $Call.ByID(1336524603, p);
+    return $Call.ByName("main.App.UpsertECHProfile", p);
+}
+
+/**
+ * @returns {$CancellablePromise<proxy$0.AutoRoutingConfig>}
+ */
+export function GetAutoRoutingConfig() {
+    return $Call.ByName("main.App.GetAutoRoutingConfig");
+}
+
+/**
+ * @param {proxy$0.AutoRoutingConfig} cfg
+ * @returns {$CancellablePromise<void>}
+ */
+export function UpdateAutoRoutingConfig(cfg) {
+    return $Call.ByName("main.App.UpdateAutoRoutingConfig", cfg);
+}
+
+/**
+ * @returns {$CancellablePromise<proxy$0.GFWListStatus>}
+ */
+export function GetAutoRoutingStatus() {
+    return $Call.ByName("main.App.GetAutoRoutingStatus");
+}
+
+/**
+ * @returns {$CancellablePromise<number>}
+ */
+export function RefreshGFWList() {
+    return $Call.ByName("main.App.RefreshGFWList");
+}
+
+/**
+ * @returns {$CancellablePromise<number>}
+ */
+export function TestServerNode() {
+    return $Call.ByName("main.App.TestServerNode");
+}
+
+/**
+ * @returns {$CancellablePromise<void>}
+ */
+export function WindowMinimise() {
+    return $Call.ByName("main.App.WindowMinimise");
+}
+
+/**
+ * @returns {$CancellablePromise<void>}
+ */
+export function WindowToggleMaximise() {
+    return $Call.ByName("main.App.WindowToggleMaximise");
+}
+
+/**
+ * @returns {$CancellablePromise<void>}
+ */
+export function WindowClose() {
+    return $Call.ByName("main.App.WindowClose");
 }
 
 // Private type creation functions

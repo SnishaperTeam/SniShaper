@@ -165,7 +165,7 @@ func (rm *RuleManager) ImportConfigWithSummary(content string) (ImportSummary, e
 			if ruleMode == "" {
 				ruleMode = mode
 			}
-			if ruleMode != "mitm" && ruleMode != "transparent" && ruleMode != "server" && ruleMode != "tls-rf" && ruleMode != "quic" {
+			if ruleMode != "mitm" && ruleMode != "transparent" && ruleMode != "server" && ruleMode != "tls-rf" && ruleMode != "quic" && ruleMode != "warp" {
 				skipped++
 				continue
 			}

@@ -27,6 +27,10 @@ type CertManager struct {
 	certMu  sync.RWMutex
 	caPath  string
 	keyPath string
+	
+	// Cache for CA install status to avoid expensive PowerShell calls
+	lastStatus  CAInstallStatus
+	lastCheck   time.Time
 }
 
 func NewCertManager(caPath, keyPath string) *CertManager {
@@ -185,6 +189,14 @@ type CAInstallStatus struct {
 }
 
 func (cm *CertManager) GetCAInstallStatus() CAInstallStatus {
+	cm.certMu.Lock()
+	if !cm.lastCheck.IsZero() && time.Since(cm.lastCheck) < 5*time.Minute {
+		status := cm.lastStatus
+		cm.certMu.Unlock()
+		return status
+	}
+	cm.certMu.Unlock()
+
 	status := CAInstallStatus{
 		CertPath:    cm.caPath,
 		Platform:    "windows",
@@ -223,6 +235,13 @@ func (cm *CertManager) GetCAInstallStatus() CAInstallStatus {
 	`, thumb)
 	output, _ := outputHiddenCommand("powershell", "-NoProfile", "-Command", psScript)
 	status.Installed = strings.Contains(strings.ToUpper(string(output)), "FOUND")
+
+	// Update cache
+	cm.certMu.Lock()
+	cm.lastStatus = status
+	cm.lastCheck = time.Now()
+	cm.certMu.Unlock()
+
 	return status
 }
 
@@ -248,6 +267,11 @@ func (cm *CertManager) InstallCA() error {
 	if err != nil {
 		return fmt.Errorf("failed to install CA certificate: %w", err)
 	}
+
+	// Invalidate cache
+	cm.certMu.Lock()
+	cm.lastCheck = time.Time{}
+	cm.certMu.Unlock()
 
 	fmt.Println("[Cert] CA certificate installed successfully to CurrentUser Root store")
 	return nil
@@ -416,6 +440,11 @@ func (cm *CertManager) UninstallCertificate(thumbprint string) error {
 	if strings.EqualFold(storeLocation, "LocalMachine") {
 		return runElevatedCommand("certutil", args...)
 	}
+
+	// Invalidate cache
+	cm.certMu.Lock()
+	cm.lastCheck = time.Time{}
+	cm.certMu.Unlock()
 
 	return runHiddenCommand("certutil", args...)
 }

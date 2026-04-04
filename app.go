@@ -45,6 +45,11 @@ type App struct {
 	systemProxyItemV3 *application.MenuItem
 	proxyOpMu   sync.Mutex
 	warpOpMu    sync.Mutex
+	
+	// Track stats for traffic speed calculations
+	lastIn     int64
+	lastOut    int64
+	lastTick   time.Time
 }
 
 type ringLogWriter struct {
@@ -95,6 +100,9 @@ func (w *ringLogWriter) Snapshot(limit int) []string {
 
 	total := len(w.lines)
 	if total == 0 {
+		if w.pending != "" {
+			return []string{w.pending}
+		}
 		return []string{}
 	}
 	if limit > total {
@@ -103,6 +111,14 @@ func (w *ringLogWriter) Snapshot(limit int) []string {
 	start := total - limit
 	out := make([]string, limit)
 	copy(out, w.lines[start:])
+
+	// If we have pending text and space in out, or just append it if we want latest
+	if w.pending != "" {
+		out = append(out, w.pending)
+		if len(out) > limit {
+			out = out[1:]
+		}
+	}
 	return out
 }
 
@@ -153,6 +169,14 @@ func resolveRuntimeFile(execDir, relativePath string) string {
 	return filepath.Join(execDir, relativePath)
 }
 
+func (a *App) isManagedSystemProxy(status SystemProxyStatus) bool {
+	if !status.Enabled {
+		return false
+	}
+	expected := fmt.Sprintf("127.0.0.1:%d", a.GetListenPort())
+	return strings.EqualFold(strings.TrimSpace(status.Server), expected)
+}
+
 func (a *App) ServiceStartup(ctx context.Context, options application.ServiceOptions) error {
 	a.startupV3()
 	return nil
@@ -187,17 +211,40 @@ func (a *App) startupV3() {
 	a.proxyServer.SetLogCallback(a.appendLog)
 	a.warpMgr.SetLogCallback(a.appendLog)
 
-	if err := sysproxy.SaveOriginalProxySettings(); err != nil {
+	// Initialize AutoRouter for automatic routing
+	a.ruleManager.InitAutoRouter(a.proxyServer.GetDoHResolver())
+	a.ruleManager.SetRouteEventCallback(func(domain, mode string) {
+		application.InvokeAsync(func() {
+			if a.mainWindow != nil {
+				a.mainWindow.EmitEvent("app:route", map[string]string{
+					"domain": domain,
+					"mode":   mode,
+				})
+			}
+		})
+	})
+
+	startupProxyStatus := a.GetSystemProxyStatus()
+	managedProxyRecovered := a.isManagedSystemProxy(startupProxyStatus)
+	if managedProxyRecovered {
+		sysproxy.SetOriginalProxySettings(sysproxy.SystemProxyStatus{})
+		a.appendLog("[startup] Detected leftover managed system proxy state; will recover proxy core and restore to disabled on exit")
+	} else if err := sysproxy.SaveOriginalProxySettings(); err != nil {
 		a.appendLog("[startup] Failed to save original proxy settings: " + err.Error())
 	}
 
 	a.appendLog("[startup] SniShaper started successfully")
 
-	// Auto-start proxy for easier diagnostics and better UX
+	// Keep startup passive: proxy and Warp are started manually by the user.
 	go func() {
 		a.UpdateTrayMenu()
-		time.Sleep(500 * time.Millisecond)
-		_ = a.StartProxy()
+
+		if managedProxyRecovered && !a.IsProxyRunning() {
+			a.appendLog("[startup] Recovering proxy core because system proxy is already pointing to SniShaper...")
+			if err := a.StartProxy(); err != nil {
+				a.appendLog("[startup] Failed to recover proxy core: " + err.Error())
+			}
+		}
 
 		// If auto update is enabled, fetch IPs immediately
 		cfg := a.ruleManager.GetCloudflareConfig()
@@ -205,12 +252,51 @@ func (a *App) startupV3() {
 			a.appendLog("[Cloudflare] Auto update is enabled, fetching initial IPs...")
 			go a.RefreshCloudflareIPPool()
 		}
-
-		if cfg.WarpEnabled {
-			a.appendLog("[Warp] Auto start is enabled, starting Warp...")
-			_ = a.warpMgr.Start()
-		}
 		a.emitFrontendState()
+
+		// Start traffic stats pusher (Clash style)
+		go func() {
+			time.Sleep(500 * time.Millisecond) // Give the window time to settle
+			
+			a.lastIn, a.lastOut, _ = a.GetStats()
+			a.lastTick = time.Now()
+			
+			ticker := time.NewTicker(1 * time.Second)
+			defer ticker.Stop()
+			
+			for range ticker.C {
+				if a.mainWindow == nil {
+					continue
+				}
+				
+				currentIn, currentOut, _ := a.GetStats()
+				now := time.Now()
+				duration := now.Sub(a.lastTick).Seconds()
+				
+				if duration > 0 {
+					downSpeed := float64(currentIn-a.lastIn) / duration
+					upSpeed := float64(currentOut-a.lastOut) / duration
+					
+					// Avoid negative values if stats reset
+					if downSpeed < 0 { downSpeed = 0 }
+					if upSpeed < 0 { upSpeed = 0 }
+
+					// Use InvokeAsync to ensure UI thread safety in Wails v3
+					application.InvokeAsync(func() {
+						if a.mainWindow != nil {
+							a.mainWindow.EmitEvent("app:traffic", map[string]float64{
+								"down": downSpeed,
+								"up":   upSpeed,
+							})
+						}
+					})
+				}
+				
+				a.lastIn = currentIn
+				a.lastOut = currentOut
+				a.lastTick = now
+			}
+		}()
 	}()
 
 	if a.mainWindow != nil {
@@ -373,11 +459,16 @@ func (a *App) appendLog(message string) {
 	if trimmed == "" {
 		return
 	}
+	// Force newline for ringLogWriter processing
+	if !strings.HasSuffix(trimmed, "\n") {
+		trimmed += "\n"
+	}
 	if matched, _ := regexp.MatchString(`^\d{4}/\d{2}/\d{2} \d{2}:\d{2}:\d{2}`, trimmed); matched {
-		a.logBuffer.AppendLine(trimmed)
+		a.logBuffer.Write([]byte(trimmed))
 		return
 	}
-	a.logBuffer.AppendLine(time.Now().Format("2006/01/02 15:04:05.000000") + " " + trimmed)
+	formatted := time.Now().Format("2006/01/02 15:04:05.000000") + " " + trimmed
+	a.logBuffer.Write([]byte(formatted))
 }
 
 func (a *App) GetRecentLogs(limit int) string {
@@ -395,22 +486,7 @@ func (a *App) GetRecentLogs(limit int) string {
 		}
 	}
 
-	a.appendLog("[diag] GetRecentLogs fallback to file-read path")
-
-	data, err := os.ReadFile(a.logPath)
-	if err != nil {
-		return ""
-	}
-
-	text := strings.ReplaceAll(string(data), "\r\n", "\n")
-	lines := strings.Split(text, "\n")
-	if len(lines) > 0 && lines[len(lines)-1] == "" {
-		lines = lines[:len(lines)-1]
-	}
-	if len(lines) > limit {
-		lines = lines[len(lines)-limit:]
-	}
-	return strings.Join(lines, "\n")
+	return ""
 }
 
 func (a *App) ClearLogs() error {
@@ -430,23 +506,66 @@ func (a *App) StartProxy() error {
 	defer a.proxyOpMu.Unlock()
 
 	a.appendLog("[action] StartProxy called")
-	err := a.proxyServer.Start()
+
+	// 1. 获取目标端口并进行可用性检查
+	originalPort := a.GetListenPort()
+	if originalPort == 0 {
+		originalPort = 8080
+	}
+
+	availablePort, err := proxy.EnsurePortAvailable(originalPort, []string{"snishaper", "usque"})
+	if err != nil {
+		a.appendLog(fmt.Sprintf("[warn] Port probe failed: %v, attempting with original port", err))
+		availablePort = originalPort
+	}
+
+	// 2. 如果端口发生了变动，更新配置并通知用户
+	if availablePort != originalPort {
+		a.appendLog(fmt.Sprintf("[info] Port %d was occupied. Switched to %d.", originalPort, availablePort))
+		if err := a.SetListenPort(availablePort); err != nil {
+			a.appendLog("[warn] Failed to update config with new port: " + err.Error())
+		}
+	}
+
+	// 3. 真正启动核心
+	err = a.proxyServer.Start()
 	if err != nil {
 		msg := err.Error()
 		if strings.Contains(msg, "Only one usage of each socket address") || strings.Contains(msg, "bind: address already in use") {
-			msg += " (端口被占用，请检查是否有旧版程序未关闭)"
+			msg += " (核心启动失败：端口仍被占用，请检查权限或手动杀进程)"
 		}
 		a.appendLog("[error] StartProxy failed: " + msg)
 		return fmt.Errorf("%s", msg)
 	}
+
 	a.UpdateTrayMenu()
 	addr := a.proxyServer.GetListenAddr()
 	if err := a.waitForProxyListen(addr, 2*time.Second); err != nil {
 		_ = a.proxyServer.Stop()
-		a.refreshTrayMenuLater(200 * time.Millisecond)
+		a.refreshTrayMenuLater(200*time.Millisecond)
 		a.appendLog("[error] StartProxy self-check failed: " + err.Error())
 		return fmt.Errorf("proxy started but not listening on %s: %w", addr, err)
 	}
+
+	cfg := a.ruleManager.GetCloudflareConfig()
+	if cfg.WarpEnabled && a.warpMgr != nil {
+		a.appendLog("[Warp] Starting alongside proxy...")
+		_ = a.warpMgr.SetEndpoint(cfg.WarpEndpoint)
+		if err := a.warpMgr.Start(); err != nil {
+			a.appendLog("[error] StartWarp during StartProxy failed: " + err.Error())
+			_ = a.proxyServer.Stop()
+			a.refreshTrayMenuLater(200 * time.Millisecond)
+			return fmt.Errorf("warp start failed during proxy startup: %w", err)
+		}
+	}
+
+	// 4. 用户反馈：如果端口漂移了，自动重设系统代理（如果当前开启了系统代理）
+	// 或者按照用户要求：只要漂移了就自动设一个系统代理
+	if availablePort != originalPort || a.GetSystemProxyStatus().Enabled {
+		a.appendLog(fmt.Sprintf("[action] Syncing system proxy to port %d...", availablePort))
+		_ = a.EnableSystemProxy()
+	}
+
 	a.refreshTrayMenuLater(300*time.Millisecond, time.Second)
 	a.emitFrontendState()
 	a.appendLog("[action] StartProxy success")
@@ -857,6 +976,62 @@ func (a *App) ExportConfig() (string, error) {
 	return a.ruleManager.ExportConfig()
 }
 
+func (a *App) TestServerNode() (int64, error) {
+	a.appendLog("[TestNode] Clicked - Checking configuration...")
+	host := a.ruleManager.GetServerHost()
+	auth := a.ruleManager.GetServerAuth()
+	if host == "" || auth == "" {
+		a.appendLog("[TestNode] Error: Server host or auth NOT configured. Please click 'Save' first.")
+		return 0, fmt.Errorf("Server node NOT configured")
+	}
+
+	a.appendLog("[TestNode] Config OK. Host: " + host)
+
+	// 处理 host 格式，防止重复拼接协议头
+	cleanHost := strings.TrimSpace(host)
+	if !strings.HasPrefix(cleanHost, "http://") && !strings.HasPrefix(cleanHost, "https://") {
+		cleanHost = "https://" + cleanHost
+	}
+	cleanHost = strings.TrimSuffix(cleanHost, "/")
+
+	// 构造测试目标
+	testTarget := "https://www.google.com/generate_204"
+	u, _ := url.Parse(testTarget)
+	
+	workerUrl := fmt.Sprintf("%s/%s/%s%s", cleanHost, auth, u.Host, u.Path)
+	if u.RawQuery != "" {
+		workerUrl += "?" + u.RawQuery
+	}
+
+	client := &http.Client{
+		Timeout: 10 * time.Second,
+		Transport: &http.Transport{
+			TLSClientConfig: &tls.Config{
+				InsecureSkipVerify: true,
+			},
+		},
+	}
+
+	start := time.Now()
+	log.Printf("[TestNode] Testing server node via URL: %s", workerUrl)
+	resp, err := client.Get(workerUrl)
+	if err != nil {
+		log.Printf("[TestNode] HTTP Request failed: %v", err)
+		return 0, err
+	}
+	defer resp.Body.Close()
+
+	duration := time.Since(start).Milliseconds()
+	log.Printf("[TestNode] Server responded with status: %d, latency: %dms", resp.StatusCode, duration)
+
+	// 用户要求：只有返回 200 (或 204) 才视为连通
+	if resp.StatusCode != 200 && resp.StatusCode != 204 {
+		return 0, fmt.Errorf("Server returned non-200 status: %d", resp.StatusCode)
+	}
+
+	return duration, nil
+}
+
 func (a *App) ImportConfig(content string) error {
 	return a.ruleManager.ImportConfig(content)
 }
@@ -900,15 +1075,23 @@ func (a *App) GetSystemProxyStatus() SystemProxyStatus {
 
 func (a *App) EnableSystemProxy() error {
 	a.appendLog("[action] EnableSystemProxy called")
+
+	if !a.proxyServer.IsRunning() {
+		a.appendLog("[action] Proxy not running, starting proxy before enabling system proxy...")
+		if err := a.StartProxy(); err != nil {
+			a.appendLog("[error] EnableSystemProxy failed to auto-start proxy: " + err.Error())
+			return err
+		}
+	}
+
 	addr := a.proxyServer.GetListenAddr()
 	var port int
 	fmt.Sscanf(addr, "127.0.0.1:%d", &port)
 	if port == 0 {
 		port = 8080
 	}
-	if err := a.waitForProxyListen(addr, 1200*time.Millisecond); err != nil {
-		a.appendLog("[error] EnableSystemProxy blocked: proxy not listening on " + addr)
-		return fmt.Errorf("proxy is not listening on %s", addr)
+	if err := a.waitForProxyListen(addr, 500*time.Millisecond); err != nil {
+		a.appendLog("[warn] EnableSystemProxy probe timeout (expected if already running): " + err.Error())
 	}
 	err := sysproxy.EnableSystemProxy(port)
 	if err != nil {
@@ -940,13 +1123,13 @@ func (a *App) waitForProxyListen(addr string, timeout time.Duration) error {
 	deadline := time.Now().Add(timeout)
 	var lastErr error
 	for time.Now().Before(deadline) {
-		conn, err := net.DialTimeout("tcp", addr, 250*time.Millisecond)
+		conn, err := net.DialTimeout("tcp", addr, 100*time.Millisecond) // Faster dial
 		if err == nil {
 			_ = conn.Close()
 			return nil
 		}
 		lastErr = err
-		time.Sleep(80 * time.Millisecond)
+		time.Sleep(20 * time.Millisecond) // Faster retry
 	}
 	if lastErr == nil {
 		lastErr = fmt.Errorf("timeout")
@@ -1035,4 +1218,62 @@ func (a *App) FetchECHConfig(domain string, dohURL string) (string, error) {
 	encoded := base64.StdEncoding.EncodeToString(config)
 	a.appendLog(fmt.Sprintf("[success] ECH fetch ok (%d bytes)", len(config)))
 	return encoded, nil
+}
+
+// --- Auto Routing API ---
+
+func (a *App) GetAutoRoutingConfig() proxy.AutoRoutingConfig {
+	return a.ruleManager.GetAutoRoutingConfig()
+}
+
+func (a *App) UpdateAutoRoutingConfig(cfg proxy.AutoRoutingConfig) error {
+	a.appendLog(fmt.Sprintf("[AutoRoute] Updating config: mode=%s", cfg.Mode))
+	err := a.ruleManager.UpdateAutoRoutingConfig(cfg)
+	if err != nil {
+		a.appendLog("[AutoRoute] Config update failed: " + err.Error())
+		return err
+	}
+	// If auto routing is enabled and no GFW list loaded, trigger fetch
+	if cfg.Mode != "" {
+		status := a.ruleManager.GetAutoRoutingStatus()
+		if status.DomainCount == 0 {
+			go func() {
+				a.appendLog("[AutoRoute] No GFW list loaded, fetching...")
+				_, _ = a.RefreshGFWList()
+			}()
+		}
+	}
+	return nil
+}
+
+func (a *App) GetAutoRoutingStatus() proxy.GFWListStatus {
+	return a.ruleManager.GetAutoRoutingStatus()
+}
+
+func (a *App) RefreshGFWList() (int, error) {
+	a.appendLog("[AutoRoute] Refreshing GFW list...")
+	count, err := a.ruleManager.RefreshGFWList()
+	if err != nil {
+		a.appendLog("[AutoRoute] GFW list refresh failed: " + err.Error())
+		return 0, err
+	}
+	a.appendLog(fmt.Sprintf("[AutoRoute] GFW list refreshed: %d domains loaded", count))
+	return count, nil
+}
+
+// Window Management API - Deeper Fix for v3
+func (a *App) WindowMinimise() {
+	if a.mainWindow != nil {
+		a.mainWindow.Minimise()
+	}
+}
+
+func (a *App) WindowToggleMaximise() {
+	if a.mainWindow != nil {
+		a.mainWindow.ToggleMaximise()
+	}
+}
+
+func (a *App) WindowClose() {
+	a.QuitApp()
 }

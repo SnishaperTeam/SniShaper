@@ -55,11 +55,28 @@ This project is built based on **Wails v3**.
 git clone https://github.com/coolapijust/snishaper.git
 cd snishaper
 
-# Build Frontend
-cd frontend && npm run build && cd ..
-# Build Backend
+# Install frontend dependencies
+cd frontend
+npm install
+
+# Build frontend assets
+npm run build
+cd ..
+
+# Build Windows GUI executable
 go build -ldflags="-H windowsgui" -o build/bin/snishaper.exe .
 ```
+
+Recommended toolchain:
+
+- `Go 1.25+`
+- `Node.js 24+`
+- `npm 11+`
+
+Build outputs:
+
+- Frontend assets: `frontend/dist`
+- Executable: `build/bin/snishaper.exe`
 
 ---
 

@@ -1,0 +1,98 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --bg-dark: #ffffff;
+  --bg-card: #f6f8fa;
+  --bg-hover: #eaeef2;
+  --bg-soft: #fdfefe;
+  --border: #d0d7de;
+  --text-primary: #1f2328;
+  --text-secondary: #656d76;
+  --text-muted: #8c959f;
+  --accent: #0969da;
+  --accent-dim: #0550ae;
+  --accent-soft: rgba(9, 105, 218, 0.12);
+  --success: #1a7f37;
+  --danger: #cf222e;
+  --warning: #9a6700;
+  --shadow-soft: 0 16px 40px rgba(15, 23, 42, 0.08);
+  --shadow-card: 0 10px 28px rgba(15, 23, 42, 0.08);
+}
+
+[data-theme="dark"] {
+  --bg-dark: #06090f;
+  --bg-card: rgba(17, 24, 39, 0.88);
+  --bg-hover: rgba(31, 41, 55, 0.5);
+  --bg-soft: #030712;
+  --border: rgba(255, 255, 255, 0.1);
+  --text-primary: #f0f6fc;
+  --text-secondary: #94a3b8;
+  --text-muted: #6e7681;
+  --accent: #2f81f7;
+  --accent-dim: #1d4ed8;
+  --accent-soft: rgba(56, 139, 253, 0.2);
+  --success: #3fb950;
+  --danger: #f85149;
+  --warning: #d29922;
+  --shadow-soft: 0 20px 50px rgba(0, 0, 0, 0.6);
+  --shadow-card: 0 10px 30px rgba(0, 0, 0, 0.4);
+}
+
+@layer base {
+  body {
+    @apply bg-background text-text-primary transition-colors duration-200;
+    font-family: "SF Pro Text", "Segoe UI", -apple-system, BlinkMacSystemFont, sans-serif;
+  }
+}
+
+/* Custom scrollbar matching Clash Verge Rev */
+::-webkit-scrollbar {
+  width: 5px;
+  height: 5px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  @apply bg-gray-400/20 rounded-full hover:bg-gray-400/40 transition-colors;
+}
+
+/* Tailwind-animate shims for transitions without the plugin */
+@layer utilities {
+  .animate-in {
+    animation-duration: var(--animation-duration, 500ms);
+    animation-fill-mode: forwards;
+    animation-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  .fade-in {
+    --tw-enter-opacity: 0;
+    animation-name: enter;
+  }
+
+  .zoom-in {
+    --tw-enter-scale: 0.95;
+    animation-name: enter;
+  }
+
+  .slide-in-from-bottom-4 {
+    --tw-enter-translate-y: 1rem;
+    animation-name: enter;
+  }
+
+  .slide-in-from-top-2 {
+    --tw-enter-translate-y: -0.5rem;
+    animation-name: enter;
+  }
+
+  @keyframes enter {
+    from {
+      opacity: var(--tw-enter-opacity, 1);
+      transform: translate3d(var(--tw-enter-translate-x, 0), var(--tw-enter-translate-y, 0), 0) scale3d(var(--tw-enter-scale, 1), var(--tw-enter-scale, 1), var(--tw-enter-scale, 1));
+    }
+  }
+}

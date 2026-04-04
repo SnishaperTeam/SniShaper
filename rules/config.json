@@ -3187,5 +3187,8 @@
     "warp_enabled": true,
     "warp_socks_port": 1080,
     "warp_endpoint": "162.159.199.2"
+  },
+  "auto_routing": {
+    "mode": ""
   }
 }

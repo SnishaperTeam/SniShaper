@@ -18,7 +18,7 @@ import (
 
 type WarpStatus struct {
 	Running bool   `json:"running"`
-	Account string `json:"account"`
+	Account string `json:"account_id"`
 	Mode    string `json:"mode"`
 	Error   string `json:"error,omitempty"`
 }
@@ -196,6 +196,13 @@ func (m *WarpManager) runLoop(ctx context.Context) {
 }
 
 func (m *WarpManager) execute(ctx context.Context) error {
+	// 1. 端口可用性检查与清理
+	availablePort, err := EnsurePortAvailable(m.SocksPort, []string{"usque", "snishaper"})
+	if err == nil && availablePort != m.SocksPort {
+		m.appendLog(fmt.Sprintf("SOCKS port %d occupied, switched to %d", m.SocksPort, availablePort))
+		m.SocksPort = availablePort
+	}
+
 	args := []string{"socks", "-p", fmt.Sprintf("%d", m.SocksPort)}
 	
 	cmd := exec.CommandContext(ctx, m.BinPath, args...)
@@ -220,7 +227,7 @@ func (m *WarpManager) execute(ctx context.Context) error {
 	go m.copyLog(stdout)
 	go m.copyLog(stderr)
 
-	err := cmd.Wait()
+	err = cmd.Wait()
 	if err != nil {
 		return fmt.Errorf("exit: %v", err)
 	}
@@ -312,6 +319,17 @@ func (m *WarpManager) GetStatus() WarpStatus {
 		}
 		if err := json.Unmarshal(data, &cfg); err == nil {
 			status.Account = cfg.ID
+		} else {
+			m.appendLog(fmt.Sprintf("[debug] Failed to unmarshal warp config: %v", err))
+		}
+	} else {
+		// 仅在运行中且非初次尝试时记录调试信息，避免干扰
+		if m.running && !os.IsNotExist(err) {
+			m.appendLog(fmt.Sprintf("[debug] Failed to read warp config at %s: %v", configPath, err))
+		}
+		// 如果文件不存在，也记录一下路径（用于诊断）
+		if os.IsNotExist(err) && m.running {
+			m.appendLog(fmt.Sprintf("[diag] Warp config.json NOT found at expected path: %s", configPath))
 		}
 	}
 

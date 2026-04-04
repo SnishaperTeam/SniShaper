@@ -55,11 +55,28 @@
 git clone https://github.com/coolapijust/snishaper.git
 cd snishaper
 
-# 构建前端
-cd frontend && npm run build && cd ..
-# 构建后端
+# 安装前端依赖
+cd frontend
+npm install
+
+# 构建前端静态资源
+npm run build
+cd ..
+
+# 构建 Windows GUI 可执行文件
 go build -ldflags="-H windowsgui" -o build/bin/snishaper.exe .
 ```
+
+开发环境建议：
+
+- `Go 1.25+`
+- `Node.js 24+`
+- `npm 11+`
+
+构建产物：
+
+- 前端资源位于 `frontend/dist`
+- 可执行文件位于 `build/bin/snishaper.exe`
 
 ---
 
