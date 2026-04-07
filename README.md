@@ -68,6 +68,8 @@ cd ..
 go build -ldflags="-H windowsgui" -o build/bin/snishaper.exe .
 ```
 
+`snishaper.syso` 已随仓库维护，`go build` 时会自动嵌入 Windows 图标与版本信息，无需额外执行资源打包步骤。
+
 开发环境建议：
 
 - `Go 1.25+`

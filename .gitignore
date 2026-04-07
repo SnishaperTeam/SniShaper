@@ -5,6 +5,7 @@ build/bin/
 *.dll
 *.msi
 *.syso
+!snishaper.syso
 
 # Go cache / temp
 .gocache/
@@ -55,5 +56,13 @@ snishaper.zip
 mitmverify.exe
 mitmverify-report.json
 cmd/
+cmd/h3check/
+cmd/quic-poc/
+WinDivert.dll
+WinDivert64.sys
+WinDivert32.sys
+WinDivert*.sys
 scripts/
 wiki_repo/
+
+snishaper

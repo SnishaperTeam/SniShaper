@@ -22,7 +22,7 @@ const (
 	AutoRoutingServerFallback AutoRoutingMode = "server"  // + Server fallback
 )
 
-// AutoRoutingConfig is persisted in config.json.
+// AutoRoutingConfig is persisted in settings.json.
 type AutoRoutingConfig struct {
 	Mode       AutoRoutingMode `json:"mode"`
 	GFWListURL string          `json:"gfwlist_url,omitempty"`
@@ -179,11 +179,11 @@ func (ar *AutoRouter) GetConfig() AutoRoutingConfig {
 
 // GFWListStatus is returned to the frontend.
 type GFWListStatus struct {
-	Enabled    bool   `json:"enabled"`
-	Mode       string `json:"mode"`
-	DomainCount int   `json:"domain_count"`
-	LastUpdate string `json:"last_update"`
-	GFWListURL string `json:"gfwlist_url"`
+	Enabled     bool   `json:"enabled"`
+	Mode        string `json:"mode"`
+	DomainCount int    `json:"domain_count"`
+	LastUpdate  string `json:"last_update"`
+	GFWListURL  string `json:"gfwlist_url"`
 }
 
 func (ar *AutoRouter) GetStatus() GFWListStatus {

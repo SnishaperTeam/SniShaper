@@ -1,9 +1,15 @@
 // @ts-ignore
 import * as app from '../../bindings/snishaper/app.js';
-import { Events } from '@wailsio/runtime';
+import { Call, Events } from '@wailsio/runtime';
 
 export const EventsOn = (eventName: string, callback: (data: any) => void) =>
     Events.On(eventName, (event) => callback(event.data));
+export const GetAutoStart = () => Call.ByName('main.App.GetAutoStart');
+export const SetAutoStart = (enabled: boolean) => Call.ByName('main.App.SetAutoStart', enabled);
+export const GetShowMainWindowOnAutoStart = () => Call.ByName('main.App.GetShowMainWindowOnAutoStart');
+export const SetShowMainWindowOnAutoStart = (enabled: boolean) => Call.ByName('main.App.SetShowMainWindowOnAutoStart', enabled);
+export const GetAutoEnableProxyOnAutoStart = () => Call.ByName('main.App.GetAutoEnableProxyOnAutoStart');
+export const SetAutoEnableProxyOnAutoStart = (enabled: boolean) => Call.ByName('main.App.SetAutoEnableProxyOnAutoStart', enabled);
 export const {
     AddSiteGroup,
     AddUpstream,
@@ -26,6 +32,7 @@ export const {
     GetCloudflareIPStats,
     GetECHProfiles,
     GetInstalledCerts,
+    IsLogCaptureEnabled,
     GetListenPort,
     GetProxyDiagnostics,
     GetProxyMode,
@@ -53,8 +60,10 @@ export const {
     SetCloseToTray,
     SetListenPort,
     SetProxyMode,
+    StartLogCapture,
     StartProxy,
     StartWarp,
+    StopLogCapture,
     StopProxy,
     StopWarp,
     TriggerCFHealthCheck,

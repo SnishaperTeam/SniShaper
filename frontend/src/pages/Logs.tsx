@@ -2,15 +2,19 @@ import React, { useState, useEffect, useRef } from 'react';
 import { 
   FileText, 
   Trash2, 
-  Download, 
   Pause, 
   Play, 
   Search,
-  AlertCircle,
-  Info,
-  AlertTriangle
+  ChevronsUp,
+  Radio
 } from 'lucide-react';
-import { GetRecentLogs, ClearLogs } from '../api/bindings';
+import {
+  ClearLogs,
+  GetRecentLogs,
+  IsLogCaptureEnabled,
+  StartLogCapture,
+  StopLogCapture
+} from '../api/bindings';
 
 const LogLine: React.FC<{ line: string }> = ({ line }) => {
   const isError = /error|failed|panic/i.test(line);
@@ -43,32 +47,73 @@ const LogLine: React.FC<{ line: string }> = ({ line }) => {
 
 const Logs: React.FC = () => {
   const [lines, setLines] = useState<string[]>([]);
+  const [captureEnabled, setCaptureEnabled] = useState(false);
   const [isPaused, setIsPaused] = useState(false);
+  const [isTogglingCapture, setIsTogglingCapture] = useState(false);
   const [search, setSearch] = useState('');
   const scrollRef = useRef<HTMLDivElement>(null);
 
-  useEffect(() => {
-    if (isPaused) return;
+  const fetchLogs = async () => {
+    const text = await GetRecentLogs(400);
+    const newLines = text ? text.split('\n').filter(Boolean) : [];
+    setLines(newLines);
+  };
 
-    const fetchLogs = async () => {
-      const text = await GetRecentLogs(400);
-      if (text) {
-        const newLines = text.split('\n').filter(Boolean);
-        setLines(newLines);
+  useEffect(() => {
+    let mounted = true;
+
+    const init = async () => {
+      const enabled = await IsLogCaptureEnabled();
+      if (!mounted) return;
+      setCaptureEnabled(enabled);
+      if (enabled) {
+        await fetchLogs();
       }
     };
 
-    fetchLogs(); // Initial fetch
-    const interval = setInterval(fetchLogs, 1500); // More frequent updates
+    void init();
+
+    return () => {
+      mounted = false;
+      void StopLogCapture();
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!captureEnabled || isPaused) return;
+
+    void fetchLogs();
+    const interval = setInterval(() => {
+      void fetchLogs();
+    }, 1500);
 
     return () => clearInterval(interval);
-  }, [isPaused]);
+  }, [captureEnabled, isPaused]);
 
   useEffect(() => {
     if (!isPaused && scrollRef.current) {
         scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
   }, [lines, isPaused]);
+
+  const handleToggleCapture = async () => {
+    if (isTogglingCapture) return;
+
+    setIsTogglingCapture(true);
+    try {
+      if (captureEnabled) {
+        await StopLogCapture();
+        setCaptureEnabled(false);
+      } else {
+        await StartLogCapture();
+        setCaptureEnabled(true);
+        setIsPaused(false);
+        await fetchLogs();
+      }
+    } finally {
+      setIsTogglingCapture(false);
+    }
+  };
 
   const filteredLines = lines.filter(l => l.toLowerCase().includes(search.toLowerCase()));
 
@@ -77,22 +122,45 @@ const Logs: React.FC = () => {
     setLines([]);
   };
 
+  const handleScrollTop = () => {
+    if (scrollRef.current) {
+      scrollRef.current.scrollTop = 0;
+    }
+  };
+
   return (
     <div className="h-full flex flex-col p-6 animate-in fade-in duration-500 overflow-hidden">
       <header className="flex justify-between items-end mb-6 shrink-0">
         <div>
            <h1 className="text-3xl font-black tracking-tighter">系统日志</h1>
-           <p className="text-text-muted mt-1 text-sm font-medium">诊断接口与后端运行轨迹</p>
         </div>
         <div className="flex gap-2">
             <button 
-                onClick={() => setIsPaused(!isPaused)}
+                onClick={handleToggleCapture}
+                disabled={isTogglingCapture}
                 className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all ${
-                    isPaused ? "bg-accent text-white" : "bg-background-hover text-text-secondary hover:text-accent"
+                    captureEnabled ? "bg-danger text-white" : "bg-accent text-white"
                 }`}
             >
+                <Radio size={14} />
+                {captureEnabled ? "停止捕捉" : "捕捉日志"}
+            </button>
+            <button 
+                onClick={() => setIsPaused(!isPaused)}
+                disabled={!captureEnabled}
+                className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all ${
+                    isPaused ? "bg-accent text-white" : "bg-background-hover text-text-secondary hover:text-accent"
+                } ${!captureEnabled ? "opacity-50 cursor-not-allowed" : ""}`}
+            >
                 {isPaused ? <Play size={14} /> : <Pause size={14} />}
-                {isPaused ? "继续渲染" : "暂停渲染"}
+                {isPaused ? "继续刷新" : "暂停刷新"}
+            </button>
+            <button
+                onClick={handleScrollTop}
+                className="flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold bg-background-hover text-text-secondary hover:text-accent transition-all"
+            >
+                <ChevronsUp size={14} />
+                回到顶部
             </button>
             <button 
                 onClick={handleClear}
@@ -120,7 +188,15 @@ const Logs: React.FC = () => {
         className="flex-1 bg-background-card border border-border rounded-2xl overflow-hidden shadow-inner flex flex-col"
       >
         <div className="flex-1 overflow-y-auto overflow-x-hidden">
-            {filteredLines.length === 0 ? (
+            {!captureEnabled ? (
+                <div className="h-full flex flex-col items-center justify-center text-text-muted opacity-60 px-8 text-center">
+                    <Radio size={42} strokeWidth={1.5} />
+                    <span className="text-xs mt-4 font-black uppercase tracking-[0.2em]">Capture Disabled</span>
+                    <p className="mt-3 text-xs leading-relaxed max-w-md">
+                      日志采集默认关闭。点击右上角“捕捉日志”后，页面会开始临时收集并自动滚动到最新日志。
+                    </p>
+                </div>
+            ) : filteredLines.length === 0 ? (
                 <div className="h-full flex flex-col items-center justify-center text-text-muted opacity-40">
                     <FileText size={48} strokeWidth={1} />
                     <span className="text-xs mt-4 font-black uppercase tracking-[0.2em]">No logs collected</span>
@@ -132,12 +208,15 @@ const Logs: React.FC = () => {
         
         <div className="px-6 py-2 bg-background-hover/50 border-t border-border flex justify-between items-center shrink-0">
              <div className="flex gap-4 text-[9px] font-black uppercase tracking-widest text-text-muted">
-                <div className="flex items-center gap-1"><div className="w-1.5 h-1.5 bg-accent rounded-full animate-pulse" /> SYSTEM READY</div>
+                <div className="flex items-center gap-1">
+                  <div className={`w-1.5 h-1.5 rounded-full ${captureEnabled ? "bg-success animate-pulse" : "bg-text-muted/40"}`} />
+                  {captureEnabled ? "CAPTURE ON" : "CAPTURE OFF"}
+                </div>
                 <div>BUFFER: {lines.length} LINES</div>
              </div>
-             {isPaused && (
+             {captureEnabled && isPaused && (
                 <div className="text-[9px] font-black text-accent bg-accent/10 px-2 py-0.5 rounded-full animate-bounce">
-                    BUFFERING PAUSED
+                    REFRESH PAUSED
                 </div>
              )}
         </div>

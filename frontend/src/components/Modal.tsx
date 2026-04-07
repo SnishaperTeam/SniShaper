@@ -52,16 +52,16 @@ const Modal: React.FC<ModalProps> = ({
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       {/* Backdrop */}
       <div 
-        className="absolute inset-0 z-0 bg-background/65 animate-in fade-in duration-300"
+        className="absolute inset-0 z-0 bg-background/80 backdrop-blur-sm animate-in fade-in duration-300"
         onClick={onClose}
       />
       
       {/* Modal Content */}
       <div className={cn(
-        "relative z-10 w-full max-h-[85vh] bg-background-card border border-border rounded-2xl shadow-2xl flex flex-col overflow-hidden animate-in fade-in duration-300",
+        "relative z-10 w-full max-h-[85vh] bg-background-card border border-border rounded-2xl shadow-2xl backdrop-blur-xl flex flex-col overflow-hidden animate-in fade-in duration-300",
         maxWidth
       )}>
-        <div className="px-6 py-4 border-b border-border flex justify-between items-start shrink-0 bg-background-soft/30">
+        <div className="px-6 py-4 border-b border-border flex justify-between items-start shrink-0 bg-background-card">
           <div>
             <h3 className="text-xl font-black tracking-tight">{title}</h3>
             {subtitle && <p className="text-xs text-text-muted mt-1 font-medium">{subtitle}</p>}
@@ -79,7 +79,7 @@ const Modal: React.FC<ModalProps> = ({
         </div>
 
         {footer && (
-          <div className="px-6 py-4 border-t border-border bg-background-soft/30 flex justify-end gap-3 shrink-0">
+          <div className="px-6 py-4 border-t border-border bg-background-card flex justify-end gap-3 shrink-0">
             {footer}
           </div>
         )}

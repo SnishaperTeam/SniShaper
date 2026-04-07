@@ -10,6 +10,9 @@ import (
 //go:embed all:frontend/dist
 var assets embed.FS
 
+//go:embed build/appicon.png
+var trayIcon []byte
+
 func main() {
 	app := NewApp()
 
@@ -35,6 +38,9 @@ func main() {
 
 	// Create Tray
 	tray := wailsApp.SystemTray.New()
+	tray.SetIcon(trayIcon)
+	tray.SetDarkModeIcon(trayIcon)
+	tray.SetTooltip("SniShaper")
 	app.systemTray = tray
 
 	// Define Tray Menu
@@ -44,7 +50,11 @@ func main() {
 	})
 	trayMenu.AddSeparator()
 
-	app.proxyItemV3 = trayMenu.AddCheckbox("代理运行", app.IsProxyRunning())
+	proxyLabel := "代理: 关"
+	if app.IsProxyRunning() {
+		proxyLabel = "代理: 开"
+	}
+	app.proxyItemV3 = trayMenu.AddCheckbox(proxyLabel, app.IsProxyRunning())
 	app.proxyItemV3.OnClick(func(ctx *application.Context) {
 		app.runSafeAsync("tray proxy toggle", func() {
 			if app.IsProxyRunning() {
@@ -75,7 +85,11 @@ func main() {
 		})
 	})
 
-	app.warpItemV3 = trayMenu.AddCheckbox("Warp 开启", app.GetWarpStatus().Running)
+	warpLabel := "Warp: 关"
+	if app.GetWarpStatus().Running {
+		warpLabel = "Warp: 开"
+	}
+	app.warpItemV3 = trayMenu.AddCheckbox(warpLabel, app.GetWarpStatus().Running)
 	app.warpItemV3.OnClick(func(ctx *application.Context) {
 		app.runSafeAsync("tray warp toggle", func() {
 			status := app.GetWarpStatus()
@@ -103,6 +117,7 @@ func main() {
 		Height:           768,
 		URL:              "/",
 		Frameless:        true,
+		Hidden:           app.ShouldStartHidden(),
 		BackgroundColour: application.NewRGB(27, 38, 54),
 	})
 	tray.OnClick(func() {

@@ -8,6 +8,9 @@
   --bg-hover: #eaeef2;
   --bg-soft: #fdfefe;
   --border: #d0d7de;
+  --border-strong: rgba(208, 215, 222, 0.9);
+  --border-soft: rgba(208, 215, 222, 0.62);
+  --border-divider: rgba(208, 215, 222, 0.48);
   --text-primary: #1f2328;
   --text-secondary: #656d76;
   --text-muted: #8c959f;
@@ -26,7 +29,10 @@
   --bg-card: rgba(17, 24, 39, 0.88);
   --bg-hover: rgba(31, 41, 55, 0.5);
   --bg-soft: #030712;
-  --border: rgba(255, 255, 255, 0.1);
+  --border: rgba(41, 52, 70, 0.88);
+  --border-strong: rgba(54, 68, 91, 0.72);
+  --border-soft: rgba(45, 58, 79, 0.56);
+  --border-divider: rgba(117, 133, 159, 0.18);
   --text-primary: #f0f6fc;
   --text-secondary: #94a3b8;
   --text-muted: #6e7681;
@@ -40,10 +46,56 @@
   --shadow-card: 0 10px 30px rgba(0, 0, 0, 0.4);
 }
 
+[data-theme="dark"] :is(div, section, article).bg-background-card.border {
+  border-color: transparent;
+  box-shadow:
+    inset 0 0 0 1px var(--border-soft),
+    var(--shadow-card);
+}
+
+[data-theme="dark"] :is(input, textarea, select).border-border,
+[data-theme="dark"] button.border-border,
+[data-theme="dark"] .border.border-border.bg-background-soft,
+[data-theme="dark"] .border.border-border.bg-background-hover,
+[data-theme="dark"] .border.border-border.bg-background-card {
+  border-color: transparent;
+  box-shadow: inset 0 0 0 1px var(--border-soft);
+}
+
+[data-theme="dark"] [class*="border-border/"] {
+  border-color: var(--border-divider) !important;
+}
+
+[data-theme="dark"] [class*="divide-border/"] > :not([hidden]) ~ :not([hidden]) {
+  border-color: var(--border-divider) !important;
+}
+
+[data-theme="dark"] [class*="bg-background"][class*="border-border"]:not(.bg-background-card):not(.bg-background-soft):not(.bg-background-hover) {
+  border-color: var(--border-soft);
+}
+
+[data-theme="dark"] [class*="border-r"][class*="border-border"],
+[data-theme="dark"] [class*="border-l"][class*="border-border"],
+[data-theme="dark"] [class*="border-t"][class*="border-border"],
+[data-theme="dark"] [class*="border-b"][class*="border-border"] {
+  border-color: var(--border-divider);
+}
+
 @layer base {
   body {
     @apply bg-background text-text-primary transition-colors duration-200;
     font-family: "SF Pro Text", "Segoe UI", -apple-system, BlinkMacSystemFont, sans-serif;
+  }
+
+  input[type="number"]::-webkit-outer-spin-button,
+  input[type="number"]::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+  }
+
+  input[type="number"] {
+    -moz-appearance: textfield;
+    appearance: textfield;
   }
 }
 

@@ -68,6 +68,8 @@ cd ..
 go build -ldflags="-H windowsgui" -o build/bin/snishaper.exe .
 ```
 
+`snishaper.syso` is maintained in the repository, so `go build` will automatically embed the Windows icon and version metadata without an extra resource-packaging step.
+
 Recommended toolchain:
 
 - `Go 1.25+`

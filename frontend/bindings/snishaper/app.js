@@ -211,6 +211,13 @@ export function GetRecentLogs(limit) {
 }
 
 /**
+ * @returns {$CancellablePromise<boolean>}
+ */
+export function IsLogCaptureEnabled() {
+    return $Call.ByName("main.App.IsLogCaptureEnabled");
+}
+
+/**
  * @returns {$CancellablePromise<{ [_ in string]?: string }>}
  */
 export function GetServerConfig() {
@@ -400,8 +407,22 @@ export function StartProxy() {
 /**
  * @returns {$CancellablePromise<void>}
  */
+export function StartLogCapture() {
+    return $Call.ByName("main.App.StartLogCapture");
+}
+
+/**
+ * @returns {$CancellablePromise<void>}
+ */
 export function StartWarp() {
     return $Call.ByID(1947332473);
+}
+
+/**
+ * @returns {$CancellablePromise<void>}
+ */
+export function StopLogCapture() {
+    return $Call.ByName("main.App.StopLogCapture");
 }
 
 /**

@@ -87,7 +87,7 @@ const Routing: React.FC = () => {
     <div className="p-6 max-w-5xl mx-auto space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
 
       {/* Real-time Flow Canvas (Clash Verge connection-like) */}
-      <div className="bg-background-card border border-border rounded-2xl overflow-hidden shadow-sm flex flex-col h-[220px]">
+      <div className="bg-background-card border border-border rounded-2xl overflow-hidden shadow-sm flex flex-col h-[340px]">
         <div className="px-6 py-4 border-b border-border bg-background-soft/30 flex justify-between items-center">
             <div className="flex items-center gap-2 text-text-secondary font-bold text-xs uppercase tracking-widest">
                 <Activity size={14} className="text-success animate-pulse" />
@@ -167,18 +167,6 @@ const Routing: React.FC = () => {
                         Update List
                     </button>
                 </div>
-                
-                <div className="space-y-2 border-t border-border/50 pt-4">
-                    <label className="text-[11px] font-black text-text-muted uppercase tracking-widest px-1">自定义规则源 URL</label>
-                    <input 
-                        type="text" 
-                        value={config.gfwlist_url}
-                        onChange={(e) => setConfig({...config, gfwlist_url: e.target.value})}
-                        placeholder="https://raw.githubusercontent.com/..."
-                        className="w-full bg-background-soft border border-border px-4 py-2.5 rounded-xl text-sm focus:ring-2 focus:ring-accent outline-none transition-all font-mono"
-                    />
-                </div>
-
                 <button 
                     onClick={handleSave}
                     className="w-full py-3 bg-accent text-white rounded-2xl font-black shadow-lg shadow-accent/20 hover:scale-[1.01] active:scale-[0.99] transition-all"

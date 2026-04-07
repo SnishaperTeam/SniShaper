@@ -1,15 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import { NavLink } from 'react-router-dom';
+import logoUrl from '../assets/logo.svg';
 import { 
   LayoutDashboard, 
   ShieldCheck, 
   Activity, 
   FileText, 
   Settings, 
-  Zap, 
   Sun, 
   Moon,
-  CloudLightning,
   Workflow,
   Globe,
   ArrowDown,
@@ -69,14 +68,16 @@ const Sidebar: React.FC<SidebarProps> = ({ theme, toggleTheme }) => {
     <aside 
       className="w-[180px] h-full flex flex-col bg-background-card border-r border-border py-6 px-2 shadow-xl z-20 select-none overflow-hidden"
     >
-      <div className="flex flex-col gap-8 mb-8 items-center">
+      <div className="flex flex-col gap-6 mb-8 items-center">
         <div className="flex items-center">
-            <div className="flex flex-col items-center gap-2">
-                <div className="w-10 h-10 rounded-xl bg-accent flex items-center justify-center text-white shadow-lg shadow-accent/40 shrink-0">
-                    <Zap size={22} fill="white" />
-                </div>
-                <span className="font-extrabold text-[11px] tracking-[0.2em] uppercase text-text-secondary">SniShaper</span>
-            </div>
+          <div className="flex flex-col items-center gap-3">
+            <img
+              src={logoUrl}
+              alt="SniShaper logo"
+              className="w-14 h-14 object-contain drop-shadow-[0_10px_20px_rgba(33,150,243,0.22)]"
+            />
+            <span className="font-extrabold text-[11px] tracking-[0.2em] uppercase text-text-secondary">SniShaper</span>
+          </div>
         </div>
       </div>
 
@@ -147,8 +148,9 @@ const Sidebar: React.FC<SidebarProps> = ({ theme, toggleTheme }) => {
         </div>
 
         <button 
+          type="button"
           onClick={toggleTheme}
-          className="w-full flex items-center justify-center py-2.5 rounded-xl bg-background-hover border border-border text-text-secondary hover:text-accent transition-all"
+          className="w-full flex items-center justify-center py-2.5 rounded-xl bg-background-hover border border-border text-text-secondary hover:text-accent transition-all outline-none focus:outline-none focus-visible:outline-none focus-visible:border-accent/40 focus-visible:ring-2 focus-visible:ring-accent/30"
         >
           {theme === 'light' ? <Moon size={18} /> : <Sun size={18} />}
         </button>

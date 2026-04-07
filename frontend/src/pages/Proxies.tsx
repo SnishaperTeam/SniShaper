@@ -68,18 +68,22 @@ const Proxies: React.FC = () => {
   const [editingProfile, setEditingProfile] = useState<any>(null);
 
   const loadData = async () => {
-    const [w, s, e] = await Promise.all([
+    const [w, e] = await Promise.all([
       GetWarpStatus(),
-      GetServerConfig(),
       GetECHProfiles()
     ]);
     setWarpStatus(w || { running: false, account_id: '' });
-    setServerConfig({ host: s.host || '', auth: s.auth || '' });
     setEchProfiles(e || []);
+  };
+
+  const loadServerConfig = async () => {
+    const s = await GetServerConfig();
+    setServerConfig({ host: s.host || '', auth: s.auth || '' });
   };
 
   useEffect(() => {
     loadData();
+    loadServerConfig();
     const timer = setInterval(loadData, 3000);
     return () => clearInterval(timer);
   }, []);
@@ -109,15 +113,14 @@ const Proxies: React.FC = () => {
 
   const handleSaveServer = async () => {
     await UpdateServerConfig(serverConfig.host, serverConfig.auth);
-    // Notify user
+    await loadServerConfig();
   };
 
   return (
     <div className="p-6 max-w-5xl mx-auto space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
       <header className="flex justify-between items-end">
         <div>
-           <h1 className="text-3xl font-black tracking-tighter">服务管理</h1>
-           <p className="text-text-muted mt-1 text-sm font-medium">配置并监控 Warp、Server 节点及 ECH 证书</p>
+           <h1 className="text-3xl font-black tracking-tighter">代理</h1>
         </div>
       </header>
 

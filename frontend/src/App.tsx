@@ -54,11 +54,9 @@ const App: React.FC = () => {
         <main className="flex-1 min-w-0 bg-background-soft/30 backdrop-blur-sm relative flex flex-col">
           <header className="h-10 shrink-0 border-b border-border/60 bg-background/70 backdrop-blur-md flex items-center justify-between pl-4 pr-3">
             <div
-              className="flex-1 h-full flex items-center text-[12px] font-medium tracking-[0.18em] uppercase text-text-secondary"
+              className="flex-1 h-full"
               style={{ "--wails-draggable": "drag" } as React.CSSProperties}
-            >
-              SniShaper
-            </div>
+            />
             <WindowControls />
           </header>
 

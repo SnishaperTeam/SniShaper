@@ -152,8 +152,9 @@ const Dashboard: React.FC = () => {
       await InstallCA();
       // Wait a bit for system to process
       await new Promise(r => setTimeout(r, 2000));
-      await refresh();
-      if (caStatus.Installed) {
+      const ca = await GetCAInstallStatus();
+      setCaStatus(ca || { Installed: false });
+      if (ca?.Installed) {
         setShowCertModal(false);
       }
     } catch (err) {
@@ -164,11 +165,10 @@ const Dashboard: React.FC = () => {
   };
 
   return (
-    <div className="p-6 max-w-5xl mx-auto space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-700">
-      <div className="flex justify-between items-end mb-4">
+    <div className="px-6 pt-10 pb-6 max-w-5xl mx-auto space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-700">
+      <div className="flex justify-between items-end mb-6">
         <div>
-          <h1 className="text-3xl font-black tracking-tighter">概览</h1>
-          <p className="text-text-muted mt-1 text-sm font-medium">配置代理核心与系统状态</p>
+          <h1 className="text-3xl font-black tracking-tighter">主页</h1>
         </div>
         <div className="flex gap-3">
           <button
@@ -243,7 +243,7 @@ const Dashboard: React.FC = () => {
 
         <DashboardCard title="证书状态" icon={<ShieldCheck size={20} />}>
           <div className="space-y-3">
-            <div className={`flex items-center gap-2 p-2.5 rounded-2xl border ${caStatus.Installed ? "bg-success/5 border-success/20 text-success" : "bg-danger/5 border-danger/20 text-danger"}`}>
+            <div className={`flex items-center gap-2 p-2.5 rounded-2xl border border-transparent ${caStatus.Installed ? "bg-success/10 text-success shadow-[inset_0_0_0_1px_rgba(63,185,80,0.24)]" : "bg-danger/10 text-danger shadow-[inset_0_0_0_1px_rgba(248,81,73,0.22)]"}`}>
               {caStatus.Installed ? <ShieldCheck size={14} /> : <ShieldAlert size={14} />}
               <span className="text-xs font-bold truncate">
                 {caStatus.Installed ? "根证书已安装" : "未安装根证书"}
@@ -260,7 +260,7 @@ const Dashboard: React.FC = () => {
 
         <DashboardCard title="连接信息" icon={<ShieldCheck size={20} />} className="lg:col-span-1">
           <div className="space-y-3">
-            <div className="flex items-center gap-2 p-2.5 bg-accent/5 border border-accent/20 rounded-2xl">
+            <div className="flex items-center gap-2 p-2.5 bg-accent/10 border border-transparent rounded-2xl shadow-[inset_0_0_0_1px_rgba(47,129,247,0.24)]">
               <Zap size={14} className="text-accent" />
               <span className="text-sm font-bold text-accent truncate">127.0.0.1:{port}</span>
             </div>

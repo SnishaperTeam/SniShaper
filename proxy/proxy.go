@@ -64,20 +64,24 @@ type ProxyServer struct {
 }
 
 type RuleManager struct {
-	rules              []Rule
-	siteGroups         []SiteGroup
-	upstreams          []Upstream
-	configPath         string
-	cloudflareConfig   CloudflareConfig
-	closeToTray        bool
-	serverHost         string
-	serverAuth         string
-	listenPort         string
-	echProfiles        []ECHProfile
-	autoRouter         *AutoRouter
-	autoRoutingConfig  AutoRoutingConfig
-	mu                 sync.RWMutex
-	routeEventCallback func(domain, mode string)
+	rules                      []Rule
+	siteGroups                 []SiteGroup
+	upstreams                  []Upstream
+	settingsPath               string
+	rulesPath                  string
+	cloudflareConfig           CloudflareConfig
+	closeToTray                bool
+	autoStart                  bool
+	showMainOnAutoStart        bool
+	autoEnableProxyOnAutoStart bool
+	serverHost                 string
+	serverAuth                 string
+	listenPort                 string
+	echProfiles                []ECHProfile
+	autoRouter                 *AutoRouter
+	autoRoutingConfig          AutoRoutingConfig
+	mu                         sync.RWMutex
+	routeEventCallback         func(domain, mode string)
 }
 
 func (r *RuleManager) SetRouteEventCallback(cb func(domain, mode string)) {
@@ -131,16 +135,22 @@ type ECHProfile struct {
 	AutoUpdate      bool   `json:"auto_update,omitempty"`
 }
 
-type Config struct {
-	ListenPort       string            `json:"listen_port"`
-	ServerHost       string            `json:"server_host,omitempty"`
-	ServerAuth       string            `json:"server_auth,omitempty"`
-	CloseToTray      *bool             `json:"close_to_tray,omitempty"`
-	SiteGroups       []SiteGroup       `json:"site_groups"`
-	Upstreams        []Upstream        `json:"upstreams"`
-	ECHProfiles      []ECHProfile      `json:"ech_profiles,omitempty"`
-	CloudflareConfig CloudflareConfig  `json:"cloudflare_config"`
-	AutoRouting      AutoRoutingConfig `json:"auto_routing,omitempty"`
+type SettingsConfig struct {
+	ListenPort                 string            `json:"listen_port"`
+	ServerHost                 string            `json:"server_host,omitempty"`
+	ServerAuth                 string            `json:"server_auth,omitempty"`
+	CloseToTray                *bool             `json:"close_to_tray,omitempty"`
+	AutoStart                  *bool             `json:"auto_start,omitempty"`
+	ShowMainWindowOnAutoStart  *bool             `json:"show_main_window_on_auto_start,omitempty"`
+	AutoEnableProxyOnAutoStart *bool             `json:"auto_enable_proxy_on_auto_start,omitempty"`
+	CloudflareConfig           CloudflareConfig  `json:"cloudflare_config"`
+	AutoRouting                AutoRoutingConfig `json:"auto_routing,omitempty"`
+}
+
+type RulesConfig struct {
+	SiteGroups  []SiteGroup  `json:"site_groups"`
+	Upstreams   []Upstream   `json:"upstreams"`
+	ECHProfiles []ECHProfile `json:"ech_profiles,omitempty"`
 }
 
 type CloudflareConfig struct {
@@ -867,7 +877,7 @@ func NewProxyServer(addr string) *ProxyServer {
 		dohResolver: NewDoHResolver(""),
 		cfPool:      NewCloudflarePool([]string{}),
 	}
-	p.rules = NewRuleManager("")
+	p.rules = NewRuleManager("", "")
 	return p
 }
 
@@ -1819,11 +1829,13 @@ func (p *ProxyServer) GetDiagnostics() (int64, int64, int64, []string) {
 	return 0, 0, 0, nil
 }
 
-func NewRuleManager(configPath string) *RuleManager {
+func NewRuleManager(settingsPath, rulesPath string) *RuleManager {
 	return &RuleManager{
-		configPath:  configPath,
-		rules:       []Rule{},
-		closeToTray: true,
+		settingsPath:        settingsPath,
+		rulesPath:           rulesPath,
+		rules:               []Rule{},
+		closeToTray:         true,
+		showMainOnAutoStart: true,
 	}
 }
 
@@ -1890,36 +1902,18 @@ func migrateLegacyECHRules(siteGroups []SiteGroup, profiles *[]ECHProfile) bool 
 }
 
 func (rm *RuleManager) LoadConfig() error {
-	data, err := os.ReadFile(rm.configPath)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return rm.saveDefaultConfig()
-		}
+	if err := rm.loadSettingsConfig(); err != nil {
+		return err
+	}
+	if err := rm.loadRulesConfig(); err != nil {
 		return err
 	}
 
-	var config Config
-	if err := json.Unmarshal(data, &config); err != nil {
-		return err
-	}
-
-	rm.siteGroups = config.SiteGroups
 	for i := range rm.siteGroups {
 		rm.siteGroups[i].DNSMode = normalizeDNSMode(rm.siteGroups[i].DNSMode)
 	}
-	rm.upstreams = config.Upstreams
 	if rm.upstreams == nil {
 		rm.upstreams = []Upstream{}
-	}
-	rm.cloudflareConfig = config.CloudflareConfig
-	rm.serverHost = config.ServerHost
-	rm.serverAuth = config.ServerAuth
-	rm.listenPort = config.ListenPort
-	rm.echProfiles = config.ECHProfiles
-	rm.autoRoutingConfig = config.AutoRouting
-	rm.closeToTray = true
-	if config.CloseToTray != nil {
-		rm.closeToTray = *config.CloseToTray
 	}
 	if rm.echProfiles == nil {
 		rm.echProfiles = []ECHProfile{}
@@ -1927,15 +1921,7 @@ func (rm *RuleManager) LoadConfig() error {
 	for i := range rm.echProfiles {
 		normalizeECHProfile(&rm.echProfiles[i])
 	}
-	if rm.listenPort == "" {
-		rm.listenPort = "8080"
-	}
-	if rm.cloudflareConfig.WarpEndpoint == "" {
-		rm.cloudflareConfig.WarpEndpoint = "162.159.199.2"
-	}
-	if rm.cloudflareConfig.WarpSocksPort == 0 {
-		rm.cloudflareConfig.WarpSocksPort = 1080
-	}
+	rm.applySettingsDefaults()
 
 	// Sync Cloudflare Config if ProxyServer is linked
 	// Note: In current architecture, RuleManager doesn't have a back-pointer to ProxyServer.
@@ -1958,7 +1944,7 @@ func (rm *RuleManager) LoadConfig() error {
 
 	rm.buildRules()
 	if migrated {
-		if err := rm.saveConfig(); err != nil {
+		if err := rm.saveRulesConfig(); err != nil {
 			log.Printf("[Config] migrate website field failed: %v", err)
 		} else {
 			log.Printf("[Config] migrated website field for existing site groups")
@@ -1967,13 +1953,92 @@ func (rm *RuleManager) LoadConfig() error {
 	return nil
 }
 
-func (rm *RuleManager) saveDefaultConfig() error {
+func (rm *RuleManager) applySettingsDefaults() {
+	if rm.listenPort == "" {
+		rm.listenPort = "8080"
+	}
+	if rm.cloudflareConfig.WarpEndpoint == "" {
+		rm.cloudflareConfig.WarpEndpoint = "162.159.199.2"
+	}
+	if rm.cloudflareConfig.WarpSocksPort == 0 {
+		rm.cloudflareConfig.WarpSocksPort = 1080
+	}
+}
+
+func (rm *RuleManager) loadSettingsConfig() error {
+	data, err := os.ReadFile(rm.settingsPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return rm.saveDefaultSettingsConfig()
+		}
+		return err
+	}
+
+	var config SettingsConfig
+	if err := json.Unmarshal(data, &config); err != nil {
+		return err
+	}
+
+	rm.cloudflareConfig = config.CloudflareConfig
+	rm.serverHost = config.ServerHost
+	rm.serverAuth = config.ServerAuth
+	rm.listenPort = config.ListenPort
+	rm.autoRoutingConfig = config.AutoRouting
+	rm.closeToTray = true
+	rm.autoStart = false
+	rm.showMainOnAutoStart = true
+	rm.autoEnableProxyOnAutoStart = false
+	if config.CloseToTray != nil {
+		rm.closeToTray = *config.CloseToTray
+	}
+	if config.AutoStart != nil {
+		rm.autoStart = *config.AutoStart
+	}
+	if config.ShowMainWindowOnAutoStart != nil {
+		rm.showMainOnAutoStart = *config.ShowMainWindowOnAutoStart
+	}
+	if config.AutoEnableProxyOnAutoStart != nil {
+		rm.autoEnableProxyOnAutoStart = *config.AutoEnableProxyOnAutoStart
+	}
+	rm.applySettingsDefaults()
+	return nil
+}
+
+func (rm *RuleManager) loadRulesConfig() error {
+	data, err := os.ReadFile(rm.rulesPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return rm.saveDefaultRulesConfig()
+		}
+		return err
+	}
+
+	var config RulesConfig
+	if err := json.Unmarshal(data, &config); err != nil {
+		return err
+	}
+
+	rm.siteGroups = config.SiteGroups
+	rm.upstreams = config.Upstreams
+	rm.echProfiles = config.ECHProfiles
+	return nil
+}
+
+func (rm *RuleManager) saveDefaultSettingsConfig() error {
+	rm.closeToTray = true
+	rm.autoStart = false
+	rm.showMainOnAutoStart = true
+	rm.autoEnableProxyOnAutoStart = false
+	rm.applySettingsDefaults()
+	return rm.saveSettingsConfig()
+}
+
+func (rm *RuleManager) saveDefaultRulesConfig() error {
 	rm.siteGroups = []SiteGroup{}
 	rm.upstreams = []Upstream{}
 	rm.echProfiles = []ECHProfile{}
 	rm.buildRules()
-
-	return rm.saveConfig()
+	return rm.saveRulesConfig()
 }
 
 func (rm *RuleManager) buildRules() {
@@ -2096,31 +2161,10 @@ func (rm *RuleManager) SetListenPort(port string) {
 func (rm *RuleManager) SaveConfig() error {
 	rm.mu.RLock()
 	defer rm.mu.RUnlock()
-	if rm.listenPort == "" {
-		rm.listenPort = "8080"
-	}
-	closeToTray := rm.closeToTray
-	config := Config{
-		ListenPort:       rm.listenPort,
-		ServerHost:       rm.serverHost,
-		ServerAuth:       rm.serverAuth,
-		CloseToTray:      &closeToTray,
-		SiteGroups:       rm.siteGroups,
-		Upstreams:        rm.upstreams,
-		ECHProfiles:      rm.echProfiles,
-		CloudflareConfig: rm.cloudflareConfig,
-	}
-
-	data, err := json.MarshalIndent(config, "", "  ")
-	if err != nil {
+	if err := rm.saveSettingsConfig(); err != nil {
 		return err
 	}
-
-	if err := os.MkdirAll(filepath.Dir(rm.configPath), 0755); err != nil {
-		return err
-	}
-
-	return os.WriteFile(rm.configPath, data, 0644)
+	return rm.saveRulesConfig()
 }
 
 func (rm *RuleManager) UpdateServerConfig(host, auth string) error {
@@ -2128,7 +2172,7 @@ func (rm *RuleManager) UpdateServerConfig(host, auth string) error {
 	rm.serverHost = host
 	rm.serverAuth = auth
 	rm.mu.Unlock()
-	return rm.saveConfig()
+	return rm.saveSettingsConfig()
 }
 
 func (rm *RuleManager) GetCloudflareConfig() CloudflareConfig {
@@ -2147,14 +2191,53 @@ func (rm *RuleManager) SetCloseToTray(enabled bool) error {
 	rm.mu.Lock()
 	rm.closeToTray = enabled
 	rm.mu.Unlock()
-	return rm.saveConfig()
+	return rm.saveSettingsConfig()
+}
+
+func (rm *RuleManager) GetAutoStart() bool {
+	rm.mu.RLock()
+	defer rm.mu.RUnlock()
+	return rm.autoStart
+}
+
+func (rm *RuleManager) SetAutoStart(enabled bool) error {
+	rm.mu.Lock()
+	rm.autoStart = enabled
+	rm.mu.Unlock()
+	return rm.saveSettingsConfig()
+}
+
+func (rm *RuleManager) GetShowMainWindowOnAutoStart() bool {
+	rm.mu.RLock()
+	defer rm.mu.RUnlock()
+	return rm.showMainOnAutoStart
+}
+
+func (rm *RuleManager) SetShowMainWindowOnAutoStart(enabled bool) error {
+	rm.mu.Lock()
+	rm.showMainOnAutoStart = enabled
+	rm.mu.Unlock()
+	return rm.saveSettingsConfig()
+}
+
+func (rm *RuleManager) GetAutoEnableProxyOnAutoStart() bool {
+	rm.mu.RLock()
+	defer rm.mu.RUnlock()
+	return rm.autoEnableProxyOnAutoStart
+}
+
+func (rm *RuleManager) SetAutoEnableProxyOnAutoStart(enabled bool) error {
+	rm.mu.Lock()
+	rm.autoEnableProxyOnAutoStart = enabled
+	rm.mu.Unlock()
+	return rm.saveSettingsConfig()
 }
 
 func (rm *RuleManager) UpdateCloudflareConfig(cfg CloudflareConfig) error {
 	rm.mu.Lock()
 	rm.cloudflareConfig = cfg
 	rm.mu.Unlock()
-	return rm.saveConfig()
+	return rm.saveSettingsConfig()
 }
 
 func (rm *RuleManager) AddSiteGroup(sg SiteGroup) error {
@@ -2165,7 +2248,7 @@ func (rm *RuleManager) AddSiteGroup(sg SiteGroup) error {
 	sg.Website = strings.TrimSpace(sg.Website)
 	rm.siteGroups = append(rm.siteGroups, sg)
 	rm.buildRules()
-	return rm.saveConfig()
+	return rm.saveRulesConfig()
 }
 
 func (rm *RuleManager) UpdateSiteGroup(sg SiteGroup) error {
@@ -2180,7 +2263,7 @@ func (rm *RuleManager) UpdateSiteGroup(sg SiteGroup) error {
 		}
 	}
 	rm.buildRules()
-	return rm.saveConfig()
+	return rm.saveRulesConfig()
 }
 
 func (rm *RuleManager) DeleteSiteGroup(id string) error {
@@ -2194,7 +2277,7 @@ func (rm *RuleManager) DeleteSiteGroup(id string) error {
 		}
 	}
 	rm.buildRules()
-	return rm.saveConfig()
+	return rm.saveRulesConfig()
 }
 
 func (rm *RuleManager) GetUpstreams() []Upstream {
@@ -2209,7 +2292,7 @@ func (rm *RuleManager) AddUpstream(u Upstream) error {
 
 	u.ID = generateID()
 	rm.upstreams = append(rm.upstreams, u)
-	return rm.saveConfig()
+	return rm.saveRulesConfig()
 }
 
 func (rm *RuleManager) UpdateUpstream(u Upstream) error {
@@ -2222,7 +2305,7 @@ func (rm *RuleManager) UpdateUpstream(u Upstream) error {
 			break
 		}
 	}
-	return rm.saveConfig()
+	return rm.saveRulesConfig()
 }
 
 func (rm *RuleManager) DeleteUpstream(id string) error {
@@ -2235,24 +2318,35 @@ func (rm *RuleManager) DeleteUpstream(id string) error {
 			break
 		}
 	}
-	return rm.saveConfig()
+	return rm.saveRulesConfig()
 }
 
-func (rm *RuleManager) saveConfig() error {
-	if rm.listenPort == "" {
-		rm.listenPort = "8080"
+func (rm *RuleManager) saveSettingsConfig() error {
+	listenPort := rm.listenPort
+	if listenPort == "" {
+		listenPort = "8080"
 	}
 	closeToTray := rm.closeToTray
-	config := Config{
-		ListenPort:       rm.listenPort,
-		ServerHost:       rm.serverHost,
-		ServerAuth:       rm.serverAuth,
-		CloseToTray:      &closeToTray,
-		SiteGroups:       rm.siteGroups,
-		Upstreams:        rm.upstreams,
-		ECHProfiles:      rm.echProfiles,
-		CloudflareConfig: rm.cloudflareConfig,
-		AutoRouting:      rm.autoRoutingConfig,
+	autoStart := rm.autoStart
+	showMainOnAutoStart := rm.showMainOnAutoStart
+	autoEnableProxyOnAutoStart := rm.autoEnableProxyOnAutoStart
+	cloudflareConfig := rm.cloudflareConfig
+	if cloudflareConfig.WarpEndpoint == "" {
+		cloudflareConfig.WarpEndpoint = "162.159.199.2"
+	}
+	if cloudflareConfig.WarpSocksPort == 0 {
+		cloudflareConfig.WarpSocksPort = 1080
+	}
+	config := SettingsConfig{
+		ListenPort:                 listenPort,
+		ServerHost:                 rm.serverHost,
+		ServerAuth:                 rm.serverAuth,
+		CloseToTray:                &closeToTray,
+		AutoStart:                  &autoStart,
+		ShowMainWindowOnAutoStart:  &showMainOnAutoStart,
+		AutoEnableProxyOnAutoStart: &autoEnableProxyOnAutoStart,
+		CloudflareConfig:           cloudflareConfig,
+		AutoRouting:                rm.autoRoutingConfig,
 	}
 
 	data, err := json.MarshalIndent(config, "", "  ")
@@ -2260,11 +2354,30 @@ func (rm *RuleManager) saveConfig() error {
 		return err
 	}
 
-	if err := os.MkdirAll(filepath.Dir(rm.configPath), 0755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(rm.settingsPath), 0755); err != nil {
 		return err
 	}
 
-	return os.WriteFile(rm.configPath, data, 0644)
+	return os.WriteFile(rm.settingsPath, data, 0644)
+}
+
+func (rm *RuleManager) saveRulesConfig() error {
+	config := RulesConfig{
+		SiteGroups:  rm.siteGroups,
+		Upstreams:   rm.upstreams,
+		ECHProfiles: rm.echProfiles,
+	}
+
+	data, err := json.MarshalIndent(config, "", "  ")
+	if err != nil {
+		return err
+	}
+
+	if err := os.MkdirAll(filepath.Dir(rm.rulesPath), 0755); err != nil {
+		return err
+	}
+
+	return os.WriteFile(rm.rulesPath, data, 0644)
 }
 
 func (rm *RuleManager) GetECHProfiles() []ECHProfile {
@@ -2297,7 +2410,7 @@ func (rm *RuleManager) UpsertECHProfile(p ECHProfile) error {
 			rm.echProfiles = append(rm.echProfiles, p)
 		}
 	}
-	return rm.saveConfig()
+	return rm.saveRulesConfig()
 }
 
 func (rm *RuleManager) DeleteECHProfile(id string) error {
@@ -2310,7 +2423,7 @@ func (rm *RuleManager) DeleteECHProfile(id string) error {
 			break
 		}
 	}
-	return rm.saveConfig()
+	return rm.saveRulesConfig()
 }
 
 func generateID() string {
@@ -2929,7 +3042,7 @@ func (rm *RuleManager) UpdateAutoRoutingConfig(cfg AutoRoutingConfig) error {
 		rm.autoRouter.UpdateConfig(cfg)
 	}
 	rm.mu.Unlock()
-	return rm.saveConfig()
+	return rm.saveSettingsConfig()
 }
 
 func (rm *RuleManager) GetAutoRouter() *AutoRouter {
@@ -2944,7 +3057,7 @@ func (rm *RuleManager) InitAutoRouter(dohResolver *DoHResolver) {
 	rm.autoRouter = NewAutoRouter(rm.autoRoutingConfig, dohResolver)
 
 	// Try loading cached GFW list
-	cachePath := gfwListCachePath(rm.configPath)
+	cachePath := gfwListCachePath(rm.settingsPath)
 	if count, err := rm.autoRouter.GetGFWList().LoadFromFile(cachePath); err == nil {
 		log.Printf("[AutoRoute] Loaded %d domains from cache: %s", count, cachePath)
 	} else {
@@ -2956,7 +3069,7 @@ func (rm *RuleManager) RefreshGFWList() (int, error) {
 	rm.mu.RLock()
 	ar := rm.autoRouter
 	cfg := rm.autoRoutingConfig
-	configPath := rm.configPath
+	settingsPath := rm.settingsPath
 	rm.mu.RUnlock()
 
 	if ar == nil {
@@ -2974,7 +3087,7 @@ func (rm *RuleManager) RefreshGFWList() (int, error) {
 	}
 
 	// Save to local cache
-	cachePath := gfwListCachePath(configPath)
+	cachePath := gfwListCachePath(settingsPath)
 	if saveErr := ar.GetGFWList().SaveToFile(cachePath); saveErr != nil {
 		log.Printf("[AutoRoute] Failed to save GFW list cache: %v", saveErr)
 	}
@@ -2987,7 +3100,7 @@ func (rm *RuleManager) RefreshGFWList() (int, error) {
 		rm.autoRouter.UpdateConfig(cfg)
 	}
 	rm.mu.Unlock()
-	_ = rm.saveConfig()
+	_ = rm.saveSettingsConfig()
 
 	return count, nil
 }

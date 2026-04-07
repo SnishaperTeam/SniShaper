@@ -8,8 +8,8 @@ import (
 	"crypto/sha1"
 	"crypto/x509"
 	"crypto/x509/pkix"
-	"encoding/json"
 	"encoding/hex"
+	"encoding/json"
 	"encoding/pem"
 	"fmt"
 	"math/big"
@@ -27,10 +27,10 @@ type CertManager struct {
 	certMu  sync.RWMutex
 	caPath  string
 	keyPath string
-	
+
 	// Cache for CA install status to avoid expensive PowerShell calls
-	lastStatus  CAInstallStatus
-	lastCheck   time.Time
+	lastStatus CAInstallStatus
+	lastCheck  time.Time
 }
 
 func NewCertManager(caPath, keyPath string) *CertManager {
@@ -268,10 +268,7 @@ func (cm *CertManager) InstallCA() error {
 		return fmt.Errorf("failed to install CA certificate: %w", err)
 	}
 
-	// Invalidate cache
-	cm.certMu.Lock()
-	cm.lastCheck = time.Time{}
-	cm.certMu.Unlock()
+	cm.invalidateInstallStatusCache()
 
 	fmt.Println("[Cert] CA certificate installed successfully to CurrentUser Root store")
 	return nil
@@ -438,15 +435,24 @@ func (cm *CertManager) UninstallCertificate(thumbprint string) error {
 	args = append(args, "-delstore", storeName, certThumbprint)
 
 	if strings.EqualFold(storeLocation, "LocalMachine") {
-		return runElevatedCommand("certutil", args...)
+		if err := runElevatedCommand("certutil", args...); err != nil {
+			return err
+		}
+		cm.invalidateInstallStatusCache()
+		return nil
 	}
 
-	// Invalidate cache
+	if err := runHiddenCommand("certutil", args...); err != nil {
+		return err
+	}
+	cm.invalidateInstallStatusCache()
+	return nil
+}
+
+func (cm *CertManager) invalidateInstallStatusCache() {
 	cm.certMu.Lock()
 	cm.lastCheck = time.Time{}
 	cm.certMu.Unlock()
-
-	return runHiddenCommand("certutil", args...)
 }
 
 func (cm *CertManager) OpenCertDir() error {
@@ -467,22 +473,22 @@ func (cm *CertManager) GetCACertPEM() string {
 }
 
 func (cm *CertManager) RegenerateCA() error {
-	cm.certMu.Lock()
-	defer cm.certMu.Unlock()
-
 	// 1. Try to clean up existing certificates from system store
 	certs, err := cm.GetInstalledCertificates()
 	if err == nil {
 		for _, c := range certs {
 			fmt.Printf("[Cert] Cleaning up old cert: %s\n", c.Thumbprint)
-			_ = cm.UninstallCertificate(c.Thumbprint)
+			_ = cm.UninstallCertificate(c.Token)
 		}
 	}
 
 	// 2. Generate new CA
+	cm.certMu.Lock()
 	if err := cm.generateCAUnlocked(); err != nil {
+		cm.certMu.Unlock()
 		return err
 	}
+	cm.certMu.Unlock()
 
 	fmt.Println("[Cert] CA certificate regenerated successfully")
 

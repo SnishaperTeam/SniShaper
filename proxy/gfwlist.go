@@ -142,7 +142,7 @@ func (g *GFWList) LastLoadTime() time.Time {
 	return g.lastLoad
 }
 
-// gfwListCachePath returns the path of the local cache file, relative to configPath.
-func gfwListCachePath(configPath string) string {
-	return filepath.Join(filepath.Dir(configPath), gfwListCacheFile)
+// gfwListCachePath returns the path of the local cache file, relative to the settings file.
+func gfwListCachePath(settingsPath string) string {
+	return filepath.Join(filepath.Dir(settingsPath), gfwListCacheFile)
 }

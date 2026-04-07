@@ -27,29 +27,33 @@ import (
 )
 
 type App struct {
-	wailsApp    *application.App
-	mainWindow  *application.WebviewWindow
-	proxyServer *proxy.ProxyServer
-	certManager *cert.CertManager
-	ruleManager *proxy.RuleManager
-	warpMgr     *proxy.WarpManager
-	certPath    string
-	logPath     string
-	logFile     *os.File
-	logBuffer   *ringLogWriter
-	shouldQuit  bool
-	systemTray  *application.SystemTray
-	trayMenuV3  *application.Menu
-	proxyItemV3 *application.MenuItem
-	warpItemV3  *application.MenuItem
+	wailsApp          *application.App
+	mainWindow        *application.WebviewWindow
+	proxyServer       *proxy.ProxyServer
+	certManager       *cert.CertManager
+	ruleManager       *proxy.RuleManager
+	warpMgr           *proxy.WarpManager
+	certPath          string
+	logPath           string
+	logFile           *os.File
+	logBuffer         *ringLogWriter
+	logCaptureMu      sync.RWMutex
+	logCaptureEnabled bool
+	shouldQuit        bool
+	systemTray        *application.SystemTray
+	trayMenuV3        *application.Menu
+	proxyItemV3       *application.MenuItem
+	warpItemV3        *application.MenuItem
 	systemProxyItemV3 *application.MenuItem
-	proxyOpMu   sync.Mutex
-	warpOpMu    sync.Mutex
-	
+	proxyOpMu         sync.Mutex
+	systemProxyOpMu   sync.Mutex
+	warpOpMu          sync.Mutex
+	launchedAtStartup bool
+
 	// Track stats for traffic speed calculations
-	lastIn     int64
-	lastOut    int64
-	lastTick   time.Time
+	lastIn   int64
+	lastOut  int64
+	lastTick time.Time
 }
 
 type ringLogWriter struct {
@@ -57,6 +61,10 @@ type ringLogWriter struct {
 	lines   []string
 	pending string
 	max     int
+}
+
+type gatedLogWriter struct {
+	app *App
 }
 
 func newRingLogWriter(max int) *ringLogWriter {
@@ -141,12 +149,27 @@ func (w *ringLogWriter) AppendLine(line string) {
 	}
 }
 
+func (w *gatedLogWriter) Write(p []byte) (int, error) {
+	if w == nil || w.app == nil || !w.app.IsLogCaptureEnabled() {
+		return len(p), nil
+	}
+	if w.app.logBuffer == nil {
+		w.app.logBuffer = newRingLogWriter(5000)
+	}
+	_, err := w.app.logBuffer.Write(p)
+	if err != nil {
+		return 0, err
+	}
+	return len(p), nil
+}
+
 func NewApp() *App {
 	execPath, _ := os.Executable()
 	execDir := filepath.Dir(execPath)
-	configPath := resolveRuntimeFile(execDir, filepath.Join("rules", "config.json"))
+	settingsPath := resolveRuntimeFile(execDir, filepath.Join("config", "settings.json"))
+	rulesPath := resolveRuntimeFile(execDir, filepath.Join("rules", "config.json"))
 
-	ruleManager := proxy.NewRuleManager(configPath)
+	ruleManager := proxy.NewRuleManager(settingsPath, rulesPath)
 	if err := ruleManager.LoadConfig(); err != nil {
 		log.Printf("[warn] Failed to load config at init: %v", err)
 	}
@@ -157,16 +180,26 @@ func NewApp() *App {
 	}
 
 	return &App{
-		proxyServer: proxy.NewProxyServer("127.0.0.1:" + port),
-		ruleManager: ruleManager,
-		warpMgr:     proxy.NewWarpManager(execDir),
-		certPath:    filepath.Join(execDir, "cert"),
-		logPath:     filepath.Join(execDir, "snishaper.log"),
+		proxyServer:       proxy.NewProxyServer("127.0.0.1:" + port),
+		ruleManager:       ruleManager,
+		warpMgr:           proxy.NewWarpManager(execDir),
+		certPath:          filepath.Join(execDir, "cert"),
+		logPath:           filepath.Join(execDir, "snishaper.log"),
+		launchedAtStartup: hasLaunchArg("--startup"),
 	}
 }
 
 func resolveRuntimeFile(execDir, relativePath string) string {
 	return filepath.Join(execDir, relativePath)
+}
+
+func hasLaunchArg(flag string) bool {
+	for _, arg := range os.Args[1:] {
+		if strings.EqualFold(strings.TrimSpace(arg), flag) {
+			return true
+		}
+	}
+	return false
 }
 
 func (a *App) isManagedSystemProxy(status SystemProxyStatus) bool {
@@ -202,6 +235,9 @@ func (a *App) startupV3() {
 
 	if err := a.ruleManager.LoadConfig(); err != nil {
 		a.appendLog("[startup] Failed to load config: " + err.Error())
+	}
+	if err := a.syncAutoStartRegistration(); err != nil {
+		a.appendLog("[startup] Failed to sync auto-start registration: " + err.Error())
 	}
 
 	a.proxyServer.SetRuleManager(a.ruleManager)
@@ -239,7 +275,12 @@ func (a *App) startupV3() {
 	go func() {
 		a.UpdateTrayMenu()
 
-		if managedProxyRecovered && !a.IsProxyRunning() {
+		if a.ShouldAutoEnableProxyOnAutoStart() {
+			a.appendLog("[startup] Auto-start launch detected, enabling proxy and system proxy...")
+			if err := a.EnableSystemProxy(); err != nil {
+				a.appendLog("[startup] Failed to auto-enable proxy on startup: " + err.Error())
+			}
+		} else if managedProxyRecovered && !a.IsProxyRunning() {
 			a.appendLog("[startup] Recovering proxy core because system proxy is already pointing to SniShaper...")
 			if err := a.StartProxy(); err != nil {
 				a.appendLog("[startup] Failed to recover proxy core: " + err.Error())
@@ -257,29 +298,33 @@ func (a *App) startupV3() {
 		// Start traffic stats pusher (Clash style)
 		go func() {
 			time.Sleep(500 * time.Millisecond) // Give the window time to settle
-			
+
 			a.lastIn, a.lastOut, _ = a.GetStats()
 			a.lastTick = time.Now()
-			
+
 			ticker := time.NewTicker(1 * time.Second)
 			defer ticker.Stop()
-			
+
 			for range ticker.C {
 				if a.mainWindow == nil {
 					continue
 				}
-				
+
 				currentIn, currentOut, _ := a.GetStats()
 				now := time.Now()
 				duration := now.Sub(a.lastTick).Seconds()
-				
+
 				if duration > 0 {
 					downSpeed := float64(currentIn-a.lastIn) / duration
 					upSpeed := float64(currentOut-a.lastOut) / duration
-					
+
 					// Avoid negative values if stats reset
-					if downSpeed < 0 { downSpeed = 0 }
-					if upSpeed < 0 { upSpeed = 0 }
+					if downSpeed < 0 {
+						downSpeed = 0
+					}
+					if upSpeed < 0 {
+						upSpeed = 0
+					}
 
 					// Use InvokeAsync to ensure UI thread safety in Wails v3
 					application.InvokeAsync(func() {
@@ -291,7 +336,7 @@ func (a *App) startupV3() {
 						}
 					})
 				}
-				
+
 				a.lastIn = currentIn
 				a.lastOut = currentOut
 				a.lastTick = now
@@ -355,6 +400,82 @@ func (a *App) SetCloseToTray(enabled bool) error {
 	return a.ruleManager.SetCloseToTray(enabled)
 }
 
+func (a *App) GetAutoStart() bool {
+	if a.ruleManager == nil {
+		return false
+	}
+	return a.ruleManager.GetAutoStart()
+}
+
+func (a *App) SetAutoStart(enabled bool) error {
+	if a.ruleManager == nil {
+		return fmt.Errorf("RuleManager not initialized")
+	}
+	command := a.autoStartCommand()
+	if enabled && command == "" {
+		return fmt.Errorf("failed to resolve executable path")
+	}
+	if err := setAutoStartEnabled(enabled, command); err != nil {
+		return err
+	}
+	return a.ruleManager.SetAutoStart(enabled)
+}
+
+func (a *App) GetShowMainWindowOnAutoStart() bool {
+	if a.ruleManager == nil {
+		return true
+	}
+	return a.ruleManager.GetShowMainWindowOnAutoStart()
+}
+
+func (a *App) SetShowMainWindowOnAutoStart(enabled bool) error {
+	if a.ruleManager == nil {
+		return fmt.Errorf("RuleManager not initialized")
+	}
+	return a.ruleManager.SetShowMainWindowOnAutoStart(enabled)
+}
+
+func (a *App) GetAutoEnableProxyOnAutoStart() bool {
+	if a.ruleManager == nil {
+		return false
+	}
+	return a.ruleManager.GetAutoEnableProxyOnAutoStart()
+}
+
+func (a *App) SetAutoEnableProxyOnAutoStart(enabled bool) error {
+	if a.ruleManager == nil {
+		return fmt.Errorf("RuleManager not initialized")
+	}
+	return a.ruleManager.SetAutoEnableProxyOnAutoStart(enabled)
+}
+
+func (a *App) ShouldStartHidden() bool {
+	return a.launchedAtStartup && !a.GetShowMainWindowOnAutoStart()
+}
+
+func (a *App) ShouldAutoEnableProxyOnAutoStart() bool {
+	return a.launchedAtStartup && a.GetAutoEnableProxyOnAutoStart()
+}
+
+func (a *App) syncAutoStartRegistration() error {
+	if !a.GetAutoStart() {
+		return setAutoStartEnabled(false, "")
+	}
+	command := a.autoStartCommand()
+	if command == "" {
+		return fmt.Errorf("failed to resolve executable path")
+	}
+	return setAutoStartEnabled(true, command)
+}
+
+func (a *App) autoStartCommand() string {
+	execPath, err := os.Executable()
+	if err != nil {
+		return ""
+	}
+	return buildAutoStartCommand(execPath)
+}
+
 func (a *App) UpdateTrayMenu() {
 	proxyRunning := a.proxyServer != nil && a.proxyServer.IsRunning()
 	warpRunning := a.warpMgr != nil && a.warpMgr.GetStatus().Running
@@ -363,9 +484,19 @@ func (a *App) UpdateTrayMenu() {
 	application.InvokeAsync(func() {
 		if a.proxyItemV3 != nil {
 			a.proxyItemV3.SetChecked(proxyRunning)
+			if proxyRunning {
+				a.proxyItemV3.SetLabel("代理: 开")
+			} else {
+				a.proxyItemV3.SetLabel("代理: 关")
+			}
 		}
 		if a.warpItemV3 != nil {
 			a.warpItemV3.SetChecked(warpRunning)
+			if warpRunning {
+				a.warpItemV3.SetLabel("Warp: 开")
+			} else {
+				a.warpItemV3.SetLabel("Warp: 关")
+			}
 		}
 		if a.systemProxyItemV3 != nil {
 			if systemProxyEnabled {
@@ -447,11 +578,13 @@ func (a *App) setupFileLogger() {
 		a.logBuffer = newRingLogWriter(5000)
 	}
 	log.SetFlags(log.LstdFlags | log.Lmicroseconds)
-	log.SetOutput(io.MultiWriter(os.Stdout, a.logBuffer))
-	a.appendLog("[startup] logger configured (in-memory only)")
+	log.SetOutput(io.MultiWriter(os.Stdout, &gatedLogWriter{app: a}))
 }
 
 func (a *App) appendLog(message string) {
+	if !a.IsLogCaptureEnabled() {
+		return
+	}
 	if a.logBuffer == nil {
 		a.logBuffer = newRingLogWriter(5000)
 	}
@@ -494,6 +627,40 @@ func (a *App) ClearLogs() error {
 		a.logBuffer.Clear()
 	}
 	a.setupFileLogger()
+	return nil
+}
+
+func (a *App) IsLogCaptureEnabled() bool {
+	a.logCaptureMu.RLock()
+	defer a.logCaptureMu.RUnlock()
+	return a.logCaptureEnabled
+}
+
+func (a *App) StartLogCapture() error {
+	if a.logBuffer == nil {
+		a.logBuffer = newRingLogWriter(5000)
+	}
+	a.logBuffer.Clear()
+
+	a.logCaptureMu.Lock()
+	alreadyEnabled := a.logCaptureEnabled
+	a.logCaptureEnabled = true
+	a.logCaptureMu.Unlock()
+
+	if !alreadyEnabled {
+		a.appendLog("[logs] capture started")
+	}
+	return nil
+}
+
+func (a *App) StopLogCapture() error {
+	if a.IsLogCaptureEnabled() {
+		a.appendLog("[logs] capture stopping")
+	}
+
+	a.logCaptureMu.Lock()
+	a.logCaptureEnabled = false
+	a.logCaptureMu.Unlock()
 	return nil
 }
 
@@ -542,7 +709,7 @@ func (a *App) StartProxy() error {
 	addr := a.proxyServer.GetListenAddr()
 	if err := a.waitForProxyListen(addr, 2*time.Second); err != nil {
 		_ = a.proxyServer.Stop()
-		a.refreshTrayMenuLater(200*time.Millisecond)
+		a.refreshTrayMenuLater(200 * time.Millisecond)
 		a.appendLog("[error] StartProxy self-check failed: " + err.Error())
 		return fmt.Errorf("proxy started but not listening on %s: %w", addr, err)
 	}
@@ -909,7 +1076,7 @@ func (a *App) StopWarp() error {
 
 	err := a.warpMgr.Stop()
 	a.UpdateTrayMenu()
-	a.refreshTrayMenuLater(300*time.Millisecond)
+	a.refreshTrayMenuLater(300 * time.Millisecond)
 	a.emitFrontendState()
 	return err
 }
@@ -997,7 +1164,7 @@ func (a *App) TestServerNode() (int64, error) {
 	// 构造测试目标
 	testTarget := "https://www.google.com/generate_204"
 	u, _ := url.Parse(testTarget)
-	
+
 	workerUrl := fmt.Sprintf("%s/%s/%s%s", cleanHost, auth, u.Host, u.Path)
 	if u.RawQuery != "" {
 		workerUrl += "?" + u.RawQuery
@@ -1073,6 +1240,41 @@ func (a *App) GetSystemProxyStatus() SystemProxyStatus {
 	}
 }
 
+func (a *App) applySystemProxy(enabled bool, port int) error {
+	a.systemProxyOpMu.Lock()
+	defer a.systemProxyOpMu.Unlock()
+
+	status := a.GetSystemProxyStatus()
+
+	if enabled {
+		expected := fmt.Sprintf("127.0.0.1:%d", port)
+		if status.Enabled && strings.EqualFold(strings.TrimSpace(status.Server), expected) {
+			a.appendLog("[action] EnableSystemProxy skipped: already enabled")
+			a.UpdateTrayMenu()
+			a.emitFrontendState()
+			return nil
+		}
+		if err := sysproxy.EnableSystemProxy(port); err != nil {
+			return err
+		}
+	} else {
+		if !status.Enabled {
+			a.appendLog("[action] DisableSystemProxy skipped: already disabled")
+			a.UpdateTrayMenu()
+			a.emitFrontendState()
+			return nil
+		}
+		if err := sysproxy.DisableSystemProxy(); err != nil {
+			return err
+		}
+	}
+
+	a.UpdateTrayMenu()
+	a.refreshTrayMenuLater(300 * time.Millisecond)
+	a.emitFrontendState()
+	return nil
+}
+
 func (a *App) EnableSystemProxy() error {
 	a.appendLog("[action] EnableSystemProxy called")
 
@@ -1093,28 +1295,22 @@ func (a *App) EnableSystemProxy() error {
 	if err := a.waitForProxyListen(addr, 500*time.Millisecond); err != nil {
 		a.appendLog("[warn] EnableSystemProxy probe timeout (expected if already running): " + err.Error())
 	}
-	err := sysproxy.EnableSystemProxy(port)
+	err := a.applySystemProxy(true, port)
 	if err != nil {
 		a.appendLog("[error] EnableSystemProxy failed: " + err.Error())
 		return err
 	}
-	a.UpdateTrayMenu()
-	a.refreshTrayMenuLater(300 * time.Millisecond)
-	a.emitFrontendState()
 	a.appendLog(fmt.Sprintf("[action] EnableSystemProxy success: 127.0.0.1:%d", port))
 	return nil
 }
 
 func (a *App) DisableSystemProxy() error {
 	a.appendLog("[action] DisableSystemProxy called")
-	err := sysproxy.DisableSystemProxy()
+	err := a.applySystemProxy(false, 0)
 	if err != nil {
 		a.appendLog("[error] DisableSystemProxy failed: " + err.Error())
 		return err
 	}
-	a.UpdateTrayMenu()
-	a.refreshTrayMenuLater(300 * time.Millisecond)
-	a.emitFrontendState()
 	a.appendLog("[action] DisableSystemProxy success")
 	return nil
 }
