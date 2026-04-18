@@ -1,85 +1,89 @@
-// @ts-ignore
-import * as app from '../../bindings/snishaper/app.js';
 import { Call, Events } from '@wailsio/runtime';
 
+const appCall = (name: string, ...args: any[]) => Call.ByName(`main.App.${name}`, ...args);
+
 export const EventsOn = (eventName: string, callback: (data: any) => void) =>
-    Events.On(eventName, (event) => callback(event.data));
-export const GetAutoStart = () => Call.ByName('main.App.GetAutoStart');
-export const SetAutoStart = (enabled: boolean) => Call.ByName('main.App.SetAutoStart', enabled);
-export const GetShowMainWindowOnAutoStart = () => Call.ByName('main.App.GetShowMainWindowOnAutoStart');
-export const SetShowMainWindowOnAutoStart = (enabled: boolean) => Call.ByName('main.App.SetShowMainWindowOnAutoStart', enabled);
-export const GetAutoEnableProxyOnAutoStart = () => Call.ByName('main.App.GetAutoEnableProxyOnAutoStart');
-export const SetAutoEnableProxyOnAutoStart = (enabled: boolean) => Call.ByName('main.App.SetAutoEnableProxyOnAutoStart', enabled);
-export const {
-    AddSiteGroup,
-    AddUpstream,
-    ClearLogs,
-    DeleteECHProfile,
-    DeleteSiteGroup,
-    DeleteUpstream,
-    DisableSystemProxy,
-    EnableSystemProxy,
-    EnrollWarp,
-    ExportCert,
-    ExportConfig,
-    FetchECHConfig,
-    ForceFetchCloudflareIPs,
-    GetCACertPEM,
-    GetCACertPath,
-    GetCAInstallStatus,
-    GetCloseToTray,
-    GetCloudflareConfig,
-    GetCloudflareIPStats,
-    GetECHProfiles,
-    GetInstalledCerts,
-    IsLogCaptureEnabled,
-    GetListenPort,
-    GetProxyDiagnostics,
-    GetProxyMode,
-    GetRecentLogs,
-    GetServerConfig,
-    GetSiteGroups,
-    GetStats,
-    GetSystemProxyStatus,
-    GetUpstreams,
-    GetWarpStatus,
-    Greet,
-    HandleWindowClose,
-    ImportConfig,
-    ImportConfigWithSummary,
-    InstallCA,
-    IsProxyRunning,
-    OpenCAFile,
-    OpenCertDir,
-    ProxySelfCheck,
-    QuitApp,
-    RefreshCloudflareIPPool,
-    RegenerateCert,
-    RegisterWarp,
-    RemoveInvalidCFIPs,
-    SetCloseToTray,
-    SetListenPort,
-    SetProxyMode,
-    StartLogCapture,
-    StartProxy,
-    StartWarp,
-    StopLogCapture,
-    StopProxy,
-    StopWarp,
-    TriggerCFHealthCheck,
-    UninstallCert,
-    UpdateCloudflareConfig,
-    UpdateServerConfig,
-    UpdateSiteGroup,
-    UpdateTrayMenu,
-    UpdateUpstream,
-    UpsertECHProfile,
-    WindowClose,
-    WindowMinimise,
-    WindowToggleMaximise,
-    GetAutoRoutingConfig,
-    UpdateAutoRoutingConfig,
-    GetAutoRoutingStatus,
-    RefreshGFWList,
-    TestServerNode
-} = app;
+  Events.On(eventName, (event) => callback(event.data));
+
+export const GetAutoStart = () => appCall('GetAutoStart');
+export const SetAutoStart = (enabled: boolean) => appCall('SetAutoStart', enabled);
+export const GetShowMainWindowOnAutoStart = () => appCall('GetShowMainWindowOnAutoStart');
+export const SetShowMainWindowOnAutoStart = (enabled: boolean) => appCall('SetShowMainWindowOnAutoStart', enabled);
+export const GetAutoEnableProxyOnAutoStart = () => appCall('GetAutoEnableProxyOnAutoStart');
+export const SetAutoEnableProxyOnAutoStart = (enabled: boolean) => appCall('SetAutoEnableProxyOnAutoStart', enabled);
+export const GetTUNConfig = () => appCall('GetTUNConfig');
+export const UpdateTUNConfig = (cfg: any) => appCall('UpdateTUNConfig', cfg);
+export const GetTUNStatus = () => appCall('GetTUNStatus');
+export const StartTUN = () => appCall('StartTUN');
+export const StopTUN = () => appCall('StopTUN');
+export const AddSiteGroup = (sg: any) => appCall('AddSiteGroup', sg);
+export const AddUpstream = (u: any) => appCall('AddUpstream', u);
+export const ClearLogs = () => appCall('ClearLogs');
+export const DeleteECHProfile = (id: string) => appCall('DeleteECHProfile', id);
+export const DeleteSiteGroup = (id: string) => appCall('DeleteSiteGroup', id);
+export const DeleteUpstream = (id: string) => appCall('DeleteUpstream', id);
+export const DisableSystemProxy = () => appCall('DisableSystemProxy');
+export const EnableSystemProxy = () => appCall('EnableSystemProxy');
+export const EnrollWarp = () => appCall('EnrollWarp');
+export const ExportCert = () => appCall('ExportCert');
+export const ExportConfig = () => appCall('ExportConfig');
+export const FetchECHConfig = (domain: string, dohURL: string) => appCall('FetchECHConfig', domain, dohURL);
+export const ForceFetchCloudflareIPs = () => appCall('ForceFetchCloudflareIPs');
+export const GetCACertPEM = () => appCall('GetCACertPEM');
+export const GetCACertPath = () => appCall('GetCACertPath');
+export const GetCAInstallStatus = () => appCall('GetCAInstallStatus');
+export const GetCloseToTray = () => appCall('GetCloseToTray');
+export const GetCloudflareConfig = () => appCall('GetCloudflareConfig');
+export const GetCloudflareIPStats = () => appCall('GetCloudflareIPStats');
+export const GetECHProfiles = () => appCall('GetECHProfiles');
+export const GetInstalledCerts = () => appCall('GetInstalledCerts');
+export const IsLogCaptureEnabled = () => appCall('IsLogCaptureEnabled');
+export const GetListenPort = () => appCall('GetListenPort');
+export const GetProxyDiagnostics = () => appCall('GetProxyDiagnostics');
+export const GetProxyMode = () => appCall('GetProxyMode');
+export const GetRecentLogs = (limit: number) => appCall('GetRecentLogs', limit);
+export const GetServerConfig = () => appCall('GetServerConfig');
+export const GetSiteGroups = () => appCall('GetSiteGroups');
+export const GetStats = () => appCall('GetStats');
+export const GetSystemProxyStatus = () => appCall('GetSystemProxyStatus');
+export const GetUpstreams = () => appCall('GetUpstreams');
+export const GetWarpStatus = () => appCall('GetWarpStatus');
+export const Greet = (name: string) => appCall('Greet', name);
+export const HandleWindowClose = () => appCall('HandleWindowClose');
+export const ImportConfig = (content: string) => appCall('ImportConfig', content);
+export const ImportConfigWithSummary = (content: string) => appCall('ImportConfigWithSummary', content);
+export const InstallCA = () => appCall('InstallCA');
+export const IsProxyRunning = () => appCall('IsProxyRunning');
+export const OpenCAFile = () => appCall('OpenCAFile');
+export const OpenCertDir = () => appCall('OpenCertDir');
+export const ProxySelfCheck = () => appCall('ProxySelfCheck');
+export const QuitApp = () => appCall('QuitApp');
+export const RefreshCloudflareIPPool = () => appCall('RefreshCloudflareIPPool');
+export const RegenerateCert = () => appCall('RegenerateCert');
+export const RegisterWarp = (deviceName: string) => appCall('RegisterWarp', deviceName);
+export const RemoveInvalidCFIPs = () => appCall('RemoveInvalidCFIPs');
+export const SetCloseToTray = (enabled: boolean) => appCall('SetCloseToTray', enabled);
+export const SetListenPort = (port: number) => appCall('SetListenPort', port);
+export const SetProxyMode = (mode: string) => appCall('SetProxyMode', mode);
+export const StartLogCapture = () => appCall('StartLogCapture');
+export const StartProxy = () => appCall('StartProxy');
+export const StartWarp = () => appCall('StartWarp');
+export const StopLogCapture = () => appCall('StopLogCapture');
+export const StopProxy = () => appCall('StopProxy');
+export const StopWarp = () => appCall('StopWarp');
+export const TriggerCFHealthCheck = () => appCall('TriggerCFHealthCheck');
+export const UninstallCert = (thumbprint: string) => appCall('UninstallCert', thumbprint);
+export const UpdateCloudflareConfig = (cfg: any) => appCall('UpdateCloudflareConfig', cfg);
+export const UpdateServerConfig = (host: string, auth: string) => appCall('UpdateServerConfig', host, auth);
+export const UpdateSiteGroup = (sg: any) => appCall('UpdateSiteGroup', sg);
+export const UpdateTrayMenu = () => appCall('UpdateTrayMenu');
+export const UpdateUpstream = (u: any) => appCall('UpdateUpstream', u);
+export const UpsertECHProfile = (p: any) => appCall('UpsertECHProfile', p);
+export const WindowClose = () => appCall('WindowClose');
+export const WindowMinimise = () => appCall('WindowMinimise');
+export const WindowToggleMaximise = () => appCall('WindowToggleMaximise');
+export const GetAutoRoutingConfig = () => appCall('GetAutoRoutingConfig');
+export const UpdateAutoRoutingConfig = (cfg: any) => appCall('UpdateAutoRoutingConfig', cfg);
+export const GetAutoRoutingStatus = () => appCall('GetAutoRoutingStatus');
+export const RefreshGFWList = () => appCall('RefreshGFWList');
+export const TestServerNode = () => appCall('TestServerNode');

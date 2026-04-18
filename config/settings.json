@@ -1,5 +1,13 @@
 {
   "listen_port": "8080",
+  "tun": {
+    "enabled": false,
+    "stack": "mixed",
+    "mtu": 9000,
+    "dns_hijack": true,
+    "auto_route": true,
+    "strict_route": true
+  },
   "cloudflare_config": {
     "preferred_ips": [
       "104.25.252.161",

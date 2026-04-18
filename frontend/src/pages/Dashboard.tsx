@@ -23,10 +23,15 @@ import {
   IsProxyRunning,
   GetSystemProxyStatus,
   GetListenPort,
+  GetTUNConfig,
+  GetTUNStatus,
   StartProxy,
+  StartTUN,
   StopProxy,
+  StopTUN,
   EnableSystemProxy,
   DisableSystemProxy,
+  UpdateTUNConfig,
   GetStats,
   GetCAInstallStatus,
   OpenCAFile,
@@ -34,6 +39,7 @@ import {
   EventsOn
 } from '../api/bindings';
 import Modal from '../components/Modal';
+import { toast } from '../lib/toast';
 
 const DashboardCard: React.FC<{
   title: string;
@@ -56,12 +62,53 @@ const formatSpeed = (bytes: number) => {
   return `${Math.round(bytes / (1024 * 1024))} MB/s`;
 };
 
+const normalizeTUNStatus = (value: any) => ({
+  supported: Boolean(value?.supported ?? value?.Supported),
+  running: Boolean(value?.running ?? value?.Running),
+  enabled: Boolean(value?.enabled ?? value?.Enabled),
+  stack: String(value?.stack ?? value?.Stack ?? 'gvisor'),
+  driver: String(value?.driver ?? value?.Driver ?? ''),
+  message: String(value?.message ?? value?.Message ?? ''),
+});
+
+const normalizeTUNConfig = (value: any) => ({
+  stack: String(value?.stack ?? value?.Stack ?? 'gvisor'),
+  mtu: Number(value?.mtu ?? value?.MTU ?? 9000),
+  dns_hijack: Boolean(value?.dns_hijack ?? value?.DNSHijack ?? true),
+});
+
+const extractErrorMessage = (err: any): string => {
+  if (!err) return '';
+  if (typeof err === 'string') return err;
+  if (typeof err?.message === 'string' && err.message.trim()) return err.message;
+  if (typeof err?.cause === 'string' && err.cause.trim()) return err.cause;
+  if (typeof err?.cause?.message === 'string' && err.cause.message.trim()) return err.cause.message;
+  try {
+    return JSON.stringify(err);
+  } catch {
+    return String(err);
+  }
+};
+
 const Dashboard: React.FC = () => {
   const [proxyRunning, setProxyRunning] = useState(false);
   const [sysProxyEnabled, setSysProxyEnabled] = useState(false);
   const [proxyMode, setProxyMode] = useState('MITM');
   const [port, setPort] = useState(8080);
   const [isOperating, setIsOperating] = useState(false);
+  const [tunConfig, setTunConfig] = useState<any>({
+    stack: 'gvisor',
+    mtu: 9000,
+    dns_hijack: true
+  });
+  const [tunStatus, setTunStatus] = useState<any>({
+    supported: true,
+    running: false,
+    enabled: false,
+    stack: 'gvisor',
+    message: '正在获取核心状态...'
+  });
+  const [isTUNBusy, setIsTUNBusy] = useState(false);
 
   // Real-time Stats
   const [downSpeed, setDownSpeed] = useState(0);
@@ -74,12 +121,14 @@ const Dashboard: React.FC = () => {
 
   const refresh = async () => {
     try {
-      const [running, sysStatus, mode, p, ca] = await Promise.all([
+      const [running, sysStatus, mode, p, ca, tunCfg, tunState] = await Promise.all([
         IsProxyRunning(),
         GetSystemProxyStatus(),
         GetProxyMode(),
         GetListenPort(),
-        GetCAInstallStatus()
+        GetCAInstallStatus(),
+        GetTUNConfig(),
+        GetTUNStatus()
       ]);
 
       setProxyRunning(running);
@@ -87,14 +136,36 @@ const Dashboard: React.FC = () => {
       setProxyMode(mode.toUpperCase());
       setPort(p);
       setCaStatus(ca || { Installed: false });
+      const normalizedTunConfig = normalizeTUNConfig(tunCfg);
+      const normalizedTunStatus = normalizeTUNStatus(tunState);
 
-      // Auto-show modal if not installed and not shown this session
-      if (ca && !ca.Installed && !sessionStorage.getItem('ca_modal_shown')) {
+      setTunConfig(normalizedTunConfig);
+      setTunStatus(normalizedTunStatus);
+
+      const statusPending = ca?.InstallHelp === '证书状态初始化中' || ca?.InstallHelp === '证书管理器未初始化';
+
+      if (ca?.Installed) {
+        setShowCertModal(false);
+      }
+
+      // Auto-show modal only after certificate state is fully initialized.
+      if (ca && !statusPending && !ca.Installed && !sessionStorage.getItem('ca_modal_shown')) {
         setShowCertModal(true);
         sessionStorage.setItem('ca_modal_shown', 'true');
       }
+
+      return {
+        running,
+        sysStatus,
+        mode,
+        port: p,
+        ca,
+        tunCfg: normalizedTunConfig,
+        tunState: normalizedTunStatus
+      };
     } catch (e) {
       console.error("Dashboard refresh error:", e);
+      return null;
     }
   };
 
@@ -146,6 +217,32 @@ const Dashboard: React.FC = () => {
     }
   };
 
+  const handleToggleTUN = async () => {
+    if (isTUNBusy) return;
+    setIsTUNBusy(true);
+    const nextEnabled = !tunStatus.running;
+    try {
+      if (nextEnabled) {
+        await StartTUN();
+      } else {
+        await StopTUN();
+      }
+      await new Promise(r => setTimeout(r, nextEnabled ? 1200 : 500));
+      const state = await refresh();
+      const running = Boolean(state?.tunState?.running);
+      if (nextEnabled && !running) {
+        toast.error('TUN 未进入运行态', String(state?.tunState?.message || 'TUN 配置已启用，但运行状态仍为关闭。'));
+        return;
+      }
+      toast.success('TUN 状态已更新', nextEnabled ? 'TUN 已进入运行态。' : '已关闭 TUN 路径。');
+    } catch (err) {
+      await refresh();
+      toast.error('TUN 切换失败', extractErrorMessage(err));
+    } finally {
+      setIsTUNBusy(false);
+    }
+  };
+
   const handleInstallCA = async () => {
     setIsInstallingCert(true);
     try {
@@ -193,6 +290,18 @@ const Dashboard: React.FC = () => {
             {isOperating ? <Loader2 size={16} className="animate-spin" /> : <Globe size={16} />}
             系统代理: {sysProxyEnabled ? "开" : "关"}
           </button>
+          <button
+            onClick={handleToggleTUN}
+            disabled={isTUNBusy || !tunStatus.supported}
+            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all border shadow-sm min-w-[118px] justify-center ${
+              tunStatus.running
+                ? "bg-warning text-white border-warning/30 shadow-warning/10"
+                : "bg-background-hover text-text-secondary border-border"
+            } ${(isTUNBusy || !tunStatus.supported) ? "opacity-70 cursor-not-allowed" : ""}`}
+          >
+            {isTUNBusy ? <Loader2 size={16} className="animate-spin" /> : <Globe size={16} />}
+            TUN: {tunStatus.running ? "开" : "关"}
+          </button>
         </div>
       </div>
 
@@ -212,6 +321,12 @@ const Dashboard: React.FC = () => {
             <div className="flex items-center justify-between">
               <span className="text-text-secondary text-sm">监听端口</span>
               <span className="font-bold">{port}</span>
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="text-text-secondary text-sm">TUN 状态</span>
+              <span className={`px-2 py-0.5 rounded-lg text-[11px] font-black uppercase ${tunStatus.running ? "bg-warning/15 text-warning" : "bg-background-hover text-text-secondary"}`}>
+                {tunStatus.running ? "Running" : "Off"}
+              </span>
             </div>
           </div>
         </DashboardCard>

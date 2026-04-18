@@ -14,6 +14,15 @@ var assets embed.FS
 var trayIcon []byte
 
 func main() {
+	if hasLaunchArg("--core") {
+		if err := runCoreMain(); err != nil {
+			log.Fatal(err)
+		}
+		return
+	}
+
+	recoverBrokenSingleInstance("com.snishaper.desktop")
+
 	app := NewApp()
 
 	wailsApp := application.New(application.Options{

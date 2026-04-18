@@ -24,6 +24,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -70,6 +71,7 @@ type RuleManager struct {
 	settingsPath               string
 	rulesPath                  string
 	cloudflareConfig           CloudflareConfig
+	tunConfig                  TUNConfig
 	closeToTray                bool
 	autoStart                  bool
 	showMainOnAutoStart        bool
@@ -82,6 +84,7 @@ type RuleManager struct {
 	autoRoutingConfig          AutoRoutingConfig
 	mu                         sync.RWMutex
 	routeEventCallback         func(domain, mode string)
+	onConfigSaved              func()
 }
 
 func (r *RuleManager) SetRouteEventCallback(cb func(domain, mode string)) {
@@ -96,6 +99,21 @@ func (r *RuleManager) emitRouteEvent(domain, mode string) {
 	r.mu.RUnlock()
 	if cb != nil {
 		cb(domain, mode)
+	}
+}
+ 
+func (r *RuleManager) SetOnConfigSaved(cb func()) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.onConfigSaved = cb
+}
+ 
+// triggerConfigSaved fires the config-saved callback asynchronously.
+// It is always called from methods that already hold rm.mu, so no extra locking is needed.
+func (r *RuleManager) triggerConfigSaved() {
+	cb := r.onConfigSaved
+	if cb != nil {
+		go cb()
 	}
 }
 
@@ -145,6 +163,25 @@ type SettingsConfig struct {
 	AutoEnableProxyOnAutoStart *bool             `json:"auto_enable_proxy_on_auto_start,omitempty"`
 	CloudflareConfig           CloudflareConfig  `json:"cloudflare_config"`
 	AutoRouting                AutoRoutingConfig `json:"auto_routing,omitempty"`
+	TUN                        TUNConfig         `json:"tun,omitempty"`
+}
+
+type TUNConfig struct {
+	Enabled     bool   `json:"enabled"`
+	Stack       string `json:"stack,omitempty"`
+	MTU         int    `json:"mtu,omitempty"`
+	DNSHijack   bool   `json:"dns_hijack,omitempty"`
+	AutoRoute   bool   `json:"auto_route,omitempty"`
+	StrictRoute bool   `json:"strict_route,omitempty"`
+}
+
+type TUNStatus struct {
+	Supported bool   `json:"supported"`
+	Running   bool   `json:"running"`
+	Enabled   bool   `json:"enabled"`
+	Stack     string `json:"stack,omitempty"`
+	Driver    string `json:"driver,omitempty"`
+	Message   string `json:"message,omitempty"`
 }
 
 type RulesConfig struct {
@@ -1816,6 +1853,12 @@ func (p *ProxyServer) GetStats() (int64, int64, int64) {
 	return atomic.LoadInt64(&p.bytesDown), atomic.LoadInt64(&p.bytesUp), 0
 }
 
+func (p *ProxyServer) ClearCertCache() {
+	p.certCacheMu.Lock()
+	defer p.certCacheMu.Unlock()
+	p.certCache = make(map[string]*tls.Certificate)
+}
+
 func (p *ProxyServer) trackAccepted(remote string) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
@@ -1963,6 +2006,34 @@ func (rm *RuleManager) applySettingsDefaults() {
 	if rm.cloudflareConfig.WarpSocksPort == 0 {
 		rm.cloudflareConfig.WarpSocksPort = 1080
 	}
+	rm.tunConfig = normalizeTUNConfig(rm.tunConfig)
+}
+
+func normalizeTUNStack(stack string) string {
+	switch strings.ToLower(strings.TrimSpace(stack)) {
+	case "":
+		return "gvisor"
+	case "mixed":
+		return "mixed"
+	case "system", "gvisor":
+		return strings.ToLower(strings.TrimSpace(stack))
+	default:
+		return "gvisor"
+	}
+}
+
+func normalizeTUNConfig(cfg TUNConfig) TUNConfig {
+	cfg.Stack = normalizeTUNStack(cfg.Stack)
+	if cfg.MTU <= 0 {
+		cfg.MTU = 9000
+	}
+	if runtime.GOOS == "windows" {
+		// Windows StrictRoute only protects the current process.
+		// In a Wails app, WebView2 helper processes can be cut off immediately,
+		// which looks like a flash-crash while the main process is still alive.
+		cfg.StrictRoute = false
+	}
+	return cfg
 }
 
 func (rm *RuleManager) loadSettingsConfig() error {
@@ -1980,6 +2051,7 @@ func (rm *RuleManager) loadSettingsConfig() error {
 	}
 
 	rm.cloudflareConfig = config.CloudflareConfig
+	rm.tunConfig = config.TUN
 	rm.serverHost = config.ServerHost
 	rm.serverAuth = config.ServerAuth
 	rm.listenPort = config.ListenPort
@@ -2181,6 +2253,12 @@ func (rm *RuleManager) GetCloudflareConfig() CloudflareConfig {
 	return rm.cloudflareConfig
 }
 
+func (rm *RuleManager) GetTUNConfig() TUNConfig {
+	rm.mu.RLock()
+	defer rm.mu.RUnlock()
+	return normalizeTUNConfig(rm.tunConfig)
+}
+
 func (rm *RuleManager) GetCloseToTray() bool {
 	rm.mu.RLock()
 	defer rm.mu.RUnlock()
@@ -2236,6 +2314,13 @@ func (rm *RuleManager) SetAutoEnableProxyOnAutoStart(enabled bool) error {
 func (rm *RuleManager) UpdateCloudflareConfig(cfg CloudflareConfig) error {
 	rm.mu.Lock()
 	rm.cloudflareConfig = cfg
+	rm.mu.Unlock()
+	return rm.saveSettingsConfig()
+}
+
+func (rm *RuleManager) UpdateTUNConfig(cfg TUNConfig) error {
+	rm.mu.Lock()
+	rm.tunConfig = normalizeTUNConfig(cfg)
 	rm.mu.Unlock()
 	return rm.saveSettingsConfig()
 }
@@ -2331,6 +2416,7 @@ func (rm *RuleManager) saveSettingsConfig() error {
 	showMainOnAutoStart := rm.showMainOnAutoStart
 	autoEnableProxyOnAutoStart := rm.autoEnableProxyOnAutoStart
 	cloudflareConfig := rm.cloudflareConfig
+	tunConfig := normalizeTUNConfig(rm.tunConfig)
 	if cloudflareConfig.WarpEndpoint == "" {
 		cloudflareConfig.WarpEndpoint = "162.159.199.2"
 	}
@@ -2347,6 +2433,7 @@ func (rm *RuleManager) saveSettingsConfig() error {
 		AutoEnableProxyOnAutoStart: &autoEnableProxyOnAutoStart,
 		CloudflareConfig:           cloudflareConfig,
 		AutoRouting:                rm.autoRoutingConfig,
+		TUN:                        tunConfig,
 	}
 
 	data, err := json.MarshalIndent(config, "", "  ")
@@ -2358,7 +2445,11 @@ func (rm *RuleManager) saveSettingsConfig() error {
 		return err
 	}
 
-	return os.WriteFile(rm.settingsPath, data, 0644)
+	if err := os.WriteFile(rm.settingsPath, data, 0644); err != nil {
+		return err
+	}
+	rm.triggerConfigSaved()
+	return nil
 }
 
 func (rm *RuleManager) saveRulesConfig() error {
@@ -2377,7 +2468,11 @@ func (rm *RuleManager) saveRulesConfig() error {
 		return err
 	}
 
-	return os.WriteFile(rm.rulesPath, data, 0644)
+	if err := os.WriteFile(rm.rulesPath, data, 0644); err != nil {
+		return err
+	}
+	rm.triggerConfigSaved()
+	return nil
 }
 
 func (rm *RuleManager) GetECHProfiles() []ECHProfile {
@@ -3057,7 +3152,7 @@ func (rm *RuleManager) InitAutoRouter(dohResolver *DoHResolver) {
 	rm.autoRouter = NewAutoRouter(rm.autoRoutingConfig, dohResolver)
 
 	// Try loading cached GFW list
-	cachePath := gfwListCachePath(rm.settingsPath)
+	cachePath := gfwListCachePath(rm.rulesPath)
 	if count, err := rm.autoRouter.GetGFWList().LoadFromFile(cachePath); err == nil {
 		log.Printf("[AutoRoute] Loaded %d domains from cache: %s", count, cachePath)
 	} else {
@@ -3069,7 +3164,7 @@ func (rm *RuleManager) RefreshGFWList() (int, error) {
 	rm.mu.RLock()
 	ar := rm.autoRouter
 	cfg := rm.autoRoutingConfig
-	settingsPath := rm.settingsPath
+	rulesPath := rm.rulesPath
 	rm.mu.RUnlock()
 
 	if ar == nil {
@@ -3087,7 +3182,7 @@ func (rm *RuleManager) RefreshGFWList() (int, error) {
 	}
 
 	// Save to local cache
-	cachePath := gfwListCachePath(settingsPath)
+	cachePath := gfwListCachePath(rulesPath)
 	if saveErr := ar.GetGFWList().SaveToFile(cachePath); saveErr != nil {
 		log.Printf("[AutoRoute] Failed to save GFW list cache: %v", saveErr)
 	}

@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/tls"
 	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -34,8 +35,7 @@ type App struct {
 	ruleManager       *proxy.RuleManager
 	warpMgr           *proxy.WarpManager
 	certPath          string
-	logPath           string
-	logFile           *os.File
+	proxyMarkerPath   string
 	logBuffer         *ringLogWriter
 	logCaptureMu      sync.RWMutex
 	logCaptureEnabled bool
@@ -49,6 +49,7 @@ type App struct {
 	systemProxyOpMu   sync.Mutex
 	warpOpMu          sync.Mutex
 	launchedAtStartup bool
+	core              *coreClient
 
 	// Track stats for traffic speed calculations
 	lastIn   int64
@@ -65,6 +66,10 @@ type ringLogWriter struct {
 
 type gatedLogWriter struct {
 	app *App
+}
+
+type managedSystemProxyMarker struct {
+	Server string `json:"server"`
 }
 
 func newRingLogWriter(max int) *ringLogWriter {
@@ -93,7 +98,15 @@ func (w *ringLogWriter) Write(p []byte) (int, error) {
 		}
 		w.lines = append(w.lines, line)
 		if len(w.lines) > w.max {
-			w.lines = w.lines[len(w.lines)-w.max:]
+			// Slicing keeps the underlying array. 
+			// To truly assist GC and shrink cap, we re-allocate if it grows 2x over max.
+			if cap(w.lines) > w.max*2 {
+				newLines := make([]string, w.max)
+				copy(newLines, w.lines[len(w.lines)-w.max:])
+				w.lines = newLines
+			} else {
+				w.lines = w.lines[len(w.lines)-w.max:]
+			}
 		}
 	}
 	return len(p), nil
@@ -184,8 +197,9 @@ func NewApp() *App {
 		ruleManager:       ruleManager,
 		warpMgr:           proxy.NewWarpManager(execDir),
 		certPath:          filepath.Join(execDir, "cert"),
-		logPath:           filepath.Join(execDir, "snishaper.log"),
+		proxyMarkerPath:   filepath.Join(execDir, "config", "system_proxy_owner.json"),
 		launchedAtStartup: hasLaunchArg("--startup"),
+		core:              newCoreClient(),
 	}
 }
 
@@ -206,8 +220,58 @@ func (a *App) isManagedSystemProxy(status SystemProxyStatus) bool {
 	if !status.Enabled {
 		return false
 	}
-	expected := fmt.Sprintf("127.0.0.1:%d", a.GetListenPort())
-	return strings.EqualFold(strings.TrimSpace(status.Server), expected)
+	marker, err := a.loadManagedSystemProxyMarker()
+	if err != nil || marker == nil {
+		return false
+	}
+	return strings.EqualFold(strings.TrimSpace(status.Server), strings.TrimSpace(marker.Server))
+}
+
+func (a *App) loadManagedSystemProxyMarker() (*managedSystemProxyMarker, error) {
+	data, err := os.ReadFile(a.proxyMarkerPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, nil
+		}
+		return nil, err
+	}
+
+	var marker managedSystemProxyMarker
+	if err := json.Unmarshal(data, &marker); err != nil {
+		return nil, err
+	}
+	marker.Server = strings.TrimSpace(marker.Server)
+	if marker.Server == "" {
+		return nil, nil
+	}
+	return &marker, nil
+}
+
+func (a *App) saveManagedSystemProxyMarker(server string) error {
+	server = strings.TrimSpace(server)
+	if server == "" {
+		return fmt.Errorf("managed system proxy marker server is empty")
+	}
+
+	dir := filepath.Dir(a.proxyMarkerPath)
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		return err
+	}
+
+	data, err := json.Marshal(managedSystemProxyMarker{Server: server})
+	if err != nil {
+		return err
+	}
+
+	return os.WriteFile(a.proxyMarkerPath, data, 0644)
+}
+
+func (a *App) clearManagedSystemProxyMarker() error {
+	err := os.Remove(a.proxyMarkerPath)
+	if err != nil && !os.IsNotExist(err) {
+		return err
+	}
+	return nil
 }
 
 func (a *App) ServiceStartup(ctx context.Context, options application.ServiceOptions) error {
@@ -249,6 +313,11 @@ func (a *App) startupV3() {
 
 	// Initialize AutoRouter for automatic routing
 	a.ruleManager.InitAutoRouter(a.proxyServer.GetDoHResolver())
+	a.ruleManager.SetOnConfigSaved(func() {
+		if a.core != nil {
+			a.core.reloadIfRunning()
+		}
+	})
 	a.ruleManager.SetRouteEventCallback(func(domain, mode string) {
 		application.InvokeAsync(func() {
 			if a.mainWindow != nil {
@@ -267,6 +336,19 @@ func (a *App) startupV3() {
 		a.appendLog("[startup] Detected leftover managed system proxy state; will recover proxy core and restore to disabled on exit")
 	} else if err := sysproxy.SaveOriginalProxySettings(); err != nil {
 		a.appendLog("[startup] Failed to save original proxy settings: " + err.Error())
+	}
+	if !managedProxyRecovered {
+		if marker, err := a.loadManagedSystemProxyMarker(); err != nil {
+			a.appendLog("[startup] Failed to read managed system proxy marker: " + err.Error())
+		} else if marker != nil && !strings.EqualFold(strings.TrimSpace(startupProxyStatus.Server), marker.Server) {
+			if err := a.clearManagedSystemProxyMarker(); err != nil {
+				a.appendLog("[startup] Failed to clear stale managed system proxy marker: " + err.Error())
+			}
+		} else if !startupProxyStatus.Enabled && marker != nil {
+			if err := a.clearManagedSystemProxyMarker(); err != nil {
+				a.appendLog("[startup] Failed to clear disabled managed system proxy marker: " + err.Error())
+			}
+		}
 	}
 
 	a.appendLog("[startup] SniShaper started successfully")
@@ -326,6 +408,11 @@ func (a *App) startupV3() {
 						upSpeed = 0
 					}
 
+					var routeEvents []RouteEvent
+					if a.core != nil {
+						routeEvents = a.core.GetRouteEvents()
+					}
+
 					// Use InvokeAsync to ensure UI thread safety in Wails v3
 					application.InvokeAsync(func() {
 						if a.mainWindow != nil {
@@ -333,6 +420,13 @@ func (a *App) startupV3() {
 								"down": downSpeed,
 								"up":   upSpeed,
 							})
+
+							for _, ev := range routeEvents {
+								a.mainWindow.EmitEvent("app:route", map[string]string{
+									"domain": ev.Domain,
+									"mode":   ev.Mode,
+								})
+							}
 						}
 					})
 				}
@@ -477,8 +571,8 @@ func (a *App) autoStartCommand() string {
 }
 
 func (a *App) UpdateTrayMenu() {
-	proxyRunning := a.proxyServer != nil && a.proxyServer.IsRunning()
-	warpRunning := a.warpMgr != nil && a.warpMgr.GetStatus().Running
+	proxyRunning := a.IsProxyRunning()
+	warpRunning := a.GetWarpStatus().Running
 	systemProxyEnabled := a.GetSystemProxyStatus().Enabled
 
 	application.InvokeAsync(func() {
@@ -536,9 +630,10 @@ func (a *App) emitFrontendState() {
 	}
 
 	state := map[string]any{
-		"proxyRunning":       a.proxyServer != nil && a.proxyServer.IsRunning(),
+		"proxyRunning":       a.IsProxyRunning(),
 		"systemProxyEnabled": a.GetSystemProxyStatus().Enabled,
-		"warpRunning":        a.warpMgr != nil && a.warpMgr.GetStatus().Running,
+		"warpRunning":        a.GetWarpStatus().Running,
+		"tunRunning":         a.GetTUNStatus().Running,
 	}
 
 	application.InvokeAsync(func() {
@@ -548,6 +643,10 @@ func (a *App) emitFrontendState() {
 
 func (a *App) shutdown() {
 	a.appendLog("[shutdown] SniShaper shutting down...")
+
+	if a.core != nil {
+		a.core.shutdownIfRunning()
+	}
 
 	if a.proxyServer.IsRunning() {
 		a.appendLog("[shutdown] Stopping proxy server...")
@@ -565,20 +664,19 @@ func (a *App) shutdown() {
 	if err := sysproxy.RestoreOriginalProxySettings(); err != nil {
 		a.appendLog("[shutdown] Failed to restore proxy settings: " + err.Error())
 	}
+	if err := a.clearManagedSystemProxyMarker(); err != nil {
+		a.appendLog("[shutdown] Failed to clear managed system proxy marker: " + err.Error())
+	}
 
 	a.appendLog("[shutdown] SniShaper shutdown complete")
-	if a.logFile != nil {
-		_ = a.logFile.Close()
-		a.logFile = nil
-	}
 }
 
 func (a *App) setupFileLogger() {
 	if a.logBuffer == nil {
-		a.logBuffer = newRingLogWriter(5000)
+		a.logBuffer = newRingLogWriter(500)
 	}
 	log.SetFlags(log.LstdFlags | log.Lmicroseconds)
-	log.SetOutput(io.MultiWriter(os.Stdout, &gatedLogWriter{app: a}))
+	log.SetOutput(newBestEffortMultiWriter(&gatedLogWriter{app: a}, os.Stdout))
 }
 
 func (a *App) appendLog(message string) {
@@ -586,7 +684,7 @@ func (a *App) appendLog(message string) {
 		return
 	}
 	if a.logBuffer == nil {
-		a.logBuffer = newRingLogWriter(5000)
+		a.logBuffer = newRingLogWriter(500)
 	}
 	trimmed := strings.TrimSpace(message)
 	if trimmed == "" {
@@ -605,6 +703,11 @@ func (a *App) appendLog(message string) {
 }
 
 func (a *App) GetRecentLogs(limit int) string {
+	if a.core != nil {
+		if logs := a.core.GetRecentLogs(limit); strings.TrimSpace(logs) != "" {
+			return logs
+		}
+	}
 	if limit <= 0 {
 		limit = 200
 	}
@@ -631,12 +734,28 @@ func (a *App) ClearLogs() error {
 }
 
 func (a *App) IsLogCaptureEnabled() bool {
+	if a.core != nil {
+		if enabled := a.core.IsLogCaptureEnabled(); enabled {
+			a.logCaptureMu.Lock()
+			a.logCaptureEnabled = true
+			a.logCaptureMu.Unlock()
+			return true
+		}
+	}
 	a.logCaptureMu.RLock()
 	defer a.logCaptureMu.RUnlock()
 	return a.logCaptureEnabled
 }
 
 func (a *App) StartLogCapture() error {
+	if a.core != nil {
+		if err := a.core.StartLogCapture(); err == nil {
+			a.logCaptureMu.Lock()
+			a.logCaptureEnabled = true
+			a.logCaptureMu.Unlock()
+			return nil
+		}
+	}
 	if a.logBuffer == nil {
 		a.logBuffer = newRingLogWriter(5000)
 	}
@@ -654,6 +773,9 @@ func (a *App) StartLogCapture() error {
 }
 
 func (a *App) StopLogCapture() error {
+	if a.core != nil {
+		_ = a.core.StopLogCapture()
+	}
 	if a.IsLogCaptureEnabled() {
 		a.appendLog("[logs] capture stopping")
 	}
@@ -669,6 +791,13 @@ func (a *App) Greet(name string) string {
 }
 
 func (a *App) StartProxy() error {
+	if a.core != nil {
+		err := a.core.StartProxy()
+		a.UpdateTrayMenu()
+		a.refreshTrayMenuLater(300*time.Millisecond, time.Second)
+		a.emitFrontendState()
+		return err
+	}
 	a.proxyOpMu.Lock()
 	defer a.proxyOpMu.Unlock()
 
@@ -740,6 +869,16 @@ func (a *App) StartProxy() error {
 }
 
 func (a *App) StopProxy() error {
+	if a.core != nil {
+		err := a.core.StopProxy()
+		if a.GetSystemProxyStatus().Enabled {
+			_ = a.DisableSystemProxy()
+		}
+		a.UpdateTrayMenu()
+		a.refreshTrayMenuLater(300 * time.Millisecond)
+		a.emitFrontendState()
+		return err
+	}
 	a.proxyOpMu.Lock()
 	defer a.proxyOpMu.Unlock()
 
@@ -779,10 +918,16 @@ func (a *App) StopProxy() error {
 }
 
 func (a *App) IsProxyRunning() bool {
+	if a.core != nil {
+		return a.core.IsProxyRunning()
+	}
 	return a.proxyServer.IsRunning()
 }
 
 func (a *App) GetStats() (int64, int64, int64) {
+	if a.core != nil {
+		return a.core.GetStats()
+	}
 	return a.proxyServer.GetStats()
 }
 
@@ -803,11 +948,20 @@ func (a *App) SetListenPort(port int) error {
 		return err
 	}
 	a.ruleManager.SetListenPort(fmt.Sprintf("%d", port))
-	return a.ruleManager.SaveConfig()
+	if err := a.ruleManager.SaveConfig(); err != nil {
+		return err
+	}
+	return nil
 }
 
 func (a *App) SetProxyMode(mode string) error {
 	a.appendLog("[action] SetProxyMode: " + mode)
+	if a.core != nil {
+		if err := a.core.SetProxyMode(mode); err != nil {
+			a.appendLog("[error] SetProxyMode failed: " + err.Error())
+			return err
+		}
+	}
 	err := a.proxyServer.SetMode(mode)
 	if err != nil {
 		a.appendLog("[error] SetProxyMode failed: " + err.Error())
@@ -816,10 +970,101 @@ func (a *App) SetProxyMode(mode string) error {
 }
 
 func (a *App) GetProxyMode() string {
+	if a.core != nil {
+		if mode := a.core.GetProxyMode(); strings.TrimSpace(mode) != "" {
+			return mode
+		}
+	}
 	return a.proxyServer.GetMode()
 }
 
+func (a *App) GetTUNConfig() proxy.TUNConfig {
+	if a.ruleManager == nil {
+		return proxy.TUNConfig{}
+	}
+	return a.ruleManager.GetTUNConfig()
+}
+
+func (a *App) UpdateTUNConfig(cfg proxy.TUNConfig) error {
+	if a.ruleManager == nil {
+		return fmt.Errorf("RuleManager not initialized")
+	}
+	cfg = proxy.TUNConfig{
+		Stack:       cfg.Stack,
+		MTU:         cfg.MTU,
+		DNSHijack:   cfg.DNSHijack,
+		AutoRoute:   cfg.AutoRoute,
+		StrictRoute: cfg.StrictRoute,
+	}
+	if err := a.ruleManager.UpdateTUNConfig(cfg); err != nil {
+		a.appendLog("[error] UpdateTUNConfig failed: " + err.Error())
+		return err
+	}
+	if a.core != nil {
+		a.core.reloadIfRunning()
+	}
+	a.emitFrontendState()
+	a.appendLog(fmt.Sprintf("[action] TUN config updated: stack=%s mtu=%d", cfg.Stack, cfg.MTU))
+	return nil
+}
+
+func (a *App) GetTUNStatus() proxy.TUNStatus {
+	if a.core != nil {
+		return a.core.GetTUNStatus()
+	}
+	return proxy.TUNStatus{}
+}
+
+func (a *App) PreviewTUNFlow(flow proxy.TUNFlow) proxy.TUNFlowPlan {
+	if a.proxyServer == nil {
+		return proxy.TUNFlowPlan{}
+	}
+	return a.proxyServer.PlanTUNFlow(flow)
+}
+
+func (a *App) StartTUN() (err error) {
+	if a.core == nil {
+		return fmt.Errorf("core client not initialized")
+	}
+
+	// TUN requires the proxy to be running first (mihomo forwards traffic to it)
+	if !a.IsProxyRunning() {
+		a.appendLog("[TUN] Proxy not running, starting it first...")
+		if err := a.StartProxy(); err != nil {
+			return fmt.Errorf("failed to start proxy before TUN: %w", err)
+		}
+	}
+
+	captureEnabled := a.IsLogCaptureEnabled()
+	err = a.core.StartTUN()
+	if err == nil && captureEnabled {
+		_ = a.core.StartLogCapture()
+	}
+	a.emitFrontendState()
+	if err != nil {
+		a.appendLog("[error] StartTUN failed: " + err.Error())
+	}
+	return err
+}
+
+func (a *App) StopTUN() error {
+	if a.core != nil {
+		err := a.core.StopTUN()
+		a.emitFrontendState()
+		if err != nil {
+			a.appendLog("[error] StopTUN failed: " + err.Error())
+		}
+		return err
+	}
+	return fmt.Errorf("core client not initialized")
+}
+
 func (a *App) GetCACertPath() string {
+	if a.certManager == nil && a.certPath != "" {
+		if cm, err := cert.InitCertManager(a.certPath); err == nil {
+			a.certManager = cm
+		}
+	}
 	if a.certManager != nil {
 		return a.certManager.GetCACertPath()
 	}
@@ -835,10 +1080,17 @@ type CAInstallStatus struct {
 
 func (a *App) GetCAInstallStatus() CAInstallStatus {
 	if a.certManager == nil {
+		if a.certPath != "" {
+			if cm, err := cert.InitCertManager(a.certPath); err == nil {
+				a.certManager = cm
+			}
+		}
+	}
+	if a.certManager == nil {
 		return CAInstallStatus{
-			CertPath:    "",
+			CertPath:    a.certPath,
 			Platform:    "windows",
-			InstallHelp: "证书管理器未初始化",
+			InstallHelp: "证书状态初始化中",
 		}
 	}
 	status := a.certManager.GetCAInstallStatus()
@@ -888,6 +1140,10 @@ func (a *App) InstallCA() error {
 		a.appendLog("[cert] InstallCA failed: " + err.Error())
 		return err
 	}
+	a.proxyServer.ClearCertCache()
+	if a.core != nil {
+		a.core.reloadCertificateIfRunning()
+	}
 	a.appendLog("[cert] InstallCA succeeded")
 	return nil
 }
@@ -908,6 +1164,10 @@ func (a *App) RegenerateCert() error {
 	if err := a.certManager.RegenerateCA(); err != nil {
 		a.appendLog("[cert] RegenerateCert failed: " + err.Error())
 		return err
+	}
+	a.proxyServer.ClearCertCache()
+	if a.core != nil {
+		a.core.reloadCertificateIfRunning()
 	}
 	a.appendLog("[cert] RegenerateCert succeeded")
 	return nil
@@ -1060,6 +1320,13 @@ func (a *App) UpdateCloudflareConfig(cfg proxy.CloudflareConfig) error {
 }
 
 func (a *App) StartWarp() error {
+	if a.core != nil {
+		err := a.core.StartWarp()
+		a.UpdateTrayMenu()
+		a.refreshTrayMenuLater(300*time.Millisecond, time.Second)
+		a.emitFrontendState()
+		return err
+	}
 	a.warpOpMu.Lock()
 	defer a.warpOpMu.Unlock()
 
@@ -1071,6 +1338,13 @@ func (a *App) StartWarp() error {
 }
 
 func (a *App) StopWarp() error {
+	if a.core != nil {
+		err := a.core.StopWarp()
+		a.UpdateTrayMenu()
+		a.refreshTrayMenuLater(300 * time.Millisecond)
+		a.emitFrontendState()
+		return err
+	}
 	a.warpOpMu.Lock()
 	defer a.warpOpMu.Unlock()
 
@@ -1082,6 +1356,9 @@ func (a *App) StopWarp() error {
 }
 
 func (a *App) GetWarpStatus() proxy.WarpStatus {
+	if a.core != nil {
+		return a.core.GetWarpStatus()
+	}
 	return a.warpMgr.GetStatus()
 }
 
@@ -1249,6 +1526,9 @@ func (a *App) applySystemProxy(enabled bool, port int) error {
 	if enabled {
 		expected := fmt.Sprintf("127.0.0.1:%d", port)
 		if status.Enabled && strings.EqualFold(strings.TrimSpace(status.Server), expected) {
+			if err := a.saveManagedSystemProxyMarker(expected); err != nil {
+				a.appendLog("[warn] Failed to save managed system proxy marker: " + err.Error())
+			}
 			a.appendLog("[action] EnableSystemProxy skipped: already enabled")
 			a.UpdateTrayMenu()
 			a.emitFrontendState()
@@ -1257,8 +1537,14 @@ func (a *App) applySystemProxy(enabled bool, port int) error {
 		if err := sysproxy.EnableSystemProxy(port); err != nil {
 			return err
 		}
+		if err := a.saveManagedSystemProxyMarker(expected); err != nil {
+			a.appendLog("[warn] Failed to save managed system proxy marker: " + err.Error())
+		}
 	} else {
 		if !status.Enabled {
+			if err := a.clearManagedSystemProxyMarker(); err != nil {
+				a.appendLog("[warn] Failed to clear managed system proxy marker: " + err.Error())
+			}
 			a.appendLog("[action] DisableSystemProxy skipped: already disabled")
 			a.UpdateTrayMenu()
 			a.emitFrontendState()
@@ -1266,6 +1552,9 @@ func (a *App) applySystemProxy(enabled bool, port int) error {
 		}
 		if err := sysproxy.DisableSystemProxy(); err != nil {
 			return err
+		}
+		if err := a.clearManagedSystemProxyMarker(); err != nil {
+			a.appendLog("[warn] Failed to clear managed system proxy marker: " + err.Error())
 		}
 	}
 
@@ -1278,7 +1567,7 @@ func (a *App) applySystemProxy(enabled bool, port int) error {
 func (a *App) EnableSystemProxy() error {
 	a.appendLog("[action] EnableSystemProxy called")
 
-	if !a.proxyServer.IsRunning() {
+	if !a.IsProxyRunning() {
 		a.appendLog("[action] Proxy not running, starting proxy before enabling system proxy...")
 		if err := a.StartProxy(); err != nil {
 			a.appendLog("[error] EnableSystemProxy failed to auto-start proxy: " + err.Error())

@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log"
 	"net"
 	"strconv"
 	"strings"
@@ -15,23 +14,23 @@ import (
 )
 
 const (
-	tlsRecordHeaderLen         = 5
-	tlsHandshakeRecord         = 22
-	tlsFragmentReadWait        = 10 * time.Second
-	defaultTLSRFNumRecords     = 4
-	defaultTLSRFNumSegments    = 1
-	defaultTLSRFSendInterval   = 50 * time.Millisecond
-	defaultTLSRFModMinorVer    = true
-	defaultTLSRFOOB            = false
-	defaultTLSRFOOBEx          = false
+	tlsRecordHeaderLen       = 5
+	tlsHandshakeRecord       = 22
+	tlsFragmentReadWait      = 10 * time.Second
+	defaultTLSRFNumRecords   = 4
+	defaultTLSRFNumSegments  = 1
+	defaultTLSRFSendInterval = 50 * time.Millisecond
+	defaultTLSRFModMinorVer  = true
+	defaultTLSRFOOB          = false
+	defaultTLSRFOOBEx        = false
 )
 
 func (p *ProxyServer) handleTLSFragment(clientConn, upstreamConn net.Conn, host string, rule Rule) {
-	log.Printf("[TLS-RF] Handling %s via upstream %s", host, rule.Upstream)
+	p.tracef("[TLS-RF] Handling %s via upstream %s", host, rule.Upstream)
 
 	record, err := readInitialTLSRecord(clientConn)
 	if err != nil {
-		log.Printf("[TLS-RF] Failed to read initial TLS record for %s: %v", host, err)
+		p.tracef("[TLS-RF] Failed to read initial TLS record for %s: %v", host, err)
 		clientConn.Close()
 		upstreamConn.Close()
 		return
@@ -39,7 +38,7 @@ func (p *ProxyServer) handleTLSFragment(clientConn, upstreamConn net.Conn, host 
 
 	_, sniPos, sniLen, _, err := parseClientHello(record)
 	if err != nil {
-		log.Printf("[TLS-RF] Parse ClientHello failed for %s: %v", host, err)
+		p.tracef("[TLS-RF] Parse ClientHello failed for %s: %v", host, err)
 		clientConn.Close()
 		upstreamConn.Close()
 		return
@@ -47,12 +46,12 @@ func (p *ProxyServer) handleTLSFragment(clientConn, upstreamConn net.Conn, host 
 
 	if sniPos <= 0 || sniLen <= 0 {
 		if _, err := upstreamConn.Write(record); err != nil {
-			log.Printf("[TLS-RF] Initial passthrough write failed for %s: %v", host, err)
+			p.tracef("[TLS-RF] Initial passthrough write failed for %s: %v", host, err)
 			clientConn.Close()
 			upstreamConn.Close()
 			return
 		}
-		log.Printf("[TLS-RF] No SNI in ClientHello for %s, forwarded directly", host)
+		p.tracef("[TLS-RF] No SNI in ClientHello for %s, forwarded directly", host)
 		p.directTunnel(clientConn, upstreamConn)
 		return
 	}
@@ -78,7 +77,7 @@ func (p *ProxyServer) handleTLSFragment(clientConn, upstreamConn net.Conn, host 
 		defaultTLSRFSendInterval,
 	)
 	if err != nil {
-		log.Printf("[TLS-RF] Fragmented send failed for %s: %v", host, err)
+		p.tracef("[TLS-RF] Fragmented send failed for %s: %v", host, err)
 		upstreamConn.Close()
 
 		if hasFallback {
@@ -98,7 +97,7 @@ func (p *ProxyServer) handleTLSFragment(clientConn, upstreamConn net.Conn, host 
 		_ = upstreamConn.SetReadDeadline(time.Time{})
 
 		if probeErr != nil {
-			log.Printf("[TLS-RF] Upstream probe failed for %s: %v — trying fallback %s", host, probeErr, rule.FallbackMode)
+			p.tracef("[TLS-RF] Upstream probe failed for %s: %v; trying fallback %s", host, probeErr, rule.FallbackMode)
 			upstreamConn.Close()
 			p.handleTLSRFFallback(clientConn, host, rule, savedRecord)
 			return
@@ -108,12 +107,12 @@ func (p *ProxyServer) handleTLSFragment(clientConn, upstreamConn net.Conn, host 
 			Conn:   upstreamConn,
 			reader: io.MultiReader(bytes.NewReader(probe), upstreamConn),
 		}
-		log.Printf("[TLS-RF] ClientHello OK for %s", host)
+		p.tracef("[TLS-RF] ClientHello OK for %s", host)
 		p.directTunnel(clientConn, wrappedUp)
 		return
 	}
 
-	log.Printf("[TLS-RF] ClientHello sent in original-style fragments for %s", host)
+	p.tracef("[TLS-RF] ClientHello sent in original-style fragments for %s", host)
 	p.directTunnel(clientConn, upstreamConn)
 }
 
@@ -121,7 +120,7 @@ func (p *ProxyServer) handleTLSFragment(clientConn, upstreamConn net.Conn, host 
 // transport (Warp SOCKS5 or Server), sending the original un-fragmented
 // ClientHello through the new connection.
 func (p *ProxyServer) handleTLSRFFallback(clientConn net.Conn, host string, rule Rule, originalRecord []byte) {
-	log.Printf("[TLS-RF] Fallback via %s for %s", rule.FallbackMode, host)
+	p.tracef("[TLS-RF] Fallback via %s for %s", rule.FallbackMode, host)
 
 	targetAddr := net.JoinHostPort(host, "443")
 
@@ -139,20 +138,20 @@ func (p *ProxyServer) handleTLSRFFallback(clientConn net.Conn, host string, rule
 
 	newConn, err := DialFallback(rule.FallbackMode, targetAddr, warpMgr, cfConfig, serverHost)
 	if err != nil {
-		log.Printf("[TLS-RF] Fallback %s dial failed for %s: %v", rule.FallbackMode, host, err)
+		p.tracef("[TLS-RF] Fallback %s dial failed for %s: %v", rule.FallbackMode, host, err)
 		clientConn.Close()
 		return
 	}
 
 	// Send original ClientHello un-fragmented through the protected transport
 	if _, err := newConn.Write(originalRecord); err != nil {
-		log.Printf("[TLS-RF] Fallback write ClientHello failed for %s: %v", host, err)
+		p.tracef("[TLS-RF] Fallback write ClientHello failed for %s: %v", host, err)
 		newConn.Close()
 		clientConn.Close()
 		return
 	}
 
-	log.Printf("[TLS-RF] Fallback %s succeeded for %s", rule.FallbackMode, host)
+	p.tracef("[TLS-RF] Fallback %s succeeded for %s", rule.FallbackMode, host)
 	p.directTunnel(clientConn, newConn)
 }
 

@@ -31,6 +31,9 @@ import {
   SetShowMainWindowOnAutoStart,
   GetAutoEnableProxyOnAutoStart,
   SetAutoEnableProxyOnAutoStart,
+  GetTUNConfig,
+  UpdateTUNConfig,
+  GetTUNStatus,
   OpenCertDir,
   RegenerateCert,
   GetCAInstallStatus,
@@ -97,6 +100,21 @@ const Settings: React.FC = () => {
   const [autoStart, setAutoStart] = useState(false);
   const [showMainOnAutoStart, setShowMainOnAutoStart] = useState(true);
   const [autoEnableProxyOnAutoStart, setAutoEnableProxyOnAutoStart] = useState(false);
+  const [tunConfig, setTunConfig] = useState<any>({
+    enabled: false,
+    stack: 'gvisor',
+    mtu: 9000,
+    dns_hijack: true,
+    auto_route: true,
+    strict_route: true
+  });
+  const [tunStatus, setTunStatus] = useState<any>({
+    supported: true,
+    running: false,
+    enabled: false,
+    stack: 'gvisor',
+    message: '正在获取核心状态...'
+  });
 
   // Cloudflare Config
   const [cfConfig, setCfConfig] = useState<any>({
@@ -132,12 +150,14 @@ const Settings: React.FC = () => {
   };
 
   const loadData = async () => {
-    const [p, tray, autoStartEnabled, showMainEnabled, autoEnableProxyEnabled, cf, ca, certs] = await Promise.all([
+    const [p, tray, autoStartEnabled, showMainEnabled, autoEnableProxyEnabled, tunCfg, tunState, cf, ca, certs] = await Promise.all([
       GetListenPort(),
       GetCloseToTray(),
       GetAutoStart(),
       GetShowMainWindowOnAutoStart(),
       GetAutoEnableProxyOnAutoStart(),
+      GetTUNConfig(),
+      GetTUNStatus(),
       GetCloudflareConfig(),
       GetCAInstallStatus(),
       GetInstalledCerts()
@@ -148,6 +168,21 @@ const Settings: React.FC = () => {
     setAutoStart(autoStartEnabled);
     setShowMainOnAutoStart(showMainEnabled);
     setAutoEnableProxyOnAutoStart(autoEnableProxyEnabled);
+    setTunConfig(tunCfg || {
+      enabled: false,
+      stack: 'gvisor',
+      mtu: 9000,
+      dns_hijack: true,
+      auto_route: true,
+      strict_route: true
+    });
+    setTunStatus(tunState || {
+      supported: false,
+      running: false,
+      enabled: false,
+      stack: 'gvisor',
+      message: ''
+    });
     setCaStatus(ca || { Installed: false, CertPath: '', Platform: 'windows' });
     setInstalledCerts(certs || []);
     setCfConfig(cf || {
@@ -216,6 +251,12 @@ const Settings: React.FC = () => {
     await UpdateCloudflareConfig(cfConfig);
     await loadData();
     toast.success('Cloudflare 配置已保存');
+  };
+
+  const handleSaveTUN = async () => {
+    await UpdateTUNConfig(tunConfig);
+    await loadData();
+    toast.success('TUN 配置已保存', '真实 TUN 配置已更新。');
   };
 
   const handleImport = async () => {
@@ -405,6 +446,8 @@ const Settings: React.FC = () => {
               </SettingItem>
             </div>
           </section>
+
+
         </div>
 
         {/* Upstream / Warp Section */}

@@ -64,11 +64,11 @@ npm install
 npm run build
 cd ..
 
-# Сборка Windows GUI исполняемого файла
-go build -ldflags="-H windowsgui" -o build/bin/snishaper.exe .
+# Полная сборка фронтенда и GUI с поддержкой реального TUN на gVisor
+powershell -ExecutionPolicy Bypass -File .\scripts\build_windows.ps1
 ```
 
-Файл `snishaper.syso` хранится в репозитории, поэтому при `go build` иконка Windows и метаданные версии встраиваются автоматически без дополнительного шага упаковки ресурсов.
+Файл `snishaper.syso` хранится в репозитории, а скрипт сборки автоматически встраивает иконку/метаданные Windows и собирает исполняемый файл с тегом `with_gvisor` для поддержки реального TUN.
 
 Рекомендуемое окружение:
 

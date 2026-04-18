@@ -64,11 +64,11 @@ npm install
 npm run build
 cd ..
 
-# 构建 Windows GUI 可执行文件
-go build -ldflags="-H windowsgui" -o build/bin/snishaper.exe .
+# 一次性完成前端构建，并以 gVisor 真实 TUN 支持编译 GUI
+powershell -ExecutionPolicy Bypass -File .\scripts\build_windows.ps1
 ```
 
-`snishaper.syso` 已随仓库维护，`go build` 时会自动嵌入 Windows 图标与版本信息，无需额外执行资源打包步骤。
+`snishaper.syso` 已随仓库维护，构建脚本会自动嵌入 Windows 图标与版本信息，并使用 `with_gvisor` 构建标签生成带真实 TUN 支持的 Windows 可执行文件。
 
 开发环境建议：
 

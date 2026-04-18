@@ -64,11 +64,11 @@ npm install
 npm run build
 cd ..
 
-# Build Windows GUI executable
-go build -ldflags="-H windowsgui" -o build/bin/snishaper.exe .
+# Build frontend and compile the GUI with gVisor real-TUN support
+powershell -ExecutionPolicy Bypass -File .\scripts\build_windows.ps1
 ```
 
-`snishaper.syso` is maintained in the repository, so `go build` will automatically embed the Windows icon and version metadata without an extra resource-packaging step.
+`snishaper.syso` is maintained in the repository, and the build script embeds the Windows icon/version metadata while building the Windows executable with the `with_gvisor` tag for real TUN support.
 
 Recommended toolchain:
 
