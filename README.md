@@ -64,11 +64,9 @@ npm install
 npm run build
 cd ..
 
-# 一次性完成前端构建，并以 gVisor 真实 TUN 支持编译 GUI
+# 一次性完成完整编译
 powershell -ExecutionPolicy Bypass -File .\scripts\build_windows.ps1
 ```
-
-`snishaper.syso` 已随仓库维护，构建脚本会自动嵌入 Windows 图标与版本信息，并使用 `with_gvisor` 构建标签生成带真实 TUN 支持的 Windows 可执行文件。
 
 开发环境建议：
 
@@ -87,7 +85,7 @@ powershell -ExecutionPolicy Bypass -File .\scripts\build_windows.ps1
 
 本项目受益于以下优秀开源项目的启发：
 
-- [SNIBypassGUI](https://github.com/coolapijust/SniViewer)
+- [SNIBypassGUI](https://github.com/racpast/SNIBypassGUI/)
 - [DoH-ECH-Demo](https://github.com/0xCaner/DoH-ECH-Demo)
 - [lumine](https://github.com/moi-si/lumine)
 - [usque](https://github.com/Diniboy1123/usque)
