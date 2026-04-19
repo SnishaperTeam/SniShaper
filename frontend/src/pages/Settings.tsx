@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Settings as SettingsIcon,
   Save,
@@ -94,43 +94,28 @@ const StackedSettingItem: React.FC<{
   </div>
 );
 
-const Settings: React.FC = () => {
-  const [loading, setLoading] = useState(true);
-  const hasLoaded = useRef(false);
-  const [port, setPort] = useState(8080);
-  const [closeToTray, setCloseToTray] = useState(false);
-  const [autoStart, setAutoStart] = useState(false);
-  const [showMainOnAutoStart, setShowMainOnAutoStart] = useState(true);
-  const [autoEnableProxyOnAutoStart, setAutoEnableProxyOnAutoStart] = useState(false);
-  const [tunConfig, setTunConfig] = useState<any>({
-    enabled: false,
-    stack: 'gvisor',
-    mtu: 9000,
-    dns_hijack: true,
-    auto_route: true,
-    strict_route: true
-  });
-  const [tunStatus, setTunStatus] = useState<any>({
-    supported: true,
-    running: false,
-    enabled: false,
-    stack: 'gvisor',
-    message: '正在获取核心状态...'
-  });
+interface SettingsProps {
+  cache: any;
+  onCacheUpdate: (patch: any) => void;
+}
+
+const Settings: React.FC<SettingsProps> = ({ cache, onCacheUpdate }) => {
+  // Use cached values as initial state — already the real config from app startup
+  const [port, setPort] = useState(cache.port);
+  const [closeToTray, setCloseToTray] = useState(cache.closeToTray);
+  const [autoStart, setAutoStart] = useState(cache.autoStart);
+  const [showMainOnAutoStart, setShowMainOnAutoStart] = useState(cache.showMainOnAutoStart);
+  const [autoEnableProxyOnAutoStart, setAutoEnableProxyOnAutoStart] = useState(cache.autoEnableProxyOnAutoStart);
+  const [tunConfig, setTunConfig] = useState<any>(cache.tunConfig);
+  const [tunStatus, setTunStatus] = useState<any>(cache.tunStatus);
 
   // Cloudflare Config
-  const [cfConfig, setCfConfig] = useState<any>({
-    api_key: '',
-    doh_url: 'https://1.1.1.1/dns-query',
-    auto_update: true,
-    warp_enabled: false,
-    warp_endpoint: '162.159.199.2'
-  });
-  const [ipStats, setIpStats] = useState<any[]>([]);
+  const [cfConfig, setCfConfig] = useState<any>(cache.cfConfig);
+  const [ipStats, setIpStats] = useState<any[]>(cache.ipStats);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isCheckingHealth, setIsCheckingHealth] = useState(false);
-  const [caStatus, setCaStatus] = useState<any>({ Installed: false, CertPath: '', Platform: 'windows' });
-  const [installedCerts, setInstalledCerts] = useState<any[]>([]);
+  const [caStatus, setCaStatus] = useState<any>(cache.caStatus);
+  const [installedCerts, setInstalledCerts] = useState<any[]>(cache.installedCerts);
   const [isCertBusy, setIsCertBusy] = useState(false);
 
   const loadIPStats = async () => {
@@ -152,18 +137,19 @@ const Settings: React.FC = () => {
   };
 
   const loadData = async () => {
-    const [p, tray, autoStartEnabled, showMainEnabled, autoEnableProxyEnabled, tunCfg, tunState, cf, ca, certs] = await Promise.all([
-      GetListenPort(),
-      GetCloseToTray(),
-      GetAutoStart(),
-      GetShowMainWindowOnAutoStart(),
-      GetAutoEnableProxyOnAutoStart(),
-      GetTUNConfig(),
-      GetTUNStatus(),
-      GetCloudflareConfig(),
-      GetCAInstallStatus(),
-      GetInstalledCerts()
-    ]);
+    try {
+      const [p, tray, autoStartEnabled, showMainEnabled, autoEnableProxyEnabled, tunCfg, tunState, cf, ca, certs] = await Promise.all([
+        GetListenPort(),
+        GetCloseToTray(),
+        GetAutoStart(),
+        GetShowMainWindowOnAutoStart(),
+        GetAutoEnableProxyOnAutoStart(),
+        GetTUNConfig(),
+        GetTUNStatus(),
+        GetCloudflareConfig(),
+        GetCAInstallStatus(),
+        GetInstalledCerts()
+      ]);
 
     setPort(p);
     setCloseToTray(tray);
@@ -194,20 +180,18 @@ const Settings: React.FC = () => {
       warp_enabled: false,
       warp_endpoint: '162.159.199.2'
     });
-    await loadIPStats();
-
-    if (!hasLoaded.current) {
-      hasLoaded.current = true;
-      setLoading(false);
+    } catch {
+      // Silently ignore
     }
   };
 
+  // Poll IP stats and sync updated settings from cache (App-level reads are done once at startup)
   useEffect(() => {
-    loadData();
-    const timer = setInterval(async () => {
-      await loadIPStats();
+    const ipTimer = setInterval(async () => {
+      const stats = await GetCloudflareIPStats();
+      setIpStats(stats || []);
     }, 5000);
-    return () => clearInterval(timer);
+    return () => clearInterval(ipTimer);
   }, []);
 
   const handleSavePort = async () => {
@@ -360,17 +344,6 @@ const Settings: React.FC = () => {
 
   return (
     <div className="p-6 max-w-5xl mx-auto space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
-      {loading ? (
-        <div className="space-y-8 animate-pulse">
-          <div className="h-9 w-24 rounded-xl bg-background-hover" />
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-            {[...Array(6)].map((_, i) => (
-              <div key={i} className="h-16 rounded-xl bg-background-card border border-border" />
-            ))}
-          </div>
-        </div>
-      ) : (
-      <>
       <header className="flex justify-between items-end">
         <div>
           <h1 className="text-3xl font-black tracking-tighter">设置</h1>
@@ -664,8 +637,6 @@ const Settings: React.FC = () => {
         </section>
 
       </div>
-      </>
-      )}
     </div>
   );
 };
