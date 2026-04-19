@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   Settings as SettingsIcon,
   Save,
@@ -95,6 +95,8 @@ const StackedSettingItem: React.FC<{
 );
 
 const Settings: React.FC = () => {
+  const [loading, setLoading] = useState(true);
+  const hasLoaded = useRef(false);
   const [port, setPort] = useState(8080);
   const [closeToTray, setCloseToTray] = useState(false);
   const [autoStart, setAutoStart] = useState(false);
@@ -193,6 +195,11 @@ const Settings: React.FC = () => {
       warp_endpoint: '162.159.199.2'
     });
     await loadIPStats();
+
+    if (!hasLoaded.current) {
+      hasLoaded.current = true;
+      setLoading(false);
+    }
   };
 
   useEffect(() => {
@@ -353,6 +360,17 @@ const Settings: React.FC = () => {
 
   return (
     <div className="p-6 max-w-5xl mx-auto space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
+      {loading ? (
+        <div className="space-y-8 animate-pulse">
+          <div className="h-9 w-24 rounded-xl bg-background-hover" />
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+            {[...Array(6)].map((_, i) => (
+              <div key={i} className="h-16 rounded-xl bg-background-card border border-border" />
+            ))}
+          </div>
+        </div>
+      ) : (
+      <>
       <header className="flex justify-between items-end">
         <div>
           <h1 className="text-3xl font-black tracking-tighter">设置</h1>
@@ -646,6 +664,8 @@ const Settings: React.FC = () => {
         </section>
 
       </div>
+      </>
+      )}
     </div>
   );
 };

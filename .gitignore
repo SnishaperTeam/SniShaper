@@ -75,3 +75,4 @@ runtime/
 core/mihomo/
 config/system_proxy_owner.json
 build/bin/markers/
+/.workbuddy/

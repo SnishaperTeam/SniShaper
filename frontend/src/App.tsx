@@ -3,13 +3,13 @@ import { HashRouter as Router, Routes, Route, Navigate } from 'react-router-dom'
 import Sidebar from './components/Sidebar';
 import WindowControls from './components/WindowControls';
 import ToastProvider from './components/ToastProvider';
+import Settings from './pages/Settings';
 
 const Dashboard = lazy(() => import('./pages/Dashboard'));
 const Proxies = lazy(() => import('./pages/Proxies'));
 const Rules = lazy(() => import('./pages/Rules'));
 const Routing = lazy(() => import('./pages/Routing'));
 const Logs = lazy(() => import('./pages/Logs'));
-const Settings = lazy(() => import('./pages/Settings'));
 
 const App: React.FC = () => {
   const [theme, setTheme] = useState<'light' | 'dark'>('light');
