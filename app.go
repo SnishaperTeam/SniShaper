@@ -482,7 +482,7 @@ func (a *App) HandleWindowClose() {
 
 func (a *App) GetCloseToTray() bool {
 	if a.ruleManager == nil {
-		return true
+		return false
 	}
 	return a.ruleManager.GetCloseToTray()
 }
