@@ -63,7 +63,6 @@ WinDivert.dll
 WinDivert64.sys
 WinDivert32.sys
 WinDivert*.sys
-scripts/
 third_party/windivert-cache/
 wiki_repo/
 

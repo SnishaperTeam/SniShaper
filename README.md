@@ -53,7 +53,7 @@
 
 ```powershell
 # 克隆仓库
-git clone https://github.com/coolapijust/snishaper.git
+git clone https://github.com/SniShaper/snishaper.git
 cd snishaper
 
 # 安装前端依赖
@@ -67,6 +67,8 @@ cd ..
 # 一次性完成完整编译
 powershell -ExecutionPolicy Bypass -File .\scripts\build_windows.ps1
 
+##或已有Powershell7
+pwsh -ExecutionPolicy Bypass -File .\scripts\build_windows.ps1
 # Go主程序编译
 go build -ldflags="-s -w" -o "build/bin/snishaper.exe"
 ```
