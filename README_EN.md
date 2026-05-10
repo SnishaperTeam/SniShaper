@@ -100,15 +100,9 @@ This project has benefited from the inspiration of the following excellent open-
 
 Thanks to the following contributors for their contributions to this repository:
 
-<a href="https://github.com/mechrevo">
-  <img src="https://avatars.githubusercontent.com/mechrevo" width="60" height="60" alt="mechrevo" />
-</a>
-<a href="https://github.com/dongzheyu">
-  <img src="https://avatars.githubusercontent.com/dongzheyu" width="60" height="60" alt="dongzheyu" />
-</a>
-<a href="https://github.com/JetCPP-dongle">
-  <img src="https://avatars.githubusercontent.com/JetCPP-dongle" width="60" height="60" alt="JetCPP-dongle" />
-</a>
+| <a href="https://github.com/mechrevo"><img src="https://avatars.githubusercontent.com/mechrevo" width="80" height="80" style="border-radius: 50%;" alt="mechrevo" /></a> | <a href="https://github.com/dongzheyu"><img src="https://avatars.githubusercontent.com/dongzheyu" width="80" height="80" style="border-radius: 50%;" alt="dongzheyu" /></a> | <a href="https://github.com/JetCPP-dongle"><img src="https://avatars.githubusercontent.com/JetCPP-dongle" width="80" height="80" style="border-radius: 50%;" alt="JetCPP-dongle" /></a> |
+| :---: | :---: | :---: |
+| [mechrevo](https://github.com/mechrevo) | [dongzheyu](https://github.com/dongzheyu) | [JetCPP-dongle](https://github.com/JetCPP-dongle) |
 
 ## License
 
