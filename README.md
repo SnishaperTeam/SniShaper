@@ -17,7 +17,6 @@
   - **TLS-RF (TLS 分片)**：通过分片规避针对 SNI 的精准阻断。
   - **QUIC 重建**：利用 quic-go 的混淆特性绕过常规 SNI 检测。
   - **ECH 注入**：自动获取并注入 echconfig。
-- **优选 IP 与 WARP**：集成 Cloudflare 优选 IP 池与 WARP Masque 隧道。
 - **智能分流**：基于 GFWList 自动识别被屏蔽域名，大多数规则外网站无需手动配置即可连接。
 
 ---
