@@ -2,7 +2,7 @@
 
 # SniShaper
 
-[![Go Version](https://img.shields.io/badge/Go-1.24+-00ADD8?style=flat-square&logo=go)](https://golang.org)
+[![Go Version](https://img.shields.io/badge/Go-1.25+-00ADD8?style=flat-square&logo=go)](https://golang.org)
 [![License](https://img.shields.io/badge/License-MIT-blue?style=flat-square)]()
 [![Wiki](https://img.shields.io/badge/Docs-Wiki-orange?style=flat-square)](https://github.com/coolapijust/snishaper/wiki)
 
@@ -17,7 +17,6 @@
   - **TLS-RF (фрагментация TLS)**: обход точечных блокировок по SNI с помощью фрагментации.
   - **Реплей QUIC**: обход стандартного обнаружения SNI с помощью функций `quic-go`.
   - **Инъекция ECH**: автоматическое получение и внедрение echconfig.
-- **Оптимизация IP и WARP**: интегрированная оптимизация пула IP-адресов Cloudflare и туннель WARP Masque.
 - **Интеллектуальная маршрутизация**: автоматическое определение заблокированных доменов на основе GFWList, позволяющее подключаться к большинству сайтов вне правил без ручной настройки.
 
 ---
@@ -52,45 +51,57 @@
 Проект построен с использованием **Wails v3**.
 
 ```powershell
-# Клонирование репозитория
-git clone https://github.com/coolapijust/snishaper.git
+# Клонировать репозиторий
+git clone https://github.com/SniShaper/snishaper.git
 cd snishaper
 
-# Установка зависимостей фронтенда
+# Установить зависимости фронтенда
 cd frontend
 npm install
 
-# Сборка фронтенд-ресурсов
+# Собрать статические ресурсы фронтенда
 npm run build
 cd ..
 
-# Полная сборка фронтенда и GUI с поддержкой реального TUN на gVisor
+# Полная компиляция за один шаг
 powershell -ExecutionPolicy Bypass -File .\scripts\build_windows.ps1
+
+## Или с PowerShell 7
+pwsh -ExecutionPolicy Bypass -File .\scripts\build_windows.ps1
+# Компиляция основной программы на Go
+go build -ldflags="-s -w" -o "build/bin/snishaper.exe"
 ```
 
-Файл `snishaper.syso` хранится в репозитории, а скрипт сборки автоматически встраивает иконку/метаданные Windows и собирает исполняемый файл с тегом `with_gvisor` для поддержки реального TUN.
-
-Рекомендуемое окружение:
+Рекомендации по окружению разработки:
 
 - `Go 1.25+`
 - `Node.js 24+`
 - `npm 11+`
 
-Результат сборки:
+Результаты сборки:
 
-- Ресурсы фронтенда: `frontend/dist`
-- Исполняемый файл: `build/bin/snishaper.exe`
+- Ресурсы фронтенда находятся в `frontend/dist`
+- Исполняемый файл находится в `build/bin/snishaper.exe`
 
 ---
+## Кроссплатформенность
+Программа поддерживает платформы Windows и Linux. Для версии Linux обратитесь к [Linux версия](https://github.com/dongzheyu/SniShaper-Linux/).
 
 ## Благодарности
 
-Этот проект вдохновлен и использует наработки следующих отличных open-source проектов:
+Проект вдохновлен следующими отличными open-source проектами:
 
-- [SNIBypassGUI](https://github.com/coolapijust/SniViewer)
 - [DoH-ECH-Demo](https://github.com/0xCaner/DoH-ECH-Demo)
 - [lumine](https://github.com/moi-si/lumine)
 - [usque](https://github.com/Diniboy1123/usque)
+
+## Участники
+
+Благодарим следующих участников за их вклад в этот репозиторий:
+
+| <a href="https://github.com/mechrevo"><img src="https://avatars.githubusercontent.com/mechrevo" width="40" height="40" style="border-radius: 50%;" alt="mechrevo" /></a> | <a href="https://github.com/dongzheyu"><img src="https://avatars.githubusercontent.com/dongzheyu" width="40" height="40" style="border-radius: 50%;" alt="dongzheyu" /></a> | <a href="https://github.com/JetCPP-dongle"><img src="https://avatars.githubusercontent.com/JetCPP-dongle" width="40" height="40" style="border-radius: 50%;" alt="JetCPP-dongle" /></a> |
+| :---: | :---: | :---: |
+| [mechrevo](https://github.com/mechrevo) | [dongzheyu](https://github.com/dongzheyu) | [JetCPP-dongle](https://github.com/JetCPP-dongle) |
 
 ## Лицензия
 

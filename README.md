@@ -17,7 +17,6 @@
   - **TLS-RF (TLS 分片)**：通过分片规避针对 SNI 的精准阻断。
   - **QUIC 重建**：利用 quic-go 的混淆特性绕过常规 SNI 检测。
   - **ECH 注入**：自动获取并注入 echconfig。
-- **优选 IP 与 WARP**：集成 Cloudflare 优选 IP 池与 WARP Masque 隧道。
 - **智能分流**：基于 GFWList 自动识别被屏蔽域名，大多数规则外网站无需手动配置即可连接。
 
 ---
@@ -85,7 +84,9 @@ go build -ldflags="-s -w" -o "build/bin/snishaper.exe"
 - 可执行文件位于 `build/bin/snishaper.exe`
 
 ---
-
+## 跨平台
+本程序支持 Windows和Linux 平台，Linux版请参见[Linux版](https://github.com/dongzheyu/SniShaper-Linux/)
+。
 ## 致谢
 
 本项目受益于以下优秀开源项目的启发：
@@ -93,6 +94,12 @@ go build -ldflags="-s -w" -o "build/bin/snishaper.exe"
 - [DoH-ECH-Demo](https://github.com/0xCaner/DoH-ECH-Demo)
 - [lumine](https://github.com/moi-si/lumine)
 - [usque](https://github.com/Diniboy1123/usque)
+
+感谢以下贡献者对本仓库的贡献：
+
+| <a href="https://github.com/mechrevo"><img src="https://avatars.githubusercontent.com/mechrevo" width="40" height="40" style="border-radius: 50%;" alt="mechrevo" /></a> | <a href="https://github.com/dongzheyu"><img src="https://avatars.githubusercontent.com/dongzheyu" width="40" height="40" style="border-radius: 50%;" alt="dongzheyu" /></a> | <a href="https://github.com/JetCPP-dongle"><img src="https://avatars.githubusercontent.com/JetCPP-dongle" width="40" height="40" style="border-radius: 50%;" alt="JetCPP-dongle" /></a> |
+| :---: | :---: | :---: |
+| [mechrevo](https://github.com/mechrevo) | [dongzheyu](https://github.com/dongzheyu) | [JetCPP-dongle](https://github.com/JetCPP-dongle) |
 
 ## 许可
 
