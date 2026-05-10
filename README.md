@@ -85,7 +85,9 @@ go build -ldflags="-s -w" -o "build/bin/snishaper.exe"
 - 可执行文件位于 `build/bin/snishaper.exe`
 
 ---
-
+## 跨平台
+本程序支持 Windows和Linux 平台，Linux版请参见[Linux版](https://github.com/dongzheyu/SniShaper-Linux/)
+。
 ## 致谢
 
 本项目受益于以下优秀开源项目的启发：

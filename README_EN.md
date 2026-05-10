@@ -2,7 +2,7 @@
 
 # SniShaper
 
-[![Go Version](https://img.shields.io/badge/Go-1.24+-00ADD8?style=flat-square&logo=go)](https://golang.org)
+[![Go Version](https://img.shields.io/badge/Go-1.25+-00ADD8?style=flat-square&logo=go)](https://golang.org)
 [![License](https://img.shields.io/badge/License-MIT-blue?style=flat-square)]()
 [![Wiki](https://img.shields.io/badge/Docs-Wiki-orange?style=flat-square)](https://github.com/coolapijust/snishaper/wiki)
 
@@ -52,25 +52,28 @@ For more detailed technical principles, deployment tutorials, and customization 
 This project is built based on **Wails v3**.
 
 ```powershell
-# Clone Repository
-git clone https://github.com/coolapijust/snishaper.git
+# Clone the repository
+git clone https://github.com/SniShaper/snishaper.git
 cd snishaper
 
 # Install frontend dependencies
 cd frontend
 npm install
 
-# Build frontend assets
+# Build frontend static resources
 npm run build
 cd ..
 
-# Build frontend and compile the GUI with gVisor real-TUN support
+# Complete the full compilation in one go
 powershell -ExecutionPolicy Bypass -File .\scripts\build_windows.ps1
+
+## Or with PowerShell 7
+pwsh -ExecutionPolicy Bypass -File .\scripts\build_windows.ps1
+# Go main program compilation
+go build -ldflags="-s -w" -o "build/bin/snishaper.exe"
 ```
 
-`snishaper.syso` is maintained in the repository, and the build script embeds the Windows icon/version metadata while building the Windows executable with the `with_gvisor` tag for real TUN support.
-
-Recommended toolchain:
+Development environment recommendations:
 
 - `Go 1.25+`
 - `Node.js 24+`
@@ -78,16 +81,17 @@ Recommended toolchain:
 
 Build outputs:
 
-- Frontend assets: `frontend/dist`
-- Executable: `build/bin/snishaper.exe`
+- Frontend assets located at `frontend/dist`
+- Executable located at `build/bin/snishaper.exe`
 
 ---
+## Cross-platform
+This program supports Windows and Linux platforms. For the Linux version, please refer to [Linux Version](https://github.com/dongzheyu/SniShaper-Linux/).
 
 ## Acknowledgements
 
-This project was inspired by and benefited from the following excellent open-source projects:
+This project has benefited from the inspiration of the following excellent open-source projects:
 
-- [SNIBypassGUI](https://github.com/coolapijust/SniViewer)
 - [DoH-ECH-Demo](https://github.com/0xCaner/DoH-ECH-Demo)
 - [lumine](https://github.com/moi-si/lumine)
 - [usque](https://github.com/Diniboy1123/usque)
