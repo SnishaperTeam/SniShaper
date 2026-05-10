@@ -96,6 +96,18 @@ go build -ldflags="-s -w" -o "build/bin/snishaper.exe"
 - [lumine](https://github.com/moi-si/lumine)
 - [usque](https://github.com/Diniboy1123/usque)
 
+感谢以下贡献者对本仓库的贡献：
+
+<a href="https://github.com/mechrevo">
+  <img src="https://avatars.githubusercontent.com/mechrevo" width="60" height="60" alt="mechrevo" />
+</a>
+<a href="https://github.com/dongzheyu">
+  <img src="https://avatars.githubusercontent.com/dongzheyu" width="60" height="60" alt="dongzheyu" />
+</a>
+<a href="https://github.com/JetCPP-dongle">
+  <img src="https://avatars.githubusercontent.com/JetCPP-dongle" width="60" height="60" alt="JetCPP-dongle" />
+</a>
+
 ## 许可
 
 [MIT License](LICENSE)
