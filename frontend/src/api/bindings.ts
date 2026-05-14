@@ -87,6 +87,11 @@ export const GetAutoRoutingStatus = () => appCall('GetAutoRoutingStatus');
 export const RefreshGFWList = () => appCall('RefreshGFWList');
 export const TestServerNode = () => appCall('TestServerNode');
 
+// About API
+export const GetAppVersion = () => appCall('GetAppVersion');
+export const CheckUpdate = () => appCall('CheckUpdate');
+export const OpenURL = (url: string) => appCall('OpenURL', url);
+
 // DNS Node API
 export const GetDNSNodes = () => appCall('GetDNSNodes');
 export const AddDNSNode = (n: any) => appCall('AddDNSNode', n);

@@ -28,7 +28,8 @@
     "routing": "自动分流",
     "dns": "DNS 设置",
     "logs": "实时日志",
-    "settings": "系统设置"
+    "settings": "系统设置",
+    "about": "关于"
   },
   "welcome": {
     "title": "欢迎使用 SniShaper",
@@ -302,5 +303,28 @@
     "cf_pool": {
       "fetch_now": "更新 IP 池"
     }
+  },
+  "about": {
+    "title": "关于 SniShaper",
+    "version": "版本",
+    "creator": "制作者",
+    "contributors": "贡献者",
+    "maintainers": "维护者",
+    "website": "官方网站",
+    "description": "SniShaper 是一款强大的网络工具，用于处理 SNI 和 ECH 配置，提供安全的网络连接。",
+    "check_update": "检查更新",
+    "checking": "检查中...",
+    "update_available": "发现新版本",
+    "update_available_desc": "最新版本: {version}\n是否立即下载？",
+    "up_to_date": "已是最新版",
+    "up_to_date_desc": "当前版本 {version} 已是最新版本。",
+    "dev_version": "正在使用开发版本",
+    "dev_version_desc": "您的版本 ({version}) 比最新版本 ({latestVersion}) 更新，可能包含未发布的特性。",
+    "check_failed": "检查更新失败",
+    "check_failed_desc": "无法连接到更新服务器，请稍后重试。",
+    "network_timeout": "网络连接超时，请检查您的网络连接或稍后重试。",
+    "connection_refused": "连接被拒绝，可能是代理服务器不可用。",
+    "dns_error": "DNS 解析失败，请检查您的 DNS 设置。",
+    "proxy_error": "代理配置错误，请检查系统代理设置。"
   }
 }

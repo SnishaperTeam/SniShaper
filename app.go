@@ -13,6 +13,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"regexp"
 	"runtime/debug"
@@ -1799,4 +1800,163 @@ func (a *App) WindowToggleMaximise() {
 
 func (a *App) WindowClose() {
 	a.QuitApp()
+}
+
+// GetAppVersion returns the application version
+func (a *App) GetAppVersion() string {
+	return "1.25"
+}
+
+// CheckUpdateResult represents the result of checking for updates
+type CheckUpdateResult struct {
+	HasUpdate     bool   `json:"has_update"`
+	LatestVersion string `json:"latest_version"`
+	DownloadURL   string `json:"download_url"`
+	Message       string `json:"message"`
+	ErrorDetail   string `json:"error_detail"`
+}
+
+// CheckUpdate checks for available updates
+func (a *App) CheckUpdate() CheckUpdateResult {
+	// GitHub raw file URL with proxy
+	updateURL := "https://gh.llkk.cc/https://raw.githubusercontent.com/dongzheyu/SniShaperWeb/master/update.txt"
+
+	// Create HTTP client with timeout
+	client := &http.Client{
+		Timeout: 10 * time.Second,
+	}
+
+	// Make HTTP request
+	resp, err := client.Get(updateURL)
+	if err != nil {
+		errorMsg := err.Error()
+		a.appendLog("[update] Failed to check update: " + errorMsg)
+		
+		// Determine error type
+		errorDetail := "check_failed"
+		if strings.Contains(errorMsg, "timeout") || strings.Contains(errorMsg, "deadline exceeded") {
+			errorDetail = "network_timeout"
+		} else if strings.Contains(errorMsg, "connection refused") {
+			errorDetail = "connection_refused"
+		} else if strings.Contains(errorMsg, "no such host") || strings.Contains(errorMsg, "DNS") {
+			errorDetail = "dns_error"
+		} else if strings.Contains(errorMsg, "proxy") {
+			errorDetail = "proxy_error"
+		}
+		
+		return CheckUpdateResult{
+			HasUpdate:   false,
+			Message:     "check_failed",
+			ErrorDetail: errorDetail,
+		}
+	}
+	defer resp.Body.Close()
+
+	// Read response body
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		a.appendLog("[update] Failed to read update info: " + err.Error())
+		return CheckUpdateResult{
+			HasUpdate: false,
+			Message:   "check_failed",
+		}
+	}
+
+	// Parse response: first line is version, second line is download URL
+	lines := strings.Split(strings.TrimSpace(string(body)), "\n")
+	if len(lines) < 2 {
+		a.appendLog("[update] Invalid update info format")
+		return CheckUpdateResult{
+			HasUpdate: false,
+			Message:   "check_failed",
+		}
+	}
+
+	latestVersion := strings.TrimSpace(lines[0])
+	downloadURL := strings.TrimSpace(lines[1])
+	currentVersion := a.GetAppVersion()
+
+	a.appendLog(fmt.Sprintf("[update] Current: %s, Latest: %s", currentVersion, latestVersion))
+
+	// Compare versions
+	comparison := compareVersions(currentVersion, latestVersion)
+
+	switch comparison {
+	case -1:
+		// Current version is older
+		return CheckUpdateResult{
+			HasUpdate:     true,
+			LatestVersion: latestVersion,
+			DownloadURL:   downloadURL,
+			Message:       "update_available",
+		}
+	case 0:
+		// Same version
+		return CheckUpdateResult{
+			HasUpdate:     false,
+			LatestVersion: latestVersion,
+			DownloadURL:   downloadURL,
+			Message:       "up_to_date",
+		}
+	default:
+		// Current version is newer (development version)
+		return CheckUpdateResult{
+			HasUpdate:     false,
+			LatestVersion: latestVersion,
+			DownloadURL:   downloadURL,
+			Message:       "dev_version",
+		}
+	}
+}
+
+// compareVersions compares two version strings (x.y.z format)
+// Returns: -1 if v1 < v2, 0 if v1 == v2, 1 if v1 > v2
+func compareVersions(v1, v2 string) int {
+	// Remove any 'v' prefix
+	v1 = strings.TrimPrefix(v1, "v")
+	v2 = strings.TrimPrefix(v2, "v")
+
+	// Split version strings
+	parts1 := strings.Split(v1, ".")
+	parts2 := strings.Split(v2, ".")
+
+	// Compare each part
+	maxLen := len(parts1)
+	if len(parts2) > maxLen {
+		maxLen = len(parts2)
+	}
+
+	for i := 0; i < maxLen; i++ {
+		var num1, num2 int
+
+		if i < len(parts1) {
+			fmt.Sscanf(parts1[i], "%d", &num1)
+		}
+		if i < len(parts2) {
+			fmt.Sscanf(parts2[i], "%d", &num2)
+		}
+
+		if num1 < num2 {
+			return -1
+		} else if num1 > num2 {
+			return 1
+		}
+	}
+
+	return 0
+}
+
+// OpenURL opens a URL in the default browser using system command
+func (a *App) OpenURL(url string) {
+	if url == "" {
+		return
+	}
+	
+	// Use cmd /c start to open URL in default browser (Windows)
+	cmd := exec.Command("cmd", "/c", "start", url)
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	if err := cmd.Run(); err != nil {
+		a.appendLog(fmt.Sprintf("[update] Failed to open URL: %v", err))
+	}
 }

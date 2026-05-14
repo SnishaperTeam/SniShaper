@@ -28,7 +28,8 @@
     "routing": "Auto Route",
     "dns": "DNS Settings",
     "logs": "Real-time Logs",
-    "settings": "Settings"
+    "settings": "Settings",
+    "about": "About"
   },
   "welcome": {
     "title": "Welcome to SniShaper",
@@ -302,5 +303,28 @@
     "cf_pool": {
       "fetch_now": "Refresh IP Pool"
     }
+  },
+  "about": {
+    "title": "About SniShaper",
+    "version": "Version",
+    "creator": "Creator",
+    "contributors": "Contributors",
+    "maintainers": "Maintainers",
+    "website": "Official Website",
+    "description": "SniShaper is a powerful networking tool for handling SNI and ECH configurations, providing secure network connections.",
+    "check_update": "Check for Updates",
+    "checking": "Checking...",
+    "update_available": "Update Available",
+    "update_available_desc": "Latest version: {version}\nDownload now?",
+    "up_to_date": "Up to Date",
+    "up_to_date_desc": "Current version {version} is the latest.",
+    "dev_version": "Development Version",
+    "dev_version_desc": "Your version ({version}) is newer than the latest release ({latestVersion}), may contain unreleased features.",
+    "check_failed": "Check Failed",
+    "check_failed_desc": "Unable to connect to update server, please try again later.",
+    "network_timeout": "Network connection timed out. Please check your network or try again later.",
+    "connection_refused": "Connection refused. The proxy server may be unavailable.",
+    "dns_error": "DNS resolution failed. Please check your DNS settings.",
+    "proxy_error": "Proxy configuration error. Please check your system proxy settings."
   }
 }

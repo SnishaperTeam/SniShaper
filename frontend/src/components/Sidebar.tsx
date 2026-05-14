@@ -13,7 +13,8 @@ import {
   Globe,
   ArrowDown,
   ArrowUp,
-  Antenna
+  Antenna,
+  Info
 } from 'lucide-react';
 import { AreaChart, Area, ResponsiveContainer } from 'recharts';
 import { clsx, type ClassValue } from 'clsx';
@@ -33,6 +34,7 @@ const getNavItems = (t: any) => [
   { path: '/dns', label: t('sidebar.dns'), icon: Antenna },
   { path: '/logs', label: t('sidebar.logs'), icon: FileText },
   { path: '/settings', label: t('sidebar.settings'), icon: Settings },
+  { path: '/about', label: t('sidebar.about'), icon: Info },
 ];
 
 const formatSpeed = (bytes: number) => {
