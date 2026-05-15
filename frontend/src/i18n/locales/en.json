@@ -277,6 +277,11 @@
       "title": "Show main window on startup",
       "desc": "If disabled, the app will only run in the tray when auto-started."
     },
+    "socks5": {
+      "title": "Enable SOCKS5 Support",
+      "desc": "When enabled, a separate SOCKS5 proxy server will be started.",
+      "port": "Port"
+    },
     "min_to_tray": {
       "title": "Minimize to Tray",
       "desc": "Hide to tray instead of exiting when clicking close."

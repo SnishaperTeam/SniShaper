@@ -33,6 +33,8 @@ import {
   SetShowMainWindowOnAutoStart,
   GetAutoEnableProxyOnAutoStart,
   SetAutoEnableProxyOnAutoStart,
+  GetSocks5Port,
+  SetSocks5Port,
   GetTUNConfig,
   UpdateTUNConfig,
   GetTUNStatus,
@@ -60,22 +62,27 @@ const SettingItem: React.FC<{
   desc?: React.ReactNode;
   icon?: React.ReactNode;
   children: React.ReactNode;
-}> = ({ title, desc, icon, children }) => (
-  <div className="flex items-start justify-between gap-5 p-5 bg-background-card border border-border rounded-xl hover:border-accent/40 transition-all group">
-    <div className="flex flex-1 min-w-0 gap-4 items-center">
-      <div className="w-10 h-10 rounded-2xl bg-background-hover flex items-center justify-center text-text-secondary group-hover:text-accent transition-colors shrink-0">
-        {icon || <Activity size={20} />}
-      </div>
-      <div className="min-w-0">
-        <h4 className="text-sm font-bold leading-snug">{title}</h4>
-        {desc && <p className="text-[11px] text-text-muted mt-0.5 leading-relaxed font-medium break-words">{desc}</p>}
+}> = ({ title, desc, icon, children }) => {
+  const hasLeft = title || icon;
+  return (
+    <div className={`flex items-start gap-5 p-5 bg-background-card border border-border rounded-xl hover:border-accent/40 transition-all group ${hasLeft ? 'justify-between' : 'justify-center'}`}>
+      {hasLeft && (
+        <div className="flex flex-1 min-w-0 gap-4 items-center">
+          <div className="w-10 h-10 rounded-2xl bg-background-hover flex items-center justify-center text-text-secondary group-hover:text-accent transition-colors shrink-0">
+            {icon || <Activity size={20} />}
+          </div>
+          <div className="min-w-0">
+            <h4 className="text-sm font-bold leading-snug whitespace-nowrap">{title}</h4>
+            {desc && <p className="text-[11px] text-text-muted mt-0.5 leading-relaxed font-medium break-words">{desc}</p>}
+          </div>
+        </div>
+      )}
+      <div className={`shrink-0 ${hasLeft ? 'self-center' : ''}`}>
+        {children}
       </div>
     </div>
-    <div className="shrink-0 self-center">
-      {children}
-    </div>
-  </div>
-);
+  );
+};
 
 const StackedSettingItem: React.FC<{
   title: React.ReactNode;
@@ -111,6 +118,7 @@ const Settings: React.FC<SettingsProps> = ({ cache, onCacheUpdate, theme, toggle
   
   // Only keep local state for editable text inputs and toggle optimistic updates
   const [port, setPort] = useState(cache.port);
+  const [socks5Port, setSocks5Port] = useState(cache.socks5Port ?? '8081');
   const [closeToTray, setCloseToTray] = useState(cache.closeToTray);
   const [autoStart, setAutoStart] = useState(cache.autoStart);
   const [showMainOnAutoStart, setShowMainOnAutoStart] = useState(cache.showMainOnAutoStart);
@@ -184,6 +192,19 @@ const Settings: React.FC<SettingsProps> = ({ cache, onCacheUpdate, theme, toggle
     await SetListenPort(port);
     onCacheUpdate({ port });
     toast.success(t('proxies.notifications.updated'), `${t('settings.http_port')} ${port}`);
+  };
+
+  const handleSaveSocks5Port = async (val: string) => {
+    const normalized = val.trim();
+    if (!normalized) return;
+    setSocks5Port(normalized);
+    try {
+      await SetSocks5Port(normalized);
+      onCacheUpdate({ socks5Port: normalized });
+      toast.success(t('proxies.notifications.updated'));
+    } catch (err: any) {
+      toast.error(t('common.failed'), String(err));
+    }
   };
 
   const handleToggleTray = async (val: boolean) => {
@@ -305,17 +326,32 @@ const Settings: React.FC<SettingsProps> = ({ cache, onCacheUpdate, theme, toggle
 
             <div className="space-y-4">
               <SettingItem
-                title={t('settings.http_port')}
+                title=""
                 icon={<Monitor size={20} />}
               >
-                <div className="flex gap-2">
-                  <input
-                    type="number"
-                    value={port}
-                    onChange={(e) => setPort(parseInt(e.target.value))}
-                    className="w-20 bg-background-soft border border-border px-3 py-1.5 rounded-xl text-sm font-bold focus:ring-2 focus:ring-accent outline-none"
-                  />
-                  <button onClick={handleSavePort} className="px-3 py-1.5 bg-accent/10 text-accent rounded-xl text-[11px] font-bold hover:bg-accent hover:text-white transition-all">{t('common.apply')}</button>
+                <div className="flex flex-col gap-3">
+                  <div className="flex items-center gap-2">
+                    <span className="text-[10px] text-text-secondary font-bold w-12">{t('settings.http_port')}</span>
+                    <input
+                      type="number"
+                      value={port}
+                      onChange={(e) => setPort(parseInt(e.target.value))}
+                      className="w-20 bg-background-soft border border-border px-3 py-1.5 rounded-xl text-sm font-bold focus:ring-2 focus:ring-accent outline-none"
+                    />
+                    <button onClick={handleSavePort} className="px-3 py-1.5 bg-accent/10 text-accent rounded-xl text-[11px] font-bold hover:bg-accent hover:text-white transition-all">{t('common.apply')}</button>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-[10px] text-text-secondary font-bold w-12">SOCKS5</span>
+                    <input
+                      type="text"
+                      value={socks5Port}
+                      onChange={(e) => setSocks5Port(e.target.value)}
+                      onBlur={(e) => handleSaveSocks5Port(e.target.value)}
+                      onKeyDown={(e) => { if (e.key === 'Enter') { (e.target as HTMLInputElement).blur(); } }}
+                      className="w-20 bg-background-soft border border-border px-3 py-1.5 rounded-xl text-sm font-bold focus:ring-2 focus:ring-accent outline-none"
+                      placeholder="8081"
+                    />
+                  </div>
                 </div>
               </SettingItem>
 

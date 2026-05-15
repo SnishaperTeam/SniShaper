@@ -64,6 +64,11 @@ func newCoreRuntime() (*coreRuntime, error) {
 		port = "8080"
 	}
 
+	socks5Port := ruleManager.GetSocks5Port()
+	if socks5Port == "" {
+		socks5Port = "8081"
+	}
+
 	r := &coreRuntime{
 		execPath:    execPath,
 		execDir:     execDir,
@@ -73,6 +78,7 @@ func newCoreRuntime() (*coreRuntime, error) {
 		externalTUN: newExternalMihomoManager(),
 		logBuffer:   newRingLogWriter(5000),
 	}
+	r.proxyServer.SetSocks5Addr("127.0.0.1:" + socks5Port)
 
 	if err := r.start(); err != nil {
 		return nil, err
@@ -92,6 +98,7 @@ func (r *coreRuntime) start() error {
 	r.proxyServer.UpdateCloudflareConfig(r.ruleManager.GetCloudflareConfig())
 	r.proxyServer.SetCertGenerator(r.certManager)
 	r.proxyServer.SetLogCallback(r.appendLog)
+	r.proxyServer.SetSocks5Enabled(r.ruleManager.GetSocks5Enabled())
 	r.ruleManager.InitAutoRouter(r.proxyServer.GetDoHResolver())
 
 	r.ruleManager.SetRouteEventCallback(func(domain, mode string) {
@@ -133,6 +140,7 @@ func (r *coreRuntime) reloadConfig() error {
 	r.proxyServer.SetRuleManager(r.ruleManager)
 	r.proxyServer.UpdateCloudflareConfig(r.ruleManager.GetCloudflareConfig())
 	r.proxyServer.SetCertGenerator(r.certManager)
+	r.proxyServer.SetSocks5Enabled(r.ruleManager.GetSocks5Enabled())
 	r.ruleManager.InitAutoRouter(r.proxyServer.GetDoHResolver())
 	if r.externalTUN != nil {
 		_ = r.externalTUN.RestartIfRunning(r.ruleManager.GetTUNConfig(), r.currentListenPort(), r.appendLog)

@@ -14,6 +14,7 @@ const Welcome: React.FC<WelcomeProps> = ({ onComplete }) => {
 
   const handleStart = async () => {
     await SetLanguage(selected);
+    localStorage.setItem('language', selected);
     setLanguage(selected);
     onComplete(selected);
   };

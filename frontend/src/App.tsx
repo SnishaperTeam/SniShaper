@@ -5,10 +5,10 @@ import WindowControls from './components/WindowControls';
 import ToastProvider from './components/ToastProvider';
 import {
   GetListenPort, GetCloseToTray, GetAutoStart,
-  GetShowMainWindowOnAutoStart, GetAutoEnableProxyOnAutoStart,
+  GetShowMainWindowOnAutoStart, GetAutoEnableProxyOnAutoStart, GetSocks5Enabled, GetSocks5Port,
   GetTUNConfig, GetTUNStatus, GetCloudflareConfig,
   GetCAInstallStatus, GetInstalledCerts, GetCloudflareIPStats,
-  GetLanguage, GetTheme, SetTheme
+  GetLanguage, GetTheme, SetTheme, EventsOn
 } from './api/bindings';
 import { I18nProvider, useTranslation } from './i18n/I18nContext';
 
@@ -29,6 +29,8 @@ interface SettingsCache {
   autoStart: boolean;
   showMainOnAutoStart: boolean;
   autoEnableProxyOnAutoStart: boolean;
+  socks5Enabled: boolean;
+  socks5Port: string;
   tunConfig: any;
   tunStatus: any;
   cfConfig: any;
@@ -42,6 +44,8 @@ interface SettingsCache {
 const defaultCache: SettingsCache = {
   port: 8080, closeToTray: false, autoStart: false,
   showMainOnAutoStart: true, autoEnableProxyOnAutoStart: false,
+  socks5Enabled: false,
+  socks5Port: '8081',
   tunConfig: { enabled: false, mtu: 9000, dns_hijack: true, auto_route: true, strict_route: true },
   tunStatus: { supported: true, running: false, enabled: false, message: '' },
   cfConfig: { api_key: '', auto_update: true },
@@ -57,8 +61,12 @@ const SettingsCtx = createContext<{ cache: SettingsCache; updateCache: (patch: P
 });
 
 const App: React.FC = () => {
-  const [theme, setTheme] = useState<'light' | 'dark'>('dark');
-  const [settingsCache, setSettingsCache] = useState<SettingsCache>(defaultCache);
+  const [theme, setTheme] = useState<'light' | 'dark'>((localStorage.getItem('theme') as any) || 'dark');
+  const [settingsCache, setSettingsCache] = useState<SettingsCache>({
+    ...defaultCache,
+    language: localStorage.getItem('language') || '',
+    theme: (localStorage.getItem('theme') as any) || 'dark'
+  });
   const [initialized, setInitialized] = useState(false);
 
   useEffect(() => {
@@ -67,12 +75,16 @@ const App: React.FC = () => {
     const fastLoad = async () => {
       try {
         const [language, savedTheme, port, closeToTray, autoStart,
-          showMainOnAutoStart, autoEnableProxyOnAutoStart, cfConfig] = await Promise.all([
+          showMainOnAutoStart, autoEnableProxyOnAutoStart, socks5Enabled, socks5Port, cfConfig] = await Promise.all([
           GetLanguage(), GetTheme(), GetListenPort(), GetCloseToTray(), GetAutoStart(),
-          GetShowMainWindowOnAutoStart(), GetAutoEnableProxyOnAutoStart(), GetCloudflareConfig()
+          GetShowMainWindowOnAutoStart(), GetAutoEnableProxyOnAutoStart(), GetSocks5Enabled(), GetSocks5Port(), GetCloudflareConfig()
         ]);
         const resolvedTheme = (savedTheme as any) || 'dark';
         setTheme(resolvedTheme);
+        localStorage.setItem('theme', resolvedTheme);
+        if (language) {
+          localStorage.setItem('language', language as string);
+        }
         setSettingsCache(prev => ({
           ...prev,
           language: (language as string) || '',
@@ -82,6 +94,8 @@ const App: React.FC = () => {
           autoStart: autoStart ?? prev.autoStart,
           showMainOnAutoStart: showMainOnAutoStart ?? prev.showMainOnAutoStart,
           autoEnableProxyOnAutoStart: autoEnableProxyOnAutoStart ?? prev.autoEnableProxyOnAutoStart,
+          socks5Enabled: socks5Enabled ?? prev.socks5Enabled,
+          socks5Port: (socks5Port as string) || '8081',
           cfConfig: cfConfig || prev.cfConfig,
         }));
       } catch { /* ignore */ }
@@ -107,6 +121,27 @@ const App: React.FC = () => {
     };
 
     fastLoad().then(() => slowLoad());
+
+    const unlisten = EventsOn("app:state", (state: any) => {
+      if (!state) return;
+      const updates: Partial<SettingsCache> = {};
+      if (typeof state.listenPort === 'number') {
+        updates.port = state.listenPort;
+      }
+      if (typeof state.socks5Port === 'string') {
+        updates.socks5Port = state.socks5Port;
+      }
+      if (typeof state.socks5Enabled === 'boolean') {
+        updates.socks5Enabled = state.socks5Enabled;
+      }
+      if (Object.keys(updates).length > 0) {
+        setSettingsCache(prev => ({ ...prev, ...updates }));
+      }
+    });
+
+    return () => {
+      if (unlisten) unlisten();
+    };
   }, []);
 
   const updateSettingsCache = (patch: Partial<SettingsCache>) => {
@@ -141,6 +176,7 @@ const App: React.FC = () => {
     const next = theme === 'light' ? 'dark' : 'light';
     setTheme(next);
     SetTheme(next);
+    localStorage.setItem('theme', next);
     updateSettingsCache({ theme: next });
   };
   return (

@@ -169,6 +169,28 @@ func (s *coreService) GetProxyMode(_ EmptyArgs, reply *StringReply) error {
 	return nil
 }
 
+func (s *coreService) SetSocks5Enabled(args BoolReply, _ *EmptyArgs) error {
+	s.runtime.proxyServer.SetSocks5Enabled(args.Value)
+	s.runtime.ruleManager.SetSocks5Enabled(args.Value)
+	return s.runtime.ruleManager.SaveConfig()
+}
+
+func (s *coreService) GetSocks5Enabled(_ EmptyArgs, reply *BoolReply) error {
+	reply.Value = s.runtime.proxyServer.IsSocks5Enabled()
+	return nil
+}
+
+func (s *coreService) GetSocks5Port(_ EmptyArgs, reply *StringReply) error {
+	reply.Value = s.runtime.ruleManager.GetSocks5Port()
+	return nil
+}
+
+func (s *coreService) SetSocks5Port(args StringReply, _ *EmptyArgs) error {
+	s.runtime.ruleManager.SetSocks5Port(args.Value)
+	s.runtime.proxyServer.SetSocks5Addr("127.0.0.1:" + args.Value)
+	return s.runtime.ruleManager.SaveConfig()
+}
+
 func runCoreMain() error {
 	runtime, err := newCoreRuntime()
 	if err != nil {

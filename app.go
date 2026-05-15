@@ -16,6 +16,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"runtime/debug"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -189,6 +190,11 @@ func NewApp() *App {
 		port = "8080"
 	}
 
+	socks5Port := ruleManager.GetSocks5Port()
+	if socks5Port == "" {
+		socks5Port = "8081"
+	}
+
 	a := &App{
 		proxyServer:       proxy.NewProxyServer("127.0.0.1:" + port),
 		ruleManager:       ruleManager,
@@ -197,6 +203,7 @@ func NewApp() *App {
 		launchedAtStartup: hasLaunchArg("--startup"),
 		core:              newCoreClient(),
 	}
+	a.proxyServer.SetSocks5Addr("127.0.0.1:" + socks5Port)
 
 	// Initialize Cloudflare IP pool and trigger background health check on startup
 	cf := ruleManager.GetCloudflareConfig()
@@ -663,6 +670,9 @@ func (a *App) emitFrontendState() {
 		"proxyRunning":       a.IsProxyRunning(),
 		"systemProxyEnabled": a.GetSystemProxyStatus().Enabled,
 		"tunRunning":         a.GetTUNStatus().Running,
+		"listenPort":         a.GetListenPort(),
+		"socks5Port":         a.ruleManager.GetSocks5Port(),
+		"socks5Enabled":      a.ruleManager.GetSocks5Enabled(),
 	}
 
 	application.InvokeAsync(func() {
@@ -846,6 +856,29 @@ func (a *App) StartProxy() error {
 		}
 	}
 
+	a.proxyServer.SetSocks5Enabled(true)
+	a.ruleManager.SetSocks5Enabled(true)
+	_ = a.ruleManager.SaveConfig()
+
+	// 2.5. 检查 SOCKS5 端口可用性
+	socks5OriginalPort := a.ruleManager.GetSocks5Port()
+	if socks5OriginalPort == "" {
+		socks5OriginalPort = "8081"
+	}
+	socks5PortNum, err := strconv.Atoi(socks5OriginalPort)
+	if err == nil {
+		socks5Available, err := proxy.EnsurePortAvailable(socks5PortNum, []string{"snishaper", "usque"})
+		if err != nil {
+			a.appendLog(fmt.Sprintf("[warn] SOCKS5 port probe failed: %v, using original port", err))
+			socks5Available = socks5PortNum
+		}
+		if socks5Available != socks5PortNum {
+			a.appendLog(fmt.Sprintf("[info] SOCKS5 port %d was occupied. Switched to %d.", socks5PortNum, socks5Available))
+			a.ruleManager.SetSocks5Port(strconv.Itoa(socks5Available))
+		}
+		a.proxyServer.SetSocks5Addr(fmt.Sprintf("127.0.0.1:%d", socks5Available))
+	}
+
 	// 3. 真正启动核心
 	err = a.proxyServer.Start()
 	if err != nil {
@@ -952,6 +985,22 @@ func (a *App) SetListenPort(port int) error {
 		return err
 	}
 	a.ruleManager.SetListenPort(fmt.Sprintf("%d", port))
+	if err := a.ruleManager.SaveConfig(); err != nil {
+		return err
+	}
+	if a.core != nil {
+		a.core.reloadIfRunning()
+	}
+	return nil
+}
+
+func (a *App) GetSocks5Enabled() bool {
+	return a.proxyServer.IsSocks5Enabled()
+}
+
+func (a *App) SetSocks5Enabled(enabled bool) error {
+	a.proxyServer.SetSocks5Enabled(enabled)
+	a.ruleManager.SetSocks5Enabled(enabled)
 	if err := a.ruleManager.SaveConfig(); err != nil {
 		return err
 	}
