@@ -64,10 +64,10 @@ npm run build
 cd ..
 
 # 一次性完成完整编译
-powershell -ExecutionPolicy Bypass -File .\scripts\build_windows.ps1
+powershell -ExecutionPolicy Bypass -File .\build_windows.ps1
 
 ##或已有Powershell7
-pwsh -ExecutionPolicy Bypass -File .\scripts\build_windows.ps1
+pwsh -ExecutionPolicy Bypass -File .\build_windows.ps1
 # Go主程序编译
 go build -ldflags="-s -w" -o "build/bin/snishaper.exe"
 ```

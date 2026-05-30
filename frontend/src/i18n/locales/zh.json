@@ -317,6 +317,20 @@
     "maintainers": "维护者",
     "website": "官方网站",
     "description": "SniShaper 是一款强大的网络工具，用于处理 SNI 和 ECH 配置，提供安全的网络连接。",
+    "features": "核心特性",
+    "feature_ech": "ECH 加密支持",
+    "feature_ech_desc": "支持 Encrypted Client Hello，保护您的 SNI 隐私",
+    "feature_fast": "高性能架构",
+    "feature_fast_desc": "基于 Go 语言开发，低延迟高并发处理",
+    "feature_open": "开源免费",
+    "feature_open_desc": "完全开源，社区驱动，持续更新",
+    "community": "社区参与",
+    "site_adaptation": "网站适配征集",
+    "site_adaptation_desc": "帮助我们收集和测试需要适配的网站，提交您遇到的问题和建议。",
+    "participate_now": "立即参与",
+    "development_plan": "开发计划",
+    "development_plan_desc": "查看项目的开发路线图，了解即将推出的功能和改进计划。",
+    "view_plan": "查看详情",
     "check_update": "检查更新",
     "checking": "检查中...",
     "update_available": "发现新版本",
@@ -330,6 +344,9 @@
     "network_timeout": "网络连接超时，请检查您的网络连接或稍后重试。",
     "connection_refused": "连接被拒绝，可能是代理服务器不可用。",
     "dns_error": "DNS 解析失败，请检查您的 DNS 设置。",
-    "proxy_error": "代理配置错误，请检查系统代理设置。"
+    "proxy_error": "代理配置错误，请检查系统代理设置。",
+    "rights_reserved": "保留所有权利。",
+    "made_with": "由 SniShaper 社区",
+    "by_community": "倾心打造"
   }
 }
