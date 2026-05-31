@@ -63,7 +63,7 @@ const About: React.FC = () => {
   }, []);
 
   const handleOpenWebsite = () => {
-    OpenURL('https://dongle.dpdns.org/');
+    OpenURL('https://jetcpp.dpdns.org/snishaper/index.html');
   };
 
   const handleOpenGitHub = () => {
@@ -312,7 +312,7 @@ const About: React.FC = () => {
                   {t('about.website')}
                 </h3>
                 <p className="text-accent font-semibold text-[15px] group-hover:underline">
-                  dongle.dpdns.org
+                  jetcpp.dpdns.org
                 </p>
               </div>
             </div>

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { 
   FileText, 
   Trash2, 
@@ -17,16 +17,19 @@ import {
 } from '../api/bindings';
 import { useTranslation } from '../i18n/I18nContext';
 
-const LogLine: React.FC<{ line: string }> = ({ line }) => {
-  const isError = /error|failed|panic/i.test(line);
-  const isWarn = /warn/i.test(line);
-  
-  const parseLine = (text: string) => {
-    const match = text.match(/^(\d{4}\/\d{2}\/\d{2}) (\d{2}:\d{2}:\d{2})(?:\.\d+)?\s+(.*)$/);
-    if (!match) return { time: '--:--:--', msg: text };
-    return { time: match[2], msg: match[3] };
-  };
+const RE_ERROR = /error|failed|panic/i;
+const RE_WARN = /warn/i;
+const RE_LINE_PARSE = /^(\d{4}\/\d{2}\/\d{2}) (\d{2}:\d{2}:\d{2})(?:\.\d+)?\s+(.*)$/;
 
+const parseLine = (text: string) => {
+  const match = text.match(RE_LINE_PARSE);
+  if (!match) return { time: '--:--:--', msg: text };
+  return { time: match[2], msg: match[3] };
+};
+
+const LogLine: React.FC<{ line: string }> = React.memo(({ line }) => {
+  const isError = RE_ERROR.test(line);
+  const isWarn = RE_WARN.test(line);
   const { time, msg } = parseLine(line);
 
   return (
@@ -44,7 +47,7 @@ const LogLine: React.FC<{ line: string }> = ({ line }) => {
       </div>
     </div>
   );
-};
+});
 
 const Logs: React.FC = () => {
   const { t } = useTranslation();
@@ -55,11 +58,11 @@ const Logs: React.FC = () => {
   const [search, setSearch] = useState('');
   const scrollRef = useRef<HTMLDivElement>(null);
 
-  const fetchLogs = async () => {
+  const fetchLogs = useCallback(async () => {
     const text = await GetRecentLogs(400);
     const newLines = text ? text.split('\n').filter(Boolean) : [];
     setLines(newLines);
-  };
+  }, []);
 
   useEffect(() => {
     let mounted = true;
@@ -116,7 +119,10 @@ const Logs: React.FC = () => {
     }
   };
 
-  const filteredLines = lines.filter(l => l.toLowerCase().includes(search.toLowerCase()));
+  const filteredLines = useMemo(
+    () => lines.filter(l => l.toLowerCase().includes(search.toLowerCase())),
+    [lines, search]
+  );
 
   const handleClear = async () => {
     await ClearLogs();

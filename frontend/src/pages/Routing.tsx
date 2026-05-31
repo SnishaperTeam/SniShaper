@@ -2,12 +2,9 @@ import React, { useState, useEffect, useRef } from 'react';
 import { 
   Workflow, 
   ShieldCheck, 
-  Zap, 
-  Monitor,
   Activity,
   Share2,
-  RefreshCw,
-  Power
+  RefreshCw
 } from 'lucide-react';
 import { 
   GetAutoRoutingConfig, 

@@ -9,12 +9,9 @@ import {
   ArrowUpRight,
   ArrowDownRight,
   Zap,
-  HardDrive,
-  CloudLightning,
   ShieldAlert,
   Search,
   Loader2,
-  AlertCircle,
   Download,
   Lock
 } from 'lucide-react';

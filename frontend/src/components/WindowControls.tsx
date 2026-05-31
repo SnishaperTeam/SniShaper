@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useCallback } from 'react';
 import { Minus, Square, X } from 'lucide-react';
 import { 
   HandleWindowClose,
@@ -6,30 +6,30 @@ import {
   WindowToggleMaximise
 } from "../api/bindings";
 
-const WindowControls: React.FC = () => {
-  const handleMinimise = async () => {
+const WindowControls: React.FC = React.memo(() => {
+  const handleMinimise = useCallback(async () => {
     try {
       await WindowMinimise();
     } catch (e) {
       console.error("WindowMinimise failed:", e);
     }
-  };
+  }, []);
 
-  const handleToggleMaximise = async () => {
+  const handleToggleMaximise = useCallback(async () => {
     try {
       await WindowToggleMaximise();
     } catch (e) {
       console.error("WindowToggleMaximise failed:", e);
     }
-  };
+  }, []);
 
-  const handleClose = async () => {
+  const handleClose = useCallback(async () => {
     try {
       await HandleWindowClose();
     } catch (e) {
       console.error("HandleWindowClose failed:", e);
     }
-  };
+  }, []);
 
   return (
     <div className="flex items-center gap-1" style={{ "--wails-draggable": "no-drag" } as React.CSSProperties}>
@@ -59,6 +59,6 @@ const WindowControls: React.FC = () => {
       </button>
     </div>
   );
-};
+});
 
 export default WindowControls;
