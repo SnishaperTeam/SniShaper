@@ -7,14 +7,10 @@ import {
   ChevronUp,
   ChevronDown,
   Zap,
-  AlertTriangle,
   CheckCircle2,
-  XCircle,
   Loader2,
   Shield,
   Globe,
-  Lock,
-  Settings,
   AlertCircle
 } from 'lucide-react';
 import {

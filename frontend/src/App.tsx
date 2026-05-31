@@ -1,4 +1,4 @@
-import React, { Suspense, lazy, useState, useEffect, createContext, useContext } from 'react';
+import React, { Suspense, lazy, useState, useEffect, useCallback, createContext, useContext } from 'react';
 import { HashRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import Sidebar from './components/Sidebar';
 import WindowControls from './components/WindowControls';
@@ -145,9 +145,9 @@ const App: React.FC = () => {
     };
   }, []);
 
-  const updateSettingsCache = (patch: Partial<SettingsCache>) => {
+  const updateSettingsCache = useCallback((patch: Partial<SettingsCache>) => {
     setSettingsCache(prev => ({ ...prev, ...patch }));
-  };
+  }, []);
 
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', theme);
@@ -173,13 +173,13 @@ const App: React.FC = () => {
     return () => window.removeEventListener('contextmenu', handleContextMenu);
   }, []);
 
-  const toggleTheme = () => {
+  const toggleTheme = useCallback(() => {
     const next = theme === 'light' ? 'dark' : 'light';
     setTheme(next);
     SetTheme(next);
     localStorage.setItem('theme', next);
     updateSettingsCache({ theme: next });
-  };
+  }, [theme, updateSettingsCache]);
   return (
     <I18nProvider initialLanguage={(settingsCache.language as any) || 'zh'}>
       <AppContent 

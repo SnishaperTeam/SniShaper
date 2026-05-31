@@ -63,13 +63,40 @@ npm install
 npm run build
 cd ..
 
-# 一次性完成完整编译
-powershell -ExecutionPolicy Bypass -File .\scripts\build_windows.ps1
+# 一次性完成完整编译（交互模式）
+powershell -ExecutionPolicy Bypass -File .\build_windows.ps1
 
-##或已有Powershell7
-pwsh -ExecutionPolicy Bypass -File .\scripts\build_windows.ps1
+# 或使用 PowerShell 7
+pwsh -ExecutionPolicy Bypass -File .\build_windows.ps1
+
 # Go主程序编译
 go build -ldflags="-s -w" -o "build/bin/snishaper.exe"
+```
+
+### 构建脚本命令行参数
+
+`build_windows.ps1` 支持以下参数，可跳过交互式选择：
+
+| 参数 | 可选值 | 说明 |
+|------|--------|------|
+| `-Build` | `frontend` / `backend` / `all` | 指定构建目标 |
+| `-Lang` | `en` / `cn` | 指定界面语言 |
+| `-InstallDeps` | 无值（开关） | 安装前端 npm 依赖 |
+
+**用法示例：**
+
+```powershell
+# 仅构建前端（中文界面）
+.\build_windows.ps1 -Build frontend -Lang cn
+
+# 仅构建后端（英文界面）
+.\build_windows.ps1 -Build backend -Lang en
+
+# 同时构建前后端，并安装依赖
+.\build_windows.ps1 -Build all -Lang cn -InstallDeps
+
+# 无参数 = 交互模式（原有行为）
+.\build_windows.ps1
 ```
 
 开发环境建议：

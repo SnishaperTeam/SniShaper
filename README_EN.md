@@ -63,13 +63,40 @@ npm install
 npm run build
 cd ..
 
-# Complete the full compilation in one go
-powershell -ExecutionPolicy Bypass -File .\scripts\build_windows.ps1
+# Complete the full compilation in one go (interactive mode)
+powershell -ExecutionPolicy Bypass -File .\build_windows.ps1
 
-## Or with PowerShell 7
-pwsh -ExecutionPolicy Bypass -File .\scripts\build_windows.ps1
+# Or with PowerShell 7
+pwsh -ExecutionPolicy Bypass -File .\build_windows.ps1
+
 # Go main program compilation
 go build -ldflags="-s -w" -o "build/bin/snishaper.exe"
+```
+
+### Build Script Command-Line Parameters
+
+`build_windows.ps1` supports the following parameters to skip interactive prompts:
+
+| Parameter | Values | Description |
+|-----------|--------|-------------|
+| `-Build` | `frontend` / `backend` / `all` | Specify build target |
+| `-Lang` | `en` / `cn` | Specify interface language |
+| `-InstallDeps` | No value (switch) | Install frontend npm dependencies |
+
+**Usage examples:**
+
+```powershell
+# Build frontend only (Chinese interface)
+.\build_windows.ps1 -Build frontend -Lang cn
+
+# Build backend only (English interface)
+.\build_windows.ps1 -Build backend -Lang en
+
+# Build both frontend and backend, with dependency install
+.\build_windows.ps1 -Build all -Lang cn -InstallDeps
+
+# No parameters = interactive mode (original behavior)
+.\build_windows.ps1
 ```
 
 Development environment recommendations:

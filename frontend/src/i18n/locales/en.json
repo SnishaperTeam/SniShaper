@@ -317,6 +317,20 @@
     "maintainers": "Maintainers",
     "website": "Official Website",
     "description": "SniShaper is a powerful networking tool for handling SNI and ECH configurations, providing secure network connections.",
+    "features": "Core Features",
+    "feature_ech": "ECH Encryption",
+    "feature_ech_desc": "Support Encrypted Client Hello to protect your SNI privacy",
+    "feature_fast": "High Performance",
+    "feature_fast_desc": "Built with Go, delivering low latency and high concurrency",
+    "feature_open": "Open Source",
+    "feature_open_desc": "Completely open source, community-driven, continuously updated",
+    "community": "Community",
+    "site_adaptation": "Website Adaptation",
+    "site_adaptation_desc": "Help us collect and test websites that need adaptation. Submit your issues and suggestions.",
+    "participate_now": "Participate Now",
+    "development_plan": "Development Plan",
+    "development_plan_desc": "View the project roadmap and upcoming features and improvements.",
+    "view_plan": "View Details",
     "check_update": "Check for Updates",
     "checking": "Checking...",
     "update_available": "Update Available",
@@ -330,6 +344,9 @@
     "network_timeout": "Network connection timed out. Please check your network or try again later.",
     "connection_refused": "Connection refused. The proxy server may be unavailable.",
     "dns_error": "DNS resolution failed. Please check your DNS settings.",
-    "proxy_error": "Proxy configuration error. Please check your system proxy settings."
+    "proxy_error": "Proxy configuration error. Please check your system proxy settings.",
+    "rights_reserved": "All rights reserved.",
+    "made_with": "Made with",
+    "by_community": "by the SniShaper community"
   }
 }

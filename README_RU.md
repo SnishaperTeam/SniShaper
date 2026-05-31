@@ -63,13 +63,40 @@ npm install
 npm run build
 cd ..
 
-# Полная компиляция за один шаг
-powershell -ExecutionPolicy Bypass -File .\scripts\build_windows.ps1
+# Полная компиляция за один шаг (интерактивный режим)
+powershell -ExecutionPolicy Bypass -File .\build_windows.ps1
 
-## Или с PowerShell 7
-pwsh -ExecutionPolicy Bypass -File .\scripts\build_windows.ps1
+# Или с PowerShell 7
+pwsh -ExecutionPolicy Bypass -File .\build_windows.ps1
+
 # Компиляция основной программы на Go
 go build -ldflags="-s -w" -o "build/bin/snishaper.exe"
+```
+
+### Параметры командной строки скрипта сборки
+
+`build_windows.ps1` поддерживает следующие параметры для пропуска интерактивных запросов:
+
+| Параметр | Значения | Описание |
+|----------|----------|----------|
+| `-Build` | `frontend` / `backend` / `all` | Цель сборки |
+| `-Lang` | `en` / `cn` | Язык интерфейса |
+| `-InstallDeps` | без значений (флаг) | Установить npm зависимости |
+
+**Примеры использования:**
+
+```powershell
+# Собрать только фронтенд (русский интерфейс)
+.\build_windows.ps1 -Build frontend -Lang cn
+
+# Собрать только бэкенд (английский интерфейс)
+.\build_windows.ps1 -Build backend -Lang en
+
+# Собрать всё и установить зависимости
+.\build_windows.ps1 -Build all -Lang cn -InstallDeps
+
+# Без параметров = интерактивный режим
+.\build_windows.ps1
 ```
 
 Рекомендации по окружению разработки:

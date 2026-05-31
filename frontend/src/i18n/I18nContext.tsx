@@ -1,9 +1,10 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, useMemo } from 'react';
 import zh from './locales/zh.json';
 import en from './locales/en.json';
+import ru from './locales/ru.json';
 
 type Translations = typeof zh;
-type Language = 'zh' | 'en';
+type Language = 'zh' | 'en' | 'ru';
 
 interface I18nContextType {
   language: Language;
@@ -11,21 +12,19 @@ interface I18nContextType {
   t: (path: string, params?: Record<string, string | number>) => string;
 }
 
-const translations: Record<Language, Translations> = { zh, en };
+const translations: Record<Language, Translations> = { zh, en, ru };
 
 const I18nContext = createContext<I18nContextType | undefined>(undefined);
 
-export const I18nProvider: React.FC<{ children: React.ReactNode, initialLanguage?: Language }> = ({ children, initialLanguage = 'zh' }) => {
-  const [language, setLangState] = useState<Language>(initialLanguage);
-
-  const t = (path: string, params?: Record<string, string | number>): string => {
+const createTFunction = (language: Language) => {
+  return (path: string, params?: Record<string, string | number>): string => {
     const keys = path.split('.');
     let result: any = translations[language];
     for (const key of keys) {
       if (result && result[key]) {
         result = result[key];
       } else {
-        return path; // Fallback to path if not found
+        return path;
       }
     }
     
@@ -37,9 +36,17 @@ export const I18nProvider: React.FC<{ children: React.ReactNode, initialLanguage
     }
     return text;
   };
+};
+
+export const I18nProvider: React.FC<{ children: React.ReactNode, initialLanguage?: Language }> = ({ children, initialLanguage = 'zh' }) => {
+  const [language, setLangState] = useState<Language>(initialLanguage);
+
+  const t = useMemo(() => createTFunction(language), [language]);
+
+  const value = useMemo(() => ({ language, setLanguage: setLangState, t }), [language, t]);
 
   return (
-    <I18nContext.Provider value={{ language, setLanguage: setLangState, t }}>
+    <I18nContext.Provider value={value}>
       {children}
     </I18nContext.Provider>
   );

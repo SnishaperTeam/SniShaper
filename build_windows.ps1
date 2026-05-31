@@ -1,4 +1,14 @@
-﻿$currentPrincipal = New-Object Security.Principal.WindowsPrincipal([Security.Principal.WindowsIdentity]::GetCurrent())
+﻿param(
+    [ValidateSet("frontend", "backend", "all")]
+    [string]$Build,
+
+    [ValidateSet("en", "cn", "ru")]
+    [string]$Lang,
+
+    [switch]$InstallDeps
+)
+
+$currentPrincipal = New-Object Security.Principal.WindowsPrincipal([Security.Principal.WindowsIdentity]::GetCurrent())
 $isAdmin = $currentPrincipal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
 
 if (-not $isAdmin) {
@@ -22,10 +32,11 @@ $ProjectRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
 Set-Location $ProjectRoot
 
 $messages = @{
-    "LangTitle" = "Please select your language / 请选择语言"
+    "LangTitle" = "Please select your language / 请选择语言 / Выберите язык"
     "LangOpt1" = "English"
     "LangOpt2" = "中文"
-    "LangPrompt" = "Enter your choice (1 or 2)"
+    "LangOpt3" = "Русский"
+    "LangPrompt" = "Enter your choice (1, 2 or 3)"
 
     "EN_MenuTitle" = "       Project Build Menu"
     "EN_DepPrompt" = "Do you want to install frontend npm dependencies? (Y/N, default is N)"
@@ -74,47 +85,102 @@ $messages = @{
     "CN_BackDone" = "[后端] 后端编译与文件复制完成！"
     "CN_AllDone" = "所有选定的任务已成功完成！"
     "CN_Exit" = "按回车键退出"
+
+    "RU_MenuTitle" = "       Меню сборки проекта"
+    "RU_DepPrompt" = "Установить npm зависимости фронтенда? (Y/N, по умолчанию N)"
+    "RU_SelectTitle" = "Выберите вариант сборки:"
+    "RU_Opt1" = "1. Собрать только фронтенд"
+    "RU_Opt2" = "2. Собрать только бэкенд"
+    "RU_Opt3" = "3. Собрать фронтенд и бэкенд"
+    "RU_ChoicePrompt" = "Введите ваш выбор (1, 2 или 3)"
+    "RU_Start" = "Начало сборки..."
+    "RU_FrontEnter" = "[Фронтенд] Переход в директорию frontend..."
+    "RU_FrontErrDir" = "[Фронтенд] ОШИБКА: Не удалось войти в директорию 'frontend'!"
+    "RU_FrontInstall" = "[Фронтенд] Установка npm зависимостей..."
+    "RU_FrontErrInstall" = "[Фронтенд] ОШИБКА: npm install не удался!"
+    "RU_FrontBuild" = "[Фронтенд] Запуск команды: npm run build..."
+    "RU_FrontErrBuild" = "[Фронтенд] ОШИБКА: 'npm run build' не удался!"
+    "RU_FrontDone" = "[Фронтенд] Сборка фронтенда завершена успешно!"
+    "RU_BackStart" = "[Бэкенд] Начало сборки Go..."
+    "RU_BackErrBuild" = "[Бэкенд] ОШИБКА: Сборка Go не удалась!"
+    "RU_BackCopyCore" = "[Бэкенд] Копирование папки 'core'..."
+    "RU_BackCopyProxy" = "[Бэкенд] Копирование папки 'proxy'..."
+    "RU_BackCopyRuntime" = "[Бэкенд] Копирование папки 'runtime'..."
+    "RU_BackDone" = "[Бэкенд] Сборка бэкенда и копирование файлов завершены!"
+    "RU_AllDone" = "Все выбранные задачи успешно завершены!"
+    "RU_Exit" = "Нажмите Enter для выхода"
 }
 
-Write-Host "==========================================" -ForegroundColor Cyan
-Write-Host $messages["LangTitle"] -ForegroundColor Cyan
-Write-Host "==========================================" -ForegroundColor Cyan
-Write-Host "1. $($messages['LangOpt1'])"
-Write-Host "2. $($messages['LangOpt2'])"
-Write-Host ""
-$langChoice = Read-Host $messages["LangPrompt"]
-
-if ($langChoice -eq "2") {
-    $lang = "CN"
-} elseif ($langChoice -eq "1") {
-    $lang = "EN"
+# --- Resolve language ---
+if ($Lang) {
+    $lang = $Lang.ToUpper()
 } else {
-    Write-Host "Invalid choice, defaulting to English..." -ForegroundColor Yellow
-    $lang = "EN"
+    Write-Host "==========================================" -ForegroundColor Cyan
+    Write-Host $messages["LangTitle"] -ForegroundColor Cyan
+    Write-Host "==========================================" -ForegroundColor Cyan
+    Write-Host "1. $($messages['LangOpt1'])"
+    Write-Host "2. $($messages['LangOpt2'])"
+    Write-Host "3. $($messages['LangOpt3'])"
+    Write-Host ""
+    $langChoice = Read-Host $messages["LangPrompt"]
+
+    if ($langChoice -eq "2") {
+        $lang = "CN"
+    } elseif ($langChoice -eq "1") {
+        $lang = "EN"
+    } elseif ($langChoice -eq "3") {
+        $lang = "RU"
+    } else {
+        Write-Host "Invalid choice, defaulting to English..." -ForegroundColor Yellow
+        $lang = "EN"
+    }
 }
 
-Write-Host ""
-Write-Host "==========================================" -ForegroundColor Cyan
-Write-Host $messages["$($lang)_MenuTitle"] -ForegroundColor Cyan
-Write-Host "==========================================" -ForegroundColor Cyan
-Write-Host ""
+# --- Resolve build target ---
+$installDepsInput = $null
 
-$installDeps = Read-Host $messages["$($lang)_DepPrompt"]
+if ($Build) {
+    switch ($Build) {
+        "frontend" { $choice = "1" }
+        "backend"  { $choice = "2" }
+        "all"      { $choice = "3" }
+    }
+} else {
+    Write-Host ""
+    Write-Host "==========================================" -ForegroundColor Cyan
+    Write-Host $messages["$($lang)_MenuTitle"] -ForegroundColor Cyan
+    Write-Host "==========================================" -ForegroundColor Cyan
+    Write-Host ""
 
-Write-Host ""
-Write-Host $messages["$($lang)_SelectTitle"] -ForegroundColor Yellow
-Write-Host $messages["$($lang)_Opt1"]
-Write-Host $messages["$($lang)_Opt2"]
-Write-Host $messages["$($lang)_Opt3"]
-Write-Host ""
+    if (-not $PSBoundParameters.ContainsKey('InstallDeps')) {
+        $installDepsInput = Read-Host $messages["$($lang)_DepPrompt"]
+    }
 
-$choice = Read-Host $messages["$($lang)_ChoicePrompt"]
+    Write-Host ""
+    Write-Host $messages["$($lang)_SelectTitle"] -ForegroundColor Yellow
+    Write-Host $messages["$($lang)_Opt1"]
+    Write-Host $messages["$($lang)_Opt2"]
+    Write-Host $messages["$($lang)_Opt3"]
+    Write-Host ""
+
+    $choice = Read-Host $messages["$($lang)_ChoicePrompt"]
+}
 
 # Validate choice
 if ($choice -ne "1" -and $choice -ne "2" -and $choice -ne "3") {
     Write-Host "[ERROR] Invalid choice: $choice. Please enter 1, 2, or 3." -ForegroundColor Red
     Read-Host $messages["$($lang)_Exit"]
     exit 1
+}
+
+# --- Resolve InstallDeps when interactive ---
+if (-not $Build -and -not $PSBoundParameters.ContainsKey('InstallDeps')) {
+    if ([string]::IsNullOrWhiteSpace($installDepsInput)) {
+        $installDepsInput = "N"
+    }
+    if ($installDepsInput -eq "Y" -or $installDepsInput -eq "y") {
+        $InstallDeps = $true
+    }
 }
 
 Write-Host ""
@@ -153,12 +219,7 @@ if ($choice -eq "1" -or $choice -eq "3") {
         exit 1
     }
 
-    # Handle empty input as default (N)
-    if ([string]::IsNullOrWhiteSpace($installDeps)) {
-        $installDeps = "N"
-    }
-    
-    if ($installDeps -eq "Y" -or $installDeps -eq "y") {
+    if ($InstallDeps) {
         Write-Host $messages["$($lang)_FrontInstall"] -ForegroundColor Green
         npm install
         if ($LASTEXITCODE -ne 0) {

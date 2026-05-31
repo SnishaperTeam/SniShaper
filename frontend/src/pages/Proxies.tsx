@@ -4,16 +4,9 @@ import {
   Shield, 
   Server, 
   Zap, 
-  Cloud, 
   Lock, 
   History, 
-  Settings as SettingsIcon,
-  RefreshCw,
   PlusCircle,
-  ExternalLink,
-  UserPlus,
-  Play,
-  Square,
   Activity
 } from 'lucide-react';
 import { 

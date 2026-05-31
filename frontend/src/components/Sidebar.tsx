@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { NavLink } from 'react-router-dom';
 import logoUrl from '../assets/logo.svg';
 import { 
@@ -48,9 +48,9 @@ interface SidebarProps {
   toggleTheme: () => void;
 }
 
-const Sidebar: React.FC<SidebarProps> = ({ theme, toggleTheme }) => {
+const Sidebar: React.FC<SidebarProps> = React.memo(({ theme, toggleTheme }) => {
   const { t } = useTranslation();
-  const navItems = getNavItems(t);
+  const navItems = useMemo(() => getNavItems(t), [t]);
   const [speedHistory, setSpeedHistory] = useState(Array.from({ length: 20 }, () => ({ down: 0, up: 0 })));
   const [currentSpeed, setCurrentSpeed] = useState({ down: 0, up: 0 });
   const chartGradientIdDown = React.useId();
@@ -164,6 +164,6 @@ const Sidebar: React.FC<SidebarProps> = ({ theme, toggleTheme }) => {
       </div>
     </aside>
   );
-};
+});
 
 export default Sidebar;

@@ -10,7 +10,7 @@ interface WelcomeProps {
 
 const Welcome: React.FC<WelcomeProps> = ({ onComplete }) => {
   const { setLanguage, t } = useTranslation();
-  const [selected, setSelected] = useState<'zh' | 'en'>('zh');
+  const [selected, setSelected] = useState<'zh' | 'en' | 'ru'>('zh');
 
   const handleStart = async () => {
     await SetLanguage(selected);
@@ -30,7 +30,7 @@ const Welcome: React.FC<WelcomeProps> = ({ onComplete }) => {
           <p className="text-text-secondary">{t('welcome.subtitle')}</p>
         </div>
 
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-3 gap-3">
           <button
             onClick={() => { setSelected('zh'); setLanguage('zh'); }}
             className={`flex flex-col items-center justify-center p-4 rounded-xl border-2 transition-all duration-200 ${
@@ -58,6 +58,20 @@ const Welcome: React.FC<WelcomeProps> = ({ onComplete }) => {
               English
             </span>
             <span className="text-xs opacity-60">英语</span>
+          </button>
+          <button
+            onClick={() => { setSelected('ru'); setLanguage('ru'); }}
+            className={`flex flex-col items-center justify-center p-4 rounded-xl border-2 transition-all duration-200 ${
+              selected === 'ru' 
+                ? 'border-accent bg-accent/5 text-accent shadow-sm' 
+                : 'border-border bg-background-soft/50 text-text-secondary hover:border-border-hover'
+            }`}
+          >
+            <span className="text-lg font-medium mb-1 flex items-center gap-2">
+              <Languages size={18} />
+              Русский
+            </span>
+            <span className="text-xs opacity-60">俄语</span>
           </button>
         </div>
 

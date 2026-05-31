@@ -1,15 +1,11 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
-  Settings as SettingsIcon,
-  Save,
   ShieldAlert,
   Download,
-  Cloud,
   FolderOpen,
   RefreshCcw,
   Monitor,
   Anchor,
-  HelpCircle,
   Cpu,
   Globe,
   BellRing,
@@ -18,7 +14,6 @@ import {
   Zap,
   Trash2,
   AlertCircle,
-  Upload,
   Sun,
   Moon
 } from 'lucide-react';
@@ -132,12 +127,12 @@ const Settings: React.FC<SettingsProps> = ({ cache, onCacheUpdate, theme, toggle
   const [isCheckingHealth, setIsCheckingHealth] = useState(false);
   const [isCertBusy, setIsCertBusy] = useState(false);
 
-  // Read-only display data
+  // Read-only display data (local state for frequently updated data)
   const tunConfig = cache.tunConfig;
   const tunStatus = cache.tunStatus;
   const caStatus = cache.caStatus;
   const installedCerts = cache.installedCerts || [];
-  const ipStats = cache.ipStats || [];
+  const [ipStats, setIpStats] = useState<any[]>(cache.ipStats || []);
 
   const parseLatencyMs = (latency: unknown) => {
     if (typeof latency === 'number') return latency;
@@ -152,7 +147,7 @@ const Settings: React.FC<SettingsProps> = ({ cache, onCacheUpdate, theme, toggle
     return value;
   };
 
-  const reloadCriticalData = async () => {
+  const reloadCriticalData = useCallback(async () => {
     try {
       const [tunCfg, tunState, cf, ca, certs, stats] = await Promise.all([
         GetTUNConfig(),
@@ -164,26 +159,26 @@ const Settings: React.FC<SettingsProps> = ({ cache, onCacheUpdate, theme, toggle
       ]);
 
       if (cf) setCfConfig(cf);
+      if (stats) setIpStats(stats);
 
       onCacheUpdate({
         tunConfig: tunCfg || cache.tunConfig,
         tunStatus: tunState || cache.tunStatus,
         cfConfig: cf || cache.cfConfig,
         caStatus: ca || cache.caStatus,
-        installedCerts: certs || cache.installedCerts,
-        ipStats: stats || cache.ipStats
+        installedCerts: certs || cache.installedCerts
       });
     } catch {
       // Silently ignore
     }
-  };
+  }, [cache, onCacheUpdate]);
 
   useEffect(() => {
     reloadCriticalData();
     TriggerCFHealthCheck().catch(console.error);
     const ipTimer = setInterval(async () => {
       const stats = await GetCloudflareIPStats();
-      onCacheUpdate({ ipStats: stats || [] });
+      if (stats) setIpStats(stats);
     }, 5000);
     return () => clearInterval(ipTimer);
   }, []);
@@ -385,6 +380,12 @@ const Settings: React.FC<SettingsProps> = ({ cache, onCacheUpdate, theme, toggle
                     className={`px-3 py-1 text-[11px] font-bold rounded-lg transition-all ${language === 'en' ? 'bg-accent text-white shadow-sm' : 'text-text-secondary hover:text-text-primary'}`}
                   >
                     English
+                  </button>
+                  <button
+                    onClick={() => handleLanguageChange('ru')}
+                    className={`px-3 py-1 text-[11px] font-bold rounded-lg transition-all ${language === 'ru' ? 'bg-accent text-white shadow-sm' : 'text-text-secondary hover:text-text-primary'}`}
+                  >
+                    Русский
                   </button>
                 </div>
               </SettingItem>
