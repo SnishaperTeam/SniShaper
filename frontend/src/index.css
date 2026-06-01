@@ -100,7 +100,6 @@
   }
 }
 
-/* Custom scrollbar matching Clash Verge Rev */
 ::-webkit-scrollbar {
   width: 5px;
   height: 5px;
@@ -114,7 +113,6 @@
   @apply bg-gray-400/20 rounded-full hover:bg-gray-400/40 transition-colors;
 }
 
-/* Tailwind-animate shims for transitions without the plugin */
 @layer utilities {
   .animate-in {
     animation-duration: var(--animation-duration, 500ms);
@@ -149,8 +147,6 @@
     }
   }
 
-  /* Fix for dynamic color opacities not parsed by Tailwind when using hex CSS variables */
-  /* Accent */
   .border-accent\/20 { border-color: color-mix(in srgb, var(--accent) 20%, transparent) !important; }
   .border-accent\/25 { border-color: color-mix(in srgb, var(--accent) 25%, transparent) !important; }
   .border-accent\/30 { border-color: color-mix(in srgb, var(--accent) 30%, transparent) !important; }
@@ -160,7 +156,6 @@
   .hover\:border-accent\/30:hover { border-color: color-mix(in srgb, var(--accent) 30%, transparent) !important; }
   .hover\:border-accent\/40:hover { border-color: color-mix(in srgb, var(--accent) 40%, transparent) !important; }
 
-  /* Warning */
   .border-warning\/20 { border-color: color-mix(in srgb, var(--warning) 20%, transparent) !important; }
   .border-warning\/25 { border-color: color-mix(in srgb, var(--warning) 25%, transparent) !important; }
   .border-warning\/30 { border-color: color-mix(in srgb, var(--warning) 30%, transparent) !important; }
@@ -169,7 +164,6 @@
   .bg-warning\/10 { background-color: color-mix(in srgb, var(--warning) 10%, transparent) !important; }
   .bg-warning\/15 { background-color: color-mix(in srgb, var(--warning) 15%, transparent) !important; }
 
-  /* Danger */
   .border-danger\/20 { border-color: color-mix(in srgb, var(--danger) 20%, transparent) !important; }
   .border-danger\/25 { border-color: color-mix(in srgb, var(--danger) 25%, transparent) !important; }
   .border-danger\/30 { border-color: color-mix(in srgb, var(--danger) 30%, transparent) !important; }
@@ -178,7 +172,6 @@
   .bg-danger\/12 { background-color: color-mix(in srgb, var(--danger) 12%, transparent) !important; }
   .bg-danger\/18 { background-color: color-mix(in srgb, var(--danger) 18%, transparent) !important; }
 
-  /* Success */
   .border-success\/20 { border-color: color-mix(in srgb, var(--success) 20%, transparent) !important; }
   .border-success\/30 { border-color: color-mix(in srgb, var(--success) 30%, transparent) !important; }
   .bg-success\/10 { background-color: color-mix(in srgb, var(--success) 10%, transparent) !important; }

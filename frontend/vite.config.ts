@@ -1,11 +1,9 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
-import svgr from 'vite-plugin-svgr'
 import path from 'path'
 
-// https://vitejs.dev/config/
 export default defineConfig({
-  plugins: [react(), svgr()],
+  plugins: [react()],
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './src'),
@@ -14,21 +12,20 @@ export default defineConfig({
   build: {
     outDir: 'dist',
     emptyOutDir: true,
-    chunkSizeWarningLimit: 600,
-    rollupOptions: {
-      external: (id) => id.startsWith('/wails/'),
-      output: {
-        manualChunks: {
-          'react-vendor': ['react', 'react-dom', 'react-router-dom'],
-          'chart-vendor': ['recharts'],
-        },
-      },
-      onwarn(warning, warn) {
+    target: 'esnext',
+    minify: 'oxc',
+    reportCompressedSize: false,
+    rolldownOptions: {
+      external: (id: string) => id.startsWith('/wails/'),
+      onwarn(warning: any, warn: any) {
         if (warning.code === 'MODULE_LEVEL_DIRECTIVE' && warning.message.includes("'use client'")) {
+          return
+        }
+        if (warning.code === 'CIRCULAR_DEPENDENCY') {
           return
         }
         warn(warning)
       },
     },
-  }
+  },
 })
