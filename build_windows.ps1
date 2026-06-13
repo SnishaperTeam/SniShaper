@@ -1,4 +1,4 @@
-param(
+﻿param(
     [ValidateSet("frontend", "backend", "all")]
     [string]$Build,
 

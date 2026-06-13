@@ -2030,6 +2030,8 @@ func (a *App) OpenURL(url string) {
 	if err := cmd.Run(); err != nil {
 		a.appendLog(fmt.Sprintf("[update] Failed to open URL: %v", err))
 	}
+}
+
 // Evolution Mode APIs
 func (a *App) StartEvolutionTest(domains []string, enableIPv6 bool) (map[string]interface{}, error) {
 	a.appendLog("[Evolution] 开始进化模式测试")

@@ -4,7 +4,9 @@ import {
   ShieldCheck, 
   Activity,
   Share2,
-  RefreshCw
+  RefreshCw,
+  Power,
+  Zap
 } from 'lucide-react';
 import { 
   GetAutoRoutingConfig, 
