@@ -22,6 +22,7 @@ import (
 	"time"
 
 	"snishaper/cert"
+	"snishaper/evolution"
 	"snishaper/proxy"
 	"snishaper/sysproxy"
 
@@ -34,6 +35,7 @@ type App struct {
 	proxyServer       *proxy.ProxyServer
 	certManager       *cert.CertManager
 	ruleManager       *proxy.RuleManager
+	evolutionTester   *evolution.Tester
 	certPath          string
 	proxyMarkerPath   string
 	logBuffer         *ringLogWriter
@@ -998,6 +1000,13 @@ func (a *App) GetSocks5Enabled() bool {
 	return a.proxyServer.IsSocks5Enabled()
 }
 
+func (a *App) GetSocks5Port() string {
+	addr := a.proxyServer.GetSocks5Addr()
+	var port string
+	fmt.Sscanf(addr, "127.0.0.1:%s", &port)
+	return port
+}
+
 func (a *App) SetSocks5Enabled(enabled bool) error {
 	a.proxyServer.SetSocks5Enabled(enabled)
 	a.ruleManager.SetSocks5Enabled(enabled)
@@ -1008,6 +1017,19 @@ func (a *App) SetSocks5Enabled(enabled bool) error {
 		a.core.reloadIfRunning()
 	}
 	return nil
+}
+
+func (a *App) SetSocks5Port(port string) error {
+	if a.IsProxyRunning() {
+		return fmt.Errorf("cannot change port while proxy is running")
+	}
+	port = strings.TrimSpace(port)
+	portNum, err := strconv.Atoi(port)
+	if err != nil || portNum < 1 || portNum > 65535 {
+		return fmt.Errorf("invalid port number: %s", port)
+	}
+	a.ruleManager.SetSocks5Port(port)
+	return a.ruleManager.SaveConfig()
 }
 
 func (a *App) SetProxyMode(mode string) error {
@@ -1848,4 +1870,145 @@ func (a *App) WindowToggleMaximise() {
 
 func (a *App) WindowClose() {
 	a.QuitApp()
+}
+
+// Evolution Mode APIs
+func (a *App) StartEvolutionTest(domains []string, enableIPv6 bool) (map[string]interface{}, error) {
+	a.appendLog("[Evolution] 开始进化模式测试")
+
+	config := evolution.DefaultTestConfig()
+	config.EnableIPv6 = enableIPv6
+
+	if a.evolutionTester == nil {
+		a.evolutionTester = evolution.NewTester(
+			a.ruleManager,
+			a.proxyServer,
+			a.proxyServer.GetDoHResolver(),
+			a.ruleManager.GetAutoRouter(),
+			func(msg string) {
+				a.appendLog(msg)
+			},
+		)
+	}
+
+	task, err := a.evolutionTester.StartTest(domains, config)
+	if err != nil {
+		a.appendLog("[Evolution] 启动测试失败: " + err.Error())
+		return nil, err
+	}
+
+	go func() {
+		ticker := time.NewTicker(500 * time.Millisecond)
+		defer ticker.Stop()
+
+		for {
+			<-ticker.C
+			currentTask := a.evolutionTester.GetTask()
+			if currentTask == nil || currentTask.Status != evolution.StatusRunning {
+				break
+			}
+
+			application.InvokeAsync(func() {
+				if a.mainWindow != nil {
+					a.mainWindow.EmitEvent("evolution:progress", map[string]interface{}{
+						"progress":   currentTask.Progress,
+						"total":      currentTask.Total,
+						"status":     string(currentTask.Status),
+						"results":    a.evolutionTester.GetAllResults(),
+						"temp_rules": a.evolutionTester.GetTempRules(),
+					})
+				}
+			})
+		}
+
+		finalTask := a.evolutionTester.GetTask()
+		if finalTask != nil {
+			application.InvokeAsync(func() {
+				if a.mainWindow != nil {
+					a.mainWindow.EmitEvent("evolution:complete", map[string]interface{}{
+						"id":         finalTask.ID,
+						"status":     string(finalTask.Status),
+						"progress":   finalTask.Progress,
+						"total":      finalTask.Total,
+						"results":    a.evolutionTester.GetAllResults(),
+						"temp_rules": a.evolutionTester.GetTempRules(),
+					})
+				}
+			})
+		}
+	}()
+
+	return map[string]interface{}{
+		"id":     task.ID,
+		"status": string(task.Status),
+		"total":  task.Total,
+	}, nil
+}
+
+func (a *App) GetEvolutionTestStatus() map[string]interface{} {
+	a.appendLog("[Evolution] 获取测试状态")
+	if a.evolutionTester == nil {
+		return map[string]interface{}{
+			"status": "idle",
+		}
+	}
+
+	task := a.evolutionTester.GetTask()
+	if task == nil {
+		return map[string]interface{}{
+			"status": "idle",
+		}
+	}
+
+	rules := a.evolutionTester.GetTempRules()
+
+	return map[string]interface{}{
+		"id":         task.ID,
+		"status":     string(task.Status),
+		"progress":   task.Progress,
+		"total":      task.Total,
+		"results":    task.Results,
+		"temp_rules": rules,
+	}
+}
+
+func (a *App) StopEvolutionTest() error {
+	a.appendLog("[Evolution] 停止测试")
+	if a.evolutionTester != nil {
+		a.evolutionTester.StopTest()
+	}
+	return nil
+}
+
+func (a *App) ApplyEvolutionRule(ruleID string) error {
+	a.appendLog("[Evolution] 应用规则: " + ruleID)
+
+	if a.evolutionTester == nil {
+		return fmt.Errorf("evolution tester not initialized")
+	}
+
+	tempRule := a.evolutionTester.GetTempRule(ruleID)
+	if tempRule == nil {
+		return fmt.Errorf("rule not found: %s", ruleID)
+	}
+
+	siteGroupMap := tempRule.ToSiteGroup()
+	siteGroupJSON, err := json.Marshal(siteGroupMap)
+	if err != nil {
+		return fmt.Errorf("failed to marshal site group: %v", err)
+	}
+
+	var siteGroup proxy.SiteGroup
+	if err := json.Unmarshal(siteGroupJSON, &siteGroup); err != nil {
+		return fmt.Errorf("failed to unmarshal site group: %v", err)
+	}
+
+	if err := a.ruleManager.AddSiteGroup(siteGroup); err != nil {
+		return fmt.Errorf("failed to add site group: %v", err)
+	}
+
+	a.evolutionTester.MarkRuleApplied(ruleID)
+
+	a.appendLog("[Evolution] 规则已成功应用: " + ruleID)
+	return nil
 }

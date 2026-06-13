@@ -13,7 +13,8 @@ import {
   Globe,
   ArrowDown,
   ArrowUp,
-  Antenna
+  Antenna,
+  Zap
 } from 'lucide-react';
 import { AreaChart, Area, ResponsiveContainer } from 'recharts';
 import { clsx, type ClassValue } from 'clsx';
@@ -31,6 +32,7 @@ const getNavItems = (t: any) => [
   { path: '/rules', label: t('sidebar.rules'), icon: ShieldCheck },
   { path: '/routing', label: t('sidebar.routing'), icon: Workflow },
   { path: '/dns', label: t('sidebar.dns'), icon: Antenna },
+  { path: '/evolution', label: '进化模式', icon: Zap },
   { path: '/logs', label: t('sidebar.logs'), icon: FileText },
   { path: '/settings', label: t('sidebar.settings'), icon: Settings },
 ];

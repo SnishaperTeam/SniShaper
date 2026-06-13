@@ -67,7 +67,7 @@ const RuleForm: React.FC<RuleFormProps> = ({ initialData, onSuccess, onCancel })
   ];
 
   const DNS_OPTIONS = [
-    { id: '', label: t('dns.modes.default'), desc: t('dns.mode_descs.default') },
+    { id: '', label: t('rules.dns_options.default'), desc: '' },
     { id: 'prefer_ipv4', label: t('rules.dns_options.prefer_ipv4'), desc: t('rules.dns_options.prefer_ipv4') },
     { id: 'prefer_ipv6', label: t('rules.dns_options.prefer_ipv6'), desc: t('rules.dns_options.prefer_ipv6') },
     { id: 'ipv4_only', label: t('rules.dns_options.ipv4_only'), desc: t('rules.dns_options.ipv4_only') },
@@ -75,12 +75,12 @@ const RuleForm: React.FC<RuleFormProps> = ({ initialData, onSuccess, onCancel })
   ];
 
   const CERT_VERIFY_MODES = [
-    { id: '', label: t('dns.modes.default'), desc: t('dns.mode_descs.default') },
     { id: 'strict_real', label: t('dns.modes.strict'), desc: t('dns.mode_descs.strict') },
     { id: 'allow_names', label: t('dns.modes.names'), desc: t('dns.mode_descs.names') },
     { id: 'allow_suffixes', label: t('dns.modes.suffixes'), desc: t('dns.mode_descs.suffixes') },
     { id: 'allow_spki', label: t('dns.modes.spki'), desc: t('dns.mode_descs.spki') },
-    { id: 'chain_only', label: t('dns.modes.chain'), desc: t('dns.mode_descs.chain') }
+    { id: 'chain_only', label: t('dns.modes.chain'), desc: t('dns.mode_descs.chain') },
+    { id: '', label: t('rules.cert_policy.ignore'), desc: t('rules.cert_policy.ignore_hint') }
   ];
 
   const [formData, setFormData] = useState<any>({

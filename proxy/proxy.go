@@ -1714,31 +1714,97 @@ func (p *ProxyServer) handleMITM(clientConn net.Conn, host string, rule Rule, di
 		orderedCandidates = append(orderedCandidates, c)
 	}
 
-	p.tracef("[MITM] Establishing upstream via candidates=%v", orderedCandidates)
-	upstreamRW, upstreamProtocol, err := p.establishUpstreamConn(host, rule, orderedCandidates, "")
-	if err != nil {
-		p.tracef("[MITM] Failed to establish upstream: %v", err)
-		clientConn.Close()
-		return
-	}
-	defer upstreamRW.Close()
+	var (
+		upstreamRW       net.Conn
+		upstreamProtocol string
+		upstreamErr      error
+		dialOnce         sync.Once
+	)
 
-	if upstreamRW == nil {
-		log.Printf("[MITM] No usable upstream")
-		clientConn.Close()
-		return
-	}
+	tlsConfig := &tls.Config{
+		GetConfigForClient: func(hello *tls.ClientHelloInfo) (*tls.Config, error) {
+			dialOnce.Do(func() {
+				initialALPN := "h2_h1"
+				if len(hello.SupportedProtos) > 0 {
+					hasH2 := false
+					for _, proto := range hello.SupportedProtos {
+						if proto == "h2" {
+							hasH2 = true
+							break
+						}
+					}
+					if !hasH2 {
+						initialALPN = "http/1.1"
+					}
+				} else {
+					initialALPN = "http/1.1"
+				}
 
-	p.tracef("[MITM] Upstream negotiated protocol: %s", upstreamProtocol)
-	tlsConfig := p.makeMITMTLSConfig(host, caCert, caKey, nextProtosForNegotiatedALPN(upstreamProtocol), "[MITM]")
+				p.tracef("[MITM] Client supported ALPNs: %v, selected initialALPN: %s", hello.SupportedProtos, initialALPN)
+				p.tracef("[MITM] Establishing upstream via candidates=%v", orderedCandidates)
+				upstreamRW, upstreamProtocol, upstreamErr = p.establishUpstreamConn(host, rule, orderedCandidates, initialALPN)
+			})
+
+			if upstreamErr != nil {
+				p.tracef("[MITM] Failed to establish upstream in callback: %v", upstreamErr)
+				return nil, upstreamErr
+			}
+
+			if upstreamRW == nil {
+				return nil, fmt.Errorf("no usable upstream connection established")
+			}
+
+			p.tracef("[MITM] Upstream negotiated protocol: %s", upstreamProtocol)
+
+			clientSNI := normalizeHost(hello.ServerName)
+			if clientSNI != "" && host != "" && clientSNI != host {
+				log.Printf("[MITM] ClientHello SNI mismatch: connect_host=%s client_sni=%s remote=%s", host, clientSNI, hello.Conn.RemoteAddr())
+			} else {
+				log.Printf("[MITM] ClientHello: connect_host=%s client_sni=%s remote=%s", host, clientSNI, hello.Conn.RemoteAddr())
+			}
+
+			var clientNextProtos []string
+			if upstreamProtocol != "" {
+				if upstreamProtocol == "h2" {
+					clientNextProtos = []string{"h2", "http/1.1"}
+				} else {
+					clientNextProtos = []string{upstreamProtocol}
+				}
+			} else {
+				clientNextProtos = []string{"http/1.1"}
+			}
+
+			certHost := host
+			if hello.ServerName != "" {
+				certHost = hello.ServerName
+			}
+			cert, err := p.generateCert(certHost, caCert, caKey)
+			if err != nil {
+				log.Printf("[MITM] Generate cert failed: cert_host=%s err=%v", certHost, err)
+				return nil, err
+			}
+			log.Printf("[MITM] Serving MITM cert: cert_host=%s alpn=%v next_protos=%v", certHost, hello.SupportedProtos, clientNextProtos)
+			return &tls.Config{
+				Certificates: []tls.Certificate{*cert},
+				NextProtos:   clientNextProtos,
+			}, nil
+		},
+	}
 
 	clientTls := tls.Server(clientConn, tlsConfig)
 	if err := clientTls.Handshake(); err != nil {
 		p.tracef("[MITM] Client TLS handshake failed: %v", err)
 		clientConn.Close()
-		upstreamRW.Close()
+		if upstreamRW != nil {
+			upstreamRW.Close()
+		}
 		return
 	}
+	defer func() {
+		if upstreamRW != nil {
+			upstreamRW.Close()
+		}
+	}()
 
 	clientALPN := clientTls.ConnectionState().NegotiatedProtocol
 	p.tracef("[MITM] Client ALPN: %s, Upstream Protocol: %s", clientALPN, upstreamProtocol)
@@ -2920,7 +2986,7 @@ func (p *ProxyServer) resolveRuleECHConfig(host string, rule Rule) []byte {
 	return nil
 }
 
-func (p *ProxyServer) newQUICRoundTripper(host string, rule Rule) (*http3.Transport, error) {
+func (p *ProxyServer) NewQUICRoundTripper(host string, rule Rule) (*http3.Transport, error) {
 	targetAddr := net.JoinHostPort(host, "443")
 	dialCandidates := p.buildDialCandidates(context.Background(), host, targetAddr, rule, "quic")
 	if len(dialCandidates) == 0 {
@@ -3024,7 +3090,7 @@ func (p *ProxyServer) handleQUICMITM(clientConn net.Conn, host string, rule Rule
 		return
 	}
 
-	quicTransport, err := p.newQUICRoundTripper(host, rule)
+	quicTransport, err := p.NewQUICRoundTripper(host, rule)
 	if err != nil {
 		log.Printf("[QUICMode] Failed to create HTTP/3 transport: %v", err)
 		return
@@ -3228,6 +3294,11 @@ func (p *ProxyServer) handleServerMITM(clientConn net.Conn, host string, rule Ru
 }
 
 // establishUpstreamConn 整合多节点拨号、优选 IP、uTLS 握手及 ECH 自动提取逻辑
+// EstablishUpstreamConn is the public version of establishUpstreamConn, used by evolution mode testing
+func (p *ProxyServer) EstablishUpstreamConn(host string, rule Rule, dialCandidates []string, initialALPN string) (net.Conn, string, error) {
+	return p.establishUpstreamConn(host, rule, dialCandidates, initialALPN)
+}
+
 func (p *ProxyServer) establishUpstreamConn(host string, rule Rule, dialCandidates []string, initialALPN string) (net.Conn, string, error) {
 	// 1. 确定拨号地址
 	ordered := dialCandidates
@@ -3368,6 +3439,11 @@ func (p *ProxyServer) dialWithRule(ctx context.Context, network, addr string, ru
 		KeepAlive: 30 * time.Second,
 	}
 	return dialer.DialContext(ctx, network, addr)
+}
+
+// DialWithRule is the public version of dialWithRule, used by evolution mode testing
+func (p *ProxyServer) DialWithRule(ctx context.Context, network, addr string, rule Rule) (net.Conn, error) {
+	return p.dialWithRule(ctx, network, addr, rule)
 }
 
 // FetchECH performs a one-off ECH resolution via DoH for a specific domain and upstream

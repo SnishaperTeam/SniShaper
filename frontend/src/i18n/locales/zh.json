@@ -189,7 +189,12 @@
       "quic": "QUIC 分片混淆",
       "transparent": "不解密 TLS，仅透传"
     },
+    "cert_policy": {
+      "ignore": "忽略证书验证",
+      "ignore_hint": "忽略证书校验 (危险)"
+    },
     "dns_options": {
+      "default": "默认",
       "prefer_ipv4": "IPv4 优先",
       "prefer_ipv6": "IPv6 优先",
       "ipv4_only": "仅 IPv4",

@@ -76,15 +76,14 @@
       "domains": [
         "api.bbc.co.uk",
         "api.bbci.co.uk",
-        "bbc.co.uk",
         "bbci.co.uk",
-        "files.bbci.co.uk",
-        "live.bbc.co.uk"
+        "emp.bbc.co.uk",
+        "r.bbci.co.uk"
       ],
-      "mode": "mitm",
+      "mode": "tls-rf",
       "upstream": "",
       "dns_mode": "prefer_ipv4",
-      "sni_fake": "un",
+      "sni_fake": "",
       "enabled": true,
       "ech_enabled": false,
       "use_cf_pool": false,
@@ -97,9 +96,9 @@
       "domains": [
         "api.bbc.com"
       ],
-      "mode": "mitm",
+      "mode": "tls-rf",
       "upstream": "13.35.186.119:443",
-      "sni_fake": "un",
+      "sni_fake": "",
       "enabled": true,
       "ech_enabled": false,
       "use_cf_pool": false,
@@ -230,7 +229,6 @@
         "xhamster.desi",
         "checkgfw.com",
         "suno.com",
-        "science.org",
         "economist.com",
         "dissentmagazine.org",
         "puck.news",
@@ -242,7 +240,17 @@
         "twimg.com",
         "journals.sagepub.com",
         "foreignpolicy.com",
-        "cloudflare.com"
+        "cloudflare.com",
+        "itch.io",
+        "dnschecker.org",
+        "cloudflare-dns.com",
+        "tgstat.com",
+        "www.science.org",
+        "geph.io",
+        "sagernet.org",
+        "bgm.tv",
+        "piped.video",
+        "imagedelivery.net"
       ],
       "mode": "mitm",
       "upstream": "",
@@ -252,13 +260,7 @@
       "ech_enabled": true,
       "ech_profile_id": "legacy-cloudflare",
       "use_cf_pool": true,
-      "cert_verify": {
-        "mode": "allow_names",
-        "names": [
-          "*.apkmirror.com",
-          "apkmirror.com"
-        ]
-      }
+      "cert_verify": {}
     },
     {
       "id": "sg-1771319670672-13",
@@ -547,7 +549,7 @@
     {
       "id": "sg-1771319670672-30",
       "name": "dl.dropboxusercontent.com",
-      "website": "dropboxusercontent",
+      "website": "dropbox",
       "domains": [
         "dl.dropboxusercontent.com",
         "previews.dropboxusercontent.com"
@@ -751,15 +753,14 @@
       "domains": [
         "etsy.com"
       ],
-      "mode": "mitm",
+      "mode": "tls-rf",
       "upstream": "",
-      "sni_fake": "any",
+      "sni_fake": "",
       "sni_policy": "fake",
       "enabled": true,
       "ech_enabled": false,
       "use_cf_pool": false,
       "cert_verify": {
-        "mode": "chain_only",
         "names": [
           "*.etsy.com",
           "*.etsystatic.com",
@@ -861,7 +862,8 @@
         "youtu.be",
         "youtube-nocookie.com",
         "youtube.com",
-        "ytimg.com"
+        "ytimg.com",
+        "gmail.com"
       ],
       "mode": "mitm",
       "upstream": "142.250.20.206",
@@ -870,7 +872,10 @@
       "enabled": true,
       "ech_enabled": false,
       "use_cf_pool": false,
-      "cert_verify": {}
+      "cert_verify": {
+        "mode": "strict_real",
+        "allow_unknown_authority": true
+      }
     },
     {
       "id": "sg-1771319670672-50",
@@ -887,7 +892,12 @@
       "enabled": true,
       "ech_enabled": false,
       "use_cf_pool": false,
-      "cert_verify": {}
+      "cert_verify": {
+        "mode": "allow_names",
+        "names": [
+          "google.cn"
+        ]
+      }
     },
     {
       "id": "sg-1771319670672-52",
@@ -985,23 +995,6 @@
       }
     },
     {
-      "id": "sg-1771319670672-57",
-      "name": "gstatic.com",
-      "website": "google",
-      "domains": [
-        "ggpht.com",
-        "gmail.com",
-        "youtubei.googleapis.com"
-      ],
-      "mode": "mitm",
-      "upstream": "142.250.20.206",
-      "sni_fake": "g.cn",
-      "enabled": true,
-      "ech_enabled": false,
-      "use_cf_pool": false,
-      "cert_verify": {}
-    },
-    {
       "id": "sg-1771319670672-59",
       "name": "identity.flickr.com",
       "website": "flickr",
@@ -1093,8 +1086,8 @@
         "wiktionary.org"
       ],
       "mode": "mitm",
-      "upstream": "208.80.153.224:443,185.15.59.224:443,185.15.58.224:443",
-      "sni_fake": "wikipedia-org",
+      "upstream": "185.15.58.224,103.102.166.224,185.15.58.224,195.200.68.224",
+      "sni_fake": "cn.bing.com",
       "connect_policy": "mitm",
       "sni_policy": "fake",
       "enabled": true,
@@ -1224,17 +1217,14 @@
       "domains": [
         "nyaa.si"
       ],
-      "mode": "mitm",
-      "upstream": "186.2.163.20:443",
+      "mode": "tls-rf",
+      "upstream": "",
       "sni_fake": "",
       "sni_policy": "fake",
       "enabled": true,
       "ech_enabled": false,
       "use_cf_pool": false,
-      "cert_verify": {
-        "mode": "chain_only",
-        "allow_unknown_authority": true
-      }
+      "cert_verify": {}
     },
     {
       "id": "sg-1771319670672-71",
@@ -1243,16 +1233,14 @@
       "domains": [
         "okx.com"
       ],
-      "mode": "mitm",
-      "upstream": "8.212.101.92:443",
+      "mode": "tls-rf",
+      "upstream": "8.212.101.92",
       "sni_fake": "",
       "sni_policy": "fake",
       "enabled": true,
       "ech_enabled": false,
       "use_cf_pool": false,
-      "cert_verify": {
-        "mode": "chain_only"
-      }
+      "cert_verify": {}
     },
     {
       "id": "sg-1771319670672-73",
@@ -1442,8 +1430,8 @@
         "redditmedia.com",
         "redditstatic.com"
       ],
-      "mode": "mitm",
-      "upstream": "146.75.33.140:443",
+      "mode": "quic",
+      "upstream": "",
       "sni_fake": "",
       "sni_policy": "fake",
       "enabled": true,
@@ -1545,25 +1533,6 @@
       "cert_verify": {}
     },
     {
-      "id": "sg-1771319670672-89",
-      "name": "sukebei.nyaa.si",
-      "website": "nyaa",
-      "domains": [
-        "sukebei.nyaa.si"
-      ],
-      "mode": "mitm",
-      "upstream": "198.251.89.38:443",
-      "sni_fake": "",
-      "sni_policy": "fake",
-      "enabled": true,
-      "ech_enabled": false,
-      "use_cf_pool": false,
-      "cert_verify": {
-        "mode": "chain_only",
-        "allow_unknown_authority": true
-      }
-    },
-    {
       "id": "sg-1771319670672-91",
       "name": "t.me",
       "website": "telegram",
@@ -1577,7 +1546,7 @@
       ],
       "mode": "mitm",
       "upstream": "149.154.161.145",
-      "sni_fake": "msoft.net",
+      "sni_fake": "apple.com",
       "connect_policy": "mitm",
       "sni_policy": "fake",
       "enabled": true,
@@ -1640,8 +1609,9 @@
         "upload.wikimedia.org"
       ],
       "mode": "mitm",
-      "upstream": "208.80.153.240:443,208.80.154.240:443,185.15.59.240:443",
-      "sni_fake": "upload-wikipedia-org",
+      "upstream": "208.80.154.240",
+      "dns_mode": "ipv4_only",
+      "sni_fake": "cn.bing.com",
       "connect_policy": "mitm",
       "sni_policy": "fake",
       "enabled": true,
@@ -1663,7 +1633,7 @@
         "whatsapp.com",
         "whatsapp.net"
       ],
-      "mode": "mitm",
+      "mode": "quic",
       "upstream": "157.240.225.60:443",
       "sni_fake": "",
       "sni_policy": "fake",
@@ -1870,9 +1840,9 @@
       "domains": [
         "assets.dropbox.com"
       ],
-      "mode": "mitm",
+      "mode": "tls-rf",
       "upstream": "216.137.39.27:443",
-      "sni_fake": "assets-dropbox-com.mapped",
+      "sni_fake": "",
       "enabled": true,
       "ech_enabled": false,
       "use_cf_pool": false,
@@ -1974,15 +1944,25 @@
         "keep.new",
         "cal.new",
         "website.new",
-        "*.google"
+        "*.google",
+        "schema.org",
+        "googleapps.com",
+        "goo.gl",
+        "chrome.com",
+        "chromebook.com"
       ],
       "mode": "mitm",
-      "upstream": "142.250.20.206",
+      "upstream": "47.102.115.14",
       "sni_fake": "g.cn",
       "enabled": true,
       "ech_enabled": false,
       "use_cf_pool": false,
-      "cert_verify": {}
+      "cert_verify": {
+        "mode": "allow_names",
+        "names": [
+          "google.cn"
+        ]
+      }
     },
     {
       "id": "1773045366962644100",
@@ -2076,16 +2056,17 @@
       "name": "archive",
       "website": "archive",
       "domains": [
-        "archive.org",
-        "archive-it.org"
+        "archive.org"
       ],
       "mode": "mitm",
-      "upstream": "207.241.224.44",
+      "upstream": "207.241.225.120",
       "sni_fake": "arch.oms",
       "enabled": true,
       "ech_enabled": false,
       "use_cf_pool": false,
-      "cert_verify": {}
+      "cert_verify": {
+        "mode": "strict_real"
+      }
     },
     {
       "id": "sg-manual-web-archive-org",
@@ -2100,7 +2081,9 @@
       "enabled": true,
       "ech_enabled": false,
       "use_cf_pool": false,
-      "cert_verify": {}
+      "cert_verify": {
+        "mode": "strict_real"
+      }
     },
     {
       "id": "sg-manual-uploads-github",
@@ -2233,25 +2216,12 @@
       ],
       "mode": "mitm",
       "upstream": "142.250.20.206",
-      "sni_fake": "g.cn",
+      "sni_fake": "",
       "enabled": true,
       "ech_enabled": false,
       "use_cf_pool": false,
       "cert_verify": {
         "mode": "chain_only",
-        "names": [
-          "*.appengine.google.com",
-          "*.android.com",
-          "*.cloud.google.com",
-          "*.crowdsource.google.com",
-          "*.google.com",
-          "*.origin-test.bdn.dev",
-          "appengine.google.com",
-          "bdn.dev",
-          "cloud.google.com",
-          "crowdsource.google.com",
-          "google.com"
-        ],
         "allow_unknown_authority": true
       }
     },
@@ -2264,12 +2234,17 @@
         "gstatic.com"
       ],
       "mode": "mitm",
-      "upstream": "142.250.20.206",
+      "upstream": "47.102.115.14",
       "sni_fake": "g.cn",
       "enabled": true,
       "ech_enabled": false,
       "use_cf_pool": false,
-      "cert_verify": {}
+      "cert_verify": {
+        "mode": "allow_names",
+        "names": [
+          "google.cn"
+        ]
+      }
     },
     {
       "id": "1774782086542746000",
@@ -2284,21 +2259,6 @@
       "enabled": true,
       "ech_enabled": false,
       "use_cf_pool": false,
-      "cert_verify": {}
-    },
-    {
-      "id": "1774858914753778200",
-      "name": "geph.io",
-      "website": "geph",
-      "domains": [
-        "geph.io"
-      ],
-      "mode": "mitm",
-      "upstream": "75.2.60.5",
-      "sni_fake": "apple.com",
-      "enabled": true,
-      "ech_enabled": true,
-      "use_cf_pool": true,
       "cert_verify": {}
     },
     {
@@ -2340,13 +2300,15 @@
         "bbc.com",
         "www.bbc.com"
       ],
-      "mode": "mitm",
+      "mode": "quic",
       "upstream": "146.75.36.81:443",
-      "sni_fake": "un",
+      "sni_fake": "",
       "enabled": true,
       "ech_enabled": false,
       "use_cf_pool": false,
-      "cert_verify": {}
+      "cert_verify": {
+        "mode": "strict_real"
+      }
     },
     {
       "id": "1774953793009945300",
@@ -2355,8 +2317,8 @@
       "domains": [
         "meta.com"
       ],
-      "mode": "mitm",
-      "upstream": "57.144.144.141:443",
+      "mode": "quic",
+      "upstream": "57.144.188.141",
       "sni_fake": "",
       "enabled": true,
       "ech_enabled": true,
@@ -2371,7 +2333,7 @@
       "domains": [
         "fbsbx.com"
       ],
-      "mode": "tls-rf",
+      "mode": "quic",
       "upstream": "57.144.44.128:443",
       "sni_fake": "",
       "enabled": true,
@@ -2386,13 +2348,15 @@
       "domains": [
         "spotify.com"
       ],
-      "mode": "tls-rf",
+      "mode": "quic",
       "upstream": "",
       "sni_fake": "",
       "enabled": true,
       "ech_enabled": false,
       "use_cf_pool": false,
-      "cert_verify": {}
+      "cert_verify": {
+        "mode": "strict_real"
+      }
     },
     {
       "id": "1775029961585569800",
@@ -2403,11 +2367,16 @@
       ],
       "mode": "mitm",
       "upstream": "2001:67c:2960:6464::9765:c32a",
-      "sni_fake": "sptify.com",
+      "sni_fake": "spotify.com",
       "enabled": true,
       "ech_enabled": false,
       "use_cf_pool": false,
-      "cert_verify": {}
+      "cert_verify": {
+        "mode": "allow_names",
+        "names": [
+          "*.spotify.com"
+        ]
+      }
     },
     {
       "id": "1775127344454748400",
@@ -2454,7 +2423,7 @@
       ],
       "mode": "quic",
       "upstream": "66.254.114.41",
-      "sni_fake": "ba",
+      "sni_fake": "apple.com",
       "enabled": true,
       "ech_enabled": false,
       "use_cf_pool": false,
@@ -2494,19 +2463,6 @@
       "cert_verify": {}
     },
     {
-      "id": "1776499731756792900",
-      "name": "ph",
-      "website": "ph",
-      "domains": [],
-      "mode": "mitm",
-      "upstream": "",
-      "sni_fake": "",
-      "enabled": true,
-      "ech_enabled": false,
-      "use_cf_pool": false,
-      "cert_verify": {}
-    },
-    {
       "id": "1776499764168894900",
       "name": "ph",
       "website": "archive",
@@ -2514,13 +2470,15 @@
         "archive.ph",
         "archive.today"
       ],
-      "mode": "mitm",
+      "mode": "tls-rf",
       "upstream": "107.189.8.227",
-      "sni_fake": "apple.com",
+      "sni_fake": "",
       "enabled": true,
       "ech_enabled": false,
       "use_cf_pool": false,
-      "cert_verify": {}
+      "cert_verify": {
+        "mode": "strict_real"
+      }
     },
     {
       "id": "1776501197319615800",
@@ -2535,7 +2493,9 @@
       "enabled": true,
       "ech_enabled": false,
       "use_cf_pool": false,
-      "cert_verify": {}
+      "cert_verify": {
+        "mode": "strict_real"
+      }
     },
     {
       "id": "1776501456736746100",
@@ -2546,7 +2506,7 @@
         "public.api.bsky.app",
         "cdn.bsky.app"
       ],
-      "mode": "mitm",
+      "mode": "tls-rf",
       "upstream": "156.146.56.168,169.150.220.229",
       "sni_fake": "bs",
       "enabled": true,
@@ -2561,9 +2521,9 @@
       "domains": [
         "video.bsky.app"
       ],
-      "mode": "mitm",
+      "mode": "tls-rf",
       "upstream": "",
-      "sni_fake": "bs",
+      "sni_fake": "",
       "enabled": true,
       "ech_enabled": false,
       "use_cf_pool": false,
@@ -2606,9 +2566,9 @@
       "domains": [
         "vdownload.hembed.com"
       ],
-      "mode": "tls-rf",
+      "mode": "mitm",
       "upstream": "89.187.163.20,95.173.204.24",
-      "sni_fake": "",
+      "sni_fake": "apple.com",
       "enabled": true,
       "ech_enabled": false,
       "use_cf_pool": false,
@@ -2681,28 +2641,12 @@
       "domains": [
         "hitomi.la"
       ],
-      "mode": "quic",
-      "upstream": "185.165.169.231",
+      "mode": "tls-rf",
+      "upstream": "",
       "sni_fake": "",
       "enabled": true,
       "ech_enabled": false,
       "use_cf_pool": false,
-      "cert_verify": {}
-    },
-    {
-      "id": "1776505976210250600",
-      "name": "itch",
-      "website": "itch",
-      "domains": [
-        "itch.io"
-      ],
-      "mode": "mitm",
-      "upstream": "",
-      "sni_fake": "",
-      "enabled": true,
-      "ech_enabled": true,
-      "ech_profile_id": "legacy-cloudflare",
-      "use_cf_pool": true,
       "cert_verify": {}
     },
     {
@@ -2774,26 +2718,30 @@
       ],
       "mode": "mitm",
       "upstream": "143.192.150.194",
-      "sni_fake": "microsoft.com",
+      "sni_fake": "any",
       "enabled": true,
       "ech_enabled": false,
       "use_cf_pool": false,
-      "cert_verify": {}
+      "cert_verify": {
+        "mode": "chain_only"
+      }
     },
     {
       "id": "1776508820266278200",
       "name": "urbandictionary",
       "website": "urbandictionary",
       "domains": [
-        "www.urbandictionary.com"
+        "urbandictionary.com"
       ],
-      "mode": "mitm",
+      "mode": "tls-rf",
       "upstream": "138.199.46.68",
-      "sni_fake": "microsoft.com",
+      "sni_fake": "",
       "enabled": true,
       "ech_enabled": false,
       "use_cf_pool": false,
-      "cert_verify": {}
+      "cert_verify": {
+        "mode": "strict_real"
+      }
     },
     {
       "id": "1776509861419390200",
@@ -2808,7 +2756,9 @@
       "enabled": true,
       "ech_enabled": false,
       "use_cf_pool": false,
-      "cert_verify": {}
+      "cert_verify": {
+        "mode": "strict_real"
+      }
     },
     {
       "id": "1777022343274016300",
@@ -2824,22 +2774,9 @@
       "enabled": true,
       "ech_enabled": false,
       "use_cf_pool": false,
-      "cert_verify": {}
-    },
-    {
-      "id": "1777088593643550700",
-      "name": "ssl",
-      "website": "google",
-      "domains": [
-        "ssl.gstatic.com"
-      ],
-      "mode": "mitm",
-      "upstream": "203.208.40.34",
-      "sni_fake": "g.cn",
-      "enabled": true,
-      "ech_enabled": false,
-      "use_cf_pool": false,
-      "cert_verify": {}
+      "cert_verify": {
+        "mode": "strict_real"
+      }
     },
     {
       "id": "1777460595908512600",
@@ -2918,6 +2855,7 @@
       "sni_fake": "",
       "enabled": true,
       "ech_enabled": false,
+      "ech_profile_id": "legacy-cloudflare",
       "use_cf_pool": true,
       "cert_verify": {}
     },
@@ -2998,20 +2936,27 @@
       "enabled": true,
       "ech_enabled": false,
       "use_cf_pool": false,
-      "cert_verify": {}
+      "cert_verify": {
+        "mode": "allow_names",
+        "names": [
+          "vercel.com"
+        ]
+      }
     },
     {
       "id": "1777969418784774200",
       "name": "cdn",
       "website": "cdnsolution",
       "domains": [
-        "static.cdnsolutions.media"
+        "static.cdnsolutions.media",
+        "arena.ai"
       ],
       "mode": "server",
       "upstream": "",
       "sni_fake": "45.133.44.23",
       "enabled": true,
       "ech_enabled": true,
+      "ech_profile_id": "legacy-cloudflare",
       "use_cf_pool": true,
       "cert_verify": {}
     },
@@ -3058,7 +3003,9 @@
       "enabled": true,
       "ech_enabled": false,
       "use_cf_pool": false,
-      "cert_verify": {}
+      "cert_verify": {
+        "mode": "strict_real"
+      }
     },
     {
       "id": "1777990600585297400",
@@ -3090,7 +3037,9 @@
       "enabled": true,
       "ech_enabled": false,
       "use_cf_pool": false,
-      "cert_verify": {}
+      "cert_verify": {
+        "mode": "strict_real"
+      }
     },
     {
       "id": "1777991677379032300",
@@ -3167,9 +3116,9 @@
       "domains": [
         "lemonde.fr"
       ],
-      "mode": "mitm",
+      "mode": "tls-rf",
       "upstream": "",
-      "sni_fake": "empty",
+      "sni_fake": "",
       "enabled": true,
       "ech_enabled": false,
       "use_cf_pool": false,
@@ -3227,9 +3176,9 @@
       "domains": [
         "archive.li"
       ],
-      "mode": "mitm",
+      "mode": "tls-rf",
       "upstream": "103.70.115.11",
-      "sni_fake": "apple.com",
+      "sni_fake": "",
       "enabled": true,
       "ech_enabled": false,
       "use_cf_pool": false,
@@ -3263,7 +3212,9 @@
       "enabled": true,
       "ech_enabled": false,
       "use_cf_pool": false,
-      "cert_verify": {}
+      "cert_verify": {
+        "mode": "strict_real"
+      }
     },
     {
       "id": "1778129989586388800",
@@ -3348,7 +3299,7 @@
       "domains": [
         "restofworld.org"
       ],
-      "mode": "mitm",
+      "mode": "tls-rf",
       "upstream": "",
       "sni_fake": "pressable.com",
       "enabled": true,
@@ -3378,9 +3329,9 @@
       "domains": [
         "library.kiwix.org"
       ],
-      "mode": "mitm",
+      "mode": "tls-rf",
       "upstream": "51.159.101.162",
-      "sni_fake": "apple.com",
+      "sni_fake": "",
       "enabled": true,
       "ech_enabled": false,
       "use_cf_pool": false,
@@ -3394,11 +3345,12 @@
         "avatars.githubusercontent.com",
         "camo.githubusercontent.com",
         "release-assets.githubusercontent.com",
-        "objects.githubusercontent.com"
+        "objects.githubusercontent.com",
+        "marketplace-screenshots.githubusercontent.com"
       ],
-      "mode": "mitm",
+      "mode": "tls-rf",
       "upstream": "185.199.110.154",
-      "sni_fake": "centr.map",
+      "sni_fake": "",
       "enabled": true,
       "ech_enabled": false,
       "use_cf_pool": false,
@@ -3434,6 +3386,252 @@
       "ech_enabled": false,
       "use_cf_pool": false,
       "cert_verify": {}
+    },
+    {
+      "id": "1778915834873728400",
+      "name": "raw",
+      "website": "github",
+      "domains": [
+        "raw.githubusercontent.com"
+      ],
+      "mode": "tls-rf",
+      "upstream": "185.199.110.105,185.199.110.154,185.199.110.215",
+      "sni_fake": "",
+      "enabled": true,
+      "ech_enabled": false,
+      "use_cf_pool": false,
+      "cert_verify": {}
+    },
+    {
+      "id": "1778917013096331500",
+      "name": "bbco",
+      "website": "bbc",
+      "domains": [
+        "bbc.co.uk"
+      ],
+      "mode": "quic",
+      "upstream": "",
+      "sni_fake": "",
+      "enabled": true,
+      "ech_enabled": false,
+      "use_cf_pool": false,
+      "cert_verify": {
+        "mode": "strict_real"
+      }
+    },
+    {
+      "id": "1778920276240001700",
+      "name": "emp",
+      "website": "bbc",
+      "domains": [
+        "emp.bbc.co.uk",
+        "files.bbci.co.uk",
+        "ichef.bbci.co.uk"
+      ],
+      "mode": "tls-rf",
+      "upstream": "",
+      "sni_fake": "",
+      "enabled": true,
+      "ech_enabled": false,
+      "use_cf_pool": false,
+      "cert_verify": {}
+    },
+    {
+      "id": "1779017085118409500",
+      "name": "archiveit",
+      "website": "archive",
+      "domains": [
+        "archive-it.org"
+      ],
+      "mode": "tls-rf",
+      "upstream": "207.241.224.44",
+      "sni_fake": "",
+      "enabled": true,
+      "ech_enabled": false,
+      "use_cf_pool": false,
+      "cert_verify": {
+        "mode": "strict_real"
+      }
+    },
+    {
+      "id": "1779348250719023200",
+      "name": "speedtest",
+      "website": "speedtest",
+      "domains": [
+        "speedtest.net"
+      ],
+      "mode": "transparent",
+      "upstream": "151.101.2.219",
+      "sni_fake": "",
+      "enabled": true,
+      "ech_enabled": false,
+      "use_cf_pool": false,
+      "cert_verify": {}
+    },
+    {
+      "id": "1779679710086389000",
+      "name": "antigravity",
+      "website": "google",
+      "domains": [
+        "cloudcode-pa.googleapis.com"
+      ],
+      "mode": "mitm",
+      "upstream": "47.102.115.14",
+      "sni_fake": "g.cn",
+      "enabled": true,
+      "ech_enabled": false,
+      "use_cf_pool": false,
+      "cert_verify": {
+        "mode": "allow_names",
+        "names": [
+          "google.cn"
+        ]
+      }
+    },
+    {
+      "id": "1780134394671870800",
+      "name": "bangumi",
+      "website": "bangumi",
+      "domains": [
+        "bangumi.tv"
+      ],
+      "mode": "tls-rf",
+      "upstream": "",
+      "sni_fake": "",
+      "enabled": true,
+      "ech_enabled": false,
+      "use_cf_pool": false,
+      "cert_verify": {
+        "names": [
+          "bangumi.tv"
+        ]
+      }
+    },
+    {
+      "id": "1780408215178416400",
+      "name": "piped",
+      "website": "piped",
+      "domains": [
+        "kavin.rocks"
+      ],
+      "mode": "tls-rf",
+      "upstream": "76.76.21.21",
+      "sni_fake": "",
+      "enabled": true,
+      "ech_enabled": false,
+      "use_cf_pool": false,
+      "cert_verify": {
+        "names": [
+          "studio.vsco.co"
+        ]
+      }
+    },
+    {
+      "id": "1780409611912355100",
+      "name": "check",
+      "website": "check",
+      "domains": [
+        "nadeko.net",
+        "nerdvpn.de",
+        "redlib.perennialte.ch"
+      ],
+      "mode": "tls-rf",
+      "upstream": "",
+      "sni_fake": "",
+      "enabled": true,
+      "ech_enabled": false,
+      "use_cf_pool": false,
+      "cert_verify": {}
+    },
+    {
+      "id": "1780741874514865800",
+      "name": "deepseek",
+      "website": "deepseek",
+      "domains": [
+        "deepseek.com"
+      ],
+      "mode": "transparent",
+      "upstream": "",
+      "sni_fake": "",
+      "enabled": true,
+      "ech_enabled": false,
+      "use_cf_pool": false,
+      "cert_verify": {}
+    },
+    {
+      "id": "1780742400406918600",
+      "name": "deepwiki",
+      "website": "deepwiki",
+      "domains": [
+        "deepwiki.com"
+      ],
+      "mode": "transparent",
+      "upstream": "64.29.17.1",
+      "sni_fake": "",
+      "enabled": true,
+      "ech_enabled": false,
+      "use_cf_pool": false,
+      "cert_verify": {}
+    },
+    {
+      "id": "1780805939763197900",
+      "name": "kstatic",
+      "website": "google",
+      "domains": [
+        "kstatic.googleusercontent.com"
+      ],
+      "mode": "mitm",
+      "upstream": "35.241.11.240",
+      "sni_fake": "",
+      "enabled": true,
+      "ech_enabled": false,
+      "use_cf_pool": false,
+      "cert_verify": {}
+    },
+    {
+      "id": "1780806385586765900",
+      "name": "waze",
+      "website": "google",
+      "domains": [
+        "waze.com"
+      ],
+      "mode": "tls-rf",
+      "upstream": "130.211.9.172",
+      "sni_fake": "",
+      "enabled": true,
+      "ech_enabled": false,
+      "use_cf_pool": false,
+      "cert_verify": {}
+    },
+    {
+      "id": "1780832422513980600",
+      "name": "perplexity",
+      "website": "ai",
+      "domains": [
+        "suggest.perplexity.ai"
+      ],
+      "mode": "tls-rf",
+      "upstream": "",
+      "sni_fake": "",
+      "enabled": true,
+      "ech_enabled": false,
+      "use_cf_pool": false,
+      "cert_verify": {}
+    },
+    {
+      "id": "1781239859359540900",
+      "name": "web",
+      "website": "onedrive",
+      "domains": [
+        "onedrive.com"
+      ],
+      "mode": "mitm",
+      "upstream": "",
+      "sni_fake": "apple.com",
+      "enabled": true,
+      "ech_enabled": false,
+      "use_cf_pool": false,
+      "cert_verify": {}
     }
   ],
   "upstreams": [],
@@ -3445,7 +3643,7 @@
       "ips": [
         "104.19.148.96"
       ],
-      "ech_enabled": true,
+      "ech_enabled": false,
       "ech_auto_update": false,
       "quic": false,
       "cert_verify": {},
@@ -3468,7 +3666,7 @@
           "*.dns.iij.jp"
         ]
       },
-      "enabled": true
+      "enabled": false
     },
     {
       "id": "v-recipes",
@@ -3494,14 +3692,14 @@
       "ech_auto_update": false,
       "quic": false,
       "cert_verify": {},
-      "enabled": true
+      "enabled": false
     }
   ],
   "ech_profiles": [
     {
       "id": "legacy-cloudflare",
       "name": "Cloudflare",
-      "config": "AEX+DQBBqgAgACA3OYsLPE9igP9eEXsjtdtnPKHmeN6DZTWwPZurmmdAIAAEAAEAAQASY2xvdWRmbGFyZS1lY2guY29tAAA=",
+      "config": "AEX+DQBBYQAgACA8sKAOfwj7NsDAqaRDBnNj0Jy6mMx1ghWxKie6Bk5CRQAEAAEAAQASY2xvdWRmbGFyZS1lY2guY29tAAA=",
       "discovery_domain": "crypto.cloudflare.com",
       "doh_upstream": "https://xwfpeb16ii.cloudflare-gateway.com/dns-query",
       "auto_update": true

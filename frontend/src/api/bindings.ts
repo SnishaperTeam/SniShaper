@@ -91,6 +91,12 @@ export const GetAutoRoutingStatus = () => appCall('GetAutoRoutingStatus');
 export const RefreshGFWList = () => appCall('RefreshGFWList');
 export const TestServerNode = () => appCall('TestServerNode');
 
+// Evolution Mode API
+export const StartEvolutionTest = (domains: string[], enableIPv6: boolean) => appCall('StartEvolutionTest', domains, enableIPv6);
+export const StopEvolutionTest = () => appCall('StopEvolutionTest');
+export const ApplyEvolutionRule = (ruleId: string) => appCall('ApplyEvolutionRule', ruleId);
+export const GetEvolutionTestStatus = () => appCall('GetEvolutionTestStatus');
+
 // DNS Node API
 export const GetDNSNodes = () => appCall('GetDNSNodes');
 export const AddDNSNode = (n: any) => appCall('AddDNSNode', n);
