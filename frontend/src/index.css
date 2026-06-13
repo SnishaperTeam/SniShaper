@@ -176,3 +176,20 @@
   .border-success\/30 { border-color: color-mix(in srgb, var(--success) 30%, transparent) !important; }
   .bg-success\/10 { background-color: color-mix(in srgb, var(--success) 10%, transparent) !important; }
 }
+
+@keyframes shimmer-flow {
+  0% {
+    background-position: 0% 50%;
+  }
+  50% {
+    background-position: 100% 50%;
+  }
+  100% {
+    background-position: 0% 50%;
+  }
+}
+
+.animate-shimmer {
+  background-size: 200% auto !important;
+  animation: shimmer-flow 2.5s ease infinite !important;
+}

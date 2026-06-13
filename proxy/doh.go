@@ -54,7 +54,7 @@ func (r *FailoverResolver) getNodeClient(ctx context.Context, node DNSNode) (*ht
 	if node.QUIC {
 		// Note: static IPs are not fully supported for QUIC DoH nodes yet because newQUICRoundTripper computes candidates itself.
 		// A potential future enhancement is passing node.IPs into a customized QUIC roundtripper.
-		tr, err := r.proxy.newQUICRoundTripper(host, rule)
+		tr, err := r.proxy.NewQUICRoundTripper(host, rule)
 		if err != nil {
 			return nil, err
 		}

@@ -96,6 +96,12 @@ export const GetAppVersion = () => appCall('GetAppVersion');
 export const CheckUpdate = () => appCall('CheckUpdate');
 export const OpenURL = (url: string) => appCall('OpenURL', url);
 
+// Evolution Mode API
+export const StartEvolutionTest = (domains: string[], enableIPv6: boolean) => appCall('StartEvolutionTest', domains, enableIPv6);
+export const StopEvolutionTest = () => appCall('StopEvolutionTest');
+export const ApplyEvolutionRule = (ruleId: string) => appCall('ApplyEvolutionRule', ruleId);
+export const GetEvolutionTestStatus = () => appCall('GetEvolutionTestStatus');
+
 // DNS Node API
 export const GetDNSNodes = () => appCall('GetDNSNodes');
 export const AddDNSNode = (n: any) => appCall('AddDNSNode', n);

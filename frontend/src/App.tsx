@@ -22,6 +22,7 @@ const Logs = lazy(() => import('./pages/Logs'));
 const Settings = lazy(() => import('./pages/Settings'));
 const DNS = lazy(() => import('./pages/DNS'));
 const About = lazy(() => import('./pages/About'));
+const Evolution = lazy(() => import('./pages/Evolution'));
 
 // Global settings cache — read once at app startup, shared across all pages
 interface SettingsCache {
@@ -232,6 +233,7 @@ const AppContent: React.FC<{ settingsCache: SettingsCache, updateSettingsCache: 
                   <Route path="/rules" element={<Rules />} />
                   <Route path="/routing" element={<Routing />} />
                   <Route path="/dns" element={<DNS />} />
+                  <Route path="/evolution" element={<Evolution />} />
                   <Route path="/logs" element={<Logs />} />
                   <Route path="/settings" element={<Settings cache={settingsCache} onCacheUpdate={updateSettingsCache} theme={theme} toggleTheme={toggleTheme} />} />
                   <Route path="/about" element={<About />} />

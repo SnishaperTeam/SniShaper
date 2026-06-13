@@ -1,0 +1,23 @@
+{
+  "listen_port": "8080",
+  "socks5_port": "8081",
+  "close_to_tray": true,
+  "auto_start": false,
+  "show_main_window_on_auto_start": true,
+  "auto_enable_proxy_on_auto_start": false,
+  "auto_routing": {
+    "mode": ""
+  },
+  "tun": {
+    "enabled": false,
+    "mtu": 9000
+  },
+  "language": "zh",
+  "theme": "dark",
+  "cloudflare_config": {
+    "preferred_ips": null,
+    "auto_update": false,
+    "api_key": ""
+  },
+  "socks5_enabled": false
+}

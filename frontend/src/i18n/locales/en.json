@@ -190,7 +190,12 @@
       "quic": "QUIC Fragment Obfuscation",
       "transparent": "No TLS decryption, pass-through"
     },
+    "cert_policy": {
+      "ignore": "Ignore Cert Verification",
+      "ignore_hint": "Bypass certificate validation (Dangerous)"
+    },
     "dns_options": {
+      "default": "Default",
       "prefer_ipv4": "Prefer IPv4",
       "prefer_ipv6": "Prefer IPv6",
       "ipv4_only": "IPv4 Only",
