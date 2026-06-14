@@ -53,6 +53,7 @@ type CertGenerator interface {
 }
 
 type ProxyServer struct {
+	startStopMu   sync.Mutex
 	Server        *http.Server
 	listenAddr    string
 	socks5Addr    string
@@ -1086,6 +1087,9 @@ func (p *ProxyServer) GetMode() string {
 }
 
 func (p *ProxyServer) Start() error {
+	p.startStopMu.Lock()
+	defer p.startStopMu.Unlock()
+
 	p.mu.Lock()
 	if p.running {
 		p.mu.Unlock()
@@ -1099,10 +1103,6 @@ func (p *ProxyServer) Start() error {
 		WriteTimeout: 30 * time.Second,
 	}
 	listenAddr := p.listenAddr
-
-	if p.cfPool != nil {
-		p.cfPool.Start()
-	}
 
 	if p.cfPool != nil {
 		p.cfPool.Start()
@@ -1179,6 +1179,17 @@ func (l *socks5ConnTracker) getConn(addr string) net.Conn {
 	return nil
 }
 
+func (l *socks5ConnTracker) Close() error {
+	err := l.Listener.Close()
+	l.conns.Range(func(key, value any) bool {
+		if conn, ok := value.(net.Conn); ok {
+			_ = conn.Close()
+		}
+		return true
+	})
+	return err
+}
+
 type socks5TrackedConn struct {
 	net.Conn
 	tracker *socks5ConnTracker
@@ -1206,20 +1217,32 @@ func (p *ProxyServer) startSocks5() {
 }
 
 func (p *ProxyServer) Stop() error {
+	p.startStopMu.Lock()
+	defer p.startStopMu.Unlock()
+
 	p.mu.Lock()
-	defer p.mu.Unlock()
 	if !p.running {
+		p.mu.Unlock()
 		return nil
 	}
 	p.running = false
+
+	if p.socks5Tracker != nil {
+		_ = p.socks5Tracker.Close()
+		p.socks5Tracker = nil
+	}
 
 	if p.cfPool != nil {
 		p.cfPool.Stop()
 	}
 
 	if p.Server != nil {
-		return p.Server.Close()
+		srv := p.Server
+		p.Server = nil
+		p.mu.Unlock()
+		return srv.Close()
 	}
+	p.mu.Unlock()
 	return nil
 }
 

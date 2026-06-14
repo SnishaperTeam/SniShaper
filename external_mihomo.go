@@ -48,19 +48,22 @@ func resolveExternalMihomoRoot() string {
 
 func (m *externalMihomoManager) Start(cfg proxy.TUNConfig, listenPort string, logf func(string)) error {
 	m.mu.Lock()
-	defer m.mu.Unlock()
 
 	if runtime.GOOS != "windows" {
+		m.mu.Unlock()
 		return fmt.Errorf("external mihomo TUN is only supported on Windows")
 	}
 	listenPort = strings.TrimSpace(listenPort)
 	if listenPort == "" {
+		m.mu.Unlock()
 		return fmt.Errorf("proxy listen port is empty")
 	}
 	if err := m.ensureConfigLocked(cfg, listenPort); err != nil {
+		m.mu.Unlock()
 		return err
 	}
 	if err := m.stopLocked(nil); err != nil {
+		m.mu.Unlock()
 		return err
 	}
 
@@ -73,13 +76,16 @@ func (m *externalMihomoManager) Start(cfg proxy.TUNConfig, listenPort string, lo
 	stderr, _ := cmd.StderrPipe()
 
 	if err := cmd.Start(); err != nil {
+		m.mu.Unlock()
 		return err
 	}
 
 	_ = os.WriteFile(m.pidPath, []byte(strconv.Itoa(cmd.Process.Pid)), 0644)
+	m.mu.Unlock() // Unlock early so that Stop can interrupt during wait
 
 	readyChan := make(chan struct{}, 1)
 	fatalChan := make(chan string, 1)
+	exitChan := make(chan error, 1)
 
 	// Signal helper: scan each log line as it arrives
 	checkLine := func(line string) {
@@ -123,6 +129,10 @@ func (m *externalMihomoManager) Start(cfg proxy.TUNConfig, listenPort string, lo
 				logf("[mihomo] process exited")
 			}
 		}
+		select {
+		case exitChan <- err:
+		default:
+		}
 	}()
 
 	timeout := time.NewTimer(12 * time.Second)
@@ -135,11 +145,21 @@ func (m *externalMihomoManager) Start(cfg proxy.TUNConfig, listenPort string, lo
 		}
 		return nil
 	case msg := <-fatalChan:
-		return fmt.Errorf(msg)
+		_ = m.Stop(nil) // Cleanup on failure
+		return fmt.Errorf("%s", msg)
+	case err := <-exitChan:
+		_ = m.Stop(nil) // Cleanup if process exited prematurely
+		if err != nil {
+			return fmt.Errorf("external mihomo process exited prematurely: %w", err)
+		}
+		return fmt.Errorf("external mihomo process exited prematurely")
 	case <-timeout.C:
+		_ = m.Stop(nil) // Cleanup on timeout
+		m.mu.Lock()
 		_, message := m.runningStateLocked(cfg)
+		m.mu.Unlock()
 		if strings.TrimSpace(message) != "" {
-			return fmt.Errorf(message)
+			return fmt.Errorf("%s", message)
 		}
 		return fmt.Errorf("external mihomo TUN did not enter running state within 12s")
 	}
