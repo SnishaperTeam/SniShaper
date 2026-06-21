@@ -102,12 +102,15 @@ func (r *coreRuntime) start() error {
 	r.ruleManager.InitAutoRouter(r.proxyServer.GetDoHResolver())
 
 	r.ruleManager.SetRouteEventCallback(func(domain, mode string) {
-		r.routeEventsMu.Lock()
-		defer r.routeEventsMu.Unlock()
-		r.routeEvents = append(r.routeEvents, RouteEvent{Domain: domain, Mode: mode})
-		if len(r.routeEvents) > 200 {
-			r.routeEvents = r.routeEvents[len(r.routeEvents)-100:]
-		}
+	r.routeEventsMu.Lock()
+	defer r.routeEventsMu.Unlock()
+	r.routeEvents = append(r.routeEvents, RouteEvent{Domain: domain, Mode: mode})
+	if len(r.routeEvents) > 200 {
+		// Create new slice to release underlying array memory
+		newSlice := make([]RouteEvent, 100)
+		copy(newSlice, r.routeEvents[len(r.routeEvents)-100:])
+		r.routeEvents = newSlice
+	}
 	})
 
 	r.appendLog("[core] runtime ready")

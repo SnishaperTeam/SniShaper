@@ -1,7 +1,6 @@
 package proxy
 
 import (
-	"crypto/tls"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -337,15 +336,12 @@ type cfApiResponse struct {
 
 func FetchCloudflareIPs(apiKey string) ([]string, error) {
 	if apiKey == "" {
-		apiKey = "o1zrmHAF" // Default key provided by user
+		return nil, fmt.Errorf("Cloudflare API key is required")
 	}
 	url := fmt.Sprintf("https://www.wetest.vip/api/cf2dns/get_cloudflare_ip?key=%s&type=v4", apiKey)
 
 	client := &http.Client{
 		Timeout: 10 * time.Second,
-		Transport: &http.Transport{
-			TLSClientConfig: &tls.Config{InsecureSkipVerify: true}, // Avoid schannel errors on some systems
-		},
 	}
 	resp, err := client.Get(url)
 	if err != nil {
@@ -353,7 +349,7 @@ func FetchCloudflareIPs(apiKey string) ([]string, error) {
 	}
 	defer resp.Body.Close()
 
-	body, err := io.ReadAll(resp.Body)
+	body, err := io.ReadAll(io.LimitReader(resp.Body, 5*1024*1024))
 	if err != nil {
 		return nil, err
 	}

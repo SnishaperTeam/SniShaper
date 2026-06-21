@@ -14,10 +14,29 @@ import (
 	"snishaper/proxy"
 )
 
-type coreClient struct{}
+type coreClient struct {
+	token string
+}
 
 func newCoreClient() *coreClient {
 	return &coreClient{}
+}
+
+func (c *coreClient) readToken() string {
+	if c.token != "" {
+		return c.token
+	}
+	execPath, err := os.Executable()
+	if err != nil {
+		return ""
+	}
+	tokenPath := filepath.Join(filepath.Dir(execPath), "core_rpc_token")
+	data, err := os.ReadFile(tokenPath)
+	if err != nil {
+		return ""
+	}
+	c.token = strings.TrimSpace(string(data))
+	return c.token
 }
 
 func (c *coreClient) dial() (*rpc.Client, error) {
@@ -75,6 +94,14 @@ func (c *coreClient) ensureRunningWithElevation(requireElevated bool) error {
 	for i := 0; i < 30; i++ {
 		time.Sleep(200 * time.Millisecond)
 		if err := c.call("Core.Ping", EmptyArgs{}, &pong); err == nil && pong.Value {
+			// Authenticate with the core process
+			token := c.readToken()
+			if token != "" {
+				var authReply BoolReply
+				if err := c.call("Core.Authenticate", AuthArgs{Token: token}, &authReply); err != nil || !authReply.Value {
+					continue // Authentication failed, retry
+				}
+			}
 			if wasLogCaptureEnabled {
 				var empty EmptyArgs
 				_ = c.call("Core.StartLogCapture", EmptyArgs{}, &empty)

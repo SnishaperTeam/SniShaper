@@ -3,6 +3,7 @@ package proxy
 import (
 	"bufio"
 	"fmt"
+	"html"
 	"net"
 	"net/http"
 	"strings"
@@ -276,7 +277,7 @@ func (p *ProxyServer) generateHTML(lang, title, analysis, suggest string, ctx Er
         }
         .details {
             display: grid;
-            grid-template-cols: auto 1fr;
+            grid-template-columns: auto 1fr;
             gap: 12px 20px;
             font-size: 13px;
         }
@@ -326,8 +327,16 @@ func (p *ProxyServer) generateHTML(lang, title, analysis, suggest string, ctx Er
         </div>
     </div>
 </body>
-</html>`, accentColor, bgGradient, title, analysis, labels["action"], suggest, labels["detail"],
-		labels["target"], ctx.TargetHost, labels["mode"], ctx.WorkMode, labels["ip"], ctx.RemoteIP, labels["sni"], ctx.UpstreamSNI, labels["ech"], ctx.ECHStatus, labels["raw"], ctx.RawError)
+</html>`, accentColor, bgGradient,
+		html.EscapeString(title), html.EscapeString(analysis),
+		labels["action"], html.EscapeString(suggest),
+		labels["detail"],
+		labels["target"], html.EscapeString(ctx.TargetHost),
+		labels["mode"], html.EscapeString(ctx.WorkMode),
+		labels["ip"], html.EscapeString(ctx.RemoteIP),
+		labels["sni"], html.EscapeString(ctx.UpstreamSNI),
+		labels["ech"], html.EscapeString(ctx.ECHStatus),
+		labels["raw"], html.EscapeString(ctx.RawError))
 }
 
 func (p *ProxyServer) renderCertErrorPage(lang string, ctx ErrorContext) string {
@@ -384,7 +393,11 @@ func (p *ProxyServer) renderCertErrorPage(lang string, ctx ErrorContext) string 
         </div>
     </div>
 </body>
-</html>`, title, analysis, back, advanced, suggest, bypassURL, fmt.Sprintf(proceed, ctx.TargetHost), ctx.RawError)
+</html>`, html.EscapeString(title), html.EscapeString(analysis),
+		html.EscapeString(back), html.EscapeString(advanced),
+		html.EscapeString(suggest), html.EscapeString(bypassURL),
+		html.EscapeString(fmt.Sprintf(proceed, ctx.TargetHost)),
+		html.EscapeString(ctx.RawError))
 }
 
 func isRSTError(err error) bool {

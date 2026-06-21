@@ -15,7 +15,7 @@ var (
 
 func main() {
 	flag.IntVar(&port, "port", 443, "Listen port")
-	flag.StringVar(&secret, "secret", "CHANGE_ME_IN_PRODUCTION", "Auth secret (x-snishaper-auth)")
+	flag.StringVar(&secret, "secret", "", "Auth secret (x-snishaper-auth)")
 	flag.Parse()
 
 	// 优先从环境变量读取 Secret
@@ -23,11 +23,14 @@ func main() {
 		secret = envSecret
 	}
 
+	if secret == "" {
+		log.Fatal("Auth secret is required. Set via -secret flag or AUTH_SECRET environment variable.")
+	}
+
 	proxy := NewProxy(secret)
 
 	serverAddr := fmt.Sprintf(":%d", port)
 	log.Printf("Snishaper Server (sni-server) starting on %s", serverAddr)
-	log.Printf("Auth Secret: %s", secret)
 
 	err := http.ListenAndServe(serverAddr, proxy)
 	if err != nil {

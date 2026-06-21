@@ -71,7 +71,28 @@ func NewAutoRouter(config AutoRoutingConfig, dohResolver *FailoverResolver) *Aut
 		}
 		ar.cfNets = append(ar.cfNets, network)
 	}
+	// Periodic cache cleanup
+	go ar.cacheCleanupLoop()
 	return ar
+}
+
+func (ar *AutoRouter) cacheCleanupLoop() {
+	ticker := time.NewTicker(30 * time.Minute)
+	defer ticker.Stop()
+	for range ticker.C {
+		ar.cleanupCFCache()
+	}
+}
+
+func (ar *AutoRouter) cleanupCFCache() {
+	ar.cfCacheMu.Lock()
+	defer ar.cfCacheMu.Unlock()
+	now := time.Now()
+	for k, v := range ar.cfCache {
+		if now.Sub(v.checkedAt) > cfCacheTTL*3 {
+			delete(ar.cfCache, k)
+		}
+	}
 }
 
 func (ar *AutoRouter) isCloudflareIP(ip net.IP) bool {

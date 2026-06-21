@@ -82,6 +82,10 @@ func (t *Tester) StartTest(domains []string, config TestConfig) (*TestTask, erro
 		return nil, fmt.Errorf("测试任务正在运行中")
 	}
 
+	// Clear historical data to prevent memory leak
+	t.allResults = t.allResults[:0]
+	t.tempRules = make(map[string]*TempRule)
+
 	task := &TestTask{
 		ID:        fmt.Sprintf("task-%d", time.Now().Unix()),
 		Domains:   domains,
@@ -297,6 +301,8 @@ func (t *Tester) testDirect(domain string, config TestConfig) StepResult {
 
 	dialer := &net.Dialer{Timeout: config.Timeout}
 	// 直连测试使用普通的 tls 握手并强制限制 http/1.1
+	// NOTE: InsecureSkipVerify is used here because this is a diagnostic test tool
+	// that needs to check raw connectivity regardless of certificate validity.
 	tlsConn, err := tls.DialWithDialer(dialer, "tcp", net.JoinHostPort(domain, "443"), &tls.Config{
 		ServerName:         domain,
 		InsecureSkipVerify: true,

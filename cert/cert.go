@@ -97,7 +97,7 @@ func (cm *CertManager) saveCA() error {
 		return err
 	}
 
-	keyFile, err := os.Create(cm.keyPath)
+	keyFile, err := os.OpenFile(cm.keyPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0600)
 	if err != nil {
 		return err
 	}

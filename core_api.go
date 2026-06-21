@@ -1,6 +1,8 @@
 package main
 
 import (
+	"crypto/rand"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"net"
@@ -8,11 +10,23 @@ import (
 	"os"
 	"runtime/debug"
 	"sync"
+	"time"
 
 	"snishaper/proxy"
 )
 
 const coreRPCAddr = "127.0.0.1:18933"
+
+var coreRPCToken string
+
+func init() {
+	b := make([]byte, 16)
+	if _, err := rand.Read(b); err == nil {
+		coreRPCToken = hex.EncodeToString(b)
+	} else {
+		coreRPCToken = fmt.Sprintf("%d", time.Now().UnixNano())
+	}
+}
 
 type coreService struct {
 	runtime *coreRuntime
@@ -20,6 +34,10 @@ type coreService struct {
 }
 
 type EmptyArgs struct{}
+
+type AuthArgs struct {
+	Token string
+}
 
 type BoolReply struct {
 	Value bool
@@ -55,6 +73,11 @@ type SetModeArgs struct {
 
 type LogsArgs struct {
 	Limit int
+}
+
+func (s *coreService) Authenticate(args AuthArgs, reply *BoolReply) error {
+	reply.Value = args.Token == coreRPCToken
+	return nil
 }
 
 func (s *coreService) Ping(_ EmptyArgs, reply *BoolReply) error {
@@ -198,6 +221,13 @@ func runCoreMain() error {
 	}
 	defer runtime.shutdown()
 	writeCoreMarker(runtime.execDir, "run_core_main", markerDetail("entered pid=%d", os.Getpid()))
+
+	// Write RPC token to file for client to read
+	tokenPath := fmt.Sprintf("%s\\core_rpc_token", runtime.execDir)
+	if err := os.WriteFile(tokenPath, []byte(coreRPCToken), 0600); err != nil {
+		return fmt.Errorf("failed to write RPC token: %w", err)
+	}
+	defer os.Remove(tokenPath)
 
 	server := rpc.NewServer()
 	var (

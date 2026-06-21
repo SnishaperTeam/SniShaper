@@ -177,7 +177,7 @@ func (r *FailoverResolver) exchangeNodeWithRetry(ctx context.Context, node *DNSN
 		return nil, fmt.Errorf("DoH server returned status %d", resp.StatusCode)
 	}
 
-	respBuf, err := io.ReadAll(resp.Body)
+	respBuf, err := io.ReadAll(io.LimitReader(resp.Body, 64*1024))
 	if err != nil {
 		return nil, err
 	}

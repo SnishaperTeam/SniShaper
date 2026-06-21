@@ -6,6 +6,7 @@ require (
 	github.com/miekg/dns v1.1.72
 	github.com/quic-go/quic-go v0.59.0
 	github.com/refraction-networking/utls v1.8.2
+	github.com/things-go/go-socks5 v0.1.1
 	github.com/wailsapp/wails/v3 v3.0.0-alpha.74
 	golang.org/x/net v0.53.0
 	golang.org/x/sys v0.43.0
@@ -49,7 +50,6 @@ require (
 	github.com/samber/lo v1.52.0 // indirect
 	github.com/sergi/go-diff v1.4.0 // indirect
 	github.com/skeema/knownhosts v1.3.2 // indirect
-	github.com/things-go/go-socks5 v0.1.1 // indirect
 	github.com/wailsapp/go-webview2 v1.0.23 // indirect
 	github.com/xanzy/ssh-agent v0.3.3 // indirect
 	golang.org/x/crypto v0.50.0 // indirect

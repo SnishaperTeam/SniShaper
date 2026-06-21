@@ -17,6 +17,7 @@ func FindProcessByPort(port int) (int, error) {
 	}
 
 	// netstat -ano | findstr :PORT
+	// SAFE: port is int, so fmt.Sprintf with %d cannot be injected
 	cmd := exec.Command("cmd", "/c", fmt.Sprintf("netstat -ano | findstr :%d", port))
 	cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
 	out, err := cmd.CombinedOutput()

@@ -117,8 +117,8 @@ func (w *ringLogWriter) Snapshot(limit int) []string {
 	if limit <= 0 {
 		limit = 200
 	}
-	w.mu.Lock()
-	defer w.mu.Unlock()
+	w.mu.RLock()
+	defer w.mu.RUnlock()
 
 	total := len(w.lines)
 	if total == 0 {
@@ -294,7 +294,7 @@ func (a *App) saveManagedSystemProxyMarker(server string) error {
 		return err
 	}
 
-	return os.WriteFile(a.proxyMarkerPath, data, 0644)
+	return os.WriteFile(a.proxyMarkerPath, data, 0600)
 }
 
 func (a *App) clearManagedSystemProxyMarker() error {
@@ -1761,6 +1761,8 @@ func (a *App) ProxySelfCheck() string {
 		}).DialContext,
 		TLSHandshakeTimeout:   8 * time.Second,
 		ResponseHeaderTimeout: 10 * time.Second,
+		// NOTE: InsecureSkipVerify is used here ONLY for local self-check via self-signed MITM proxy.
+		// This is safe because we are testing our own proxy's connectivity, not external servers.
 		TLSClientConfig: &tls.Config{
 			InsecureSkipVerify: true,
 		},
@@ -1923,8 +1925,8 @@ func (a *App) CheckUpdate() CheckUpdateResult {
 	}
 	defer resp.Body.Close()
 
-	// Read response body
-	body, err := io.ReadAll(resp.Body)
+	// Read response body (limit to 10MB to prevent memory exhaustion)
+	body, err := io.ReadAll(io.LimitReader(resp.Body, 10*1024*1024))
 	if err != nil {
 		a.appendLog("[update] Failed to read update info: " + err.Error())
 		return CheckUpdateResult{

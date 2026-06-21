@@ -80,7 +80,7 @@ func (m *externalMihomoManager) Start(cfg proxy.TUNConfig, listenPort string, lo
 		return err
 	}
 
-	_ = os.WriteFile(m.pidPath, []byte(strconv.Itoa(cmd.Process.Pid)), 0644)
+	_ = os.WriteFile(m.pidPath, []byte(strconv.Itoa(cmd.Process.Pid)), 0600)
 	m.mu.Unlock() // Unlock early so that Stop can interrupt during wait
 
 	readyChan := make(chan struct{}, 1)
@@ -245,7 +245,7 @@ func (m *externalMihomoManager) ensureConfigLocked(cfg proxy.TUNConfig, listenPo
 	}
 	config := strings.ReplaceAll(mihomoConfigTemplate, "__SNISHAPER_PORT__", listenPort)
 	config = strings.ReplaceAll(config, "__APP_PROCESS__", appProcess)
-	return os.WriteFile(m.configPath, []byte(config), 0644)
+	return os.WriteFile(m.configPath, []byte(config), 0600)
 }
 
 func (m *externalMihomoManager) runningStateLocked(cfg proxy.TUNConfig) (bool, string) {

@@ -1128,6 +1128,9 @@ func (p *ProxyServer) Start() error {
 	p.running = true
 	p.mu.Unlock()
 
+	// Periodic cert cache cleanup
+	p.certCacheCleanup()
+
 	go func() {
 		log.Printf("[Proxy] HTTP server started on %s", listenAddr)
 
@@ -2015,11 +2018,29 @@ func (p *ProxyServer) ClearCertCache() {
 	p.certCache = make(map[string]*tls.Certificate)
 }
 
+// certCacheCleanup periodically clears the cert cache to prevent memory leaks.
+// MITM-generated certs have a 24h TTL, so clearing every 6h ensures stale entries are reclaimed.
+func (p *ProxyServer) certCacheCleanup() {
+	go func() {
+		ticker := time.NewTicker(6 * time.Hour)
+		defer ticker.Stop()
+		for range ticker.C {
+			if !p.IsRunning() {
+				return
+			}
+			p.ClearCertCache()
+		}
+	}()
+}
+
+// trackAccepted records the most recent 10 accepted connections for diagnostics.
 func (p *ProxyServer) trackAccepted(remote string) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	if len(p.recentIngress) >= 10 {
-		p.recentIngress = p.recentIngress[1:]
+		// Shift elements to release underlying array head
+		copy(p.recentIngress, p.recentIngress[1:])
+		p.recentIngress = p.recentIngress[:9]
 	}
 	p.recentIngress = append(p.recentIngress, remote)
 }

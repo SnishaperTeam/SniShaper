@@ -79,3 +79,4 @@ build/bin/markers/
 
 .history/
 docs/
+.opencode/
