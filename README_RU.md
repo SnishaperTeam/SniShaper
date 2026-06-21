@@ -69,7 +69,7 @@ powershell -ExecutionPolicy Bypass -File .\build_windows.ps1
 # Или с PowerShell 7
 pwsh -ExecutionPolicy Bypass -File .\build_windows.ps1
 
-# Компиляция основной программы на Go
+# Компиляция основной программы на Go (скрипт автоматически выполняет go mod download)
 go build -ldflags="-s -w" -o "build/bin/snishaper.exe"
 ```
 
@@ -80,13 +80,14 @@ go build -ldflags="-s -w" -o "build/bin/snishaper.exe"
 | Параметр | Значения | Описание |
 |----------|----------|----------|
 | `-Build` | `frontend` / `backend` / `all` | Цель сборки |
-| `-Lang` | `en` / `cn` | Язык интерфейса |
+| `-Lang` | `en` / `cn` / `ru` | Язык интерфейса |
 | `-InstallDeps` | без значений (флаг) | Установить npm зависимости |
+| `-Silent` | без значений (флаг) | Тихий режим, пропуск всех интерактивных запросов |
 
 **Примеры использования:**
 
 ```powershell
-# Собрать только фронтенд (русский интерфейс)
+# Собрать только фронтенд (китайский интерфейс)
 .\build_windows.ps1 -Build frontend -Lang cn
 
 # Собрать только бэкенд (английский интерфейс)
@@ -94,6 +95,12 @@ go build -ldflags="-s -w" -o "build/bin/snishaper.exe"
 
 # Собрать всё и установить зависимости
 .\build_windows.ps1 -Build all -Lang cn -InstallDeps
+
+# Тихий режим (для CI/CD, без взаимодействия)
+.\build_windows.ps1 -Silent
+
+# С параметрами + тихий режим
+.\build_windows.ps1 -Build backend -Lang en -Silent
 
 # Без параметров = интерактивный режим
 .\build_windows.ps1

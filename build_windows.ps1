@@ -5,7 +5,9 @@
     [ValidateSet("en", "cn", "ru")]
     [string]$Lang,
 
-    [switch]$InstallDeps
+    [switch]$InstallDeps,
+
+    [switch]$Silent
 )
 
 $currentPrincipal = New-Object Security.Principal.WindowsPrincipal([Security.Principal.WindowsIdentity]::GetCurrent())
@@ -13,7 +15,13 @@ $isAdmin = $currentPrincipal.IsInRole([Security.Principal.WindowsBuiltInRole]::A
 
 if (-not $isAdmin) {
     Write-Host "Requesting Administrator privileges..." -ForegroundColor Yellow
-    Start-Process powershell.exe -Verb RunAs -ArgumentList "-NoProfile -ExecutionPolicy Bypass -File `"$PSCommandPath`""
+    $params = @()
+    if ($Build)   { $params += "-Build";   $params += $Build }
+    if ($Lang)    { $params += "-Lang";    $params += $Lang }
+    if ($InstallDeps) { $params += "-InstallDeps" }
+    if ($Silent)  { $params += "-Silent" }
+    $paramStr = $params -join ' '
+    Start-Process powershell.exe -Verb RunAs -ArgumentList "-NoProfile -ExecutionPolicy Bypass -File `"$PSCommandPath`" $paramStr"
     exit
 } else {
     Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser -Force -ErrorAction SilentlyContinue
@@ -30,6 +38,13 @@ try {
 
 $ProjectRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
 Set-Location $ProjectRoot
+
+function Show-ErrorPopup($msg) {
+    if ($Silent) {
+        $wshell = New-Object -ComObject WScript.Shell
+        $wshell.Popup("Build failed!`n$msg", 0, "SniShaper Build", 0x00000010)
+    }
+}
 
 $messages = @{
     "LangTitle" = "Please select your language / 请选择语言 / Выберите язык"
@@ -54,10 +69,12 @@ $messages = @{
     "EN_FrontErrBuild" = "[Frontend] ERROR: 'npm run build' failed!"
     "EN_FrontDone" = "[Frontend] Frontend build completed successfully!"
     "EN_BackStart" = "[Backend] Starting Go build..."
+    "EN_BackInstallDeps" = "[Backend] Installing Go dependencies..."
+    "EN_BackErrInstallDeps" = "[Backend] ERROR: go mod download failed!"
     "EN_BackErrBuild" = "[Backend] ERROR: Go build failed!"
-    "EN_BackCopyCore" = "[Backend] Copying 'core' folder..."
-    "EN_BackCopyProxy" = "[Backend] Copying 'proxy' folder..."
-    "EN_BackCopyRuntime" = "[Backend] Copying 'runtime' folder..."
+    "EN_BackCopyCore" = "[Backend] Copying 'rules' folder..."
+    "EN_BackCopyProxy" = "[Backend] Copying 'config' folder..."
+    "EN_BackCopyRuntime" = "[Backend] Copying 'proxy' folder..."
     "EN_BackDone" = "[Backend] Backend build and file copy completed!"
     "EN_AllDone" = "All selected tasks finished successfully!"
     "EN_Exit" = "Press Enter to exit"
@@ -78,10 +95,12 @@ $messages = @{
     "CN_FrontErrBuild" = "[前端] 错误：'npm run build' 构建失败！"
     "CN_FrontDone" = "[前端] 前端构建成功完成！"
     "CN_BackStart" = "[后端] 正在开始 Go 编译..."
+    "CN_BackInstallDeps" = "[后端] 正在安装 Go 依赖..."
+    "CN_BackErrInstallDeps" = "[后端] 错误：go mod download 失败！"
     "CN_BackErrBuild" = "[后端] 错误：Go 编译失败！"
-    "CN_BackCopyCore" = "[后端] 正在复制 'core' 文件夹..."
-    "CN_BackCopyProxy" = "[后端] 正在复制 'proxy' 文件夹..."
-    "CN_BackCopyRuntime" = "[后端] 正在复制 'runtime' 文件夹..."
+    "CN_BackCopyCore" = "[后端] 正在复制 'rules' 文件夹..."
+    "CN_BackCopyProxy" = "[后端] 正在复制 'config' 文件夹..."
+    "CN_BackCopyRuntime" = "[后端] 正在复制 'proxy' 文件夹..."
     "CN_BackDone" = "[后端] 后端编译与文件复制完成！"
     "CN_AllDone" = "所有选定的任务已成功完成！"
     "CN_Exit" = "按回车键退出"
@@ -102,19 +121,27 @@ $messages = @{
     "RU_FrontErrBuild" = "[Фронтенд] ОШИБКА: 'npm run build' не удался!"
     "RU_FrontDone" = "[Фронтенд] Сборка фронтенда завершена успешно!"
     "RU_BackStart" = "[Бэкенд] Начало сборки Go..."
+    "RU_BackInstallDeps" = "[Бэкенд] Установка Go зависимостей..."
+    "RU_BackErrInstallDeps" = "[Бэкенд] ОШИБКА: go mod download не удался!"
     "RU_BackErrBuild" = "[Бэкенд] ОШИБКА: Сборка Go не удалась!"
-    "RU_BackCopyCore" = "[Бэкенд] Копирование папки 'core'..."
-    "RU_BackCopyProxy" = "[Бэкенд] Копирование папки 'proxy'..."
-    "RU_BackCopyRuntime" = "[Бэкенд] Копирование папки 'runtime'..."
+    "RU_BackCopyCore" = "[Бэкенд] Копирование папки 'rules'..."
+    "RU_BackCopyProxy" = "[Бэкенд] Копирование папки 'config'..."
+    "RU_BackCopyRuntime" = "[Бэкенд] Копирование папки 'proxy'..."
     "RU_BackDone" = "[Бэкенд] Сборка бэкенда и копирование файлов завершены!"
     "RU_AllDone" = "Все выбранные задачи успешно завершены!"
     "RU_Exit" = "Нажмите Enter для выхода"
 }
 
+# --- Silent mode defaults ---
+if ($Silent) {
+    if (-not $Build) { $Build = "all" }
+    if (-not $Lang) { $Lang = "EN" }
+}
+
 # --- Resolve language ---
 if ($Lang) {
     $lang = $Lang.ToUpper()
-} else {
+} elseif (-not $Silent) {
     Write-Host "==========================================" -ForegroundColor Cyan
     Write-Host $messages["LangTitle"] -ForegroundColor Cyan
     Write-Host "==========================================" -ForegroundColor Cyan
@@ -134,6 +161,8 @@ if ($Lang) {
         Write-Host "Invalid choice, defaulting to English..." -ForegroundColor Yellow
         $lang = "EN"
     }
+} else {
+    $lang = "EN"
 }
 
 # --- Resolve build target ---
@@ -145,7 +174,7 @@ if ($Build) {
         "backend"  { $choice = "2" }
         "all"      { $choice = "3" }
     }
-} else {
+} elseif (-not $Silent) {
     Write-Host ""
     Write-Host "==========================================" -ForegroundColor Cyan
     Write-Host $messages["$($lang)_MenuTitle"] -ForegroundColor Cyan
@@ -164,17 +193,20 @@ if ($Build) {
     Write-Host ""
 
     $choice = Read-Host $messages["$($lang)_ChoicePrompt"]
+} else {
+    $choice = "3"
 }
 
 # Validate choice
 if ($choice -ne "1" -and $choice -ne "2" -and $choice -ne "3") {
     Write-Host "[ERROR] Invalid choice: $choice. Please enter 1, 2, or 3." -ForegroundColor Red
-    Read-Host $messages["$($lang)_Exit"]
+    Show-ErrorPopup "Invalid choice: $choice"
+    if (-not $Silent) { Read-Host $messages["$($lang)_Exit"] }
     exit 1
 }
 
 # --- Resolve InstallDeps when interactive ---
-if (-not $Build -and -not $PSBoundParameters.ContainsKey('InstallDeps')) {
+if (-not $Build -and -not $Silent -and -not $PSBoundParameters.ContainsKey('InstallDeps')) {
     if ([string]::IsNullOrWhiteSpace($installDepsInput)) {
         $installDepsInput = "N"
     }
@@ -200,14 +232,16 @@ if ($choice -eq "1" -or $choice -eq "3") {
         }
     } catch {
         Write-Host "[ERROR] npm is not installed or not in PATH. Please install Node.js first." -ForegroundColor Red
-        Read-Host $messages["$($lang)_Exit"]
+        Show-ErrorPopup "npm is not installed or not in PATH"
+        if (-not $Silent) { Read-Host $messages["$($lang)_Exit"] }
         exit 1
     }
     
     $FrontendPath = Join-Path $ProjectRoot "frontend"
     if (-not (Test-Path $FrontendPath -PathType Container)) {
         Write-Host "[ERROR] Cannot find frontend directory: $FrontendPath" -ForegroundColor Red
-        Read-Host $messages["$($lang)_Exit"]
+        Show-ErrorPopup "Cannot find frontend directory"
+        if (-not $Silent) { Read-Host $messages["$($lang)_Exit"] }
         exit 1
     }
 
@@ -215,7 +249,8 @@ if ($choice -eq "1" -or $choice -eq "3") {
         Set-Location $FrontendPath
     } catch {
         Write-Host $messages["$($lang)_FrontErrDir"] -ForegroundColor Red
-        Read-Host $messages["$($lang)_Exit"]
+        Show-ErrorPopup "Failed to enter frontend directory"
+        if (-not $Silent) { Read-Host $messages["$($lang)_Exit"] }
         exit 1
     }
 
@@ -225,7 +260,8 @@ if ($choice -eq "1" -or $choice -eq "3") {
         if ($LASTEXITCODE -ne 0) {
             Write-Host $messages["$($lang)_FrontErrInstall"] -ForegroundColor Red
             Set-Location $ProjectRoot
-            Read-Host $messages["$($lang)_Exit"]
+            Show-ErrorPopup "npm install failed"
+            if (-not $Silent) { Read-Host $messages["$($lang)_Exit"] }
             exit 1
         }
     }
@@ -235,7 +271,8 @@ if ($choice -eq "1" -or $choice -eq "3") {
     if ($LASTEXITCODE -ne 0) {
         Write-Host $messages["$($lang)_FrontErrBuild"] -ForegroundColor Red
         Set-Location $ProjectRoot
-        Read-Host $messages["$($lang)_Exit"]
+        Show-ErrorPopup "npm run build failed"
+        if (-not $Silent) { Read-Host $messages["$($lang)_Exit"] }
         exit 1
     }
 
@@ -253,11 +290,21 @@ if ($choice -eq "2" -or $choice -eq "3") {
         }
     } catch {
         Write-Host "[ERROR] Go is not installed or not in PATH. Please install Go first." -ForegroundColor Red
-        Read-Host $messages["$($lang)_Exit"]
+        Show-ErrorPopup "Go is not installed or not in PATH"
+        if (-not $Silent) { Read-Host $messages["$($lang)_Exit"] }
         exit 1
     }
     
     Write-Host $messages["$($lang)_BackStart"] -ForegroundColor Green
+    
+    Write-Host $messages["$($lang)_BackInstallDeps"] -ForegroundColor Green
+    go mod download
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host $messages["$($lang)_BackErrInstallDeps"] -ForegroundColor Red
+        Show-ErrorPopup "go mod download failed"
+        if (-not $Silent) { Read-Host $messages["$($lang)_Exit"] }
+        exit 1
+    }
     
     # Ensure build/bin directory exists
     $BuildDir = Join-Path $ProjectRoot "build"
@@ -270,26 +317,44 @@ if ($choice -eq "2" -or $choice -eq "3") {
     go build -ldflags="-s -w -H windowsgui" -o "$BuildBinPath\snishaper.exe" .
     if ($LASTEXITCODE -ne 0) {
         Write-Host $messages["$($lang)_BackErrBuild"] -ForegroundColor Red
-        Read-Host $messages["$($lang)_Exit"]
+        Show-ErrorPopup "Go build failed"
+        if (-not $Silent) { Read-Host $messages["$($lang)_Exit"] }
         exit 1
     }
 
     Write-Host $messages["$($lang)_BackCopyCore"] -ForegroundColor Green
-    $CoreSrc = Join-Path $ProjectRoot "core"
-    $CoreDst = Join-Path $BuildBinPath "core"
-    if (Test-Path $CoreSrc -PathType Container) {
+    $RulesSrc = Join-Path $ProjectRoot "rules"
+    $RulesDst = Join-Path $BuildBinPath "rules"
+    if (Test-Path $RulesSrc -PathType Container) {
         try {
-            Copy-Item -Path $CoreSrc -Destination $CoreDst -Recurse -Force -ErrorAction Stop
+            Copy-Item -Path $RulesSrc -Destination $RulesDst -Recurse -Force -ErrorAction Stop
         } catch {
-            Write-Host "[ERROR] Failed to copy 'core' folder! $_" -ForegroundColor Red
-            Read-Host $messages["$($lang)_Exit"]
+            Write-Host "[ERROR] Failed to copy 'rules' folder! $_" -ForegroundColor Red
+            Show-ErrorPopup "Failed to copy 'rules' folder"
+            if (-not $Silent) { Read-Host $messages["$($lang)_Exit"] }
             exit 1
         }
     } else {
-        Write-Host "[WARNING] 'core' folder not found, skipping copy." -ForegroundColor Yellow
+        Write-Host "[WARNING] 'rules' folder not found, skipping copy." -ForegroundColor Yellow
     }
     
     Write-Host $messages["$($lang)_BackCopyProxy"] -ForegroundColor Green
+    $ConfigSrc = Join-Path $ProjectRoot "config"
+    $ConfigDst = Join-Path $BuildBinPath "config"
+    if (Test-Path $ConfigSrc -PathType Container) {
+        try {
+            Copy-Item -Path $ConfigSrc -Destination $ConfigDst -Recurse -Force -ErrorAction Stop
+        } catch {
+            Write-Host "[ERROR] Failed to copy 'config' folder! $_" -ForegroundColor Red
+            Show-ErrorPopup "Failed to copy 'config' folder"
+            if (-not $Silent) { Read-Host $messages["$($lang)_Exit"] }
+            exit 1
+        }
+    } else {
+        Write-Host "[WARNING] 'config' folder not found, skipping copy." -ForegroundColor Yellow
+    }
+    
+    Write-Host $messages["$($lang)_BackCopyRuntime"] -ForegroundColor Green
     $ProxySrc = Join-Path $ProjectRoot "proxy"
     $ProxyDst = Join-Path $BuildBinPath "proxy"
     if (Test-Path $ProxySrc -PathType Container) {
@@ -297,26 +362,12 @@ if ($choice -eq "2" -or $choice -eq "3") {
             Copy-Item -Path $ProxySrc -Destination $ProxyDst -Recurse -Force -ErrorAction Stop
         } catch {
             Write-Host "[ERROR] Failed to copy 'proxy' folder! $_" -ForegroundColor Red
-            Read-Host $messages["$($lang)_Exit"]
+            Show-ErrorPopup "Failed to copy 'proxy' folder"
+            if (-not $Silent) { Read-Host $messages["$($lang)_Exit"] }
             exit 1
         }
     } else {
         Write-Host "[WARNING] 'proxy' folder not found, skipping copy." -ForegroundColor Yellow
-    }
-    
-    Write-Host $messages["$($lang)_BackCopyRuntime"] -ForegroundColor Green
-    $RuntimeSrc = Join-Path $ProjectRoot "runtime"
-    $RuntimeDst = Join-Path $BuildBinPath "runtime"
-    if (Test-Path $RuntimeSrc -PathType Container) {
-        try {
-            Copy-Item -Path $RuntimeSrc -Destination $RuntimeDst -Recurse -Force -ErrorAction Stop
-        } catch {
-            Write-Host "[ERROR] Failed to copy 'runtime' folder! $_" -ForegroundColor Red
-            Read-Host $messages["$($lang)_Exit"]
-            exit 1
-        }
-    } else {
-        Write-Host "[WARNING] 'runtime' folder not found, skipping copy." -ForegroundColor Yellow
     }
 
     Write-Host $messages["$($lang)_BackDone"] -ForegroundColor Green
@@ -326,4 +377,10 @@ if ($choice -eq "2" -or $choice -eq "3") {
 Write-Host "==========================================" -ForegroundColor Cyan
 Write-Host $messages["$($lang)_AllDone"] -ForegroundColor Cyan
 Write-Host "==========================================" -ForegroundColor Cyan
-Read-Host $messages["$($lang)_Exit"]
+
+if ($Silent) {
+    $wshell = New-Object -ComObject WScript.Shell
+    $wshell.Popup("Build completed successfully!`n构建完毕！", 0, "SniShaper Build", 0x00000040)
+} else {
+    Read-Host $messages["$($lang)_Exit"]
+}

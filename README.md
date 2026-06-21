@@ -69,7 +69,7 @@ powershell -ExecutionPolicy Bypass -File .\build_windows.ps1
 # 或使用 PowerShell 7
 pwsh -ExecutionPolicy Bypass -File .\build_windows.ps1
 
-# Go主程序编译
+# Go主程序编译（脚本会自动执行 go mod download）
 go build -ldflags="-s -w" -o "build/bin/snishaper.exe"
 ```
 
@@ -80,8 +80,9 @@ go build -ldflags="-s -w" -o "build/bin/snishaper.exe"
 | 参数 | 可选值 | 说明 |
 |------|--------|------|
 | `-Build` | `frontend` / `backend` / `all` | 指定构建目标 |
-| `-Lang` | `en` / `cn` | 指定界面语言 |
+| `-Lang` | `en` / `cn` / `ru` | 指定界面语言 |
 | `-InstallDeps` | 无值（开关） | 安装前端 npm 依赖 |
+| `-Silent` | 无值（开关） | 静默模式，跳过所有交互提示 |
 
 **用法示例：**
 
@@ -94,6 +95,12 @@ go build -ldflags="-s -w" -o "build/bin/snishaper.exe"
 
 # 同时构建前后端，并安装依赖
 .\build_windows.ps1 -Build all -Lang cn -InstallDeps
+
+# 静默模式（CI/CD 适用，无交互）
+.\build_windows.ps1 -Silent
+
+# 指定参数 + 静默模式
+.\build_windows.ps1 -Build backend -Lang en -Silent
 
 # 无参数 = 交互模式（原有行为）
 .\build_windows.ps1

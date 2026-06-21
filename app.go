@@ -59,7 +59,7 @@ type App struct {
 }
 
 type ringLogWriter struct {
-	mu      sync.Mutex
+	mu      sync.RWMutex
 	lines   []string
 	pending string
 	max     int
