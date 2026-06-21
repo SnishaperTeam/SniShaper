@@ -257,6 +257,9 @@ const Settings: React.FC<SettingsProps> = ({ cache, onCacheUpdate, theme, toggle
     try {
       await ForceFetchCloudflareIPs();
       await reloadCriticalData();
+      toast.success(t('settings.cf_pool.fetch_now'));
+    } catch (err: any) {
+      toast.error(t('common.failed'), String(err?.message || err));
     } finally {
       setIsRefreshing(false);
     }

@@ -190,7 +190,12 @@
       "quic": "Фрагментация QUIC",
       "transparent": "Без расшифровки TLS, прозрачный"
     },
+    "cert_policy": {
+      "ignore": "Игнорировать проверку сертификатов",
+      "ignore_hint": "Пропустить проверку сертификатов (опасно)"
+    },
     "dns_options": {
+      "default": "По умолчанию",
       "prefer_ipv4": "Приоритет IPv4",
       "prefer_ipv6": "Приоритет IPv6",
       "ipv4_only": "Только IPv4",
@@ -307,6 +312,66 @@
     },
     "cf_pool": {
       "fetch_now": "Обновить пул IP"
+    }
+  },
+  "evolution": {
+    "title": "Режим эволюции",
+    "subtitle": "Автотестирование доступности доменов и генерация оптимальных правил",
+    "tab_test": "Тест",
+    "tab_rules": "Правила",
+    "tab_results": "Результаты",
+    "domain_list": "Список доменов",
+    "domain_count": "{count} шт.",
+    "placeholder": "example.com\ntest.com\ndemo.org",
+    "enable_ipv6": "Включить IPv6",
+    "start_test": "Начать тест",
+    "stop_test": "Остановить тест",
+    "test_progress": "Прогресс теста",
+    "testing_domain": "Тестирование домена {current}...",
+    "test_flow": "Процесс тестирования",
+    "test_flow_desc": "Успешные домены автоматически создают временные правила. Конвертируйте в постоянные во вкладке «Правила».",
+    "start_success": "Запущено тестирование {count} доменов",
+    "start_failed": "Ошибка запуска теста: {error}",
+    "stop_success": "Тест остановлен",
+    "stop_failed": "Ошибка остановки теста: {error}",
+    "complete_success": "Тест завершён, протестировано {count} доменов",
+    "status_failed": "Ошибка получения статуса эволюции",
+    "empty_rules": "Правила пока не сгенерированы",
+    "empty_rules_desc": "Успешные домены создадут временные правила после тестирования",
+    "temp_rules": "Временные правила",
+    "applied_count": "Применено: {applied} / {total}",
+    "convert_to_rule": "Конвертировать",
+    "applied": "Применено",
+    "empty_results": "Результатов пока нет",
+    "empty_results_desc": "Введите домены во вкладке «Тест» и начните тестирование",
+    "test_results": "Результаты теста",
+    "success_count": "{count} пройдено",
+    "fail_count": "{count} не пройдено",
+    "cloudflare": "CF",
+    "unreachable": "Недоступен",
+    "delay": "{ms}мс",
+    "confirm_title": "Подтвердить конвертацию правила",
+    "confirm_desc": "Конвертировать временное правило в постоянное и записать в конфигурацию?",
+    "confirm_convert": "Подтвердить",
+    "convert_success": "Правило «{name}» успешно конвертировано",
+    "convert_failed": "Ошибка применения правила: {error}",
+    "domain": "Домен",
+    "sni": "SNI",
+    "methods": {
+      "direct": "Прямой",
+      "domain_fronting": "Фронтинг",
+      "tls_fragment": "Фрагмент TLS",
+      "ech": "ECH",
+      "quic": "QUIC",
+      "unreachable": "Недоступен"
+    },
+    "steps": {
+      "direct": "Прямой",
+      "tcping": "TCPing",
+      "domain_fronting": "Фронтинг",
+      "tls_fragment": "Фрагмент TLS",
+      "ech": "ECH",
+      "quic": "QUIC"
     }
   },
   "about": {

@@ -2,7 +2,6 @@ import React, { useState, useEffect, useRef } from 'react';
 import {
   Play,
   Square,
-  Plus,
   Globe,
   Activity,
   Zap,
@@ -14,7 +13,9 @@ import {
   XCircle,
   ArrowRight,
   FileText,
-  CheckSquare
+  CheckSquare,
+  Timer,
+  Wifi
 } from 'lucide-react';
 import {
   StartEvolutionTest,
@@ -96,17 +97,6 @@ const getMethodBgColor = (method?: string) => {
   }
 };
 
-const getMethodLabel = (method?: string) => {
-  switch (method) {
-    case 'direct': return '直连';
-    case 'domain_fronting': return '域前置';
-    case 'tls_fragment': return 'TLS分片';
-    case 'ech': return 'ECH';
-    case 'quic': return 'QUIC';
-    default: return '不可达';
-  }
-};
-
 const Evolution: React.FC = () => {
   const { t } = useTranslation();
   const [activeTab, setActiveTab] = useState<TabType>('test');
@@ -119,8 +109,6 @@ const Evolution: React.FC = () => {
   const [isOperating, setIsOperating] = useState(false);
   const [showRuleModal, setShowRuleModal] = useState(false);
   const [selectedRule, setSelectedRule] = useState<TempRule | null>(null);
-  const [currentTestingDomain, setCurrentTestingDomain] = useState<string>('');
-  const [testLogs, setTestLogs] = useState<string[]>([]);
   const logsEndRef = useRef<HTMLDivElement>(null);
 
   const scrollToBottom = () => {
@@ -129,26 +117,35 @@ const Evolution: React.FC = () => {
 
   useEffect(() => {
     scrollToBottom();
-  }, [testLogs]);
+  }, [tempRules]);
+
+  const getMethodLabel = (method?: string): string => {
+    const key = method || 'unreachable';
+    return t(`evolution.methods.${key}`);
+  };
+
+  const getStepLabel = (stepName: string): string => {
+    const key = stepName.replace(/-/g, '_');
+    return t(`evolution.steps.${key}`) || stepName.replace(/_/g, ' ');
+  };
 
   const handleStartTest = async () => {
     const domainList = domains.split('\n').map(d => d.trim()).filter(d => d.length > 0);
 
     if (domainList.length === 0) {
-      toast.error('请输入至少一个域名');
+      toast.error(t('evolution.empty_rules'));
       return;
     }
 
     setIsOperating(true);
     setIsRunning(true);
-    setTestLogs([]);
     setProgress({ current: 0, total: domainList.length });
 
     try {
       await StartEvolutionTest(domainList, enableIPv6);
-      toast.success(`开始测试 ${domainList.length} 个域名`);
+      toast.success(t('evolution.start_success', { count: domainList.length }));
     } catch (error: any) {
-      toast.error(`启动测试失败: ${error?.message || error}`);
+      toast.error(t('evolution.start_failed', { error: error?.message || error }));
       setIsRunning(false);
       setIsOperating(false);
     }
@@ -159,9 +156,9 @@ const Evolution: React.FC = () => {
       await StopEvolutionTest();
       setIsRunning(false);
       setIsOperating(false);
-      toast.info('测试已停止');
+      toast.info(t('evolution.stop_success'));
     } catch (error: any) {
-      toast.error(`停止测试失败: ${error?.message || error}`);
+      toast.error(t('evolution.stop_failed', { error: error?.message || error }));
     }
   };
 
@@ -175,11 +172,11 @@ const Evolution: React.FC = () => {
     try {
       await ApplyEvolutionRule(selectedRule.id);
       setTempRules(prev => prev.filter(r => r.id !== selectedRule.id));
-      toast.success(`规则 "${selectedRule.name}" 已转为正式规则`);
+      toast.success(t('evolution.convert_success', { name: selectedRule.name }));
       setShowRuleModal(false);
       setSelectedRule(null);
     } catch (error: any) {
-      toast.error(`应用规则失败: ${error?.message || error}`);
+      toast.error(t('evolution.convert_failed', { error: error?.message || error }));
     }
   };
 
@@ -206,7 +203,7 @@ const Evolution: React.FC = () => {
           }
         }
       } catch (e) {
-        console.error("获取进化模式状态失败:", e);
+        console.error(t('evolution.status_failed'), e);
       }
     };
 
@@ -235,7 +232,7 @@ const Evolution: React.FC = () => {
           .map((r: TestResult) => r.generated_rule!);
         setTempRules(newRules);
       }
-      toast.success(`测试完成，共 ${data.results?.length || 0} 个域名`);
+      toast.success(t('evolution.complete_success', { count: data.results?.length || 0 }));
       setActiveTab('results');
     };
 
@@ -248,24 +245,44 @@ const Evolution: React.FC = () => {
     };
   }, []);
 
+  const successCount = results.filter(r => r.reachable).length;
+  const failCount = results.filter(r => !r.reachable).length;
+  const progressPercent = progress.total > 0 ? (progress.current / progress.total) * 100 : 0;
+  const domainCount = domains.split('\n').filter(d => d.trim().length > 0).length;
+
   const tabs = [
-    { id: 'test' as TabType, label: '测试', icon: <Play className="w-4 h-4" />, count: undefined },
-    { id: 'rules' as TabType, label: '规则', icon: <FileText className="w-4 h-4" />, count: tempRules.length },
-    { id: 'results' as TabType, label: '结果', icon: <Activity className="w-4 h-4" />, count: results.length },
+    { id: 'test' as TabType, label: t('evolution.tab_test'), icon: <Play className="w-4 h-4" />, count: undefined },
+    { id: 'rules' as TabType, label: t('evolution.tab_rules'), icon: <FileText className="w-4 h-4" />, count: tempRules.length },
+    { id: 'results' as TabType, label: t('evolution.tab_results'), icon: <Activity className="w-4 h-4" />, count: results.length },
   ];
 
   return (
     <div className="h-full flex flex-col bg-background-soft/30">
       {/* Header */}
-      <div className="px-6 py-4 border-b border-border/60 bg-background/70 backdrop-blur-md">
-        <div className="flex items-center gap-3">
-          <div className="p-2 bg-accent/10 rounded-xl">
-            <Zap className="w-5 h-5 text-accent" />
+      <div className="relative px-6 py-5 border-b border-border/60 bg-gradient-to-r from-background/80 via-background-card/60 to-background/80 backdrop-blur-md overflow-hidden">
+        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,_var(--accent-soft)_0%,_transparent_60%)] opacity-30" />
+        <div className="relative flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="p-2.5 bg-accent/10 rounded-xl border border-accent/10">
+              <Zap className="w-5 h-5 text-accent" />
+            </div>
+            <div>
+              <h1 className="text-lg font-bold text-text-primary tracking-tight">{t('evolution.title')}</h1>
+              <p className="text-xs text-text-muted mt-0.5">{t('evolution.subtitle')}</p>
+            </div>
           </div>
-          <div>
-            <h1 className="text-lg font-bold text-text-primary">进化模式</h1>
-            <p className="text-xs text-text-muted">自动测试域名连通性并生成最优规则</p>
-          </div>
+          {results.length > 0 && (
+            <div className="flex items-center gap-3">
+              <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-success/10 border border-success/20">
+                <CheckCircle2 className="w-3.5 h-3.5 text-success" />
+                <span className="text-xs font-bold text-success">{successCount}</span>
+              </div>
+              <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-danger/10 border border-danger/20">
+                <XCircle className="w-3.5 h-3.5 text-danger" />
+                <span className="text-xs font-bold text-danger">{failCount}</span>
+              </div>
+            </div>
+          )}
         </div>
       </div>
 
@@ -276,16 +293,16 @@ const Evolution: React.FC = () => {
             <button
               key={tab.id}
               onClick={() => setActiveTab(tab.id)}
-              className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-bold transition-all ${
+              className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-bold transition-all duration-200 ${
                 activeTab === tab.id
-                  ? 'bg-accent/10 text-accent border border-accent/20'
-                  : 'text-text-secondary hover:text-text-primary hover:bg-background-soft/50'
+                  ? 'bg-accent/10 text-accent border border-accent/20 shadow-sm shadow-accent/5'
+                  : 'text-text-secondary hover:text-text-primary hover:bg-background-soft/50 border border-transparent'
               }`}
             >
               {tab.icon}
               {tab.label}
               {tab.count !== undefined && tab.count > 0 && (
-                <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-bold ${
+                <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-bold min-w-[18px] text-center ${
                   activeTab === tab.id ? 'bg-accent/20 text-accent' : 'bg-background-soft text-text-muted'
                 }`}>
                   {tab.count}
@@ -301,24 +318,29 @@ const Evolution: React.FC = () => {
         <div className="p-6 max-w-5xl mx-auto">
           {/* Test Tab */}
           <div style={{ display: activeTab === 'test' ? 'block' : 'none' }}>
-            <div className="space-y-6">
-              <div className="p-6 bg-background-card border border-border rounded-2xl shadow-sm">
+            <div className="space-y-5">
+              <div className="p-6 bg-background-card border border-border rounded-2xl shadow-sm hover:shadow-md transition-shadow">
                 <div className="flex items-center gap-2 mb-4">
-                  <Globe className="w-4 h-4 text-accent" />
-                  <h2 className="text-sm font-bold text-text-secondary uppercase tracking-tight">域名列表</h2>
+                  <div className="p-1.5 bg-accent/10 rounded-lg">
+                    <Globe className="w-3.5 h-3.5 text-accent" />
+                  </div>
+                  <h2 className="text-sm font-bold text-text-secondary uppercase tracking-tight">{t('evolution.domain_list')}</h2>
+                  <span className="text-xs text-text-muted font-mono ml-auto">
+                    {t('evolution.domain_count', { count: domainCount })}
+                  </span>
                 </div>
                 <textarea
                   value={domains}
                   onChange={(e) => setDomains(e.target.value)}
-                  placeholder="example.com&#10;test.com&#10;demo.org"
-                  className="w-full h-40 px-4 py-3 bg-background-soft/50 border border-border rounded-xl text-text-primary placeholder-text-muted focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent/50 resize-none font-mono text-sm transition-all"
+                  placeholder={t('evolution.placeholder')}
+                  className="w-full h-36 px-4 py-3 bg-background-soft/30 dark:bg-zinc-900/50 border border-border/60 rounded-xl text-text-primary placeholder-text-muted/40 focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent/50 resize-none font-mono text-sm transition-all"
                   disabled={isRunning}
                 />
 
                 <div className="flex items-center justify-between mt-4">
-                  <label className="flex items-center gap-2 cursor-pointer group">
-                    <div className={`w-10 h-5 rounded-full transition-all duration-200 ${enableIPv6 ? 'bg-accent border border-accent/20' : 'bg-slate-200 dark:bg-zinc-800 border border-slate-300 dark:border-zinc-700'}`}>
-                      <div className={`w-4 h-4 rounded-full bg-white shadow-sm border border-slate-300/40 dark:border-zinc-600/40 transition-transform mt-0.5 ${enableIPv6 ? 'translate-x-5' : 'translate-x-0.5'}`} />
+                  <label className="flex items-center gap-2.5 cursor-pointer group">
+                    <div className={`relative w-10 h-5 rounded-full transition-all duration-200 ${enableIPv6 ? 'bg-accent' : 'bg-slate-200 dark:bg-zinc-800'} border ${enableIPv6 ? 'border-accent/20' : 'border-slate-300 dark:border-zinc-700'}`}>
+                      <div className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white shadow-sm border border-slate-300/40 dark:border-zinc-600/40 transition-transform duration-200 ${enableIPv6 ? 'translate-x-5' : ''}`} />
                     </div>
                     <input
                       type="checkbox"
@@ -327,68 +349,87 @@ const Evolution: React.FC = () => {
                       className="sr-only"
                       disabled={isRunning}
                     />
-                    <span className="text-sm text-text-secondary group-hover:text-text-primary transition-colors">启用 IPv6</span>
+                    <span className="text-sm text-text-secondary group-hover:text-text-primary transition-colors">{t('evolution.enable_ipv6')}</span>
                   </label>
 
-                  {!isRunning ? (
-                    <button
-                      onClick={handleStartTest}
-                      disabled={isOperating}
-                      className="flex items-center gap-2 px-5 py-2.5 bg-accent hover:bg-accent/90 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-xl text-sm font-bold transition-all shadow-sm hover:shadow-md"
-                    >
-                      {isOperating ? (
-                        <Loader2 className="w-4 h-4 animate-spin" />
-                      ) : (
-                        <Play className="w-4 h-4" />
-                      )}
-                      开始测试
-                    </button>
-                  ) : (
-                    <button
-                      onClick={handleStopTest}
-                      className="flex items-center gap-2 px-5 py-2.5 bg-danger hover:bg-danger/90 text-white rounded-xl text-sm font-bold transition-all shadow-sm hover:shadow-md"
-                    >
-                      <Square className="w-4 h-4" />
-                      停止测试
-                    </button>
-                  )}
+                  <div className="flex items-center gap-2">
+                    {isRunning ? (
+                      <button
+                        onClick={handleStopTest}
+                        className="flex items-center gap-2 px-5 py-2.5 bg-danger/10 hover:bg-danger/20 text-danger border border-danger/20 rounded-xl text-sm font-bold transition-all"
+                      >
+                        <Square className="w-4 h-4" />
+                        {t('evolution.stop_test')}
+                      </button>
+                    ) : (
+                      <button
+                        onClick={handleStartTest}
+                        disabled={isOperating || domains.trim().length === 0}
+                        className="flex items-center gap-2 px-5 py-2.5 bg-accent hover:bg-accent/90 disabled:opacity-40 disabled:cursor-not-allowed text-white rounded-xl text-sm font-bold transition-all shadow-sm hover:shadow-md hover:shadow-accent/20 active:scale-[0.98]"
+                      >
+                        {isOperating ? (
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                        ) : (
+                          <Play className="w-4 h-4" />
+                        )}
+                        {t('evolution.start_test')}
+                      </button>
+                    )}
+                  </div>
                 </div>
 
                 {isRunning && (
                   <div className="mt-5 pt-4 border-t border-border/50">
-                    <div className="flex items-center justify-between text-xs text-text-muted mb-2">
+                    <div className="flex items-center justify-between text-xs text-text-muted mb-2.5">
                       <span className="flex items-center gap-1.5 font-bold">
                         <Loader2 className="w-3.5 h-3.5 animate-spin text-accent" />
-                        测试进度
+                        {t('evolution.test_progress')}
                       </span>
-                      <span className="font-mono font-bold text-accent bg-accent/10 px-2 py-0.5 rounded-md text-[11px]">{progress.current} / {progress.total}</span>
+                      <span className="font-mono font-bold text-accent bg-accent/10 px-2 py-0.5 rounded-md text-[11px]">
+                        {progress.current} / {progress.total}
+                      </span>
                     </div>
-                    <div className="w-full h-3 bg-background-soft border border-border/40 rounded-full overflow-hidden shadow-inner relative">
+                    <div className="relative w-full h-2.5 bg-background-soft border border-border/40 rounded-full overflow-hidden">
                       <div
-                        className="h-full rounded-full transition-all duration-500 ease-out animate-shimmer"
+                        className="absolute inset-y-0 left-0 rounded-full transition-all duration-500 ease-out"
                         style={{
-                          width: `${progress.total > 0 ? (progress.current / progress.total) * 100 : 0}%`,
+                          width: `${progressPercent}%`,
                           background: 'linear-gradient(90deg, var(--accent) 0%, #a855f7 50%, var(--accent) 100%)',
-                          boxShadow: '0 0 10px color-mix(in srgb, var(--accent) 45%, transparent)'
+                          backgroundSize: '200% 100%',
+                          animation: 'shimmer 2s linear infinite',
+                          boxShadow: '0 0 8px color-mix(in srgb, var(--accent) 50%, transparent)'
                         }}
                       />
                     </div>
                     {progress.current > 0 && (
-                      <div className="mt-2 text-xs text-text-secondary text-center font-bold animate-pulse">
-                        正在测试第 {progress.current} 个域名...
+                      <div className="mt-2.5 text-xs text-text-secondary text-center font-bold">
+                        {t('evolution.testing_domain', { current: progress.current })}
                       </div>
                     )}
                   </div>
                 )}
               </div>
 
-              <div className="p-6 bg-background-card border border-border rounded-2xl shadow-sm">
-                <h3 className="text-sm font-bold text-text-secondary uppercase tracking-tight mb-3">测试说明</h3>
-                <div className="space-y-2 text-xs text-text-muted">
-                  <p>• 测试将依次尝试：直连 → TCPing → 域前置 → TLS分片 → ECH → QUIC</p>
-                  <p>• 成功后会自动生成临时规则，可在「规则」页面查看并转为正式规则</p>
-                  <p>• 测试结果可在「结果」页面查看详细信息</p>
+              <div className="p-5 bg-background-card border border-border rounded-2xl shadow-sm">
+                <div className="flex items-center gap-2 mb-3">
+                  <div className="p-1.5 bg-accent/10 rounded-lg">
+                    <Wifi className="w-3.5 h-3.5 text-accent" />
+                  </div>
+                  <h3 className="text-sm font-bold text-text-secondary uppercase tracking-tight">{t('evolution.test_flow')}</h3>
                 </div>
+                <div className="flex flex-wrap gap-2">
+                  {[t('evolution.steps.direct'), t('evolution.steps.tcping'), t('evolution.steps.domain_fronting'), t('evolution.steps.tls_fragment'), t('evolution.steps.ech'), t('evolution.steps.quic')].map((step, i) => (
+                    <React.Fragment key={step}>
+                      <span className="text-xs px-2.5 py-1 bg-background-soft/80 border border-border/60 rounded-lg text-text-secondary font-medium">
+                        {step}
+                      </span>
+                      {i < 5 && <ArrowRight className="w-3 h-3 text-text-muted/40 self-center" />}
+                    </React.Fragment>
+                  ))}
+                </div>
+                <p className="text-xs text-text-muted mt-3">
+                  {t('evolution.test_flow_desc')}
+                </p>
               </div>
             </div>
           </div>
@@ -398,12 +439,12 @@ const Evolution: React.FC = () => {
             <div className="space-y-4">
               {tempRules.length === 0 ? (
                 <div className="p-6 bg-background-card border border-border rounded-2xl shadow-sm">
-                  <div className="text-center py-16">
+                  <div className="text-center py-14">
                     <div className="w-16 h-16 mx-auto mb-4 rounded-2xl bg-background-soft/50 border border-border/50 flex items-center justify-center">
-                      <FileText className="w-7 h-7 text-text-muted opacity-30" />
+                      <FileText className="w-7 h-7 text-text-muted/30" />
                     </div>
-                    <p className="text-sm text-text-muted">暂无生成的规则</p>
-                    <p className="text-xs text-text-muted/60 mt-1">完成测试后，成功的域名将生成临时规则</p>
+                    <p className="text-sm font-medium text-text-muted">{t('evolution.empty_rules')}</p>
+                    <p className="text-xs text-text-muted/60 mt-1.5">{t('evolution.empty_rules_desc')}</p>
                   </div>
                 </div>
               ) : (
@@ -411,21 +452,21 @@ const Evolution: React.FC = () => {
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
                       <FileText className="w-4 h-4 text-accent" />
-                      <span className="text-sm font-bold text-text-primary">临时规则</span>
-                      <span className="text-xs text-text-muted font-mono">{tempRules.length} 条</span>
+                      <span className="text-sm font-bold text-text-primary">{t('evolution.temp_rules')}</span>
+                      <span className="text-xs text-text-muted font-mono bg-background-soft px-2 py-0.5 rounded-md">{tempRules.length}</span>
                     </div>
                     <div className="text-xs text-text-muted">
-                      已应用: {tempRules.filter(r => r.is_applied).length} / {tempRules.length}
+                      {t('evolution.applied_count', { applied: tempRules.filter(r => r.is_applied).length, total: tempRules.length })}
                     </div>
                   </div>
                   <div className="space-y-2">
                     {tempRules.map((rule) => (
                       <div
                         key={rule.id}
-                        className="p-4 bg-background-card border border-border rounded-xl hover:border-accent/30 transition-all shadow-sm"
+                        className="group p-4 bg-background-card border border-border rounded-xl hover:border-accent/30 hover:shadow-md transition-all duration-200"
                       >
                         <div className="flex items-center gap-4">
-                          <div className={`p-2 rounded-lg ${getMethodBgColor(rule.method)}`}>
+                          <div className={`p-2 rounded-lg ${getMethodBgColor(rule.method)} group-hover:scale-110 transition-transform`}>
                             <span className={getMethodColor(rule.method)}>{getMethodIcon(rule.method)}</span>
                           </div>
                           <div className="flex-1 min-w-0">
@@ -437,22 +478,27 @@ const Evolution: React.FC = () => {
                               {rule.is_applied && (
                                 <span className="text-[10px] px-2 py-0.5 rounded-full bg-success/10 border border-success/20 text-success font-bold flex items-center gap-1">
                                   <CheckSquare className="w-3 h-3" />
-                                  已应用
+                                  {t('evolution.applied')}
                                 </span>
                               )}
                             </div>
-                            <div className="text-xs text-text-muted mt-0.5 font-mono">
-                              {rule.domain}
-                              {rule.sni_fake && <span className="ml-2">• SNI: {rule.sni_fake}</span>}
+                            <div className="flex items-center gap-3 mt-1 text-xs text-text-muted font-mono">
+                              <span>{rule.domain}</span>
+                              {rule.sni_fake && (
+                                <>
+                                  <span className="text-border">|</span>
+                                  <span>{t('evolution.sni')}: {rule.sni_fake}</span>
+                                </>
+                              )}
                             </div>
                           </div>
                           {!rule.is_applied && (
                             <button
                               onClick={() => handleApplyRule(rule)}
-                              className="flex items-center gap-1.5 px-4 py-2 bg-accent/10 hover:bg-accent/20 text-accent text-xs rounded-lg font-bold transition-all border border-accent/20"
+                              className="flex items-center gap-1.5 px-4 py-2 bg-accent/10 hover:bg-accent/20 text-accent text-xs rounded-lg font-bold transition-all border border-accent/20 opacity-0 group-hover:opacity-100"
                             >
                               <ArrowRight className="w-3 h-3" />
-                              转为正式规则
+                              {t('evolution.convert_to_rule')}
                             </button>
                           )}
                         </div>
@@ -469,36 +515,47 @@ const Evolution: React.FC = () => {
             <div className="space-y-4">
               {results.length === 0 ? (
                 <div className="p-6 bg-background-card border border-border rounded-2xl shadow-sm">
-                  <div className="text-center py-16">
+                  <div className="text-center py-14">
                     <div className="w-16 h-16 mx-auto mb-4 rounded-2xl bg-background-soft/50 border border-border/50 flex items-center justify-center">
-                      <Activity className="w-7 h-7 text-text-muted opacity-30" />
+                      <Activity className="w-7 h-7 text-text-muted/30" />
                     </div>
-                    <p className="text-sm text-text-muted">暂无测试结果</p>
-                    <p className="text-xs text-text-muted/60 mt-1">在「测试」页面输入域名并开始测试</p>
+                    <p className="text-sm font-medium text-text-muted">{t('evolution.empty_results')}</p>
+                    <p className="text-xs text-text-muted/60 mt-1.5">{t('evolution.empty_results_desc')}</p>
                   </div>
                 </div>
               ) : (
                 <>
-                  <div className="flex items-center gap-2">
-                    <Activity className="w-4 h-4 text-accent" />
-                    <span className="text-sm font-bold text-text-primary">测试结果</span>
-                    <span className="text-xs text-text-muted font-mono">{results.length} 条</span>
-                    <span className="ml-auto text-xs text-text-muted">
-                      成功: {results.filter(r => r.reachable).length} | 失败: {results.filter(r => !r.reachable).length}
-                    </span>
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <Activity className="w-4 h-4 text-accent" />
+                      <span className="text-sm font-bold text-text-primary">{t('evolution.test_results')}</span>
+                      <span className="text-xs text-text-muted font-mono bg-background-soft px-2 py-0.5 rounded-md">{results.length}</span>
+                    </div>
+                    <div className="flex items-center gap-3 text-xs">
+                      <span className="flex items-center gap-1 text-success font-bold">
+                        <CheckCircle2 className="w-3.5 h-3.5" />
+                        {t('evolution.success_count', { count: successCount })}
+                      </span>
+                      <span className="flex items-center gap-1 text-danger font-bold">
+                        <XCircle className="w-3.5 h-3.5" />
+                        {t('evolution.fail_count', { count: failCount })}
+                      </span>
+                    </div>
                   </div>
                   <div className="space-y-2">
                     {results.map((result, index) => (
                       <div
                         key={index}
-                        className={`p-4 border rounded-xl transition-all ${
+                        className={`group p-4 border rounded-xl transition-all duration-200 ${
                           result.reachable
-                            ? 'bg-background-card border-border hover:border-accent/30 shadow-sm'
-                            : 'bg-danger/5 border-danger/20'
+                            ? 'bg-background-card border-border hover:border-accent/30 hover:shadow-md'
+                            : 'bg-danger/5 border-danger/20 hover:border-danger/40'
                         }`}
                       >
                         <div className="flex items-center gap-3">
-                          <div className={`p-2 rounded-lg ${result.reachable ? getMethodBgColor(result.method) : 'bg-danger/10 border-danger/20'}`}>
+                          <div className={`p-2 rounded-lg transition-transform group-hover:scale-110 ${
+                            result.reachable ? getMethodBgColor(result.method) : 'bg-danger/10 border-danger/20'
+                          }`}>
                             <span className={result.reachable ? getMethodColor(result.method) : 'text-danger'}>
                               {getMethodIcon(result.method)}
                             </span>
@@ -514,30 +571,34 @@ const Evolution: React.FC = () => {
                                   </span>
                                   {result.is_cloudflare && (
                                     <span className="text-[10px] px-2 py-0.5 rounded-full bg-orange-500/10 border border-orange-500/20 text-orange-500 font-bold">
-                                      Cloudflare
+                                      {t('evolution.cloudflare')}
                                     </span>
                                   )}
                                 </>
                               ) : (
                                 <span className="text-[10px] px-2 py-0.5 rounded-full bg-danger/10 border border-danger/20 text-danger font-bold">
-                                  不可达
+                                  {t('evolution.unreachable')}
                                 </span>
                               )}
                             </div>
-                            <div className="flex items-center gap-4 mt-1 text-xs text-text-muted">
-                              {result.reachable && (
+                            <div className="flex items-center gap-3 mt-1 text-xs text-text-muted">
+                              {result.reachable ? (
                                 <>
-                                  <span>延迟: {Math.round(result.delay / 1000000)}ms</span>
-                                  {result.best_ip && <span>IP: {result.best_ip}</span>}
+                                  <span className="flex items-center gap-1">
+                                    <Timer className="w-3 h-3" />
+                                    {t('evolution.delay', { ms: Math.round(result.delay / 1000000) })}
+                                  </span>
+                                  {result.best_ip && (
+                                    <span className="font-mono">{result.best_ip}</span>
+                                  )}
                                 </>
-                              )}
-                              {!result.reachable && result.error && (
-                                <span className="text-danger">{result.error}</span>
+                              ) : (
+                                result.error && <span className="text-danger text-xs">{result.error}</span>
                               )}
                             </div>
                           </div>
 
-                          <div className="text-[10px] text-text-muted font-mono shrink-0">
+                          <div className="text-[10px] text-text-muted font-mono shrink-0 opacity-60 group-hover:opacity-100 transition-opacity">
                             {new Date(result.timestamp).toLocaleTimeString()}
                           </div>
                         </div>
@@ -548,14 +609,14 @@ const Evolution: React.FC = () => {
                               {result.step_results.map((step, i) => (
                                 <div
                                   key={i}
-                                  className={`flex items-center gap-1 text-[10px] px-2 py-1 rounded-full border font-bold ${
+                                  className={`flex items-center gap-1 text-[10px] px-2 py-1 rounded-full border font-bold transition-colors ${
                                     step.success
                                       ? 'bg-success/10 border-success/20 text-success'
                                       : 'bg-danger/10 border-danger/20 text-danger'
                                   }`}
                                 >
                                   {step.success ? <CheckCircle2 className="w-3 h-3" /> : <XCircle className="w-3 h-3" />}
-                                  {step.step_name.replace('_', ' ')}
+                                  {getStepLabel(step.step_name)}
                                 </div>
                               ))}
                             </div>
@@ -575,12 +636,12 @@ const Evolution: React.FC = () => {
       <Modal
         isOpen={showRuleModal}
         onClose={() => { setShowRuleModal(false); setSelectedRule(null); }}
-        title="确认转为正式规则"
+        title={t('evolution.confirm_title')}
       >
         {selectedRule && (
           <div className="space-y-4">
             <p className="text-sm text-text-secondary">
-              确定要将以下规则转为正式规则并写入配置吗？
+              {t('evolution.confirm_desc')}
             </p>
             <div className="p-4 bg-background-soft/50 border border-border rounded-xl">
               <div className="flex items-center gap-2 mb-2">
@@ -590,8 +651,8 @@ const Evolution: React.FC = () => {
                 </span>
               </div>
               <div className="text-xs text-text-muted font-mono">
-                域名: {selectedRule.domain}
-                {selectedRule.sni_fake && <span> • SNI: {selectedRule.sni_fake}</span>}
+                {t('evolution.domain')}: {selectedRule.domain}
+                {selectedRule.sni_fake && <span> | {t('evolution.sni')}: {selectedRule.sni_fake}</span>}
               </div>
             </div>
             <div className="flex gap-3 justify-end">
@@ -599,13 +660,13 @@ const Evolution: React.FC = () => {
                 onClick={() => { setShowRuleModal(false); setSelectedRule(null); }}
                 className="px-4 py-2 bg-background-soft border border-border text-text-secondary rounded-xl text-sm font-bold hover:bg-background-hover transition-all"
               >
-                取消
+                {t('common.cancel')}
               </button>
               <button
                 onClick={confirmApplyRule}
-                className="px-4 py-2 bg-accent hover:bg-accent/90 text-white rounded-xl text-sm font-bold transition-all shadow-sm"
+                className="px-4 py-2 bg-accent hover:bg-accent/90 text-white rounded-xl text-sm font-bold transition-all shadow-sm hover:shadow-md"
               >
-                确认转换
+                {t('evolution.confirm_convert')}
               </button>
             </div>
           </div>

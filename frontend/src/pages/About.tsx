@@ -47,7 +47,7 @@ const FeatureCard: React.FC<{
 
 const About: React.FC = () => {
   const { t } = useTranslation();
-  const [version, setVersion] = useState<string>('1.25');
+  const [version, setVersion] = useState<string>('1.27');
   const [checkingUpdate, setCheckingUpdate] = useState<boolean>(false);
   const [showUpdateModal, setShowUpdateModal] = useState<boolean>(false);
   const [updateInfo, setUpdateInfo] = useState<{ latestVersion: string; downloadURL: string } | null>(null);
@@ -58,7 +58,7 @@ const About: React.FC = () => {
         setVersion(v);
       }
     }).catch(() => {
-      setVersion('1.25');
+      setVersion('1.27');
     });
   }, []);
 
