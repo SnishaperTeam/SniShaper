@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import logoUrl from '../assets/logo.svg';
 import { SetLanguage } from '../api/bindings';
 import { useTranslation } from '../i18n/I18nContext';
-import { Languages } from 'lucide-react';
+import { Languages } from '../lib/icons';
 
 interface WelcomeProps {
   onComplete: (lang: string) => void;

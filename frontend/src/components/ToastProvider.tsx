@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { CheckCircle2, AlertCircle, Info, X } from 'lucide-react';
+import { CheckCircle2, AlertCircle, Info, X } from '../lib/icons';
 import { TOAST_EVENT, type ToastPayload } from '../lib/toast';
 
 const ICONS = {

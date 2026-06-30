@@ -7,7 +7,7 @@ import {
   RefreshCw,
   Power,
   Zap
-} from 'lucide-react';
+} from '../lib/icons';
 import { 
   GetAutoRoutingConfig, 
   UpdateAutoRoutingConfig, 

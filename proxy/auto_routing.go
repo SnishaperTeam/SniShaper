@@ -46,6 +46,7 @@ type AutoRouter struct {
 	cfCache     map[string]cfCacheEntry
 	cfCacheMu   sync.RWMutex
 	dohResolver *FailoverResolver
+	stopChan    chan struct{}
 }
 
 type cfCacheEntry struct {
@@ -61,6 +62,7 @@ func NewAutoRouter(config AutoRoutingConfig, dohResolver *FailoverResolver) *Aut
 		gfwList:     NewGFWList(),
 		cfCache:     make(map[string]cfCacheEntry),
 		dohResolver: dohResolver,
+		stopChan:    make(chan struct{}),
 	}
 	ar.cfNets = make([]*net.IPNet, 0, len(cloudflareCIDRStrings))
 	for _, cidr := range cloudflareCIDRStrings {
@@ -76,11 +78,20 @@ func NewAutoRouter(config AutoRoutingConfig, dohResolver *FailoverResolver) *Aut
 	return ar
 }
 
+func (ar *AutoRouter) Stop() {
+	close(ar.stopChan)
+}
+
 func (ar *AutoRouter) cacheCleanupLoop() {
 	ticker := time.NewTicker(30 * time.Minute)
 	defer ticker.Stop()
-	for range ticker.C {
-		ar.cleanupCFCache()
+	for {
+		select {
+		case <-ticker.C:
+			ar.cleanupCFCache()
+		case <-ar.stopChan:
+			return
+		}
 	}
 }
 

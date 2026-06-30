@@ -6,6 +6,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -58,13 +59,20 @@ func (g *GFWList) LoadFromReader(r io.Reader) (int, error) {
 	return count, nil
 }
 
-func (g *GFWList) LoadFromURL(url string) (int, error) {
-	if url == "" {
-		url = defaultGFWListURL
+func (g *GFWList) LoadFromURL(rawURL string) (int, error) {
+	if rawURL == "" {
+		rawURL = defaultGFWListURL
 	}
-	log.Printf("[GFWList] Fetching from %s", url)
+	parsedURL, err := url.Parse(rawURL)
+	if err != nil {
+		return 0, fmt.Errorf("invalid URL: %w", err)
+	}
+	if parsedURL.Scheme != "https" {
+		return 0, fmt.Errorf("GFWList URL must use HTTPS: %s", rawURL)
+	}
+	log.Printf("[GFWList] Fetching from %s", rawURL)
 	client := &http.Client{Timeout: 30 * time.Second}
-	resp, err := client.Get(url)
+	resp, err := client.Get(rawURL)
 	if err != nil {
 		return 0, fmt.Errorf("fetch GFWList: %w", err)
 	}

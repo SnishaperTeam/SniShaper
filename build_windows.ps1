@@ -7,6 +7,10 @@
 
     [switch]$InstallDeps,
 
+    [switch]$BuildMsix,
+
+    [switch]$SkipSign,
+
     [switch]$Silent
 )
 
@@ -16,10 +20,12 @@ $isAdmin = $currentPrincipal.IsInRole([Security.Principal.WindowsBuiltInRole]::A
 if (-not $isAdmin) {
     Write-Host "Requesting Administrator privileges..." -ForegroundColor Yellow
     $params = @()
-    if ($Build)   { $params += "-Build";   $params += $Build }
-    if ($Lang)    { $params += "-Lang";    $params += $Lang }
+    if ($Build)      { $params += "-Build";      $params += $Build }
+    if ($Lang)       { $params += "-Lang";       $params += $Lang }
     if ($InstallDeps) { $params += "-InstallDeps" }
-    if ($Silent)  { $params += "-Silent" }
+    if ($BuildMsix)  { $params += "-BuildMsix" }
+    if ($SkipSign)   { $params += "-SkipSign" }
+    if ($Silent)     { $params += "-Silent" }
     $paramStr = $params -join ' '
     Start-Process powershell.exe -Verb RunAs -ArgumentList "-NoProfile -ExecutionPolicy Bypass -File `"$PSCommandPath`" $paramStr"
     exit
@@ -55,6 +61,8 @@ $messages = @{
 
     "EN_MenuTitle" = "       Project Build Menu"
     "EN_DepPrompt" = "Do you want to install frontend npm dependencies? (Y/N, default is N)"
+    "EN_MsixPrompt" = "Do you want to build MSIX package? (Y/N, default N)"
+    "EN_SignPrompt" = "Do you want to sign the MSIX package? (Y/N, default Y)"
     "EN_SelectTitle" = "Please select a build option:"
     "EN_Opt1" = "1. Build Frontend only"
     "EN_Opt2" = "2. Build Backend only"
@@ -74,13 +82,14 @@ $messages = @{
     "EN_BackErrBuild" = "[Backend] ERROR: Go build failed!"
     "EN_BackCopyCore" = "[Backend] Copying 'rules' folder..."
     "EN_BackCopyProxy" = "[Backend] Copying 'config' folder..."
-    "EN_BackCopyRuntime" = "[Backend] Copying 'proxy' folder..."
     "EN_BackDone" = "[Backend] Backend build and file copy completed!"
     "EN_AllDone" = "All selected tasks finished successfully!"
     "EN_Exit" = "Press Enter to exit"
 
     "CN_MenuTitle" = "       项目构建菜单"
     "CN_DepPrompt" = "是否需要安装前端 npm 依赖？(Y/N，默认为 N)"
+    "CN_MsixPrompt" = "是否需要构建 MSIX 安装包？(Y/N，默认为 N)"
+    "CN_SignPrompt" = "是否对 MSIX 进行签名？(Y/N，默认为 Y)"
     "CN_SelectTitle" = "请选择构建选项："
     "CN_Opt1" = "1. 仅构建前端"
     "CN_Opt2" = "2. 仅构建后端"
@@ -100,13 +109,14 @@ $messages = @{
     "CN_BackErrBuild" = "[后端] 错误：Go 编译失败！"
     "CN_BackCopyCore" = "[后端] 正在复制 'rules' 文件夹..."
     "CN_BackCopyProxy" = "[后端] 正在复制 'config' 文件夹..."
-    "CN_BackCopyRuntime" = "[后端] 正在复制 'proxy' 文件夹..."
     "CN_BackDone" = "[后端] 后端编译与文件复制完成！"
     "CN_AllDone" = "所有选定的任务已成功完成！"
     "CN_Exit" = "按回车键退出"
 
     "RU_MenuTitle" = "       Меню сборки проекта"
     "RU_DepPrompt" = "Установить npm зависимости фронтенда? (Y/N, по умолчанию N)"
+    "RU_MsixPrompt" = "Создать MSIX-пакет? (Y/N, по умолчанию N)"
+    "RU_SignPrompt" = "Подписать MSIX-пакет? (Y/N, по умолчанию Y)"
     "RU_SelectTitle" = "Выберите вариант сборки:"
     "RU_Opt1" = "1. Собрать только фронтенд"
     "RU_Opt2" = "2. Собрать только бэкенд"
@@ -126,7 +136,6 @@ $messages = @{
     "RU_BackErrBuild" = "[Бэкенд] ОШИБКА: Сборка Go не удалась!"
     "RU_BackCopyCore" = "[Бэкенд] Копирование папки 'rules'..."
     "RU_BackCopyProxy" = "[Бэкенд] Копирование папки 'config'..."
-    "RU_BackCopyRuntime" = "[Бэкенд] Копирование папки 'proxy'..."
     "RU_BackDone" = "[Бэкенд] Сборка бэкенда и копирование файлов завершены!"
     "RU_AllDone" = "Все выбранные задачи успешно завершены!"
     "RU_Exit" = "Нажмите Enter для выхода"
@@ -165,8 +174,10 @@ if ($Lang) {
     $lang = "EN"
 }
 
-# --- Resolve build target ---
+# --- Resolve build target and MSIX/sign options ---
 $installDepsInput = $null
+$msixInput = $null
+$signInput = $null
 
 if ($Build) {
     switch ($Build) {
@@ -183,6 +194,16 @@ if ($Build) {
 
     if (-not $PSBoundParameters.ContainsKey('InstallDeps')) {
         $installDepsInput = Read-Host $messages["$($lang)_DepPrompt"]
+    }
+
+    if (-not $PSBoundParameters.ContainsKey('BuildMsix')) {
+        $msixInput = Read-Host $messages["$($lang)_MsixPrompt"]
+    }
+
+    if ($msixInput -eq "Y" -or $msixInput -eq "y" -or $BuildMsix) {
+        if (-not $PSBoundParameters.ContainsKey('SkipSign')) {
+            $signInput = Read-Host $messages["$($lang)_SignPrompt"]
+        }
     }
 
     Write-Host ""
@@ -215,16 +236,38 @@ if (-not $Build -and -not $Silent -and -not $PSBoundParameters.ContainsKey('Inst
     }
 }
 
+# --- Resolve BuildMsix when interactive ---
+if (-not $Build -and -not $Silent -and -not $PSBoundParameters.ContainsKey('BuildMsix')) {
+    if ([string]::IsNullOrWhiteSpace($msixInput)) {
+        $msixInput = "N"
+    }
+    if ($msixInput -eq "Y" -or $msixInput -eq "y") {
+        $BuildMsix = $true
+    }
+}
+
+# --- Resolve SkipSign when interactive (if BuildMsix is true) ---
+if ($BuildMsix -and -not $Silent -and -not $PSBoundParameters.ContainsKey('SkipSign')) {
+    if ([string]::IsNullOrWhiteSpace($signInput)) {
+        $signInput = "Y"
+    }
+    if ($signInput -eq "N" -or $signInput -eq "n") {
+        $SkipSign = $true
+    } else {
+        $SkipSign = $false
+    }
+}
+
 Write-Host ""
 Write-Host "==========================================" -ForegroundColor Cyan
 Write-Host $messages["$($lang)_Start"] -ForegroundColor Cyan
 Write-Host "==========================================" -ForegroundColor Cyan
 
+# ---------- Frontend Build ----------
 if ($choice -eq "1" -or $choice -eq "3") {
     Write-Host ""
     Write-Host $messages["$($lang)_FrontEnter"] -ForegroundColor Green
     
-    # Check if npm is available
     try {
         npm --version | Out-Null
         if ($LASTEXITCODE -ne 0) {
@@ -281,8 +324,8 @@ if ($choice -eq "1" -or $choice -eq "3") {
     Write-Host ""
 }
 
+# ---------- Backend Build ----------
 if ($choice -eq "2" -or $choice -eq "3") {
-    # Check if Go is available
     try {
         go version | Out-Null
         if ($LASTEXITCODE -ne 0) {
@@ -306,7 +349,6 @@ if ($choice -eq "2" -or $choice -eq "3") {
         exit 1
     }
     
-    # Ensure build/bin directory exists
     $BuildDir = Join-Path $ProjectRoot "build"
     $BuildBinPath = Join-Path $BuildDir "bin"
     if (-not (Test-Path $BuildBinPath -PathType Container)) {
@@ -322,6 +364,7 @@ if ($choice -eq "2" -or $choice -eq "3") {
         exit 1
     }
 
+    # 复制 rules 文件夹到 build/bin
     Write-Host $messages["$($lang)_BackCopyCore"] -ForegroundColor Green
     $RulesSrc = Join-Path $ProjectRoot "rules"
     $RulesDst = Join-Path $BuildBinPath "rules"
@@ -338,6 +381,7 @@ if ($choice -eq "2" -or $choice -eq "3") {
         Write-Host "[WARNING] 'rules' folder not found, skipping copy." -ForegroundColor Yellow
     }
     
+    # 复制 config 文件夹到 build/bin
     Write-Host $messages["$($lang)_BackCopyProxy"] -ForegroundColor Green
     $ConfigSrc = Join-Path $ProjectRoot "config"
     $ConfigDst = Join-Path $BuildBinPath "config"
@@ -353,27 +397,137 @@ if ($choice -eq "2" -or $choice -eq "3") {
     } else {
         Write-Host "[WARNING] 'config' folder not found, skipping copy." -ForegroundColor Yellow
     }
-    
-    Write-Host $messages["$($lang)_BackCopyRuntime"] -ForegroundColor Green
-    $ProxySrc = Join-Path $ProjectRoot "proxy"
-    $ProxyDst = Join-Path $BuildBinPath "proxy"
-    if (Test-Path $ProxySrc -PathType Container) {
-        try {
-            Copy-Item -Path $ProxySrc -Destination $ProxyDst -Recurse -Force -ErrorAction Stop
-        } catch {
-            Write-Host "[ERROR] Failed to copy 'proxy' folder! $_" -ForegroundColor Red
-            Show-ErrorPopup "Failed to copy 'proxy' folder"
-            if (-not $Silent) { Read-Host $messages["$($lang)_Exit"] }
-            exit 1
-        }
-    } else {
-        Write-Host "[WARNING] 'proxy' folder not found, skipping copy." -ForegroundColor Yellow
-    }
 
     Write-Host $messages["$($lang)_BackDone"] -ForegroundColor Green
     Write-Host ""
 }
 
+# ---------- MSIX Package Build (optional) ----------
+if ($BuildMsix) {
+    Write-Host ""
+    Write-Host "==========================================" -ForegroundColor Cyan
+    Write-Host "[MSIX] Building MSIX package..." -ForegroundColor Cyan
+    Write-Host "==========================================" -ForegroundColor Cyan
+
+    # 0. Clean previous packages
+    $OutputDir = Join-Path $ProjectRoot "Apppackage"
+    if (Test-Path $OutputDir) {
+        Remove-Item "$OutputDir\*.msix" -Force -ErrorAction SilentlyContinue
+    }
+
+    # 1. Check if winapp CLI is installed
+    try {
+        winapp --version | Out-Null
+        if ($LASTEXITCODE -ne 0) {
+            throw "winapp not found"
+        }
+    } catch {
+        Write-Host "[ERROR] WinApp CLI is not installed. Please install it via: winget install Microsoft.WinAppCLI" -ForegroundColor Red
+        Show-ErrorPopup "WinApp CLI not installed"
+        if (-not $Silent) { Read-Host $messages["$($lang)_Exit"] }
+        exit 1
+    }
+
+    # 2. Check manifest
+    $ManifestPath = Join-Path $ProjectRoot "Package.appxmanifest"
+    if (-not (Test-Path $ManifestPath)) {
+        Write-Host "[ERROR] Manifest file not found at $ManifestPath" -ForegroundColor Red
+        Show-ErrorPopup "Manifest not found"
+        if (-not $Silent) { Read-Host $messages["$($lang)_Exit"] }
+        exit 1
+    }
+
+    # 3. Ensure certificate exists, generate if not (only if signing is not skipped)
+    $CertPath = Join-Path $ProjectRoot "devcert.pfx"
+    if (-not $SkipSign) {
+        if (-not (Test-Path $CertPath)) {
+            Write-Host "[MSIX] Certificate not found. Generating one from manifest..." -ForegroundColor Yellow
+            winapp cert generate --manifest $ManifestPath --output $CertPath --install
+            if ($LASTEXITCODE -ne 0) {
+                Write-Host "[ERROR] Failed to generate certificate." -ForegroundColor Red
+                Show-ErrorPopup "Certificate generation failed"
+                if (-not $Silent) { Read-Host $messages["$($lang)_Exit"] }
+                exit 1
+            }
+        }
+    }
+
+    # 4. Pack - only pack build\bin directory
+    Write-Host "[MSIX] Running winapp pack from build\bin..." -ForegroundColor Green
+    $SourceDir = Join-Path $ProjectRoot "build\bin"
+    
+    if (-not (Test-Path $SourceDir -PathType Container)) {
+        Write-Host "[ERROR] Source directory not found: $SourceDir" -ForegroundColor Red
+        Show-ErrorPopup "Source directory not found"
+        if (-not $Silent) { Read-Host $messages["$($lang)_Exit"] }
+        exit 1
+    }
+
+    [xml]$ManifestXml = Get-Content $ManifestPath
+    $PkgName = $ManifestXml.Package.Identity.Name
+    $PkgVersion = $ManifestXml.Package.Identity.Version
+
+    $ExePath = Join-Path $SourceDir "snishaper.exe"
+    $fs = [System.IO.File]::OpenRead($ExePath)
+    $fs.Seek(0x3C, [System.IO.SeekOrigin]::Begin) | Out-Null
+    $peOffset = New-Object byte[] 4
+    $fs.Read($peOffset, 0, 4) | Out-Null
+    $offset = [BitConverter]::ToUInt32($peOffset, 0)
+    $fs.Seek($offset + 4, [System.IO.SeekOrigin]::Begin) | Out-Null
+    $machine = New-Object byte[] 2
+    $fs.Read($machine, 0, 2) | Out-Null
+    $fs.Close()
+    $machineId = [BitConverter]::ToUInt16($machine, 0)
+    switch ($machineId) {
+        0x8664 { $Arch = "x64" }
+        0xAA64 { $Arch = "arm64" }
+        0x014C { $Arch = "x86" }
+        default { $Arch = "unknown" }
+    }
+    Write-Host "[MSIX] Detected architecture: $Arch" -ForegroundColor Green
+
+    $MsixFileName = "${PkgName}_${PkgVersion}_${Arch}.msix"
+    
+    winapp pack $SourceDir --manifest $ManifestPath --output (Join-Path $OutputDir $MsixFileName)
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host "[ERROR] winapp pack failed." -ForegroundColor Red
+        Show-ErrorPopup "winapp pack failed"
+        if (-not $Silent) { Read-Host $messages["$($lang)_Exit"] }
+        exit 1
+    }
+
+    # 5. Find the generated .msix file
+    $MsixFile = Get-Item (Join-Path $OutputDir $MsixFileName) -ErrorAction SilentlyContinue
+    if (-not $MsixFile) {
+        Write-Host "[ERROR] No .msix file found in $OutputDir." -ForegroundColor Red
+        Show-ErrorPopup "No MSIX file to sign"
+        if (-not $Silent) { Read-Host $messages["$($lang)_Exit"] }
+        exit 1
+    }
+
+    # 6. Sign or rename with unsigned_ prefix
+    if (-not $SkipSign) {
+        Write-Host "[MSIX] Signing the package..." -ForegroundColor Green
+        winapp sign $MsixFile.FullName $CertPath
+        if ($LASTEXITCODE -ne 0) {
+            Write-Host "[ERROR] winapp sign failed." -ForegroundColor Red
+            Show-ErrorPopup "winapp sign failed"
+            if (-not $Silent) { Read-Host $messages["$($lang)_Exit"] }
+            exit 1
+        }
+        Write-Host "[MSIX] Package signed successfully at $OutputDir" -ForegroundColor Green
+    } else {
+        Write-Host "[MSIX] Skipping signing as requested." -ForegroundColor Yellow
+        $UnsignedName = "unsigned_" + $MsixFile.Name
+        $NewPath = Join-Path $MsixFile.Directory $UnsignedName
+        Rename-Item -Path $MsixFile.FullName -NewName $UnsignedName -ErrorAction Stop
+        Write-Host "[MSIX] Unsigned package renamed to: $UnsignedName" -ForegroundColor Yellow
+        Write-Host "[MSIX] Unsigned package located at $NewPath" -ForegroundColor Yellow
+    }
+    Write-Host ""
+}
+
+# ---------- Done ----------
 Write-Host "==========================================" -ForegroundColor Cyan
 Write-Host $messages["$($lang)_AllDone"] -ForegroundColor Cyan
 Write-Host "==========================================" -ForegroundColor Cyan

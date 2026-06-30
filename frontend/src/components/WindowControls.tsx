@@ -1,5 +1,5 @@
 import React, { useCallback } from 'react';
-import { Minus, Square, X } from 'lucide-react';
+import { Minus, Square, X } from '../lib/icons';
 import { 
   HandleWindowClose,
   WindowMinimise, 

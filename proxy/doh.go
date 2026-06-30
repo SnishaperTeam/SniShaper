@@ -455,6 +455,11 @@ func (r *FailoverResolver) ResolveIPAddrs(ctx context.Context, domain string) ([
 	wg.Add(2)
 	go func() {
 		defer wg.Done()
+		defer func() {
+			if r := recover(); r != nil {
+				log.Printf("[DOH] panic in A lookup: %v", r)
+			}
+		}()
 		if err := lookup(dns.TypeA); err != nil {
 			mapMs.Lock()
 			errs = append(errs, err)
@@ -463,6 +468,11 @@ func (r *FailoverResolver) ResolveIPAddrs(ctx context.Context, domain string) ([
 	}()
 	go func() {
 		defer wg.Done()
+		defer func() {
+			if r := recover(); r != nil {
+				log.Printf("[DOH] panic in AAAA lookup: %v", r)
+			}
+		}()
 		if err := lookup(dns.TypeAAAA); err != nil {
 			mapMs.Lock()
 			errs = append(errs, err)

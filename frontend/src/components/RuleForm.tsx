@@ -13,7 +13,7 @@ import {
   Lock,
   Settings,
   AlertCircle
-} from 'lucide-react';
+} from '../lib/icons';
 import { AddSiteGroup, UpdateSiteGroup, GetECHProfiles } from '../api/bindings';
 import { useTranslation } from '../i18n/I18nContext';
 

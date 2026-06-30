@@ -132,7 +132,14 @@ func (r *RuleManager) SetOnConfigSaved(cb func()) {
 func (r *RuleManager) triggerConfigSaved() {
 	cb := r.onConfigSaved
 	if cb != nil {
-		go cb()
+		go func() {
+			defer func() {
+				if r := recover(); r != nil {
+					log.Printf("[Config] panic in onConfigSaved callback: %v", r)
+				}
+			}()
+			cb()
+		}()
 	}
 }
 
@@ -1129,9 +1136,14 @@ func (p *ProxyServer) Start() error {
 	p.mu.Unlock()
 
 	// Periodic cert cache cleanup
-	p.certCacheCleanup()
+	p.certCacheCleanup(context.Background())
 
 	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				log.Printf("[Proxy] panic in HTTP server: %v", r)
+			}
+		}()
 		log.Printf("[Proxy] HTTP server started on %s", listenAddr)
 
 		tl := &trackingListener{
@@ -1212,6 +1224,11 @@ func (p *ProxyServer) startSocks5() {
 	}
 	p.socks5Tracker = &socks5ConnTracker{Listener: socks5Ln}
 	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				log.Printf("[Proxy] panic in SOCKS5 server: %v", r)
+			}
+		}()
 		log.Printf("[Proxy] SOCKS5 server started on %s", p.socks5Addr)
 		if err := p.socks5Server.Serve(p.socks5Tracker); err != nil {
 			log.Printf("[Proxy] SOCKS5 server error: %v", err)
@@ -2020,15 +2037,25 @@ func (p *ProxyServer) ClearCertCache() {
 
 // certCacheCleanup periodically clears the cert cache to prevent memory leaks.
 // MITM-generated certs have a 24h TTL, so clearing every 6h ensures stale entries are reclaimed.
-func (p *ProxyServer) certCacheCleanup() {
+func (p *ProxyServer) certCacheCleanup(ctx context.Context) {
 	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				log.Printf("[CertCache] panic: %v", r)
+			}
+		}()
 		ticker := time.NewTicker(6 * time.Hour)
 		defer ticker.Stop()
-		for range ticker.C {
-			if !p.IsRunning() {
+		for {
+			select {
+			case <-ticker.C:
+				if !p.IsRunning() {
+					return
+				}
+				p.ClearCertCache()
+			case <-ctx.Done():
 				return
 			}
-			p.ClearCertCache()
 		}
 	}()
 }
@@ -2226,8 +2253,12 @@ func (rm *RuleManager) loadSettingsConfig() error {
 		rm.socks5Port = config.Socks5Port
 	}
 	rm.autoRoutingConfig = config.AutoRouting
-	rm.language = config.Language
-	rm.theme = config.Theme
+	if config.Language != "" {
+		rm.language = config.Language
+	}
+	if config.Theme != "" {
+		rm.theme = config.Theme
+	}
 
 	if config.CloseToTray != nil {
 		rm.closeToTray = *config.CloseToTray

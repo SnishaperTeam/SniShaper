@@ -16,7 +16,7 @@ import {
   CheckSquare,
   Timer,
   Wifi
-} from 'lucide-react';
+} from '../lib/icons';
 import {
   StartEvolutionTest,
   StopEvolutionTest,

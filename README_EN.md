@@ -1,6 +1,6 @@
-[中文](README.md) | [English](README_EN.md) | [Русский](README_RU.md)
-
 # SniShaper
+
+[中文](README.md) | [English](README_EN.md) | [Русский](README_RU.md)
 
 [![Go Version](https://img.shields.io/badge/Go-1.25+-00ADD8?style=flat-square&logo=go)](https://golang.org)
 [![License](https://img.shields.io/badge/License-MIT-blue?style=flat-square)]()
@@ -82,6 +82,8 @@ go build -ldflags="-s -w" -o "build/bin/snishaper.exe"
 | `-Build` | `frontend` / `backend` / `all` | Specify build target |
 | `-Lang` | `en` / `cn` / `ru` | Specify interface language |
 | `-InstallDeps` | No value (switch) | Install frontend npm dependencies |
+| `-BuildMsix` | No value (switch) | Build MSIX installation package |
+| `-SkipSign` | No value (switch) | Skip MSIX signing, output file will have `unsigned_` prefix (requires `-BuildMsix`) |
 | `-Silent` | No value (switch) | Silent mode, skip all interactive prompts |
 
 **Usage examples:**
@@ -96,11 +98,17 @@ go build -ldflags="-s -w" -o "build/bin/snishaper.exe"
 # Build both frontend and backend, with dependency install
 .\build_windows.ps1 -Build all -Lang cn -InstallDeps
 
+# Build both and generate MSIX package (signed by default)
+.\build_windows.ps1 -Build all -BuildMsix
+
+# Build both and generate unsigned MSIX (skip signing)
+.\build_windows.ps1 -Build all -BuildMsix -SkipSign
+
 # Silent mode (for CI/CD, no interaction)
 .\build_windows.ps1 -Silent
 
-# With parameters + silent mode
-.\build_windows.ps1 -Build backend -Lang en -Silent
+# Silent mode with build and packaging (skip signing)
+.\build_windows.ps1 -Build all -Silent -BuildMsix -SkipSign
 
 # No parameters = interactive mode (original behavior)
 .\build_windows.ps1

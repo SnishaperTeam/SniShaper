@@ -1,13 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { 
-  Shield, 
-  Search, 
-  Loader2, 
-  CheckCircle2,
-  AlertCircle,
-  Save
-} from 'lucide-react';
+import {
+  Shield, Search, Loader2, CheckCircle2, AlertCircle, Save
+} from '../lib/icons';
 import { UpsertECHProfile, FetchECHConfig, GetDNSNodes } from '../api/bindings';
+import { Button } from '../components/ui/Button';
+import { Toggle } from '../components/ui/Toggle';
 import { useTranslation } from '../i18n/I18nContext';
 
 interface ECHProfileFormProps {

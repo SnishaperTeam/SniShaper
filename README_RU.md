@@ -1,6 +1,6 @@
-[中文](README.md) | [English](README_EN.md) | [Русский](README_RU.md)
-
 # SniShaper
+
+[中文](README.md) | [English](README_EN.md) | [Русский](README_RU.md)
 
 [![Go Version](https://img.shields.io/badge/Go-1.25+-00ADD8?style=flat-square&logo=go)](https://golang.org)
 [![License](https://img.shields.io/badge/License-MIT-blue?style=flat-square)]()
@@ -15,7 +15,7 @@
 - **Шесть режимов проксирования**: поддержка широкого спектра режимов от легковесного `transparent` до продвинутого `server` проксирования для любых задач.
 - **Гибкие стратегии**:
   - **TLS-RF (фрагментация TLS)**: обход точечных блокировок по SNI с помощью фрагментации.
-  - **Реплей QUIC**: обход стандартного обнаружения SNI с помощью функций `quic-go`.
+  - **Реплей QUIC**: обход стандартного обнаружения SNI с помощью функций quic-go.
   - **Инъекция ECH**: автоматическое получение и внедрение echconfig.
 - **Интеллектуальная маршрутизация**: автоматическое определение заблокированных доменов на основе GFWList, позволяющее подключаться к большинству сайтов вне правил без ручной настройки.
 
@@ -82,6 +82,8 @@ go build -ldflags="-s -w" -o "build/bin/snishaper.exe"
 | `-Build` | `frontend` / `backend` / `all` | Цель сборки |
 | `-Lang` | `en` / `cn` / `ru` | Язык интерфейса |
 | `-InstallDeps` | без значений (флаг) | Установить npm зависимости |
+| `-BuildMsix` | без значений (флаг) | Собрать MSIX-пакет |
+| `-SkipSign` | без значений (флаг) | Пропустить подпись MSIX, выходной файл будет иметь префикс `unsigned_` (требуется `-BuildMsix`) |
 | `-Silent` | без значений (флаг) | Тихий режим, пропуск всех интерактивных запросов |
 
 **Примеры использования:**
@@ -96,11 +98,17 @@ go build -ldflags="-s -w" -o "build/bin/snishaper.exe"
 # Собрать всё и установить зависимости
 .\build_windows.ps1 -Build all -Lang cn -InstallDeps
 
+# Собрать всё и создать MSIX-пакет (подписан по умолчанию)
+.\build_windows.ps1 -Build all -BuildMsix
+
+# Собрать всё и создать неподписанный MSIX (пропустить подпись)
+.\build_windows.ps1 -Build all -BuildMsix -SkipSign
+
 # Тихий режим (для CI/CD, без взаимодействия)
 .\build_windows.ps1 -Silent
 
-# С параметрами + тихий режим
-.\build_windows.ps1 -Build backend -Lang en -Silent
+# Тихий режим со сборкой и созданием пакета (пропуск подписи)
+.\build_windows.ps1 -Build all -Silent -BuildMsix -SkipSign
 
 # Без параметров = интерактивный режим
 .\build_windows.ps1

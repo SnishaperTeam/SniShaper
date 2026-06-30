@@ -54,6 +54,11 @@ func (p *CloudflarePool) Start() {
 	p.wg.Add(1)
 	go func() {
 		defer p.wg.Done()
+		defer func() {
+			if r := recover(); r != nil {
+				fmt.Printf("[CFPool] panic in health check: %v\n", r)
+			}
+		}()
 		p.healthCheckLoop()
 	}()
 }

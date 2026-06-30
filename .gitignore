@@ -80,3 +80,6 @@ build/bin/markers/
 .history/
 docs/
 .opencode/
+
+# Development certificate
+devcert.pfx

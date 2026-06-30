@@ -1,12 +1,7 @@
 import React, { useEffect } from 'react';
 import { createPortal } from 'react-dom';
-import { X } from 'lucide-react';
-import { clsx, type ClassValue } from 'clsx';
-import { twMerge } from 'tailwind-merge';
-
-function cn(...inputs: ClassValue[]) {
-  return twMerge(clsx(inputs));
-}
+import { X } from '../lib/icons';
+import { cn } from '../lib/utils';
 
 interface ModalProps {
   isOpen: boolean;
@@ -66,8 +61,9 @@ const Modal: React.FC<ModalProps> = ({
             <h3 className="text-xl font-black tracking-tight">{title}</h3>
             {subtitle && <p className="text-xs text-text-muted mt-1 font-medium">{subtitle}</p>}
           </div>
-          <button 
+          <button
             onClick={onClose}
+            aria-label="关闭对话框"
             className="p-2 hover:bg-background-hover rounded-xl text-text-muted transition-colors"
           >
             <X size={20} />

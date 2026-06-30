@@ -1,6 +1,6 @@
-[中文](README.md) | [English](README_EN.md) | [Русский](README_RU.md)
-
 # SniShaper
+
+[中文](README.md) | [English](README_EN.md) | [Русский](README_RU.md)
 
 [![Go Version](https://img.shields.io/badge/Go-1.25+-00ADD8?style=flat-square&logo=go)](https://golang.org)
 [![License](https://img.shields.io/badge/License-MIT-blue?style=flat-square)]()
@@ -82,6 +82,8 @@ go build -ldflags="-s -w" -o "build/bin/snishaper.exe"
 | `-Build` | `frontend` / `backend` / `all` | 指定构建目标 |
 | `-Lang` | `en` / `cn` / `ru` | 指定界面语言 |
 | `-InstallDeps` | 无值（开关） | 安装前端 npm 依赖 |
+| `-BuildMsix` | 无值（开关） | 构建 MSIX 安装包 |
+| `-SkipSign` | 无值（开关） | 跳过 MSIX 签名，生成的文件添加 `unsigned_` 前缀（需配合 `-BuildMsix`） |
 | `-Silent` | 无值（开关） | 静默模式，跳过所有交互提示 |
 
 **用法示例：**
@@ -96,11 +98,17 @@ go build -ldflags="-s -w" -o "build/bin/snishaper.exe"
 # 同时构建前后端，并安装依赖
 .\build_windows.ps1 -Build all -Lang cn -InstallDeps
 
+# 构建前后端并生成 MSIX 安装包（默认签名）
+.\build_windows.ps1 -Build all -BuildMsix
+
+# 构建前后端并生成未签名的 MSIX（跳过签名）
+.\build_windows.ps1 -Build all -BuildMsix -SkipSign
+
 # 静默模式（CI/CD 适用，无交互）
 .\build_windows.ps1 -Silent
 
-# 指定参数 + 静默模式
-.\build_windows.ps1 -Build backend -Lang en -Silent
+# 静默模式构建并打包（跳过签名）
+.\build_windows.ps1 -Build all -Silent -BuildMsix -SkipSign
 
 # 无参数 = 交互模式（原有行为）
 .\build_windows.ps1

@@ -52,6 +52,11 @@ type App struct {
 	launchedAtStartup bool
 	core              *coreClient
 
+	// Background goroutine lifecycle management
+	ctx    context.Context
+	cancel context.CancelFunc
+	wg     sync.WaitGroup
+
 	// Track stats for traffic speed calculations
 	lastIn   int64
 	lastOut  int64
@@ -198,7 +203,10 @@ func NewApp() *App {
 		socks5Port = "8081"
 	}
 
+	ctx, cancel := context.WithCancel(context.Background())
 	a := &App{
+		ctx:               ctx,
+		cancel:            cancel,
 		proxyServer:       proxy.NewProxyServer("127.0.0.1:" + port),
 		ruleManager:       ruleManager,
 		certPath:          filepath.Join(execDir, "cert"),
@@ -212,21 +220,34 @@ func NewApp() *App {
 	cf := ruleManager.GetCloudflareConfig()
 	if len(cf.PreferredIPs) > 0 {
 		a.proxyServer.UpdateCloudflareIPPool(cf.PreferredIPs)
+		a.wg.Add(1)
 		go func() {
-			time.Sleep(1 * time.Second) // Wait for app to stabilize
-			a.proxyServer.TriggerCFHealthCheck()
+			defer a.wg.Done()
+			select {
+			case <-time.After(1 * time.Second): // Wait for app to stabilize
+				a.proxyServer.TriggerCFHealthCheck()
+			case <-a.ctx.Done():
+				return
+			}
 		}()
 	}
 
 	// Periodic auto-update task (every 24h)
+	a.wg.Add(1)
 	go func() {
+		defer a.wg.Done()
 		ticker := time.NewTicker(24 * time.Hour)
 		defer ticker.Stop()
-		for range ticker.C {
-			config := a.ruleManager.GetCloudflareConfig()
-			if config.AutoUpdate {
-				log.Printf("[Cloudflare] Running scheduled auto-update")
-				a.RefreshCloudflareIPPool()
+		for {
+			select {
+			case <-ticker.C:
+				config := a.ruleManager.GetCloudflareConfig()
+				if config.AutoUpdate {
+					log.Printf("[Cloudflare] Running scheduled auto-update")
+					a.RefreshCloudflareIPPool()
+				}
+			case <-a.ctx.Done():
+				return
 			}
 		}
 	}()
@@ -407,8 +428,16 @@ func (a *App) startupV3() {
 		a.emitFrontendState()
 
 		// Start traffic stats pusher (Clash style)
+		a.wg.Add(1)
 		go func() {
-			time.Sleep(500 * time.Millisecond) // Give the window time to settle
+			defer a.wg.Done()
+
+			// Give the window time to settle
+			select {
+			case <-time.After(500 * time.Millisecond):
+			case <-a.ctx.Done():
+				return
+			}
 
 			a.lastIn, a.lastOut, _ = a.GetStats()
 			a.lastTick = time.Now()
@@ -416,53 +445,59 @@ func (a *App) startupV3() {
 			ticker := time.NewTicker(1 * time.Second)
 			defer ticker.Stop()
 
-			for range ticker.C {
-				if a.mainWindow == nil {
-					continue
-				}
-
-				currentIn, currentOut, _ := a.GetStats()
-				now := time.Now()
-				duration := now.Sub(a.lastTick).Seconds()
-
-				if duration > 0 {
-					downSpeed := float64(currentIn-a.lastIn) / duration
-					upSpeed := float64(currentOut-a.lastOut) / duration
-
-					// Avoid negative values if stats reset
-					if downSpeed < 0 {
-						downSpeed = 0
-					}
-					if upSpeed < 0 {
-						upSpeed = 0
+			for {
+				select {
+				case <-ticker.C:
+					if a.mainWindow == nil {
+						continue
 					}
 
-					var routeEvents []RouteEvent
-					if a.core != nil {
-						routeEvents = a.core.GetRouteEvents()
-					}
+					currentIn, currentOut, _ := a.GetStats()
+					now := time.Now()
+					duration := now.Sub(a.lastTick).Seconds()
 
-					// Use InvokeAsync to ensure UI thread safety in Wails v3
-					application.InvokeAsync(func() {
-						if a.mainWindow != nil {
-							a.mainWindow.EmitEvent("app:traffic", map[string]float64{
-								"down": downSpeed,
-								"up":   upSpeed,
-							})
+					if duration > 0 {
+						downSpeed := float64(currentIn-a.lastIn) / duration
+						upSpeed := float64(currentOut-a.lastOut) / duration
 
-							for _, ev := range routeEvents {
-								a.mainWindow.EmitEvent("app:route", map[string]string{
-									"domain": ev.Domain,
-									"mode":   ev.Mode,
-								})
-							}
+						// Avoid negative values if stats reset
+						if downSpeed < 0 {
+							downSpeed = 0
 						}
-					})
-				}
+						if upSpeed < 0 {
+							upSpeed = 0
+						}
 
-				a.lastIn = currentIn
-				a.lastOut = currentOut
-				a.lastTick = now
+						var routeEvents []RouteEvent
+						if a.core != nil {
+							routeEvents = a.core.GetRouteEvents()
+						}
+
+						// Use InvokeAsync to ensure UI thread safety in Wails v3
+						application.InvokeAsync(func() {
+							if a.mainWindow != nil {
+								a.mainWindow.EmitEvent("app:traffic", map[string]float64{
+									"down": downSpeed,
+									"up":   upSpeed,
+								})
+
+								for _, ev := range routeEvents {
+									a.mainWindow.EmitEvent("app:route", map[string]string{
+										"domain": ev.Domain,
+										"mode":   ev.Mode,
+									})
+								}
+							}
+						})
+					}
+
+					a.lastIn = currentIn
+					a.lastOut = currentOut
+					a.lastTick = now
+
+				case <-a.ctx.Done():
+					return
+				}
 			}
 		}()
 	}()
@@ -644,11 +679,15 @@ func (a *App) UpdateTrayMenu() {
 
 func (a *App) refreshTrayMenuLater(delays ...time.Duration) {
 	for _, delay := range delays {
+		a.wg.Add(1)
 		go func(delay time.Duration) {
-			if delay > 0 {
-				time.Sleep(delay)
+			defer a.wg.Done()
+			select {
+			case <-time.After(delay):
+				a.UpdateTrayMenu()
+			case <-a.ctx.Done():
+				return
 			}
-			a.UpdateTrayMenu()
 		}(delay)
 	}
 }
@@ -686,6 +725,11 @@ func (a *App) emitFrontendState() {
 func (a *App) shutdown() {
 	a.appendLog("[shutdown] SniShaper shutting down...")
 
+	// Signal all background goroutines to stop
+	if a.cancel != nil {
+		a.cancel()
+	}
+
 	proxyRunning := a.IsProxyRunning()
 
 	if a.core != nil {
@@ -700,6 +744,19 @@ func (a *App) shutdown() {
 		if err := a.clearManagedSystemProxyMarker(); err != nil {
 			a.appendLog("[shutdown] Failed to clear managed system proxy marker: " + err.Error())
 		}
+	}
+
+	// Wait for all background goroutines to finish (with timeout)
+	done := make(chan struct{})
+	go func() {
+		a.wg.Wait()
+		close(done)
+	}()
+	select {
+	case <-done:
+		a.appendLog("[shutdown] All background goroutines stopped")
+	case <-time.After(2 * time.Second):
+		a.appendLog("[shutdown] Background goroutine shutdown timeout (2s)")
 	}
 
 	a.appendLog("[shutdown] SniShaper shutdown complete")
@@ -1834,7 +1891,14 @@ func (a *App) UpdateAutoRoutingConfig(cfg proxy.AutoRoutingConfig) error {
 	if cfg.Mode != "" {
 		status := a.ruleManager.GetAutoRoutingStatus()
 		if status.DomainCount == 0 {
+			a.wg.Add(1)
 			go func() {
+				defer a.wg.Done()
+				defer func() {
+					if r := recover(); r != nil {
+						a.appendLog(fmt.Sprintf("[AutoRoute] panic: %v", r))
+					}
+				}()
 				a.appendLog("[AutoRoute] No GFW list loaded, fetching...")
 				_, _ = a.RefreshGFWList()
 			}()
@@ -2020,13 +2084,17 @@ func compareVersions(v1, v2 string) int {
 }
 
 // OpenURL opens a URL in the default browser using system command
-func (a *App) OpenURL(url string) {
-	if url == "" {
+func (a *App) OpenURL(rawURL string) {
+	if rawURL == "" {
 		return
 	}
-	
+	parsed, err := url.Parse(rawURL)
+	if err != nil || (parsed.Scheme != "http" && parsed.Scheme != "https") {
+		a.appendLog(fmt.Sprintf("[update] Invalid or unsupported URL: %s", rawURL))
+		return
+	}
 	// Use cmd /c start to open URL in default browser (Windows)
-	cmd := exec.Command("cmd", "/c", "start", url)
+	cmd := exec.Command("cmd", "/c", "start", parsed.String())
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	if err := cmd.Run(); err != nil {

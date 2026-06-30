@@ -22,6 +22,9 @@
   --warning: #9a6700;
   --shadow-soft: 0 16px 40px rgba(15, 23, 42, 0.08);
   --shadow-card: 0 10px 28px rgba(15, 23, 42, 0.08);
+  --duration-fast: 150ms;
+  --duration-normal: 200ms;
+  --duration-slow: 300ms;
 }
 
 [data-theme="dark"] {
@@ -97,6 +100,27 @@
   input[type="number"] {
     -moz-appearance: textfield;
     appearance: textfield;
+  }
+
+  *:focus-visible {
+    outline: 2px solid color-mix(in srgb, var(--accent) 50%, transparent);
+    outline-offset: 2px;
+  }
+
+  button:focus-visible,
+  a:focus-visible,
+  input:focus-visible,
+  select:focus-visible,
+  textarea:focus-visible {
+    outline: 2px solid color-mix(in srgb, var(--accent) 50%, transparent);
+    outline-offset: 2px;
+  }
+
+  [role="tab"]:focus-visible,
+  [role="switch"]:focus-visible,
+  [role="button"]:focus-visible {
+    outline: 2px solid color-mix(in srgb, var(--accent) 50%, transparent);
+    outline-offset: 2px;
   }
 }
 
