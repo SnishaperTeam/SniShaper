@@ -12,63 +12,72 @@ permissions:
 
 jobs:
   windows-build:
-    runs-on: windows-latest
+    runs-on: windows-2025
 
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Setup Go
-        uses: actions/setup-go@v5
+      - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
 
-      - name: Setup Node
-        uses: actions/setup-node@v4
+      - uses: actions/setup-node@v4
         with:
           node-version: 20
           cache: npm
           cache-dependency-path: frontend/package-lock.json
 
-      - name: Install frontend dependencies
-        shell: pwsh
-        working-directory: frontend
-        run: npm ci
-
-      - name: Build application
+      - name: Install WinApp CLI
         shell: pwsh
         run: |
-          Set-Location frontend
-          npm run build
-          Set-Location ..
-          New-Item -ItemType Directory -Path build/bin -Force | Out-Null
-          go build -ldflags="-H windowsgui" -o build/bin/snishaper.exe .
-
-      - name: Package bundle
-        shell: pwsh
-        run: |
-          if ("${{ github.ref }}".StartsWith("refs/tags/")) {
-            $archiveName = "snishaper-${{ github.ref_name }}-windows-amd64.zip"
+          if (Get-Command winapp -ErrorAction SilentlyContinue) {
+            Write-Host "winapp already available"
           } else {
-            $archiveName = "snishaper-windows-amd64.zip"
+            winget install --id Microsoft.WinAppCLI --accept-source-agreements --accept-package-agreements
+            if ($LASTEXITCODE -ne 0) {
+              Write-Host "winget failed, trying GitHub release..." -ForegroundColor Yellow
+              $url = "https://github.com/microsoft/WinAppCLI/releases/latest/download/Microsoft.WinAppCLI.msixbundle"
+              Invoke-WebRequest -Uri $url -OutFile "$env:TEMP\WinAppCLI.msixbundle" -ErrorAction Stop
+              Add-AppxPackage -Path "$env:TEMP\WinAppCLI.msixbundle" -ErrorAction Stop
+              # Add-AppxPackage doesn't add to PATH; find the installed location
+              $pkg = Get-AppxPackage -Name "Microsoft.WinAppCLI" | Select-Object -First 1
+              $installPath = $pkg.InstallLocation
+              Add-Content -Path $env:GITHUB_PATH -Value $installPath
+            }
           }
+          winapp --version
 
-          $bundleDir = Join-Path $env:RUNNER_TEMP "snishaper-windows-amd64"
-          $rulesDir = Join-Path $bundleDir "rules"
-          $proxyDir = Join-Path $bundleDir "proxy"
-          New-Item -ItemType Directory -Path $rulesDir -Force | Out-Null
-          New-Item -ItemType Directory -Path $proxyDir -Force | Out-Null
-          Copy-Item build/bin/snishaper.exe $bundleDir
-          Copy-Item rules/config.json $rulesDir
-          if (Test-Path proxy/config.json) {
-            Copy-Item proxy/config.json $proxyDir
-          }
-          Compress-Archive -Path "$bundleDir\\*" -DestinationPath (Join-Path "build/bin" $archiveName) -Force
+      - name: Install 7-Zip
+        run: choco install 7zip -y --no-progress
+
+      - name: Build, package & sign MSIX
+        shell: pwsh
+        run: ./build_windows.ps1 -Build all -InstallDeps -BuildMsix -Silent
+
+      - name: Create 7z archive
+        run: 7z a -mx=9 snishaper-windows-amd64.7z .\build\bin\*
+
+      - name: Create cert install batch
+        shell: pwsh
+        run: |
+          $msix = Get-ChildItem -Path Apppackage -Filter "*.msix" | Select-Object -First 1
+          $bat = '@echo off', 'chcp 65001 > nul', "echo Installing certificate to Trusted Root Certification Authorities...", "certutil -f -importpfx `"%~dp0devcert.pfx`" password", "echo Installing MSIX package...", "powershell -Command `"Add-AppxPackage -Path '%~dp0$($msix.Name)'`"", "echo Done!", "pause"
+          $bat -join "`r`n" | Set-Content -Path install.bat
+
+      - name: Stage artifacts
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Path staging -Force | Out-Null
+          Copy-Item (Get-Item Apppackage\*.msix).FullName staging\ -ErrorAction Stop
+          Copy-Item (Get-Item snishaper-windows-amd64.7z).FullName staging\ -ErrorAction Stop
+          if (Test-Path devcert.pfx) { Copy-Item devcert.pfx staging\ }
+          if (Test-Path install.bat) { Copy-Item install.bat staging\ }
+          Write-Host "Staged files:" -ForegroundColor Green
+          Get-ChildItem staging | ForEach-Object { Write-Host "  $($_.Name)" }
 
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4
         with:
           name: snishaper-windows-amd64
-          path: build/bin/*.zip
+          path: staging/*
           if-no-files-found: error
-

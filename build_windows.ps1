@@ -46,9 +46,8 @@ $ProjectRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
 Set-Location $ProjectRoot
 
 function Show-ErrorPopup($msg) {
-    if ($Silent) {
-        $wshell = New-Object -ComObject WScript.Shell
-        $wshell.Popup("Build failed!`n$msg", 0, "SniShaper Build", 0x00000010)
+    if ($Silent -and -not $env:CI -and -not $env:GITHUB_ACTIONS) {
+        try { $wshell = New-Object -ComObject WScript.Shell; $wshell.Popup("Build failed!`n$msg", 0, "SniShaper Build", 0x00000010) } catch {}
     }
 }
 
@@ -532,9 +531,8 @@ Write-Host "==========================================" -ForegroundColor Cyan
 Write-Host $messages["$($lang)_AllDone"] -ForegroundColor Cyan
 Write-Host "==========================================" -ForegroundColor Cyan
 
-if ($Silent) {
-    $wshell = New-Object -ComObject WScript.Shell
-    $wshell.Popup("Build completed successfully!`n构建完毕！", 0, "SniShaper Build", 0x00000040)
+if ($Silent -and -not $env:CI -and -not $env:GITHUB_ACTIONS) {
+    try { $wshell = New-Object -ComObject WScript.Shell; $wshell.Popup("Build completed successfully!`n构建完毕！", 0, "SniShaper Build", 0x00000040) } catch {}
 } else {
     Read-Host $messages["$($lang)_Exit"]
 }
