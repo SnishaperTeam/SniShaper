@@ -88,21 +88,21 @@ const Sidebar: React.FC<SidebarProps> = React.memo(({ theme, toggleTheme }) => {
         </div>
       </div>
 
-      <nav className="flex-1 space-y-1.5 px-1" aria-label="主导航">
+      <nav className="flex-1 space-y-1.5" aria-label="主导航">
         {navItems.map((item) => (
           <NavLink
             key={item.path}
             to={item.path}
             onClick={closeSidebar}
             className={({ isActive }) => cn(
-              "flex items-center gap-4 pl-8 py-3 rounded-xl text-[13px] font-bold transition-all group",
+              "flex flex-col items-center gap-1 px-4 py-3 rounded-xl text-[13px] font-bold transition-all group",
               isActive
                 ? "bg-accent text-white shadow-lg shadow-accent/25"
                 : "text-text-secondary hover:bg-background-hover hover:text-text-primary"
             )}
           >
             <item.icon size={18} className={cn("transition-transform group-hover:scale-110 shrink-0")} aria-hidden />
-            <span className="tracking-widest">{item.label}</span>
+            <span className="tracking-widest text-center">{item.label}</span>
           </NavLink>
         ))}
       </nav>
@@ -173,7 +173,7 @@ const Sidebar: React.FC<SidebarProps> = React.memo(({ theme, toggleTheme }) => {
       {/* Sidebar: desktop always visible, mobile as drawer */}
       <aside
         className={cn(
-          "h-full flex flex-col bg-background-card border-r border-border py-6 px-2 shadow-xl z-40 select-none overflow-hidden",
+          "h-full flex flex-col bg-background-card border-r border-border py-6 px-3 w-48 shadow-xl z-40 select-none overflow-hidden",
           "lg:relative lg:translate-x-0",
           "fixed inset-y-0 left-0 transition-transform duration-300",
           sidebarOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"

@@ -32,6 +32,7 @@ const About: React.FC = () => {
 
   const handleOpenWebsite = () => OpenURL('https://github.com/SniShaper/SniShaper');
   const handleOpenGitHub = () => OpenURL('https://github.com/SniShaper/SniShaper');
+  const handleOpenBeta = () => OpenURL('https://github.com/SniShaper/SniShaper/actions');
   const handleOpenAdaptation = () => OpenURL('https://github.com/SniShaper/SniShaper/issues/32');
   const handleOpenDevPlan = () => OpenURL('https://github.com/SniShaper/SniShaper/issues/36');
 
@@ -182,6 +183,17 @@ const About: React.FC = () => {
               <div className="flex-1">
                 <h3 className="text-xs font-bold text-text-muted uppercase tracking-wider mb-1.5">GitHub</h3>
                 <p className="text-text-primary font-semibold text-[15px] group-hover:underline">SniShaper/SniShaper</p>
+              </div>
+            </div>
+          </div>
+          <div onClick={handleOpenBeta}
+            className="p-5 rounded-2xl bg-background-card border border-border hover:border-warning/30 transition-all duration-300 group hover:shadow-lg cursor-pointer"
+            role="button" tabIndex={0} onKeyDown={(e) => e.key === 'Enter' && handleOpenBeta()}>
+            <div className="flex items-start gap-4">
+              <div className="p-3 rounded-xl bg-warning/10 text-warning group-hover:bg-warning/15 transition-colors"><Download size={22} /></div>
+              <div className="flex-1">
+                <h3 className="text-xs font-bold text-text-muted uppercase tracking-wider mb-1.5">最新beta版</h3>
+                <p className="text-warning font-semibold text-[15px] group-hover:underline">Actions 构建产物</p>
               </div>
             </div>
           </div>

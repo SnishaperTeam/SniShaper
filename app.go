@@ -1941,7 +1941,7 @@ func (a *App) WindowClose() {
 
 // GetAppVersion returns the application version
 func (a *App) GetAppVersion() string {
-	return "1.27"
+	return "1.28"
 }
 
 // CheckUpdateResult represents the result of checking for updates
