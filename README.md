@@ -27,6 +27,10 @@
 ### 1. 运行
 下载 [最新版本](https://github.com/coolapijust/snishaper/releases) 并运行 `snishaper.exe`。
 
+<a href="https://apps.microsoft.com/detail/9n11mrrsfs8n" target="_self">
+<img src="https://get.microsoft.com/images/zh-cn%20dark.svg" width="200"/>
+</a>
+
 ### 2. 证书重新安装
 在主界面点击「证书管理」-> 「**点击重新安装证书**」。
 
