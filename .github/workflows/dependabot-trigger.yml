@@ -17,4 +17,4 @@ jobs:
       - uses: actions/checkout@v4
       - uses: renovate/renovate@v39
         with:
-          token: ${{ secrets.GITHUB_TOKEN }}
+          token: ${{ secrets.RENOVATE_TOKEN }}
