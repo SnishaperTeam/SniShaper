@@ -1,0 +1,22 @@
+version: 2
+updates:
+  - package-ecosystem: "gomod"
+    directory: "/"
+    schedule:
+      interval: "daily"
+  - package-ecosystem: "gomod"
+    directory: "/utls"
+    schedule:
+      interval: "daily"
+  - package-ecosystem: "gomod"
+    directory: "/sni-server"
+    schedule:
+      interval: "daily"
+  - package-ecosystem: "npm"
+    directory: "/frontend"
+    schedule:
+      interval: "daily"
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "daily"
