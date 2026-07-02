@@ -145,6 +145,17 @@ go build -ldflags="-s -w" -o "build/bin/snishaper.exe"
 | :---: | :---: | :---: |
 | [mechrevo](https://github.com/mechrevo) | [dongzheyu](https://github.com/dongzheyu) | [JetCPP-dongle](https://github.com/JetCPP-dongle) |
 
+## История звёзд
+
+<a href="https://www.star-history.com/?repos=snishaper/snishaper&type=date&legend=top-left">
+<picture>
+<source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/chart?repos=snishaper/snishaper&type=date&theme=dark&legend=top-left" />
+<source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/chart?repos=snishaper/snishaper&type=date&legend=top-left" />
+<img alt="Диаграмма истории звёзд" src="https://api.star-history.com/chart?repos=snishaper/snishaper&type=date&legend=top-left" />
+</picture>
+</a>
+
+---
 ## Лицензия
 
 [MIT License](LICENSE)
