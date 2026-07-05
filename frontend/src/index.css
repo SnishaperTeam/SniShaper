@@ -1,6 +1,34 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import "tailwindcss";
+
+@theme {
+  --color-background: var(--bg-dark);
+  --color-background-card: var(--bg-card);
+  --color-background-soft: var(--bg-soft);
+  --color-background-hover: var(--bg-hover);
+
+  --color-text-primary: var(--text-primary);
+  --color-text-secondary: var(--text-secondary);
+  --color-text-muted: var(--text-muted);
+
+  --color-accent: var(--accent);
+  --color-accent-dim: var(--accent-dim);
+  --color-accent-soft: var(--accent-soft);
+
+  --color-border: var(--border);
+  --color-border-strong: var(--border-strong);
+  --color-border-soft: var(--border-soft);
+  --color-border-divider: var(--border-divider);
+
+  --color-success: var(--success);
+  --color-danger: var(--danger);
+  --color-warning: var(--warning);
+
+  --radius-2xl: 1rem;
+  --radius-3xl: 1.5rem;
+
+  --shadow-card: var(--shadow-card);
+  --shadow-soft: var(--shadow-soft);
+}
 
 :root {
   --bg-dark: #ffffff;
