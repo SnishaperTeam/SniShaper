@@ -98,6 +98,7 @@ func (p *ProxyServer) handleSocks5Connect(ctx context.Context, writer io.Writer,
 		socks5.SendReply(writer, statute.RepHostUnreachable, req.LocalAddr)
 		return fmt.Errorf("no underlying connection")
 	}
+	enableKeepAlive(clientConn)
 
 	cr := p.prepareConnect(matchHost, targetAddr, rule)
 

@@ -415,7 +415,15 @@ func (c *bufferedReadConn) WriteTo(w io.Writer) (int64, error) {
 	return io.Copy(w, c.reader)
 }
 
+func enableKeepAlive(conn net.Conn) {
+	if tc, ok := conn.(*net.TCPConn); ok {
+		_ = tc.SetKeepAlive(true)
+		_ = tc.SetKeepAlivePeriod(30 * time.Second)
+	}
+}
+
 func wrapHijackedConn(conn net.Conn, rw *bufio.ReadWriter) net.Conn {
+	enableKeepAlive(conn)
 	if rw == nil || rw.Reader == nil || rw.Reader.Buffered() == 0 {
 		return conn
 	}
@@ -1593,15 +1601,17 @@ func (p *ProxyServer) directConnect(w http.ResponseWriter, req *http.Request) {
 		defer wg.Done()
 		defer tunnelBufPool.Put(buf1)
 		_, _ = io.CopyBuffer(conn, clientConn, *buf1)
-		conn.Close()
+		halfClose(conn)
 	}()
 	go func() {
 		defer wg.Done()
 		defer tunnelBufPool.Put(buf2)
 		_, _ = io.CopyBuffer(clientConn, conn, *buf2)
-		clientConn.Close()
+		halfClose(clientConn)
 	}()
 	wg.Wait()
+	clientConn.Close()
+	conn.Close()
 }
 
 func (p *ProxyServer) handleHTTP(w http.ResponseWriter, req *http.Request, rule Rule) {
@@ -1855,6 +1865,21 @@ func (p *ProxyServer) handleMITM(clientConn net.Conn, host string, rule Rule, di
 	p.directTunnel(clientTls, upstreamRW)
 }
 
+func halfClose(conn net.Conn) {
+	if tc, ok := conn.(*net.TCPConn); ok {
+		_ = tc.CloseWrite()
+		return
+	}
+	type closeWriter interface {
+		CloseWrite() error
+	}
+	if cw, ok := conn.(closeWriter); ok {
+		_ = cw.CloseWrite()
+		return
+	}
+	conn.Close()
+}
+
 func (p *ProxyServer) directTunnel(clientConn, upstreamConn net.Conn) {
 	p.tracef("[Tunnel] Starting direct tunnel")
 	var wg sync.WaitGroup
@@ -1869,16 +1894,18 @@ func (p *ProxyServer) directTunnel(clientConn, upstreamConn net.Conn) {
 		defer tunnelBufPool.Put(buf1)
 		n, err := io.CopyBuffer(upstreamConn, clientConn, *buf1)
 		p.tracef("[Tunnel] Client -> Upstream: %d bytes, err: %v", n, err)
-		upstreamConn.Close()
+		halfClose(upstreamConn)
 	}()
 	go func() {
 		defer wg.Done()
 		defer tunnelBufPool.Put(buf2)
 		n, err := io.CopyBuffer(clientConn, upstreamConn, *buf2)
 		p.tracef("[Tunnel] Upstream -> Client: %d bytes, err: %v", n, err)
-		clientConn.Close()
+		halfClose(clientConn)
 	}()
 	wg.Wait()
+	clientConn.Close()
+	upstreamConn.Close()
 	p.tracef("[Tunnel] Tunnel closed")
 }
 
