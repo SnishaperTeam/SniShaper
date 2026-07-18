@@ -11,17 +11,13 @@ import {
   Moon,
   Workflow,
   Globe,
-  ArrowDown,
-  ArrowUp,
   Antenna,
   Info,
   Zap,
   Menu,
   X
 } from '../lib/icons';
-import { AreaChart, Area, ResponsiveContainer } from 'recharts';
-import { cn, formatSpeed } from '../lib/utils';
-import { EventsOn } from '../api/bindings';
+import { cn } from '../lib/utils';
 import { useTranslation } from '../i18n/I18nContext';
 
 const getNavItems = (t: any) => [
@@ -30,7 +26,7 @@ const getNavItems = (t: any) => [
   { path: '/rules', label: t('sidebar.rules'), icon: ShieldCheck },
   { path: '/routing', label: t('sidebar.routing'), icon: Workflow },
   { path: '/dns', label: t('sidebar.dns'), icon: Antenna },
-  { path: '/evolution', label: '进化模式', icon: Zap },
+  { path: '/evolution', label: t('evolution.title'), icon: Zap },
   { path: '/logs', label: t('sidebar.logs'), icon: FileText },
   { path: '/settings', label: t('sidebar.settings'), icon: Settings },
   { path: '/about', label: t('sidebar.about'), icon: Info },
@@ -45,22 +41,8 @@ const Sidebar: React.FC<SidebarProps> = React.memo(({ theme, toggleTheme }) => {
   const { t } = useTranslation();
   const navItems = useMemo(() => getNavItems(t), [t]);
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [speedHistory, setSpeedHistory] = useState(Array.from({ length: 20 }, () => ({ down: 0, up: 0 })));
-  const [currentSpeed, setCurrentSpeed] = useState({ down: 0, up: 0 });
   const chartGradientIdDown = React.useId();
   const chartGradientIdUp = React.useId();
-
-  useEffect(() => {
-    const unoff = EventsOn("app:traffic", (data: any) => {
-        if (data) {
-            const down = data.down || 0;
-            const up = data.up || 0;
-            setCurrentSpeed({ down, up });
-            setSpeedHistory(prev => [...prev.slice(1), { down, up }]);
-        }
-    });
-    return () => unoff();
-  }, []);
 
   useEffect(() => {
     if (!sidebarOpen) return;
@@ -75,7 +57,7 @@ const Sidebar: React.FC<SidebarProps> = React.memo(({ theme, toggleTheme }) => {
 
   const sidebarContent = (
     <>
-      <div className="flex flex-col gap-6 mb-8 items-center">
+      <div className="flex flex-col gap-6 mb-5 items-center">
         <div className="flex items-center">
           <div className="flex flex-col items-center gap-3">
             <img
@@ -88,54 +70,26 @@ const Sidebar: React.FC<SidebarProps> = React.memo(({ theme, toggleTheme }) => {
         </div>
       </div>
 
-      <nav className="flex-1 space-y-1.5" aria-label="主导航">
+      <nav className="flex-1 space-y-1" aria-label="主导航">
         {navItems.map((item) => (
           <NavLink
             key={item.path}
             to={item.path}
             onClick={closeSidebar}
             className={({ isActive }) => cn(
-              "flex flex-col items-center gap-1 px-4 py-3 rounded-xl text-[13px] font-bold transition-all group",
+              "flex flex-row items-center gap-3.5 px-4 py-2 rounded-xl text-[13px] font-bold transition-all group",
               isActive
                 ? "bg-accent text-white shadow-lg shadow-accent/25"
                 : "text-text-secondary hover:bg-background-hover hover:text-text-primary"
             )}
           >
-            <item.icon size={18} className={cn("transition-transform group-hover:scale-110 shrink-0")} aria-hidden />
-            <span className="tracking-widest text-center">{item.label}</span>
+            <item.icon size={16} className={cn("transition-transform group-hover:scale-110 shrink-0")} aria-hidden />
+            <span className="tracking-wider text-left">{item.label}</span>
           </NavLink>
         ))}
       </nav>
 
       <div className="mt-auto space-y-4">
-        <div className="h-[76px] w-full px-2 pointer-events-none">
-            <div className="h-full w-full bg-background-soft/40 rounded-xl overflow-hidden relative border border-border/50">
-              <ResponsiveContainer width="100%" height="100%" className="-mt-1">
-                <AreaChart data={speedHistory} margin={{ top: 20, right: 0, left: 0, bottom: 0 }}>
-                  <defs>
-                    <linearGradient id={chartGradientIdDown} x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#10b981" stopOpacity={0.3}/>
-                      <stop offset="95%" stopColor="#10b981" stopOpacity={0}/>
-                    </linearGradient>
-                    <linearGradient id={chartGradientIdUp} x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#f59e0b" stopOpacity={0.3}/>
-                      <stop offset="95%" stopColor="#f59e0b" stopOpacity={0}/>
-                    </linearGradient>
-                  </defs>
-                  <Area type="monotone" dataKey="up" stroke="#f59e0b" fillOpacity={1} fill={`url(#${chartGradientIdUp})`} strokeWidth={1.5} isAnimationActive={false} />
-                  <Area type="monotone" dataKey="down" stroke="#10b981" fillOpacity={1} fill={`url(#${chartGradientIdDown})`} strokeWidth={1.5} isAnimationActive={false} />
-                </AreaChart>
-              </ResponsiveContainer>
-              <div className="absolute top-1.5 left-2 flex items-center gap-1 z-10">
-                <ArrowDown size={10} className="text-success" aria-hidden />
-                <span className="text-[10px] font-black text-text-primary drop-shadow-sm">{formatSpeed(currentSpeed.down)}</span>
-              </div>
-              <div className="absolute top-1.5 right-2 flex items-center gap-1 z-10">
-                <span className="text-[10px] font-black text-text-primary drop-shadow-sm">{formatSpeed(currentSpeed.up)}</span>
-                <ArrowUp size={10} className="text-warning" aria-hidden />
-              </div>
-            </div>
-        </div>
 
         <button
           type="button"

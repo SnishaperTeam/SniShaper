@@ -4,37 +4,25 @@ import (
 	"bufio"
 	"bytes"
 	"context"
-	"crypto/ecdsa"
-	"crypto/elliptic"
-	"crypto/rand"
 	"crypto/tls"
 	"crypto/x509"
-	"crypto/x509/pkix"
-	"encoding/base64"
-	"encoding/json"
-	"encoding/pem"
-	"errors"
 	"fmt"
 	"io"
 	"log"
-	"math/big"
 	"net"
 	"net/http"
-	"net/textproto"
-	"os"
-	"path/filepath"
 	"regexp"
-	"runtime"
 	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
 
-	"github.com/quic-go/quic-go"
-	"github.com/quic-go/quic-go/http3"
-	utls "github.com/refraction-networking/utls"
+	"snishaper/pkg/cfpool"
+	"snishaper/pkg/dohresolver"
+
+	"github.com/miekg/dns"
 	"github.com/things-go/go-socks5"
-	"golang.org/x/net/http2"
+	utls "github.com/refraction-networking/utls"
 )
 
 // tunnelBufPool provides reusable 128KB buffers for tunnel data copying
@@ -52,122 +40,51 @@ type CertGenerator interface {
 	IsCAInstalled() bool
 }
 
-type ProxyServer struct {
-	startStopMu   sync.Mutex
-	Server        *http.Server
-	listenAddr    string
-	socks5Addr    string
-	rules         *RuleManager
-	running       bool
-	mode          string
-	mu            sync.RWMutex
-	certCacheMu   sync.RWMutex
-	certCache     map[string]*tls.Certificate
-	Fingerprint   string
-	certGenerator CertGenerator
-	recentIngress []string
-	dohResolver   *FailoverResolver
-	cfPool        *CloudflarePool
-	transport     *http.Transport
-	logCallback   func(string)
-	bytesDown     int64
-	bytesUp       int64
-	certBypassMap sync.Map
-	socks5Enabled bool
-	socks5Server  *socks5.Server
-	socks5Tracker *socks5ConnTracker
+type connectResult struct {
+	effectiveMode  string
+	targetHost     string
+	targetAddr     string
+	rule           Rule
+	dialCandidates []string
+	dialAddr       string
+	conn           net.Conn
 }
 
-type RuleManager struct {
-	rules                      []Rule
-	siteGroups                 []SiteGroup
-	upstreams                  []Upstream
-	dnsNodes                   []DNSNode
-	settingsPath               string
-	rulesPath                  string
-	cloudflareConfig           CloudflareConfig
-	tunConfig                  TUNConfig
-	closeToTray                bool
-	autoStart                  bool
-	showMainOnAutoStart        bool
-	autoEnableProxyOnAutoStart bool
-	socks5Enabled              bool
-	socks5Port                 string
-	serverHost                 string
-	serverAuth                 string
-	listenPort                 string
-	echProfiles                []ECHProfile
-	autoRouter                 *AutoRouter
-	autoRoutingConfig          AutoRoutingConfig
-	mu                         sync.RWMutex
-	routeEventCallback         func(domain, mode string)
-	onConfigSaved              func()
-	language                   string
-	theme                      string
-}
-
-func (r *RuleManager) SetRouteEventCallback(cb func(domain, mode string)) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	r.routeEventCallback = cb
-}
-
-func (r *RuleManager) emitRouteEvent(domain, mode string) {
-	r.mu.RLock()
-	cb := r.routeEventCallback
-	r.mu.RUnlock()
-	if cb != nil {
-		cb(domain, mode)
-	}
-}
-
-func (r *RuleManager) SetOnConfigSaved(cb func()) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	r.onConfigSaved = cb
-}
-
-// triggerConfigSaved fires the config-saved callback asynchronously.
-// It is always called from methods that already hold rm.mu, so no extra locking is needed.
-func (r *RuleManager) triggerConfigSaved() {
-	cb := r.onConfigSaved
-	if cb != nil {
-		go func() {
-			defer func() {
-				if r := recover(); r != nil {
-					log.Printf("[Config] panic in onConfigSaved callback: %v", r)
-				}
-			}()
-			cb()
-		}()
-	}
-}
-
-type SiteGroup struct {
+type DNSNode struct {
 	ID            string           `json:"id"`
 	Name          string           `json:"name"`
-	Website       string           `json:"website,omitempty"`
-	Domains       []string         `json:"domains"`
-	Mode          string           `json:"mode"`
-	Upstream      string           `json:"upstream"`
-	Upstreams     []string         `json:"upstreams,omitempty"`
-	DNSMode       string           `json:"dns_mode,omitempty"`
-	SniFake       string           `json:"sni_fake"`
-	ConnectPolicy string           `json:"connect_policy,omitempty"` // "", "tunnel_origin", "tunnel_upstream", "mitm", "direct"
-	SniPolicy     string           `json:"sni_policy,omitempty"`     // "", "auto", "original", "fake", "upstream", "none"
-	Enabled       bool             `json:"enabled"`
+	URL           string           `json:"url"`
+	SNI           string           `json:"sni,omitempty"`
+	IPs           []string         `json:"ips,omitempty"`
 	ECHEnabled    bool             `json:"ech_enabled"`
 	ECHProfileID  string           `json:"ech_profile_id,omitempty"`
-	ECHDomain     string           `json:"ech_domain,omitempty"` // Domain used for ECH DoH lookup
-	UseCFPool     bool             `json:"use_cf_pool"`
+	ECHAutoUpdate bool             `json:"ech_auto_update"`
+	QUIC          bool             `json:"quic"`
+	Enabled       bool             `json:"enabled"`
 	CertVerify    CertVerifyConfig `json:"cert_verify,omitempty"`
 }
 
-type Upstream struct {
-	ID      string `json:"id"`
-	Name    string `json:"name"`
-	Address string `json:"address"`
-	Enabled bool   `json:"enabled"`
+type CloudflareConfig struct {
+	PreferredIPs []string  `json:"preferred_ips"`
+	AutoUpdate   bool      `json:"auto_update"`
+	APIKey       string    `json:"api_key"`
+	DNSNodes     []DNSNode `json:"dns_nodes,omitempty"`
+}
+
+type TUNConfig struct {
+	Enabled     bool `json:"enabled"`
+	MTU         int  `json:"mtu,omitempty"`
+	DNSHijack   bool `json:"dns_hijack,omitempty"`
+	AutoRoute   bool `json:"auto_route,omitempty"`
+	StrictRoute bool `json:"strict_route,omitempty"`
+}
+
+type TUNStatus struct {
+	Supported bool   `json:"supported"`
+	Running   bool   `json:"running"`
+	Enabled   bool   `json:"enabled"`
+	Driver    string `json:"driver,omitempty"`
+	Message   string `json:"message,omitempty"`
 }
 
 type ECHProfile struct {
@@ -196,49 +113,484 @@ type SettingsConfig struct {
 	Socks5Enabled              *bool             `json:"socks5_enabled,omitempty"`
 }
 
-type TUNConfig struct {
-	Enabled     bool `json:"enabled"`
-	MTU         int  `json:"mtu,omitempty"`
-	DNSHijack   bool `json:"dns_hijack,omitempty"`
-	AutoRoute   bool `json:"auto_route,omitempty"`
-	StrictRoute bool `json:"strict_route,omitempty"`
+type Rule struct {
+	Domain             string           `json:"domain"`
+	Upstream           string           `json:"upstream,omitempty"`
+	Upstreams          []string         `json:"upstreams,omitempty"`
+	DNSMode            string           `json:"dns_mode,omitempty"`
+	Mode               string           `json:"mode"` // "mitm", "transparent", "tls-rf", "quic", "server", "direct"
+	SniFake            string           `json:"sni_fake,omitempty"`
+	ConnectPolicy      string           `json:"connect_policy,omitempty"`
+	SniPolicy          string           `json:"sni_policy,omitempty"`
+	Enabled            bool             `json:"enabled"`
+	SiteID             string           `json:"site_id,omitempty"`
+	ECHEnabled         bool             `json:"ech_enabled"`
+	ECHProfileID       string           `json:"ech_profile_id,omitempty"`
+	UseCFPool          bool             `json:"use_cf_pool"`
+	ECHDiscoveryDomain string           `json:"ech_discovery_domain,omitempty"`
+	ECHDoHUpstream     string           `json:"ech_doh_upstream,omitempty"`
+	FallbackMode       string           `json:"fallback_mode,omitempty"`
+	CertVerify         CertVerifyConfig `json:"cert_verify,omitempty"`
+	ECHAutoUpdate      bool             `json:"ech_auto_update"`
+	AutoRouted         bool             `json:"auto_routed,omitempty"`
 }
 
-type TUNStatus struct {
-	Supported bool   `json:"supported"`
-	Running   bool   `json:"running"`
-	Enabled   bool   `json:"enabled"`
-	Driver    string `json:"driver,omitempty"`
-	Message   string `json:"message,omitempty"`
+type SiteGroup struct {
+	ID                 string           `json:"id"`
+	Name               string           `json:"name"`
+	Mode               string           `json:"mode"`
+	DNSMode            string           `json:"dns_mode,omitempty"`
+	SniFake            string           `json:"sni_fake,omitempty"`
+	ConnectPolicy      string           `json:"connect_policy,omitempty"`
+	SniPolicy          string           `json:"sni_policy,omitempty"`
+	Domains            []string         `json:"domains"`
+	ECHEnabled         bool             `json:"ech_enabled"`
+	ECHProfileID       string           `json:"ech_profile_id,omitempty"`
+	UseCFPool          bool             `json:"use_cf_pool"`
+	ECHDiscoveryDomain string           `json:"ech_discovery_domain,omitempty"`
+	ECHDoHUpstream     string           `json:"ech_doh_upstream,omitempty"`
+	FallbackMode       string           `json:"fallback_mode,omitempty"`
+	CertVerify         CertVerifyConfig `json:"cert_verify,omitempty"`
+	Website            string           `json:"website,omitempty"`
+	Enabled            bool             `json:"enabled"`
+	Upstream           string           `json:"upstream,omitempty"`
+	Upstreams          []string         `json:"upstreams,omitempty"`
+	ECHDomain          string           `json:"ech_domain,omitempty"`
 }
 
-type RulesConfig struct {
-	SiteGroups  []SiteGroup  `json:"site_groups"`
-	Upstreams   []Upstream   `json:"upstreams"`
-	DNSNodes    []DNSNode    `json:"dns_nodes,omitempty"`
-	ECHProfiles []ECHProfile `json:"ech_profiles,omitempty"`
+type Upstream struct {
+	ID        string   `json:"id"`
+	Name      string   `json:"name"`
+	Type      string   `json:"type"` // "cf_preferred"
+	Addresses []string `json:"addresses"`
+	Enabled   bool     `json:"enabled"`
+	Address   string   `json:"address,omitempty"`
 }
 
-// DNSNode defines a DoH upstream with optional SNI obfuscation.
-// It reuses the same dial-level concepts as proxy rules (SNI spoofing, ECH, QUIC, static IPs).
-type DNSNode struct {
-	ID            string           `json:"id"`
-	Name          string           `json:"name"`
-	URL           string           `json:"url"`                      // DoH endpoint
-	SNI           string           `json:"sni,omitempty"`            // Frontend SNI (spoofed domain for TLS ClientHello)
-	IPs           []string         `json:"ips,omitempty"`            // Static backend IPs
-	ECHEnabled    bool             `json:"ech_enabled"`              // Enable ECH for this DoH connection
-	ECHProfileID  string           `json:"ech_profile_id,omitempty"` // ECH profile to use
-	ECHAutoUpdate bool             `json:"ech_auto_update"`          // Enable auto refresh
-	QUIC          bool             `json:"quic"`                     // Use QUIC/HTTP3 transport
-	CertVerify    CertVerifyConfig `json:"cert_verify"`              // Advanced certificate verification
-	Enabled       bool             `json:"enabled"`
+type ProxyServer struct {
+	startStopMu   sync.Mutex
+	Server        *http.Server
+	listenAddr    string
+	socks5Addr    string
+	rules         *RuleManager
+	running       bool
+	mode          string
+	mu            sync.RWMutex
+	certCacheMu   sync.RWMutex
+	certCache     map[string]*tls.Certificate
+	Fingerprint   string
+	certGenerator CertGenerator
+	dohResolver   *dohresolver.FailoverResolver
+	cfPool        *cfpool.CloudflarePool
+	transport     *http.Transport
+	logCallback   func(string)
+	bytesDown     int64
+	bytesUp       int64
+	certBypassMap sync.Map
+	// echRuntimeConfigs holds hot-patched ECH configs after server rejection
+	// (keyed by profile ID or "host:<name>"). Preferred over persisted profiles
+	// so a retry can take effect even when profile save fails or ID is empty.
+	echRuntimeConfigs sync.Map
+	socks5Enabled     bool
+	socks5Server      *socks5.Server
+	socks5Tracker     *socks5ConnTracker
+
+	// CF IP pool 刷新回调：当池过期时由 app 层注入
+	cfRefreshCallback func()
 }
 
-type CloudflareConfig struct {
-	PreferredIPs []string `json:"preferred_ips"`
-	AutoUpdate   bool     `json:"auto_update"`
-	APIKey       string   `json:"api_key"`
+type dohProxyAdapter struct {
+	p *ProxyServer
+}
+
+func (a *dohProxyAdapter) DialWithRule(ctx context.Context, network, addr string, rule dohresolver.Rule) (net.Conn, error) {
+	r := Rule{
+		SniFake:       rule.SniFake,
+		ECHEnabled:    rule.ECHEnabled,
+		ECHProfileID:  rule.ECHProfileID,
+		ECHAutoUpdate: rule.ECHAutoUpdate,
+		CertVerify:    toProxyCertVerify(rule.CertVerify),
+	}
+	return a.p.dialWithRule(ctx, network, addr, r)
+}
+
+func (a *dohProxyAdapter) GetUConn(conn net.Conn, sni, verifyName string, rule dohresolver.Rule, allowUnknownAuthority bool, alpn string, ech []byte) *utls.UConn {
+	r := Rule{
+		SniFake:       rule.SniFake,
+		ECHEnabled:    rule.ECHEnabled,
+		ECHProfileID:  rule.ECHProfileID,
+		ECHAutoUpdate: rule.ECHAutoUpdate,
+		CertVerify:    toProxyCertVerify(rule.CertVerify),
+	}
+	return a.p.GetUConn(conn, sni, verifyName, r, allowUnknownAuthority, alpn, ech)
+}
+
+func (a *dohProxyAdapter) ResolveRuleECHConfig(host string, rule dohresolver.Rule) []byte {
+	r := Rule{
+		SniFake:       rule.SniFake,
+		ECHEnabled:    rule.ECHEnabled,
+		ECHProfileID:  rule.ECHProfileID,
+		ECHAutoUpdate: rule.ECHAutoUpdate,
+		CertVerify:    toProxyCertVerify(rule.CertVerify),
+	}
+	return a.p.resolveRuleECHConfig(host, r)
+}
+
+func (a *dohProxyAdapter) UpdateECHProfileConfig(profileID string, configBytes []byte) {
+	a.p.UpdateECHProfileConfig(profileID, configBytes)
+}
+
+func NewProxyServer(addr string) *ProxyServer {
+	dialer := &net.Dialer{
+		Timeout:   10 * time.Second,
+		KeepAlive: 30 * time.Second,
+	}
+	transport := &http.Transport{
+		DialContext:           dialer.DialContext,
+		ForceAttemptHTTP2:     true,
+		MaxIdleConns:          100,
+		IdleConnTimeout:       90 * time.Second,
+		TLSHandshakeTimeout:   10 * time.Second,
+		ExpectContinueTimeout: 1 * time.Second,
+	}
+
+	p := &ProxyServer{
+		listenAddr:  addr,
+		certCache:   make(map[string]*tls.Certificate),
+		mode:        "direct",
+		transport:   transport,
+	}
+
+	p.dohResolver = dohresolver.NewFailoverResolver(&dohProxyAdapter{p: p}, func() []dohresolver.DNSNode {
+		if p.rules == nil {
+			return nil
+		}
+		var nodes []dohresolver.DNSNode
+		for _, node := range p.rules.GetDNSNodes() {
+			nodes = append(nodes, dohresolver.DNSNode{
+				Name:          node.Name,
+				URL:           node.URL,
+				SNI:           node.SNI,
+				IPs:           node.IPs,
+				ECHEnabled:    node.ECHEnabled,
+				ECHProfileID:  node.ECHProfileID,
+				ECHAutoUpdate: node.ECHAutoUpdate,
+				QUIC:          node.QUIC,
+				Enabled:       node.Enabled,
+				CertVerify: toDohCertVerify(node.CertVerify),
+			})
+		}
+		return nodes
+	})
+
+	return p
+}
+
+func (p *ProxyServer) SetRuleManager(rm *RuleManager) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.rules = rm
+}
+
+func (p *ProxyServer) SetCertGenerator(cg CertGenerator) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.certGenerator = cg
+}
+
+func (p *ProxyServer) SetLogCallback(cb func(string)) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.logCallback = cb
+}
+
+func (p *ProxyServer) tracef(format string, args ...interface{}) {
+	p.mu.RLock()
+	cb := p.logCallback
+	p.mu.RUnlock()
+	if cb != nil {
+		cb(fmt.Sprintf(format, args...))
+	} else {
+		log.Printf(format, args...)
+	}
+}
+
+func (p *ProxyServer) UpdateCloudflareConfig(cfg CloudflareConfig) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
+	if cfg.AutoUpdate {
+		p.updateCloudflareIPPoolLocked(cfg.PreferredIPs)
+	}
+}
+
+func (p *ProxyServer) UpdateCloudflareIPPool(ips []string) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.updateCloudflareIPPoolLocked(ips)
+}
+
+func (p *ProxyServer) updateCloudflareIPPoolLocked(ips []string) {
+	if p.cfPool == nil {
+		p.cfPool = cfpool.NewCloudflarePool(ips)
+		return
+	}
+	p.cfPool.UpdateIPs(ips)
+}
+
+func (p *ProxyServer) SetCFPoolFetchTime(t time.Time) {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+	if p.cfPool != nil {
+		p.cfPool.SetLastFetchTime(t)
+	}
+}
+
+// CFPoolUsable returns true when the CF pool exists, has IPs, and is not stale (>1 day).
+// If stale, it fires an async refresh in the background.
+func (p *ProxyServer) CFPoolUsable() bool {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+	if p.cfPool == nil {
+		return false
+	}
+	if !p.cfPool.HasIPs() {
+		return false
+	}
+	if p.cfPool.IsStale(24 * time.Hour) {
+		return false
+	}
+	return true
+}
+
+// maybeRefreshCFPoolAsync triggers an async IP refresh when the pool is stale.
+func (p *ProxyServer) maybeRefreshCFPoolAsync() {
+	p.mu.RLock()
+	stale := p.cfPool == nil || !p.cfPool.HasIPs() || p.cfPool.IsStale(24*time.Hour)
+	cb := p.cfRefreshCallback
+	p.mu.RUnlock()
+	if !stale || cb == nil {
+		return
+	}
+	go cb()
+}
+
+func (p *ProxyServer) SetCFRefreshCallback(cb func()) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.cfRefreshCallback = cb
+}
+
+func (p *ProxyServer) SetListenAddr(addr string) error {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if p.running {
+		return fmt.Errorf("cannot change address while proxy is running")
+	}
+	p.listenAddr = addr
+	return nil
+}
+
+func (p *ProxyServer) TriggerCFHealthCheck() {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+	if p.cfPool != nil {
+		p.cfPool.TriggerHealthCheck()
+	}
+}
+
+func (p *ProxyServer) RemoveInvalidCFIPs() int {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if p.cfPool != nil {
+		return p.cfPool.RemoveInvalidIPs()
+	}
+	return 0
+}
+
+func (p *ProxyServer) GetAllCFIPsWithStats() []*cfpool.IPStats {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+	if p.cfPool != nil {
+		return p.cfPool.GetAllIPsWithStats()
+	}
+	return nil
+}
+
+func (p *ProxyServer) GetListenAddr() string {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+	return p.listenAddr
+}
+
+func (p *ProxyServer) GetDoHResolver() *dohresolver.FailoverResolver {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+	return p.dohResolver
+}
+
+func (p *ProxyServer) UpdateECHProfileConfig(profileID string, configBytes []byte) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if p.rules != nil {
+		p.rules.UpdateECHProfileConfig(profileID, configBytes)
+	}
+}
+
+func (p *ProxyServer) GetMode() string {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+	return p.mode
+}
+
+func (p *ProxyServer) SetMode(mode string) error {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.mode = mode
+	return nil
+}
+
+func (p *ProxyServer) IsRunning() bool {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+	return p.running
+}
+
+func (p *ProxyServer) Start() error {
+	p.startStopMu.Lock()
+	defer p.startStopMu.Unlock()
+
+	p.mu.Lock()
+	if p.running {
+		p.mu.Unlock()
+		return nil
+	}
+
+	srv := &http.Server{
+		Addr:         p.listenAddr,
+		Handler:      http.HandlerFunc(p.handleRequest),
+		ReadTimeout:  30 * time.Second,
+		WriteTimeout: 30 * time.Second,
+	}
+	listenAddr := p.listenAddr
+
+	if p.cfPool != nil {
+		p.cfPool.Start()
+	}
+
+	p.mu.Unlock()
+
+	ln, err := net.Listen("tcp", listenAddr)
+	if err != nil {
+		if p.cfPool != nil {
+			p.cfPool.Stop()
+		}
+		return fmt.Errorf("failed to listen on %s: %w", listenAddr, err)
+	}
+
+	p.mu.Lock()
+	if p.running {
+		p.mu.Unlock()
+		_ = ln.Close()
+		return nil
+	}
+	p.Server = srv
+	p.running = true
+	p.mu.Unlock()
+
+	// Periodic cert cache cleanup (异步化运行，解决永久阻塞)
+	go p.certCacheCleanup(context.Background())
+
+	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				log.Printf("[Proxy] panic in HTTP server: %v", r)
+			}
+		}()
+		log.Printf("[Proxy] HTTP server started on %s", listenAddr)
+
+		tl := &trackingListener{
+			Listener: ln,
+			proxy:    p,
+		}
+
+		if err := srv.Serve(tl); err != nil && err != http.ErrServerClosed {
+			log.Printf("[Proxy] HTTP server error: %v", err)
+		}
+
+		p.mu.Lock()
+		if p.Server == srv {
+			p.running = false
+		}
+		p.mu.Unlock()
+	}()
+
+	if p.socks5Enabled {
+		p.startSocks5()
+	}
+
+	return nil
+}
+
+func (p *ProxyServer) Stop() error {
+	p.startStopMu.Lock()
+	defer p.startStopMu.Unlock()
+
+	p.mu.Lock()
+	if !p.running {
+		p.mu.Unlock()
+		return nil
+	}
+	p.running = false
+
+	if p.socks5Tracker != nil {
+		_ = p.socks5Tracker.Close()
+		p.socks5Tracker = nil
+	}
+
+	if p.cfPool != nil {
+		p.cfPool.Stop()
+	}
+
+	var err error
+	if p.Server != nil {
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		defer cancel()
+		err = p.Server.Shutdown(ctx)
+		p.Server = nil
+	}
+	p.mu.Unlock()
+
+	p.tracef("[Proxy] Server stopped")
+	return err
+}
+
+func (p *ProxyServer) SetSocks5Addr(addr string) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.socks5Addr = addr
+}
+
+func (p *ProxyServer) SetSocks5Enabled(enabled bool) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.socks5Enabled = enabled
+	if p.running {
+		if enabled {
+			p.startSocks5()
+		} else {
+			if p.socks5Tracker != nil {
+				_ = p.socks5Tracker.Close()
+				p.socks5Tracker = nil
+			}
+		}
+	}
+}
+
+func (p *ProxyServer) IsSocks5Enabled() bool {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+	return p.socks5Enabled
 }
 
 type trackingListener struct {
@@ -268,78 +620,6 @@ func (c *statConn) Write(p []byte) (n int, err error) {
 	return n, err
 }
 
-type singleConnListener struct {
-	conn     net.Conn
-	once     sync.Once
-	done     chan struct{}
-	doneOnce sync.Once
-}
-
-func (l *singleConnListener) Accept() (net.Conn, error) {
-	var accepted bool
-	l.once.Do(func() { accepted = true })
-	if accepted {
-		return &notifyCloseConn{
-			Conn: l.conn,
-			onClose: func() {
-				l.doneOnce.Do(func() { close(l.done) })
-			},
-		}, nil
-	}
-	<-l.done
-	return nil, io.EOF
-}
-func (l *singleConnListener) Close() error {
-	l.doneOnce.Do(func() { close(l.done) })
-	return nil
-}
-func (l *singleConnListener) Addr() net.Addr { return l.conn.LocalAddr() }
-
-type notifyCloseConn struct {
-	net.Conn
-	onClose func()
-}
-
-func (c *notifyCloseConn) Close() error {
-	if c.onClose != nil {
-		c.onClose()
-	}
-	return c.Conn.Close()
-}
-
-type roundTripperFunc func(*http.Request) (*http.Response, error)
-
-func (f roundTripperFunc) RoundTrip(req *http.Request) (*http.Response, error) { return f(req) }
-
-var hopByHopHeaders = []string{
-	"Proxy-Connection",
-	"Keep-Alive",
-	"Proxy-Authenticate",
-	"Proxy-Authorization",
-	"Te",
-	"Trailer",
-	"Transfer-Encoding",
-}
-
-func removeHopByHopHeaders(h http.Header) {
-	if h == nil {
-		return
-	}
-	// Preserve Connection and Upgrade headers for WebSocket support
-	if c := h.Get("Connection"); c != "" {
-		for _, f := range strings.Split(c, ",") {
-			if name := textproto.TrimString(f); name != "" {
-				if !strings.EqualFold(name, "Upgrade") {
-					h.Del(name)
-				}
-			}
-		}
-	}
-	for _, name := range hopByHopHeaders {
-		h.Del(name)
-	}
-}
-
 func (l *trackingListener) Accept() (net.Conn, error) {
 	conn, err := l.Listener.Accept()
 	if err != nil {
@@ -352,54 +632,6 @@ func (l *trackingListener) Accept() (net.Conn, error) {
 	}, nil
 }
 
-type Rule struct {
-	Domain             string
-	Upstream           string
-	Upstreams          []string
-	DNSMode            string
-	Mode               string // "mitm", "transparent", "tls-rf", "quic", "server", "direct"
-	SniFake            string
-	ConnectPolicy      string // "", "tunnel_origin", "tunnel_upstream", "mitm", "direct"
-	SniPolicy          string // "", "auto", "original", "fake", "upstream", "none"
-	Enabled            bool
-	SiteID             string
-	ECHEnabled         bool
-	ECHProfileID       string
-	UseCFPool          bool
-	ECHDiscoveryDomain string
-	ECHDoHUpstream     string
-	ECHAutoUpdate      bool
-	CertVerify         CertVerifyConfig
-	AutoRouted         bool   // true if generated by AutoRouter
-	FallbackMode       string // "server" fallback transport
-}
-
-func mergeRule(base, overlay Rule) Rule {
-	out := base
-	if strings.TrimSpace(overlay.Upstream) != "" {
-		out.Upstream = overlay.Upstream
-	}
-	if len(overlay.Upstreams) > 0 {
-		out.Upstreams = append([]string(nil), overlay.Upstreams...)
-	}
-	if strings.TrimSpace(overlay.DNSMode) != "" {
-		out.DNSMode = overlay.DNSMode
-	}
-	if strings.TrimSpace(overlay.SniFake) != "" {
-		out.SniFake = overlay.SniFake
-	}
-	if strings.TrimSpace(overlay.ConnectPolicy) != "" {
-		out.ConnectPolicy = overlay.ConnectPolicy
-	}
-	if strings.TrimSpace(overlay.SniPolicy) != "" {
-		out.SniPolicy = overlay.SniPolicy
-	}
-	if !overlay.CertVerify.IsZero() {
-		out.CertVerify = overlay.CertVerify
-	}
-	return out
-}
-
 type bufferedReadConn struct {
 	net.Conn
 	reader io.Reader
@@ -409,8 +641,6 @@ func (c *bufferedReadConn) Read(p []byte) (int, error) {
 	return c.reader.Read(p)
 }
 
-// WriteTo must be implemented to prevent io.Copy from using the embedded Conn's WriteTo method,
-// which would bypass c.reader (and the buffered data) and read directly from the file descriptor.
 func (c *bufferedReadConn) WriteTo(w io.Writer) (int64, error) {
 	return io.Copy(w, c.reader)
 }
@@ -427,7 +657,6 @@ func wrapHijackedConn(conn net.Conn, rw *bufio.ReadWriter) net.Conn {
 	if rw == nil || rw.Reader == nil || rw.Reader.Buffered() == 0 {
 		return conn
 	}
-	// Extract buffered bytes to avoid sticking with bufio.Reader
 	n := rw.Reader.Buffered()
 	buffered := make([]byte, n)
 	_, _ = rw.Reader.Read(buffered)
@@ -438,23 +667,86 @@ func wrapHijackedConn(conn net.Conn, rw *bufio.ReadWriter) net.Conn {
 	}
 }
 
-func normalizeHost(hostport string) string {
-	hostport = strings.TrimSpace(hostport)
-	if hostport == "" {
-		return ""
-	}
+type socks5ConnTracker struct {
+	net.Listener
+	conns sync.Map
+}
 
-	host, _, err := net.SplitHostPort(hostport)
-	if err == nil {
-		return strings.ToLower(strings.TrimSpace(host))
+func (l *socks5ConnTracker) Accept() (net.Conn, error) {
+	conn, err := l.Listener.Accept()
+	if err != nil {
+		return nil, err
 	}
+	l.conns.Store(conn.RemoteAddr().String(), conn)
+	return &socks5TrackedConn{Conn: conn, tracker: l}, nil
+}
 
-	// Missing port or bracket-only IPv6 literals should still match rules.
-	if strings.HasPrefix(hostport, "[") && strings.HasSuffix(hostport, "]") {
-		return strings.ToLower(strings.TrimSuffix(strings.TrimPrefix(hostport, "["), "]"))
+func (l *socks5ConnTracker) unregister(addr string) {
+	l.conns.Delete(addr)
+}
+
+func (l *socks5ConnTracker) getConn(addr string) net.Conn {
+	if v, ok := l.conns.Load(addr); ok {
+		return v.(net.Conn)
 	}
+	return nil
+}
 
-	return strings.ToLower(hostport)
+func (l *socks5ConnTracker) Close() error {
+	err := l.Listener.Close()
+	l.conns.Range(func(key, value any) bool {
+		if conn, ok := value.(net.Conn); ok {
+			_ = conn.Close()
+		}
+		return true
+	})
+	return err
+}
+
+type socks5TrackedConn struct {
+	net.Conn
+	tracker *socks5ConnTracker
+}
+
+func (c *socks5TrackedConn) Close() error {
+	c.tracker.unregister(c.RemoteAddr().String())
+	return c.Conn.Close()
+}
+
+func (p *ProxyServer) startSocks5() {
+	p.socks5Server = p.newSocks5Server()
+	socks5Ln, err := net.Listen("tcp", p.socks5Addr)
+	if err != nil {
+		log.Printf("[Proxy] Failed to listen SOCKS5 on %s: %v", p.socks5Addr, err)
+		return
+	}
+	p.socks5Tracker = &socks5ConnTracker{Listener: socks5Ln}
+	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				log.Printf("[Proxy] panic in SOCKS5 server: %v", r)
+			}
+		}()
+		log.Printf("[Proxy] SOCKS5 server started on %s", p.socks5Addr)
+		if err := p.socks5Server.Serve(p.socks5Tracker); err != nil {
+			log.Printf("[Proxy] SOCKS5 server error: %v", err)
+		}
+	}()
+}
+
+func generateID() string {
+	return fmt.Sprintf("%d", time.Now().UnixNano())
+}
+
+func normalizeECHProfile(p *ECHProfile) {
+	if p == nil {
+		return
+	}
+	p.ID = strings.TrimSpace(p.ID)
+	p.Name = strings.TrimSpace(p.Name)
+	p.Config = strings.TrimSpace(p.Config)
+	p.DiscoveryDomain = strings.TrimSpace(p.DiscoveryDomain)
+	p.DoHUpstream = strings.TrimSpace(p.DoHUpstream)
 }
 
 func cleanWebsiteToken(token string) string {
@@ -555,27 +847,6 @@ func inferWebsiteFromSiteGroup(sg SiteGroup) string {
 	return "misc"
 }
 
-func ensureAddrWithPort(addr, defaultPort string) string {
-	addr = strings.TrimSpace(addr)
-	if addr == "" {
-		return ""
-	}
-
-	host, port, err := net.SplitHostPort(addr)
-	if err == nil {
-		if port == "" {
-			port = defaultPort
-		}
-		return net.JoinHostPort(host, port)
-	}
-
-	if strings.HasPrefix(addr, "[") && strings.HasSuffix(addr, "]") {
-		return net.JoinHostPort(strings.TrimSuffix(strings.TrimPrefix(addr, "["), "]"), defaultPort)
-	}
-
-	return net.JoinHostPort(addr, defaultPort)
-}
-
 func resolveUpstreamHost(targetHost, upstream string) string {
 	upstream = strings.TrimSpace(upstream)
 	if upstream == "" {
@@ -614,11 +885,19 @@ func splitUpstreamCandidates(targetHost, upstream, defaultPort string) []string 
 	if resolved == "" {
 		return nil
 	}
+	// Support Chinese commas, semicolons, and spaces as delimiters
+	resolved = strings.ReplaceAll(resolved, "，", ",")
+	resolved = strings.ReplaceAll(resolved, ";", ",")
+	resolved = strings.ReplaceAll(resolved, " ", ",")
 	parts := strings.Split(resolved, ",")
 	out := make([]string, 0, len(parts))
 	seen := map[string]struct{}{}
 	for _, p := range parts {
-		addr := ensureAddrWithPort(strings.TrimSpace(p), defaultPort)
+		p = strings.TrimSpace(p)
+		if p == "" {
+			continue
+		}
+		addr := ensureAddrWithPort(p, defaultPort)
 		if addr == "" {
 			continue
 		}
@@ -652,8 +931,6 @@ func hostMatchesDomain(host, domain string) bool {
 	domain = strings.TrimPrefix(domain, "*.")
 	domain = strings.TrimSuffix(domain, "$")
 
-	// Extended pattern syntax: google.com.* (or any base.*)
-	// Matches google.com.sg, www.google.com.sg, google.com.hk, etc.
 	if strings.HasSuffix(domain, ".*") {
 		base := strings.TrimSuffix(domain, ".*")
 		if base == "" {
@@ -710,7 +987,6 @@ func domainMatchScore(host, domain string) int {
 	domain = strings.TrimPrefix(domain, "*.")
 	domain = strings.TrimSuffix(domain, "$")
 
-	// Pattern base.* => give base length score when matched.
 	if strings.HasSuffix(domain, ".*") {
 		base := strings.TrimSuffix(domain, ".*")
 		if base == "" {
@@ -745,1124 +1021,16 @@ func domainMatchScore(host, domain string) int {
 	return -1
 }
 
-func isLiteralIP(host string) bool {
-	return net.ParseIP(strings.Trim(host, "[]")) != nil
+func normalizeTUNConfig(cfg TUNConfig) TUNConfig {
+	if cfg.MTU <= 0 {
+		cfg.MTU = 9000
+	}
+	cfg.StrictRoute = false
+	return cfg
 }
 
-func normalizeDNSMode(mode string) string {
-	switch strings.ToLower(strings.TrimSpace(mode)) {
-	case "", "system":
-		return ""
-	case "prefer_ipv4", "prefer_ipv6", "ipv4_only", "ipv6_only":
-		return strings.ToLower(strings.TrimSpace(mode))
-	default:
-		return ""
-	}
-}
-
-func reorderIPsByDNSMode(ips []net.IP, mode string) []net.IP {
-	if len(ips) == 0 {
-		return nil
-	}
-
-	mode = normalizeDNSMode(mode)
-	if mode == "" {
-		out := make([]net.IP, len(ips))
-		copy(out, ips)
-		return out
-	}
-
-	var v4s, v6s []net.IP
-	for _, ip := range ips {
-		if ip == nil {
-			continue
-		}
-		if ip.To4() != nil {
-			v4s = append(v4s, ip)
-		} else {
-			v6s = append(v6s, ip)
-		}
-	}
-
-	switch mode {
-	case "prefer_ipv4":
-		return append(append([]net.IP{}, v4s...), v6s...)
-	case "prefer_ipv6":
-		return append(append([]net.IP{}, v6s...), v4s...)
-	case "ipv4_only":
-		return append([]net.IP{}, v4s...)
-	case "ipv6_only":
-		return append([]net.IP{}, v6s...)
-	default:
-		out := make([]net.IP, len(ips))
-		copy(out, ips)
-		return out
-	}
-}
-
-func dedupeDialCandidates(candidates []string) []string {
-	if len(candidates) == 0 {
-		return nil
-	}
-	out := make([]string, 0, len(candidates))
-	seen := make(map[string]struct{}, len(candidates))
-	for _, candidate := range candidates {
-		candidate = strings.TrimSpace(candidate)
-		if candidate == "" {
-			continue
-		}
-		if _, ok := seen[candidate]; ok {
-			continue
-		}
-		seen[candidate] = struct{}{}
-		out = append(out, candidate)
-	}
-	return out
-}
-
-func (p *ProxyServer) resolveDomainCandidates(ctx context.Context, host, port, dnsMode string) []string {
-	host = normalizeHost(host)
-	if host == "" || isLiteralIP(host) {
-		return nil
-	}
-	if p.dohResolver == nil {
-		return nil
-	}
-
-	ips, err := p.dohResolver.ResolveIPAddrs(ctx, host)
-	if err != nil {
-		log.Printf("[DNS] Resolve failed for %s via Failover DNS: %v", host, err)
-		return nil
-	}
-
-	ordered := reorderIPsByDNSMode(ips, dnsMode)
-	if len(ordered) == 0 {
-		log.Printf("[DNS] Resolve returned no usable addresses for %s (mode=%s)", host, normalizeDNSMode(dnsMode))
-		return nil
-	}
-
-	candidates := make([]string, 0, len(ordered))
-	for _, ip := range ordered {
-		candidates = append(candidates, net.JoinHostPort(ip.String(), port))
-	}
-	log.Printf("[DNS] Resolved %s via Failover DNS mode=%s -> %v", host, normalizeDNSMode(dnsMode), candidates)
-	return dedupeDialCandidates(candidates)
-}
-
-func (p *ProxyServer) buildDialCandidates(ctx context.Context, targetHost, targetAddr string, rule Rule, effectiveMode string) []string {
-	resolvedUpstream := resolveRuleUpstream(targetHost, rule)
-	isWarpRoute := strings.EqualFold(strings.TrimSpace(rule.Upstream), "warp")
-	defaultPort := "443"
-
-	if isWarpRoute {
-		if resolved := p.resolveDomainCandidates(ctx, targetHost, defaultPort, rule.DNSMode); len(resolved) > 0 {
-			return resolved
-		}
-		return []string{targetAddr}
-	}
-
-	if effectiveMode == "mitm" || effectiveMode == "transparent" || effectiveMode == "tls-rf" || effectiveMode == "quic" {
-		if strings.TrimSpace(resolvedUpstream) != "" {
-			upstreamCandidates := splitUpstreamCandidates(targetHost, resolvedUpstream, defaultPort)
-			if len(upstreamCandidates) == 0 {
-				return []string{targetAddr}
-			}
-
-			firstHost := firstUpstreamHost(targetHost, resolvedUpstream)
-			if firstHost != "" && !isLiteralIP(firstHost) {
-				if resolved := p.resolveDomainCandidates(ctx, firstHost, defaultPort, rule.DNSMode); len(resolved) > 0 {
-					return resolved
-				}
-			}
-			return upstreamCandidates
-		}
-
-		if rule.UseCFPool && p.cfPool != nil {
-			topIPs := p.cfPool.GetTopIPs(5)
-			if len(topIPs) > 0 {
-				prefs := make([]string, 0, len(topIPs))
-				for _, ip := range topIPs {
-					prefs = append(prefs, net.JoinHostPort(ip, defaultPort))
-				}
-				return dedupeDialCandidates(prefs)
-			}
-		}
-
-		if resolved := p.resolveDomainCandidates(ctx, targetHost, defaultPort, rule.DNSMode); len(resolved) > 0 {
-			return resolved
-		}
-	}
-
-	return []string{targetAddr}
-}
-
-func chooseUpstreamSNI(targetHost string, rule Rule) string {
-	targetHost = normalizeHost(targetHost)
-	hostAsToken := strings.Trim(targetHost, "[]")
-	hostAsToken = strings.ReplaceAll(hostAsToken, ".", "-")
-	hostAsToken = strings.ReplaceAll(hostAsToken, ":", "-")
-	hostAsToken = strings.TrimSpace(hostAsToken)
-	if hostAsToken == "" {
-		hostAsToken = "g-cn"
-	}
-	resolvedUpstream := resolveRuleUpstream(targetHost, rule)
-
-	switch strings.ToLower(strings.TrimSpace(rule.SniPolicy)) {
-	case "none":
-		// Explicitly disable SNI extension for upstream TLS ClientHello.
-		return ""
-	case "original":
-		return targetHost
-	case "fake":
-		if strings.TrimSpace(rule.SniFake) != "" {
-			return rule.SniFake
-		}
-		// In ECH mode, outer SNI must be a valid domain name (not a token like "linux-do").
-		// In non-ECH mode, hostAsToken is used for SNI camouflage to bypass DPI.
-		if rule.ECHEnabled {
-			return targetHost
-		}
-		return hostAsToken
-	case "upstream":
-		if upstreamHost := firstUpstreamHost(targetHost, resolvedUpstream); upstreamHost != "" && !isLiteralIP(upstreamHost) {
-			return upstreamHost
-		}
-		return targetHost
-	}
-
-	// MITM mode's core behavior: if fake SNI is configured, always use it.
-	if strings.TrimSpace(rule.SniFake) != "" {
-		return rule.SniFake
-	}
-	if resolvedUpstream != "" {
-		if upstreamHost := firstUpstreamHost(targetHost, resolvedUpstream); upstreamHost != "" {
-			if !isLiteralIP(upstreamHost) && upstreamHost != targetHost {
-				return upstreamHost
-			}
-		}
-	}
-	// Auto mode should be predictable: when no fake/upstream SNI is available,
-	// fall back to original host instead of implicit camouflage.
-	return targetHost
-}
-
-func NewProxyServer(addr string) *ProxyServer {
-	p := &ProxyServer{
-		listenAddr:  addr,
-		certCache:   make(map[string]*tls.Certificate),
-		Fingerprint: "chrome", // default
-		mode:        "mitm",   // default
-		transport: &http.Transport{
-			Proxy: nil, // We are the proxy
-			DialContext: (&net.Dialer{
-				Timeout:   30 * time.Second,
-				KeepAlive: 30 * time.Second,
-				DualStack: true,
-			}).DialContext,
-			MaxIdleConns:          200,
-			IdleConnTimeout:       120 * time.Second,
-			TLSHandshakeTimeout:   8 * time.Second,
-			ExpectContinueTimeout: 1 * time.Second,
-			MaxIdleConnsPerHost:   50,
-			MaxConnsPerHost:       100,
-			ResponseHeaderTimeout: 30 * time.Second,
-			WriteBufferSize:       64 * 1024,
-			ReadBufferSize:        64 * 1024,
-		},
-		// dohResolver is initialized separately down below to inject proxy reference
-		cfPool: NewCloudflarePool([]string{}),
-	}
-	p.dohResolver = NewFailoverResolver(p)
-	p.rules = NewRuleManager("", "")
-	return p
-}
-
-func (p *ProxyServer) SetRuleManager(rm *RuleManager) {
-	p.mu.Lock()
-	p.rules = rm
-	if rm != nil {
-		cfg := rm.GetCloudflareConfig()
-		if p.cfPool != nil {
-			p.cfPool.UpdateIPs(cfg.PreferredIPs)
-		}
-	}
-	p.mu.Unlock()
-}
-
-func (p *ProxyServer) SetCertGenerator(cg CertGenerator) {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	p.certGenerator = cg
-}
-
-func (p *ProxyServer) SetLogCallback(cb func(string)) {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	p.logCallback = cb
-}
-
-func (p *ProxyServer) tracef(format string, args ...interface{}) {
-	msg := fmt.Sprintf(format, args...)
-	log.Printf("%s", msg)
-
-	p.mu.RLock()
-	cb := p.logCallback
-	p.mu.RUnlock()
-	if cb != nil {
-		cb(msg)
-	}
-}
-
-func (p *ProxyServer) UpdateCloudflareConfig(cfg CloudflareConfig) {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	if p.cfPool != nil {
-		p.cfPool.UpdateIPs(cfg.PreferredIPs)
-	}
-}
-
-func (p *ProxyServer) UpdateCloudflareIPPool(ips []string) {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	if p.cfPool != nil {
-		p.cfPool.UpdateIPs(ips)
-	}
-}
-
-func (p *ProxyServer) SetListenAddr(addr string) error {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	if p.running {
-		return fmt.Errorf("cannot change address while proxy is running")
-	}
-	p.listenAddr = addr
-	return nil
-}
-
-func (p *ProxyServer) TriggerCFHealthCheck() {
-	p.mu.RLock()
-	defer p.mu.RUnlock()
-	if p.cfPool != nil {
-		p.cfPool.TriggerHealthCheck()
-	}
-}
-
-func (p *ProxyServer) RemoveInvalidCFIPs() int {
-	p.mu.RLock()
-	defer p.mu.RUnlock()
-	if p.cfPool != nil {
-		return p.cfPool.RemoveInvalidIPs()
-	}
-	return 0
-}
-
-func (p *ProxyServer) GetAllCFIPsWithStats() []*IPStats {
-	p.mu.RLock()
-	defer p.mu.RUnlock()
-	if p.cfPool != nil {
-		return p.cfPool.GetAllIPsWithStats()
-	}
-	return nil
-}
-
-func (p *ProxyServer) GetListenAddr() string {
-	p.mu.RLock()
-	defer p.mu.RUnlock()
-	return p.listenAddr
-}
-
-func (p *ProxyServer) GetDoHResolver() *FailoverResolver {
-	p.mu.RLock()
-	defer p.mu.RUnlock()
-	return p.dohResolver
-}
-
-func (p *ProxyServer) UpdateECHProfileConfig(profileID string, configBytes []byte) {
-	if p.rules == nil {
-		return
-	}
-	_ = p.rules.UpdateECHProfileConfig(profileID, configBytes)
-}
-
-func (p *ProxyServer) SetMode(mode string) error {
-	mode = strings.ToLower(strings.TrimSpace(mode))
-	if mode != "mitm" && mode != "transparent" && mode != "tls-rf" && mode != "quic" {
-		return fmt.Errorf("invalid proxy mode: %s", mode)
-	}
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	p.mode = mode
-	return nil
-}
-
-func (p *ProxyServer) GetMode() string {
-	p.mu.RLock()
-	defer p.mu.RUnlock()
-	return p.mode
-}
-
-func (p *ProxyServer) Start() error {
-	p.startStopMu.Lock()
-	defer p.startStopMu.Unlock()
-
-	p.mu.Lock()
-	if p.running {
-		p.mu.Unlock()
-		return nil
-	}
-
-	srv := &http.Server{
-		Addr:         p.listenAddr,
-		Handler:      http.HandlerFunc(p.handleRequest),
-		ReadTimeout:  30 * time.Second,
-		WriteTimeout: 30 * time.Second,
-	}
-	listenAddr := p.listenAddr
-
-	if p.cfPool != nil {
-		p.cfPool.Start()
-	}
-
-	p.mu.Unlock()
-
-	ln, err := net.Listen("tcp", listenAddr)
-	if err != nil {
-		if p.cfPool != nil {
-			p.cfPool.Stop()
-		}
-		return fmt.Errorf("failed to listen on %s: %w", listenAddr, err)
-	}
-
-	p.mu.Lock()
-	if p.running {
-		p.mu.Unlock()
-		_ = ln.Close()
-		return nil
-	}
-	p.Server = srv
-	p.running = true
-	p.mu.Unlock()
-
-	// Periodic cert cache cleanup
-	p.certCacheCleanup(context.Background())
-
-	go func() {
-		defer func() {
-			if r := recover(); r != nil {
-				log.Printf("[Proxy] panic in HTTP server: %v", r)
-			}
-		}()
-		log.Printf("[Proxy] HTTP server started on %s", listenAddr)
-
-		tl := &trackingListener{
-			Listener: ln,
-			proxy:    p,
-		}
-
-		if err := srv.Serve(tl); err != nil && err != http.ErrServerClosed {
-			log.Printf("[Proxy] HTTP server error: %v", err)
-		}
-
-		p.mu.Lock()
-		if p.Server == srv {
-			p.running = false
-		}
-		p.mu.Unlock()
-	}()
-
-	if p.socks5Enabled {
-		p.startSocks5()
-	}
-
-	return nil
-}
-
-type socks5ConnTracker struct {
-	net.Listener
-	conns sync.Map
-}
-
-func (l *socks5ConnTracker) Accept() (net.Conn, error) {
-	conn, err := l.Listener.Accept()
-	if err != nil {
-		return nil, err
-	}
-	l.conns.Store(conn.RemoteAddr().String(), conn)
-	return &socks5TrackedConn{Conn: conn, tracker: l}, nil
-}
-
-func (l *socks5ConnTracker) unregister(addr string) {
-	l.conns.Delete(addr)
-}
-
-func (l *socks5ConnTracker) getConn(addr string) net.Conn {
-	if v, ok := l.conns.Load(addr); ok {
-		return v.(net.Conn)
-	}
-	return nil
-}
-
-func (l *socks5ConnTracker) Close() error {
-	err := l.Listener.Close()
-	l.conns.Range(func(key, value any) bool {
-		if conn, ok := value.(net.Conn); ok {
-			_ = conn.Close()
-		}
-		return true
-	})
-	return err
-}
-
-type socks5TrackedConn struct {
-	net.Conn
-	tracker *socks5ConnTracker
-}
-
-func (c *socks5TrackedConn) Close() error {
-	c.tracker.unregister(c.RemoteAddr().String())
-	return c.Conn.Close()
-}
-
-func (p *ProxyServer) startSocks5() {
-	p.socks5Server = p.newSocks5Server()
-	socks5Ln, err := net.Listen("tcp", p.socks5Addr)
-	if err != nil {
-		log.Printf("[Proxy] Failed to listen SOCKS5 on %s: %v", p.socks5Addr, err)
-		return
-	}
-	p.socks5Tracker = &socks5ConnTracker{Listener: socks5Ln}
-	go func() {
-		defer func() {
-			if r := recover(); r != nil {
-				log.Printf("[Proxy] panic in SOCKS5 server: %v", r)
-			}
-		}()
-		log.Printf("[Proxy] SOCKS5 server started on %s", p.socks5Addr)
-		if err := p.socks5Server.Serve(p.socks5Tracker); err != nil {
-			log.Printf("[Proxy] SOCKS5 server error: %v", err)
-		}
-	}()
-}
-
-func (p *ProxyServer) Stop() error {
-	p.startStopMu.Lock()
-	defer p.startStopMu.Unlock()
-
-	p.mu.Lock()
-	if !p.running {
-		p.mu.Unlock()
-		return nil
-	}
-	p.running = false
-
-	if p.socks5Tracker != nil {
-		_ = p.socks5Tracker.Close()
-		p.socks5Tracker = nil
-	}
-
-	if p.cfPool != nil {
-		p.cfPool.Stop()
-	}
-
-	if p.Server != nil {
-		srv := p.Server
-		p.Server = nil
-		p.mu.Unlock()
-		return srv.Close()
-	}
-	p.mu.Unlock()
-	return nil
-}
-
-func (p *ProxyServer) IsRunning() bool {
-	p.mu.RLock()
-	defer p.mu.RUnlock()
-	return p.running
-}
-
-func (p *ProxyServer) handleRequest(w http.ResponseWriter, req *http.Request) {
-
-	host := req.Host
-	if host == "" {
-		host = req.URL.Host
-	}
-	matchHost := normalizeHost(host)
-	mode := p.GetMode()
-	rule := p.rules.matchRule(matchHost, mode)
-	if rule.SiteID != "" {
-		p.rules.incrementRuleHit(rule.SiteID)
-	}
-
-	p.tracef("[Proxy] Request: %s -> %s (match: %s, runtime-mode: %s, rule-mode: %s)", req.Method, host, matchHost, mode, rule.Mode)
-
-	switch req.Method {
-	case http.MethodConnect:
-		p.handleConnect(w, req, rule)
-	default:
-		p.handleHTTP(w, req, rule)
-	}
-}
-
-func (p *ProxyServer) SetSocks5Enabled(enabled bool) {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	p.socks5Enabled = enabled
-}
-
-func (p *ProxyServer) IsSocks5Enabled() bool {
-	p.mu.RLock()
-	defer p.mu.RUnlock()
-	return p.socks5Enabled
-}
-
-func (p *ProxyServer) SetSocks5Addr(addr string) {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	p.socks5Addr = addr
-}
-
-func (p *ProxyServer) GetSocks5Addr() string {
-	p.mu.RLock()
-	defer p.mu.RUnlock()
-	return p.socks5Addr
-}
-
-type connectResult struct {
-	conn           net.Conn
-	clientConn     net.Conn
-	dialCandidates []string
-	dialAddr       string
-	effectiveMode  string
-	targetHost     string
-	targetAddr     string
-	rule           Rule
-}
-
-func (p *ProxyServer) prepareConnect(targetHost, targetAddr string, rule Rule) *connectResult {
-	effectiveMode := rule.Mode
-	resolvedUpstream := resolveRuleUpstream(targetHost, rule)
-
-	switch strings.ToLower(strings.TrimSpace(rule.ConnectPolicy)) {
-	case "tunnel_origin":
-		effectiveMode = "transparent"
-		resolvedUpstream = ""
-	case "tunnel_upstream":
-		effectiveMode = "transparent"
-	case "mitm":
-		effectiveMode = "mitm"
-	case "direct":
-		effectiveMode = "direct"
-		resolvedUpstream = ""
-	}
-
-	if (effectiveMode == "mitm" || effectiveMode == "transparent") && strings.TrimSpace(resolvedUpstream) != "" {
-		upHost := firstUpstreamHost(targetHost, resolvedUpstream)
-		if upHost != "" {
-			upRule := p.rules.matchRule(upHost, effectiveMode)
-			if upRule.SiteID != "" {
-				baseSite := rule.SiteID
-				rule = mergeRule(rule, upRule)
-				if strings.TrimSpace(rule.Upstream) != "" {
-					resolvedUpstream = resolveRuleUpstream(upHost, rule)
-				}
-				log.Printf("[Connect] Stage-2 upstream rule applied: host=%s site=%s over base=%s", upHost, upRule.SiteID, baseSite)
-			}
-		}
-	}
-
-	p.tracef("[Connect] target=%s host=%s mode=%s->%s upstream=%s sni_fake=%s", targetAddr, targetHost, rule.Mode, effectiveMode, resolvedUpstream, rule.SniFake)
-
-	return &connectResult{
-		effectiveMode: effectiveMode,
-		targetHost:    targetHost,
-		targetAddr:    targetAddr,
-		rule:          rule,
-	}
-}
-
-func (p *ProxyServer) dialUpstream(cr *connectResult) error {
-	dialCandidates := p.buildDialCandidates(context.Background(), cr.targetHost, cr.targetAddr, cr.rule, cr.effectiveMode)
-	if len(dialCandidates) == 0 {
-		dialCandidates = []string{cr.targetAddr}
-	}
-	cr.dialCandidates = dialCandidates
-	cr.dialAddr = dialCandidates[0]
-
-	log.Printf("[Connect] Using candidates %v for host %s", dialCandidates, cr.targetHost)
-
-	dial := func(network, addr string) (net.Conn, error) {
-		return p.dialWithRule(context.Background(), network, addr, cr.rule)
-	}
-
-	if len(dialCandidates) > 1 {
-		var lastErr error
-		for _, addr := range dialCandidates {
-			conn, err := dial("tcp", addr)
-			if err == nil {
-				cr.dialAddr = addr
-				cr.conn = conn
-				log.Printf("[Connect] Sequential dial success: %s", cr.dialAddr)
-				if cr.rule.UseCFPool && p.cfPool != nil {
-					host, _, _ := net.SplitHostPort(addr)
-					if host != "" {
-						p.cfPool.ReportSuccess(host)
-					}
-				}
-				return nil
-			}
-			log.Printf("[Connect] Connect failed to %s: %v", addr, err)
-			lastErr = err
-			if cr.rule.UseCFPool && p.cfPool != nil {
-				host, _, _ := net.SplitHostPort(addr)
-				if host != "" {
-					p.cfPool.ReportFailure(host)
-				}
-			}
-		}
-		return lastErr
-	}
-
-	for _, candidate := range dialCandidates {
-		conn, err := dial("tcp", candidate)
-		if err == nil {
-			cr.dialAddr = candidate
-			cr.conn = conn
-			return nil
-		}
-		log.Printf("[Connect] Connect failed to %s: %v", candidate, err)
-	}
-	return fmt.Errorf("all upstream connect attempts failed: %v", dialCandidates)
-}
-
-func (p *ProxyServer) handleConnect(w http.ResponseWriter, req *http.Request, rule Rule) {
-	targetAuthority := req.URL.Host
-	if targetAuthority == "" {
-		targetAuthority = req.Host
-	}
-	targetHost := normalizeHost(targetAuthority)
-	targetAddr := ensureAddrWithPort(targetAuthority, "443")
-
-	cr := p.prepareConnect(targetHost, targetAddr, rule)
-
-	if cr.effectiveMode == "direct" {
-		p.directConnect(w, req)
-		return
-	}
-
-	if cr.effectiveMode == "server" {
-		hijacker, ok := w.(http.Hijacker)
-		if !ok {
-			http.Error(w, "Hijack not supported", http.StatusInternalServerError)
-			return
-		}
-		clientConn, rw, err := hijacker.Hijack()
-		if err != nil {
-			log.Printf("[Connect] Server hijack failed: %v", err)
-			return
-		}
-		if _, err := rw.WriteString("HTTP/1.1 200 Connection Established\r\n\r\n"); err != nil {
-			clientConn.Close()
-			return
-		}
-		if err := rw.Flush(); err != nil {
-			clientConn.Close()
-			return
-		}
-		clientConn = wrapHijackedConn(clientConn, rw)
-		_ = clientConn.SetDeadline(time.Time{})
-		p.handleServerMITM(clientConn, cr.targetHost, cr.rule)
-		return
-	}
-
-	if cr.effectiveMode == "quic" {
-		hijacker, ok := w.(http.Hijacker)
-		if !ok {
-			http.Error(w, "Hijack not supported", http.StatusInternalServerError)
-			return
-		}
-		clientConn, rw, err := hijacker.Hijack()
-		if err != nil {
-			log.Printf("[Connect] QUIC hijack failed: %v", err)
-			return
-		}
-		if _, err := rw.WriteString("HTTP/1.1 200 Connection Established\r\n\r\n"); err != nil {
-			clientConn.Close()
-			return
-		}
-		if err := rw.Flush(); err != nil {
-			clientConn.Close()
-			return
-		}
-		clientConn = wrapHijackedConn(clientConn, rw)
-		_ = clientConn.SetDeadline(time.Time{})
-		p.handleQUICMITM(clientConn, cr.targetHost, cr.rule)
-		return
-	}
-
-	if err := p.dialUpstream(cr); err != nil {
-		http.Error(w, "Failed to connect to upstream", http.StatusBadGateway)
-		p.tracef("[Connect] All upstream connect attempts failed: %v", cr.dialCandidates)
-		return
-	}
-
-	hijacker, ok := w.(http.Hijacker)
-	if !ok {
-		http.Error(w, "Hijack not supported", http.StatusInternalServerError)
-		cr.conn.Close()
-		return
-	}
-
-	clientConn, rw, err := hijacker.Hijack()
-	if err != nil {
-		log.Printf("[Connect] Hijack failed: %v", err)
-		cr.conn.Close()
-		return
-	}
-	if _, err := rw.WriteString("HTTP/1.1 200 Connection Established\r\n\r\n"); err != nil {
-		log.Printf("[Connect] Write 200 failed: %v", err)
-		clientConn.Close()
-		cr.conn.Close()
-		return
-	}
-	if err := rw.Flush(); err != nil {
-		log.Printf("[Connect] Flush 200 failed: %v", err)
-		clientConn.Close()
-		cr.conn.Close()
-		return
-	}
-	clientConn = wrapHijackedConn(clientConn, rw)
-	_ = clientConn.SetDeadline(time.Time{})
-	_ = cr.conn.SetDeadline(time.Time{})
-
-	switch cr.effectiveMode {
-	case "mitm":
-		p.handleMITM(clientConn, cr.targetHost, cr.rule, cr.dialCandidates, cr.dialAddr)
-	case "tls-rf":
-		p.handleTLSFragment(clientConn, cr.conn, cr.targetHost, cr.rule)
-	default:
-		p.handleTransparent(clientConn, cr.conn, cr.targetHost, cr.rule)
-	}
-}
-
-func (p *ProxyServer) directConnect(w http.ResponseWriter, req *http.Request) {
-	targetAuthority := req.URL.Host
-	if targetAuthority == "" {
-		targetAuthority = req.Host
-	}
-	targetAddr := ensureAddrWithPort(targetAuthority, "443")
-
-	log.Printf("[Direct] Connecting to %s", targetAddr)
-
-	dialer := &net.Dialer{
-		Timeout:   10 * time.Second,
-		KeepAlive: 30 * time.Second,
-	}
-	conn, err := dialer.Dial("tcp", targetAddr)
-	if err != nil {
-		http.Error(w, "Failed to connect", http.StatusBadGateway)
-		return
-	}
-
-	hijacker, ok := w.(http.Hijacker)
-	if !ok {
-		http.Error(w, "Hijack not supported", http.StatusInternalServerError)
-		conn.Close()
-		return
-	}
-
-	clientConn, rw, err := hijacker.Hijack()
-	if err != nil {
-		conn.Close()
-		return
-	}
-	if _, err := rw.WriteString("HTTP/1.1 200 Connection Established\r\n\r\n"); err != nil {
-		clientConn.Close()
-		conn.Close()
-		return
-	}
-	if err := rw.Flush(); err != nil {
-		clientConn.Close()
-		conn.Close()
-		return
-	}
-	clientConn = wrapHijackedConn(clientConn, rw)
-	_ = clientConn.SetDeadline(time.Time{})
-	_ = conn.SetDeadline(time.Time{})
-
-	// 双向复制数据
-	var wg sync.WaitGroup
-	wg.Add(2)
-
-	// Get buffers from pool to reduce allocation
-	buf1 := tunnelBufPool.Get().(*[]byte)
-	buf2 := tunnelBufPool.Get().(*[]byte)
-
-	go func() {
-		defer wg.Done()
-		defer tunnelBufPool.Put(buf1)
-		_, _ = io.CopyBuffer(conn, clientConn, *buf1)
-		halfClose(conn)
-	}()
-	go func() {
-		defer wg.Done()
-		defer tunnelBufPool.Put(buf2)
-		_, _ = io.CopyBuffer(clientConn, conn, *buf2)
-		halfClose(clientConn)
-	}()
-	wg.Wait()
-	clientConn.Close()
-	conn.Close()
-}
-
-func (p *ProxyServer) handleHTTP(w http.ResponseWriter, req *http.Request, rule Rule) {
-	// 创建新的请求，避免修改原始请求
-	newReq := req.Clone(req.Context())
-	newReq.RequestURI = ""
-	newReq.Header.Del("Proxy-Connection")
-
-	if newReq.URL.Scheme == "" {
-		if req.TLS != nil {
-			newReq.URL.Scheme = "https"
-		} else {
-			newReq.URL.Scheme = "http"
-		}
-	}
-	if newReq.URL.Host == "" {
-		newReq.URL.Host = req.Host
-	}
-	if newReq.Host == "" {
-		newReq.Host = req.Host
-	}
-	if newReq.Host == "" {
-		newReq.Host = newReq.URL.Host
-	}
-
-	// MITM rules are designed around HTTPS interception. Redirect plain HTTP to
-	// HTTPS so requests enter the CONNECT/TLS handling path instead of the basic
-	// HTTP forwarder, which does not implement the full MITM feature set.
-	if (rule.Mode == "mitm" || rule.Mode == "quic") && newReq.URL.Scheme == "http" {
-		httpsURL := *newReq.URL
-		httpsURL.Scheme = "https"
-		if httpsURL.Host == "" {
-			httpsURL.Host = req.Host
-		}
-		http.Redirect(w, req, httpsURL.String(), http.StatusMovedPermanently)
-		return
-	}
-
-	if rule.Mode == "direct" {
-		// 直接转发请求
-		resp, err := p.transport.RoundTrip(newReq)
-		if err != nil {
-			log.Printf("[HTTP] Direct proxy failed: %v", err)
-			http.Error(w, "Failed to proxy", http.StatusBadGateway)
-			return
-		}
-		defer resp.Body.Close()
-
-		// 复制响应头
-		for key, values := range resp.Header {
-			for _, value := range values {
-				w.Header().Add(key, value)
-			}
-		}
-		w.WriteHeader(resp.StatusCode)
-		io.Copy(w, resp.Body)
-		return
-	}
-
-	transport := http.RoundTripper(p.transport)
-	if rule.Upstream != "" {
-		defaultPort := "80"
-		if strings.EqualFold(newReq.URL.Scheme, "https") {
-			defaultPort = "443"
-		}
-		candidates := p.buildDialCandidates(req.Context(), normalizeHost(newReq.Host), ensureAddrWithPort(newReq.URL.Host, defaultPort), rule, rule.Mode)
-		if len(candidates) > 0 {
-			newReq.URL.Host = candidates[0]
-		}
-	} else {
-		defaultPort := "80"
-		if strings.EqualFold(newReq.URL.Scheme, "https") {
-			defaultPort = "443"
-		}
-		targetAddr := ensureAddrWithPort(newReq.URL.Host, defaultPort)
-		dialCandidates := p.buildDialCandidates(req.Context(), normalizeHost(newReq.Host), targetAddr, rule, rule.Mode)
-		if len(dialCandidates) > 0 && dialCandidates[0] != targetAddr {
-			t := p.transport.Clone()
-			candidateSet := dedupeDialCandidates(dialCandidates)
-			t.DialContext = func(ctx context.Context, network, _ string) (net.Conn, error) {
-				var lastErr error
-				for _, candidate := range candidateSet {
-					conn, err := p.dialWithRule(ctx, network, candidate, rule)
-					if err == nil {
-						return conn, nil
-					}
-					lastErr = err
-				}
-				return nil, lastErr
-			}
-			transport = t
-		}
-	}
-
-	resp, err := transport.RoundTrip(newReq)
-	if err != nil {
-		log.Printf("[HTTP] Proxy failed: %v", err)
-		http.Error(w, "Failed to connect to upstream", http.StatusBadGateway)
-		return
-	}
-	defer resp.Body.Close()
-
-	// 复制响应头
-	for key, values := range resp.Header {
-		for _, value := range values {
-			w.Header().Add(key, value)
-		}
-	}
-	w.WriteHeader(resp.StatusCode)
-	_, _ = io.Copy(w, resp.Body)
-}
-
-func (p *ProxyServer) handleMITM(clientConn net.Conn, host string, rule Rule, dialCandidates []string, initialDialAddr string) {
-	defer func() {
-		if r := recover(); r != nil {
-			p.tracef("[MITM] Panic: %v", r)
-			_ = clientConn.Close()
-		}
-	}()
-
-	p.tracef("[MITM] Handling %s with SNI: %s", host, rule.SniFake)
-
-	if p.certGenerator == nil {
-		p.tracef("[MITM] No cert generator, falling back to direct")
-		p.directTunnel(clientConn, clientConn)
-		return
-	}
-
-	p.tracef("[MITM] Cert generator present")
-	p.tracef("[MITM] Fetching CA cert")
-	caCert := p.certGenerator.GetCACert()
-	p.tracef("[MITM] Fetching CA key")
-	caKey := p.certGenerator.GetCAKey()
-	p.tracef("[MITM] CA fetch done cert=%t key=%t", caCert != nil, caKey != nil)
-	if caCert == nil || caKey == nil {
-		p.tracef("[MITM] CA cert/key not available")
-		clientConn.Close()
-		return
-	}
-
-	p.tracef("[MITM] Choosing upstream SNI for host=%s", host)
-	sniHost := chooseUpstreamSNI(host, rule)
-	p.tracef("[MITM] Upstream handshake SNI selected: %s", sniHost)
-
-	orderedCandidates := make([]string, 0, len(dialCandidates)+1)
-	if strings.TrimSpace(initialDialAddr) != "" {
-		orderedCandidates = append(orderedCandidates, initialDialAddr)
-	}
-	for _, c := range dialCandidates {
-		if strings.TrimSpace(c) == "" || c == initialDialAddr {
-			continue
-		}
-		orderedCandidates = append(orderedCandidates, c)
-	}
-
-	var (
-		upstreamRW       net.Conn
-		upstreamProtocol string
-		upstreamErr      error
-		dialOnce         sync.Once
-	)
-
-	tlsConfig := &tls.Config{
-		GetConfigForClient: func(hello *tls.ClientHelloInfo) (*tls.Config, error) {
-			dialOnce.Do(func() {
-				initialALPN := "h2_h1"
-				if len(hello.SupportedProtos) > 0 {
-					hasH2 := false
-					for _, proto := range hello.SupportedProtos {
-						if proto == "h2" {
-							hasH2 = true
-							break
-						}
-					}
-					if !hasH2 {
-						initialALPN = "http/1.1"
-					}
-				} else {
-					initialALPN = "http/1.1"
-				}
-
-				p.tracef("[MITM] Client supported ALPNs: %v, selected initialALPN: %s", hello.SupportedProtos, initialALPN)
-				p.tracef("[MITM] Establishing upstream via candidates=%v", orderedCandidates)
-				upstreamRW, upstreamProtocol, upstreamErr = p.establishUpstreamConn(host, rule, orderedCandidates, initialALPN)
-			})
-
-			if upstreamErr != nil {
-				p.tracef("[MITM] Failed to establish upstream in callback: %v", upstreamErr)
-				return nil, upstreamErr
-			}
-
-			if upstreamRW == nil {
-				return nil, fmt.Errorf("no usable upstream connection established")
-			}
-
-			p.tracef("[MITM] Upstream negotiated protocol: %s", upstreamProtocol)
-
-			clientSNI := normalizeHost(hello.ServerName)
-			if clientSNI != "" && host != "" && clientSNI != host {
-				log.Printf("[MITM] ClientHello SNI mismatch: connect_host=%s client_sni=%s remote=%s", host, clientSNI, hello.Conn.RemoteAddr())
-			} else {
-				log.Printf("[MITM] ClientHello: connect_host=%s client_sni=%s remote=%s", host, clientSNI, hello.Conn.RemoteAddr())
-			}
-
-			var clientNextProtos []string
-			if upstreamProtocol != "" {
-				if upstreamProtocol == "h2" {
-					clientNextProtos = []string{"h2", "http/1.1"}
-				} else {
-					clientNextProtos = []string{upstreamProtocol}
-				}
-			} else {
-				clientNextProtos = []string{"http/1.1"}
-			}
-
-			certHost := host
-			if hello.ServerName != "" {
-				certHost = hello.ServerName
-			}
-			cert, err := p.generateCert(certHost, caCert, caKey)
-			if err != nil {
-				log.Printf("[MITM] Generate cert failed: cert_host=%s err=%v", certHost, err)
-				return nil, err
-			}
-			log.Printf("[MITM] Serving MITM cert: cert_host=%s alpn=%v next_protos=%v", certHost, hello.SupportedProtos, clientNextProtos)
-			return &tls.Config{
-				Certificates: []tls.Certificate{*cert},
-				NextProtos:   clientNextProtos,
-			}, nil
-		},
-	}
-
-	clientTls := tls.Server(clientConn, tlsConfig)
-	if err := clientTls.Handshake(); err != nil {
-		p.tracef("[MITM] Client TLS handshake failed: %v", err)
-		clientConn.Close()
-		if upstreamRW != nil {
-			upstreamRW.Close()
-		}
-		return
-	}
-	defer func() {
-		if upstreamRW != nil {
-			upstreamRW.Close()
-		}
-	}()
-
-	clientALPN := clientTls.ConnectionState().NegotiatedProtocol
-	p.tracef("[MITM] Client ALPN: %s, Upstream Protocol: %s", clientALPN, upstreamProtocol)
-
-	p.directTunnel(clientTls, upstreamRW)
+func defaultDNSNodes() []DNSNode {
+	return []DNSNode{}
 }
 
 func halfClose(conn net.Conn) {
@@ -1880,1771 +1048,64 @@ func halfClose(conn net.Conn) {
 	conn.Close()
 }
 
-func (p *ProxyServer) directTunnel(clientConn, upstreamConn net.Conn) {
-	p.tracef("[Tunnel] Starting direct tunnel")
-	var wg sync.WaitGroup
-	wg.Add(2)
-
-	// Get buffers from pool to reduce allocation
-	buf1 := tunnelBufPool.Get().(*[]byte)
-	buf2 := tunnelBufPool.Get().(*[]byte)
-
-	go func() {
-		defer wg.Done()
-		defer tunnelBufPool.Put(buf1)
-		n, err := io.CopyBuffer(upstreamConn, clientConn, *buf1)
-		p.tracef("[Tunnel] Client -> Upstream: %d bytes, err: %v", n, err)
-		halfClose(upstreamConn)
-	}()
-	go func() {
-		defer wg.Done()
-		defer tunnelBufPool.Put(buf2)
-		n, err := io.CopyBuffer(clientConn, upstreamConn, *buf2)
-		p.tracef("[Tunnel] Upstream -> Client: %d bytes, err: %v", n, err)
-		halfClose(clientConn)
-	}()
-	wg.Wait()
-	clientConn.Close()
-	upstreamConn.Close()
-	p.tracef("[Tunnel] Tunnel closed")
-}
-
-func (p *ProxyServer) generateCert(host string, caCert *x509.Certificate, caKey interface{}) (*tls.Certificate, error) {
-	host = normalizeHost(host)
-	p.certCacheMu.RLock()
-	if cert, ok := p.certCache[host]; ok && cert != nil {
-		p.certCacheMu.RUnlock()
-		return cert, nil
-	}
-	p.certCacheMu.RUnlock()
-
-	serial := big.NewInt(time.Now().UnixNano())
-	template := &x509.Certificate{
-		SerialNumber: serial,
-		Subject: pkix.Name{
-			CommonName: host,
-		},
-		NotBefore:   time.Now(),
-		NotAfter:    time.Now().Add(24 * time.Hour),
-		KeyUsage:    x509.KeyUsageDigitalSignature | x509.KeyUsageKeyEncipherment,
-		ExtKeyUsage: []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
-		DNSNames:    []string{host},
-	}
-
-	privKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
-	if err != nil {
-		return nil, err
-	}
-
-	certDER, err := x509.CreateCertificate(rand.Reader, template, caCert, &privKey.PublicKey, caKey)
-	if err != nil {
-		return nil, err
-	}
-
-	certPEM := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: certDER})
-
-	keyBytes, err := x509.MarshalECPrivateKey(privKey)
-	if err != nil {
-		return nil, err
-	}
-	keyPEM := pem.EncodeToMemory(&pem.Block{Type: "EC PRIVATE KEY", Bytes: keyBytes})
-
-	cert, err := tls.X509KeyPair(certPEM, keyPEM)
-	if err != nil {
-		return nil, err
-	}
-
-	p.certCacheMu.Lock()
-	p.certCache[host] = &cert
-	p.certCacheMu.Unlock()
-	return &cert, nil
-}
-
-func (p *ProxyServer) makeMITMTLSConfig(connectHost string, caCert *x509.Certificate, caKey interface{}, nextProtos []string, logPrefix string) *tls.Config {
-	connectHost = normalizeHost(connectHost)
-	return &tls.Config{
-		NextProtos: append([]string(nil), nextProtos...),
-		GetCertificate: func(hello *tls.ClientHelloInfo) (*tls.Certificate, error) {
-			clientSNI := normalizeHost(hello.ServerName)
-			certHost := connectHost
-			if clientSNI != "" {
-				certHost = clientSNI
-			}
-
-			if clientSNI != "" && connectHost != "" && clientSNI != connectHost {
-				log.Printf("%s ClientHello SNI mismatch: connect_host=%s client_sni=%s remote=%s", logPrefix, connectHost, clientSNI, hello.Conn.RemoteAddr())
-			} else {
-				log.Printf("%s ClientHello: connect_host=%s client_sni=%s remote=%s", logPrefix, connectHost, clientSNI, hello.Conn.RemoteAddr())
-			}
-
-			cert, err := p.generateCert(certHost, caCert, caKey)
-			if err != nil {
-				log.Printf("%s Generate cert failed: cert_host=%s err=%v", logPrefix, certHost, err)
-				return nil, err
-			}
-			log.Printf("%s Serving MITM cert: cert_host=%s alpn=%v", logPrefix, certHost, hello.SupportedProtos)
-			return cert, nil
-		},
-	}
-}
-
-func (p *ProxyServer) handleTransparent(clientConn, upstreamConn net.Conn, host string, rule Rule) {
-	// Transparent mode should forward raw TLS bytes without terminating TLS.
-	// Terminating TLS here would require MITM on the client side as well.
-	log.Printf("[Transparent] Tunneling %s -> %s (raw TCP)", host, rule.Upstream)
-	p.directTunnel(clientConn, upstreamConn)
-}
-
-func (r *RuleManager) SetRules(rules []Rule) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	r.rules = rules
-}
-
-func (r *RuleManager) matchRule(host, mode string) Rule {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
-
-	host = normalizeHost(host)
-	mode = strings.ToLower(strings.TrimSpace(mode))
-
-	best := Rule{}
-	bestScore := -1
-	for _, rule := range r.rules {
-		if !rule.Enabled {
-			continue
-		}
-
-		score := domainMatchScore(host, rule.Domain)
-		if score >= 0 && score > bestScore {
-			best = rule
-			bestScore = score
-		}
-	}
-
-	// 如果命中了特定规则
-	if bestScore >= 0 {
-		if mode == "transparent" && best.Mode == "mitm" {
-			log.Printf("[RuleMatch] Global Transparent detected: Downgrading MITM rule (%s) to DIRECT to avoid cert errors.", host)
-			best.Mode = "direct"
-		}
-		log.Printf("[Router] %s -> %s", host, best.Mode)
-		r.emitRouteEvent(host, best.Mode)
-		return best
-	}
-
-	// 自动分流层：手动规则未命中时，查询 AutoRouter
-	if r.autoRouter != nil && r.autoRoutingConfig.Mode != "" {
-		autoRule := r.autoRouter.Decide(host)
-		if autoRule.Mode != "direct" {
-			log.Printf("[Router] %s -> %s (AutoRoute)", host, autoRule.Mode)
-			r.emitRouteEvent(host, autoRule.Mode)
-			return autoRule
-		}
-	}
-
-	// 未命中任何规则，走直连
-	log.Printf("[Router] %s -> direct (Default)", host)
-	r.emitRouteEvent(host, "direct")
-	return Rule{
-		Mode:    "direct",
-		Enabled: true,
-	}
-}
-
-func (p *ProxyServer) GetStats() (int64, int64, int64) {
-	return atomic.LoadInt64(&p.bytesDown), atomic.LoadInt64(&p.bytesUp), 0
-}
-
-func (p *ProxyServer) ClearCertCache() {
-	p.certCacheMu.Lock()
-	defer p.certCacheMu.Unlock()
-	p.certCache = make(map[string]*tls.Certificate)
-}
-
-// certCacheCleanup periodically clears the cert cache to prevent memory leaks.
-// MITM-generated certs have a 24h TTL, so clearing every 6h ensures stale entries are reclaimed.
-func (p *ProxyServer) certCacheCleanup(ctx context.Context) {
-	go func() {
-		defer func() {
-			if r := recover(); r != nil {
-				log.Printf("[CertCache] panic: %v", r)
-			}
-		}()
-		ticker := time.NewTicker(6 * time.Hour)
-		defer ticker.Stop()
-		for {
-			select {
-			case <-ticker.C:
-				if !p.IsRunning() {
-					return
-				}
-				p.ClearCertCache()
-			case <-ctx.Done():
-				return
-			}
-		}
-	}()
-}
-
-// trackAccepted records the most recent 10 accepted connections for diagnostics.
-func (p *ProxyServer) trackAccepted(remote string) {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	if len(p.recentIngress) >= 10 {
-		// Shift elements to release underlying array head
-		copy(p.recentIngress, p.recentIngress[1:])
-		p.recentIngress = p.recentIngress[:9]
-	}
-	p.recentIngress = append(p.recentIngress, remote)
-}
-
-func (p *ProxyServer) GetDiagnostics() (int64, int64, int64, []string) {
-	return 0, 0, 0, nil
-}
-
-func NewRuleManager(settingsPath, rulesPath string) *RuleManager {
-	return &RuleManager{
-		settingsPath:        settingsPath,
-		rulesPath:           rulesPath,
-		rules:               []Rule{},
-		closeToTray:         true,
-		showMainOnAutoStart: true,
-		language:            "zh",
-		theme:               "dark",
-	}
-}
-
-func findECHProfileByID(profiles []ECHProfile, id string) *ECHProfile {
-	id = strings.TrimSpace(id)
-	if id == "" {
-		return nil
-	}
-	for i := range profiles {
-		if profiles[i].ID == id {
-			return &profiles[i]
-		}
-	}
-	return nil
-}
-
-func normalizeECHProfile(p *ECHProfile) {
-	if p == nil {
-		return
-	}
-	p.ID = strings.TrimSpace(p.ID)
-	p.Name = strings.TrimSpace(p.Name)
-	p.Config = strings.TrimSpace(p.Config)
-	p.DiscoveryDomain = strings.TrimSpace(p.DiscoveryDomain)
-	p.DoHUpstream = strings.TrimSpace(p.DoHUpstream)
-}
-
-func ensureLegacyCloudflareProfile(profiles *[]ECHProfile) string {
-	const profileID = "legacy-cloudflare"
-	if existing := findECHProfileByID(*profiles, profileID); existing != nil {
-		normalizeECHProfile(existing)
-		if existing.Name == "" {
-			existing.Name = "Legacy Cloudflare"
-		}
-		if existing.DiscoveryDomain == "" {
-			existing.DiscoveryDomain = "crypto.cloudflare.com"
-		}
-		return existing.ID
-	}
-
-	*profiles = append(*profiles, ECHProfile{
-		ID:              profileID,
-		Name:            "Legacy Cloudflare",
-		DiscoveryDomain: "crypto.cloudflare.com",
-		AutoUpdate:      true,
-	})
-	return profileID
-}
-
-func migrateLegacyECHRules(siteGroups []SiteGroup, profiles *[]ECHProfile) bool {
-	migrated := false
-	for i := range siteGroups {
-		siteGroups[i].ECHProfileID = strings.TrimSpace(siteGroups[i].ECHProfileID)
-		siteGroups[i].ECHDomain = strings.TrimSpace(siteGroups[i].ECHDomain)
-		if siteGroups[i].ECHEnabled && siteGroups[i].ECHProfileID == "" &&
-			strings.EqualFold(siteGroups[i].ECHDomain, "crypto.cloudflare.com") {
-			siteGroups[i].ECHProfileID = ensureLegacyCloudflareProfile(profiles)
-			siteGroups[i].ECHDomain = ""
-			migrated = true
-		}
-	}
-	return migrated
-}
-
-func (rm *RuleManager) LoadConfig() error {
-	if err := rm.loadSettingsConfig(); err != nil {
-		return err
-	}
-	if err := rm.loadRulesConfig(); err != nil {
-		return err
-	}
-
-	for i := range rm.siteGroups {
-		rm.siteGroups[i].DNSMode = normalizeDNSMode(rm.siteGroups[i].DNSMode)
-	}
-	if rm.upstreams == nil {
-		rm.upstreams = []Upstream{}
-	}
-	if rm.echProfiles == nil {
-		rm.echProfiles = []ECHProfile{}
-	}
-	for i := range rm.echProfiles {
-		normalizeECHProfile(&rm.echProfiles[i])
-	}
-	rm.applySettingsDefaults()
-
-	// Sync Cloudflare Config if ProxyServer is linked
-	// Note: In current architecture, RuleManager doesn't have a back-pointer to ProxyServer.
-	// ProxyServer.SetRuleManager is used. We might need to update ProxyServer's pool elsewhere.
-	// But actually, ProxyServer holds the pool, so when LoadConfig is called via the RuleManager
-	// inside ProxyServer, it should be updated.
-	// Wait, ProxyServer has a pointer to RuleManager.
-
-	migrated := false
-	for i := range rm.siteGroups {
-		rm.siteGroups[i].Website = strings.TrimSpace(rm.siteGroups[i].Website)
-		if rm.siteGroups[i].Website == "" {
-			rm.siteGroups[i].Website = inferWebsiteFromSiteGroup(rm.siteGroups[i])
-			migrated = true
-		}
-	}
-	if migrateLegacyECHRules(rm.siteGroups, &rm.echProfiles) {
-		migrated = true
-	}
-
-	rm.buildRules()
-	if migrated {
-		if err := rm.saveRulesConfig(); err != nil {
-			log.Printf("[Config] migrate website field failed: %v", err)
-		} else {
-			log.Printf("[Config] migrated website field for existing site groups")
-		}
-	}
-	return nil
-}
-
-func (rm *RuleManager) applySettingsDefaults() {
-	if rm.listenPort == "" {
-		rm.listenPort = "8080"
-	}
-	rm.tunConfig = normalizeTUNConfig(rm.tunConfig)
-}
-
-func normalizeTUNConfig(cfg TUNConfig) TUNConfig {
-	if cfg.MTU <= 0 {
-		cfg.MTU = 9000
-	}
-	if runtime.GOOS == "windows" {
-		// Windows StrictRoute only protects the current process.
-		// In a Wails app, WebView2 helper processes can be cut off immediately,
-		// which looks like a flash-crash while the main process is still alive.
-		cfg.StrictRoute = false
-	}
-	return cfg
-}
-
-func (rm *RuleManager) loadSettingsConfig() error {
-	data, err := os.ReadFile(rm.settingsPath)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return rm.saveDefaultSettingsConfig()
-		}
-		return err
-	}
-
-	var config SettingsConfig
-	if err := json.Unmarshal(data, &config); err != nil {
-		return err
-	}
-
-	// 1. Set internal defaults first
-	rm.closeToTray = true
-	rm.autoStart = false
-	rm.showMainOnAutoStart = true
-	rm.autoEnableProxyOnAutoStart = false
-
-	// 2. Override with JSON values if they exist
-	rm.cloudflareConfig = config.CloudflareConfig
-	rm.tunConfig = config.TUN
-	rm.serverHost = config.ServerHost
-	rm.serverAuth = config.ServerAuth
-	if config.ListenPort != "" {
-		rm.listenPort = config.ListenPort
-	}
-	if config.Socks5Port != "" {
-		rm.socks5Port = config.Socks5Port
-	}
-	rm.autoRoutingConfig = config.AutoRouting
-	if config.Language != "" {
-		rm.language = config.Language
-	}
-	if config.Theme != "" {
-		rm.theme = config.Theme
-	}
-
-	if config.CloseToTray != nil {
-		rm.closeToTray = *config.CloseToTray
-	}
-	if config.AutoStart != nil {
-		rm.autoStart = *config.AutoStart
-	}
-	if config.ShowMainWindowOnAutoStart != nil {
-		rm.showMainOnAutoStart = *config.ShowMainWindowOnAutoStart
-	}
-	if config.AutoEnableProxyOnAutoStart != nil {
-		rm.autoEnableProxyOnAutoStart = *config.AutoEnableProxyOnAutoStart
-	}
-	if config.Socks5Enabled != nil {
-		rm.socks5Enabled = *config.Socks5Enabled
-	}
-	rm.applySettingsDefaults()
-	return nil
-}
-
-func (rm *RuleManager) loadRulesConfig() error {
-	data, err := os.ReadFile(rm.rulesPath)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return rm.saveDefaultRulesConfig()
-		}
-		return err
-	}
-
-	var config RulesConfig
-	if err := json.Unmarshal(data, &config); err != nil {
-		return err
-	}
-
-	rm.siteGroups = config.SiteGroups
-	rm.upstreams = config.Upstreams
-	rm.dnsNodes = config.DNSNodes
-	rm.echProfiles = config.ECHProfiles
-	// Ensure at least the default Ali DoH bootstrap node exists
-	if len(rm.dnsNodes) == 0 {
-		rm.dnsNodes = defaultDNSNodes()
-	}
-	return nil
-}
-
-func (rm *RuleManager) saveDefaultSettingsConfig() error {
-	rm.closeToTray = true
-	rm.autoStart = false
-	rm.showMainOnAutoStart = true
-	rm.autoEnableProxyOnAutoStart = false
-	rm.applySettingsDefaults()
-	return rm.saveSettingsConfig()
-}
-
-func (rm *RuleManager) saveDefaultRulesConfig() error {
-	rm.siteGroups = []SiteGroup{}
-	rm.upstreams = []Upstream{}
-	rm.dnsNodes = defaultDNSNodes()
-	rm.echProfiles = []ECHProfile{}
-	rm.buildRules()
-	return rm.saveRulesConfig()
-}
-
-func defaultDNSNodes() []DNSNode {
-	return []DNSNode{}
-}
-
-func (rm *RuleManager) buildRules() {
-	rm.rules = []Rule{}
-	upstreamMap := make(map[string]string)
-	for _, up := range rm.upstreams {
-		if up.Enabled && up.Address != "" {
-			upstreamMap[up.ID] = up.Address
-		}
-	}
-
-	echProfileMap := make(map[string]ECHProfile)
-	for _, profile := range rm.echProfiles {
-		echProfileMap[profile.ID] = profile
-	}
-
-	for _, sg := range rm.siteGroups {
-		if !sg.Enabled {
-			continue
-		}
-
-		// Resolve upstream ID to actual address
-		resolvedUpstream := sg.Upstream
-		if addr, ok := upstreamMap[sg.Upstream]; ok {
-			resolvedUpstream = addr
-		}
-
-		resolvedUpstreams := make([]string, 0, len(sg.Upstreams))
-		for _, upId := range sg.Upstreams {
-			if addr, ok := upstreamMap[upId]; ok {
-				resolvedUpstreams = append(resolvedUpstreams, addr)
-			} else {
-				resolvedUpstreams = append(resolvedUpstreams, upId)
-			}
-		}
-
-		var echConfigBytes []byte
-		var echProfile ECHProfile
-		if sg.ECHProfileID != "" {
-			if profile, ok := echProfileMap[sg.ECHProfileID]; ok {
-				echProfile = profile
-				if configStr := strings.TrimSpace(profile.Config); configStr != "" {
-					if decoded, err := base64.StdEncoding.DecodeString(configStr); err == nil {
-						echConfigBytes = decoded
-						log.Printf("[BuildRules] Successfully loaded ECH Config for SiteGroup %s (%d bytes)", sg.ID, len(echConfigBytes))
-					} else {
-						log.Printf("[BuildRules] ERROR: Failed to decode ECH Config for SiteGroup %s: %v", sg.ID, err)
-					}
-				}
-			} else {
-				log.Printf("[BuildRules] WARNING: ECHProfileID %s linked to SiteGroup %s but profile not found", sg.ECHProfileID, sg.ID)
-			}
-		}
-
-		for _, domain := range sg.Domains {
-			rule := Rule{
-				Domain:             domain,
-				Mode:               sg.Mode,
-				Upstream:           resolvedUpstream,
-				Upstreams:          resolvedUpstreams,
-				DNSMode:            normalizeDNSMode(sg.DNSMode),
-				SniFake:            sg.SniFake,
-				ConnectPolicy:      strings.TrimSpace(sg.ConnectPolicy),
-				SniPolicy:          strings.TrimSpace(sg.SniPolicy),
-				Enabled:            true,
-				SiteID:             sg.ID,
-				ECHEnabled:         sg.ECHEnabled,
-				ECHProfileID:       sg.ECHProfileID,
-				UseCFPool:          sg.UseCFPool,
-				ECHDiscoveryDomain: echProfile.DiscoveryDomain,
-				ECHDoHUpstream:     echProfile.DoHUpstream,
-				ECHAutoUpdate:      echProfile.AutoUpdate,
-				CertVerify:         sg.CertVerify,
-			}
-			rm.rules = append(rm.rules, rule)
-		}
-	}
-}
-
-func (rm *RuleManager) incrementRuleHit(siteID string) {
-	// No-op after stats removal
-}
-
-func (rm *RuleManager) GetRuleHitCounts() map[string]int64 {
-	return map[string]int64{}
-}
-
-func (rm *RuleManager) GetSiteGroups() []SiteGroup {
-	rm.mu.RLock()
-	defer rm.mu.RUnlock()
-	return rm.siteGroups
-}
-
-func (rm *RuleManager) GetServerHost() string {
-	rm.mu.RLock()
-	defer rm.mu.RUnlock()
-	return rm.serverHost
-}
-
-func (rm *RuleManager) GetServerAuth() string {
-	rm.mu.RLock()
-	defer rm.mu.RUnlock()
-	return rm.serverAuth
-}
-
-func (rm *RuleManager) GetListenPort() string {
-	rm.mu.RLock()
-	defer rm.mu.RUnlock()
-	return rm.listenPort
-}
-
-func (rm *RuleManager) SetListenPort(port string) {
-	rm.mu.Lock()
-	rm.listenPort = port
-	rm.mu.Unlock()
-}
-
-func (rm *RuleManager) GetSocks5Enabled() bool {
-	rm.mu.RLock()
-	defer rm.mu.RUnlock()
-	return rm.socks5Enabled
-}
-
-func (rm *RuleManager) SetSocks5Enabled(enabled bool) {
-	rm.mu.Lock()
-	rm.socks5Enabled = enabled
-	rm.mu.Unlock()
-}
-
-func (rm *RuleManager) GetSocks5Port() string {
-	rm.mu.RLock()
-	defer rm.mu.RUnlock()
-	return rm.socks5Port
-}
-
-func (rm *RuleManager) SetSocks5Port(port string) {
-	rm.mu.Lock()
-	rm.socks5Port = port
-	rm.mu.Unlock()
-}
-
-func (rm *RuleManager) SaveConfig() error {
-	rm.mu.RLock()
-	defer rm.mu.RUnlock()
-	if err := rm.saveSettingsConfig(); err != nil {
-		return err
-	}
-	return rm.saveRulesConfig()
-}
-
-func (rm *RuleManager) UpdateServerConfig(host, auth string) error {
-	rm.mu.Lock()
-	rm.serverHost = host
-	rm.serverAuth = auth
-	rm.mu.Unlock()
-	return rm.saveSettingsConfig()
-}
-
-func (rm *RuleManager) GetCloudflareConfig() CloudflareConfig {
-	rm.mu.RLock()
-	defer rm.mu.RUnlock()
-	return rm.cloudflareConfig
-}
-
-func (rm *RuleManager) GetTUNConfig() TUNConfig {
-	rm.mu.RLock()
-	defer rm.mu.RUnlock()
-	return normalizeTUNConfig(rm.tunConfig)
-}
-
-func (rm *RuleManager) GetCloseToTray() bool {
-	rm.mu.RLock()
-	defer rm.mu.RUnlock()
-	return rm.closeToTray
-}
-
-func (rm *RuleManager) SetCloseToTray(enabled bool) error {
-	rm.mu.Lock()
-	rm.closeToTray = enabled
-	rm.mu.Unlock()
-	return rm.saveSettingsConfig()
-}
-
-func (rm *RuleManager) GetAutoStart() bool {
-	rm.mu.RLock()
-	defer rm.mu.RUnlock()
-	return rm.autoStart
-}
-
-func (rm *RuleManager) SetAutoStart(enabled bool) error {
-	rm.mu.Lock()
-	rm.autoStart = enabled
-	rm.mu.Unlock()
-	return rm.saveSettingsConfig()
-}
-
-func (rm *RuleManager) GetShowMainWindowOnAutoStart() bool {
-	rm.mu.RLock()
-	defer rm.mu.RUnlock()
-	return rm.showMainOnAutoStart
-}
-
-func (rm *RuleManager) SetShowMainWindowOnAutoStart(enabled bool) error {
-	rm.mu.Lock()
-	rm.showMainOnAutoStart = enabled
-	rm.mu.Unlock()
-	return rm.saveSettingsConfig()
-}
-
-func (rm *RuleManager) GetAutoEnableProxyOnAutoStart() bool {
-	rm.mu.RLock()
-	defer rm.mu.RUnlock()
-	return rm.autoEnableProxyOnAutoStart
-}
-
-func (rm *RuleManager) SetAutoEnableProxyOnAutoStart(enabled bool) error {
-	rm.mu.Lock()
-	rm.autoEnableProxyOnAutoStart = enabled
-	rm.mu.Unlock()
-	return rm.saveSettingsConfig()
-}
-
-func (r *RuleManager) GetLanguage() string {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
-	return r.language
-}
-
-func (r *RuleManager) SetLanguage(lang string) error {
-	r.mu.Lock()
-	r.language = lang
-	r.mu.Unlock()
-	return r.saveSettingsConfig()
-}
-
-func (r *RuleManager) GetTheme() string {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
-	if r.theme == "" {
-		return "dark" // Default to dark
-	}
-	return r.theme
-}
-
-func (r *RuleManager) SetTheme(theme string) error {
-	r.mu.Lock()
-	r.theme = theme
-	r.mu.Unlock()
-	return r.saveSettingsConfig()
-}
-
-func (rm *RuleManager) UpdateCloudflareConfig(cfg CloudflareConfig) error {
-	rm.mu.Lock()
-	rm.cloudflareConfig = cfg
-	rm.mu.Unlock()
-	return rm.saveSettingsConfig()
-}
-
-func (rm *RuleManager) UpdateTUNConfig(cfg TUNConfig) error {
-	rm.mu.Lock()
-	rm.tunConfig = normalizeTUNConfig(cfg)
-	rm.mu.Unlock()
-	return rm.saveSettingsConfig()
-}
-
-func (rm *RuleManager) AddSiteGroup(sg SiteGroup) error {
-	rm.mu.Lock()
-	defer rm.mu.Unlock()
-
-	sg.ID = generateID()
-	sg.Website = strings.TrimSpace(sg.Website)
-	rm.siteGroups = append(rm.siteGroups, sg)
-	rm.buildRules()
-	return rm.saveRulesConfig()
-}
-
-func (rm *RuleManager) UpdateSiteGroup(sg SiteGroup) error {
-	rm.mu.Lock()
-	defer rm.mu.Unlock()
-
-	sg.Website = strings.TrimSpace(sg.Website)
-	for i, s := range rm.siteGroups {
-		if s.ID == sg.ID {
-			rm.siteGroups[i] = sg
-			break
-		}
-	}
-	rm.buildRules()
-	return rm.saveRulesConfig()
-}
-
-func (rm *RuleManager) DeleteSiteGroup(id string) error {
-	rm.mu.Lock()
-	defer rm.mu.Unlock()
-
-	for i, s := range rm.siteGroups {
-		if s.ID == id {
-			rm.siteGroups = append(rm.siteGroups[:i], rm.siteGroups[i+1:]...)
-			break
-		}
-	}
-	rm.buildRules()
-	return rm.saveRulesConfig()
-}
-
-func (rm *RuleManager) GetUpstreams() []Upstream {
-	rm.mu.RLock()
-	defer rm.mu.RUnlock()
-	return rm.upstreams
-}
-
-func (rm *RuleManager) AddUpstream(u Upstream) error {
-	rm.mu.Lock()
-	defer rm.mu.Unlock()
-
-	u.ID = generateID()
-	rm.upstreams = append(rm.upstreams, u)
-	return rm.saveRulesConfig()
-}
-
-func (rm *RuleManager) UpdateUpstream(u Upstream) error {
-	rm.mu.Lock()
-	defer rm.mu.Unlock()
-
-	for i, up := range rm.upstreams {
-		if up.ID == u.ID {
-			rm.upstreams[i] = u
-			break
-		}
-	}
-	return rm.saveRulesConfig()
-}
-
-func (rm *RuleManager) DeleteUpstream(id string) error {
-	rm.mu.Lock()
-	defer rm.mu.Unlock()
-
-	for i, up := range rm.upstreams {
-		if up.ID == id {
-			rm.upstreams = append(rm.upstreams[:i], rm.upstreams[i+1:]...)
-			break
-		}
-	}
-	return rm.saveRulesConfig()
-}
-
-// --- DNS Node CRUD ---
-
-func (rm *RuleManager) GetDNSNodes() []DNSNode {
-	rm.mu.RLock()
-	defer rm.mu.RUnlock()
-	if rm.dnsNodes == nil {
-		return []DNSNode{}
-	}
-	out := make([]DNSNode, len(rm.dnsNodes))
-	copy(out, rm.dnsNodes)
-	return out
-}
-
-func (rm *RuleManager) AddDNSNode(n DNSNode) error {
-	rm.mu.Lock()
-	defer rm.mu.Unlock()
-
-	n.ID = generateID()
-	rm.dnsNodes = append(rm.dnsNodes, n)
-	return rm.saveRulesConfig()
-}
-
-func (rm *RuleManager) UpdateDNSNode(n DNSNode) error {
-	rm.mu.Lock()
-	defer rm.mu.Unlock()
-
-	for i, node := range rm.dnsNodes {
-		if node.ID == n.ID {
-			rm.dnsNodes[i] = n
-			break
-		}
-	}
-	return rm.saveRulesConfig()
-}
-
-func (rm *RuleManager) DeleteDNSNode(id string) error {
-	rm.mu.Lock()
-	defer rm.mu.Unlock()
-
-	for i, node := range rm.dnsNodes {
-		if node.ID == id {
-			rm.dnsNodes = append(rm.dnsNodes[:i], rm.dnsNodes[i+1:]...)
-			break
-		}
-	}
-	return rm.saveRulesConfig()
-}
-
-// SetDNSNodePriority reorders DNS nodes by moving the node with the given ID
-// to the specified target index (0-based). Nodes are queried in list order.
-func (rm *RuleManager) SetDNSNodePriority(id string, targetIndex int) error {
-	rm.mu.Lock()
-	defer rm.mu.Unlock()
-
-	srcIdx := -1
-	for i, node := range rm.dnsNodes {
-		if node.ID == id {
-			srcIdx = i
-			break
-		}
-	}
-	if srcIdx < 0 {
-		return fmt.Errorf("dns node %s not found", id)
-	}
-	if targetIndex < 0 {
-		targetIndex = 0
-	}
-	if targetIndex >= len(rm.dnsNodes) {
-		targetIndex = len(rm.dnsNodes) - 1
-	}
-	if srcIdx == targetIndex {
-		return nil
-	}
-
-	node := rm.dnsNodes[srcIdx]
-	rm.dnsNodes = append(rm.dnsNodes[:srcIdx], rm.dnsNodes[srcIdx+1:]...)
-	tail := append([]DNSNode{}, rm.dnsNodes[targetIndex:]...)
-	rm.dnsNodes = append(rm.dnsNodes[:targetIndex], node)
-	rm.dnsNodes = append(rm.dnsNodes, tail...)
-	return rm.saveRulesConfig()
-}
-
-func (rm *RuleManager) saveSettingsConfig() error {
-	listenPort := rm.listenPort
-	if listenPort == "" {
-		listenPort = "8080"
-	}
-	socks5Port := rm.socks5Port
-	if socks5Port == "" {
-		socks5Port = "8081"
-	}
-	closeToTray := rm.closeToTray
-	autoStart := rm.autoStart
-	showMainOnAutoStart := rm.showMainOnAutoStart
-	autoEnableProxyOnAutoStart := rm.autoEnableProxyOnAutoStart
-	socks5Enabled := rm.socks5Enabled
-	cloudflareConfig := rm.cloudflareConfig
-	tunConfig := normalizeTUNConfig(rm.tunConfig)
-	settings := SettingsConfig{
-		ListenPort:                 listenPort,
-		Socks5Port:                 socks5Port,
-		ServerHost:                 rm.serverHost,
-		ServerAuth:                 rm.serverAuth,
-		CloseToTray:                &closeToTray,
-		AutoStart:                  &autoStart,
-		ShowMainWindowOnAutoStart:  &showMainOnAutoStart,
-		AutoEnableProxyOnAutoStart: &autoEnableProxyOnAutoStart,
-		CloudflareConfig:           cloudflareConfig,
-		AutoRouting:                rm.autoRoutingConfig,
-		TUN:                        tunConfig,
-		Language:                   rm.language,
-		Theme:                      rm.theme,
-		Socks5Enabled:              &socks5Enabled,
-	}
-
-	data, err := json.MarshalIndent(settings, "", "  ")
-	if err != nil {
-		return err
-	}
-
-	if err := os.MkdirAll(filepath.Dir(rm.settingsPath), 0755); err != nil {
-		return err
-	}
-
-	if err := os.WriteFile(rm.settingsPath, data, 0644); err != nil {
-		return err
-	}
-	rm.triggerConfigSaved()
-	return nil
-}
-
-func (rm *RuleManager) saveRulesConfig() error {
-	config := RulesConfig{
-		SiteGroups:  rm.siteGroups,
-		Upstreams:   rm.upstreams,
-		DNSNodes:    rm.dnsNodes,
-		ECHProfiles: rm.echProfiles,
-	}
-
-	data, err := json.MarshalIndent(config, "", "  ")
-	if err != nil {
-		return err
-	}
-
-	if err := os.MkdirAll(filepath.Dir(rm.rulesPath), 0755); err != nil {
-		return err
-	}
-
-	if err := os.WriteFile(rm.rulesPath, data, 0644); err != nil {
-		return err
-	}
-	rm.triggerConfigSaved()
-	return nil
-}
-
-func (rm *RuleManager) GetECHProfiles() []ECHProfile {
-	rm.mu.RLock()
-	defer rm.mu.RUnlock()
-	if rm.echProfiles == nil {
-		return []ECHProfile{}
-	}
-	return rm.echProfiles
-}
-
-func (rm *RuleManager) UpsertECHProfile(p ECHProfile) error {
-	rm.mu.Lock()
-	defer rm.mu.Unlock()
-
-	normalizeECHProfile(&p)
-	if p.ID == "" {
-		p.ID = generateID()
-		rm.echProfiles = append(rm.echProfiles, p)
-	} else {
-		found := false
-		for i, x := range rm.echProfiles {
-			if x.ID == p.ID {
-				rm.echProfiles[i] = p
-				found = true
-				break
-			}
-		}
-		if !found {
-			rm.echProfiles = append(rm.echProfiles, p)
-		}
-	}
-	return rm.saveRulesConfig()
-}
-
-func (rm *RuleManager) DeleteECHProfile(id string) error {
-	rm.mu.Lock()
-	defer rm.mu.Unlock()
-
-	for i, x := range rm.echProfiles {
-		if x.ID == id {
-			rm.echProfiles = append(rm.echProfiles[:i], rm.echProfiles[i+1:]...)
-			break
-		}
-	}
-	return rm.saveRulesConfig()
-}
-
-func generateID() string {
-	return fmt.Sprintf("%d", time.Now().UnixNano())
-}
-
-func (r *RuleManager) GetBinaryECHConfig(id string) []byte {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
-
-	for _, p := range r.echProfiles {
-		if p.ID == id {
-			data, err := base64.StdEncoding.DecodeString(p.Config)
-			if err == nil && len(data) > 0 {
-				return data
-			}
-			break
-		}
-	}
-	return nil
-}
-
-func (r *RuleManager) UpdateECHProfileConfig(profileID string, configBytes []byte) error {
-	if profileID == "" || len(configBytes) == 0 {
-		return nil
-	}
-
-	r.mu.Lock()
-	defer r.mu.Unlock()
-
-	found := false
-	configBase64 := base64.StdEncoding.EncodeToString(configBytes)
-	for i := range r.echProfiles {
-		if r.echProfiles[i].ID == profileID {
-			if r.echProfiles[i].Config == configBase64 {
-				return nil // No change
-			}
-			r.echProfiles[i].Config = configBase64
-			found = true
-			break
-		}
-	}
-
-	if !found {
-		return fmt.Errorf("profile %s not found", profileID)
-	}
-
-	log.Printf("[RuleManager] ECH Profile %s updated via sync", profileID)
-	return r.saveRulesConfig()
-}
-
-func chooseUTLSClientHelloID(alpn string) utls.ClientHelloID {
-	if strings.EqualFold(strings.TrimSpace(alpn), "http/1.1") {
-		return utls.HelloFirefox_120
-	}
-	return utls.HelloChrome_120
-}
-
-// nextProtosForNegotiatedALPN returns the ALPN protocols to advertise to the client,
-// matching whatever the upstream negotiated. Both sides speaking the same protocol
-// is safe for directTunnel because the uTLS handshake does not pre-send h2 preface.
-func nextProtosForNegotiatedALPN(alpn string) []string {
-	if strings.EqualFold(strings.TrimSpace(alpn), "h2") {
-		return []string{"h2"}
-	}
-	return []string{"http/1.1"}
-}
-
-func rewriteUTLSALPN(spec *utls.ClientHelloSpec, nextProtos []string) {
-	if spec == nil {
-		return
-	}
-	for _, ext := range spec.Extensions {
-		if alpnExt, ok := ext.(*utls.ALPNExtension); ok {
-			alpnExt.AlpnProtocols = append([]string(nil), nextProtos...)
-			return
-		}
-	}
-	spec.Extensions = append(spec.Extensions, &utls.ALPNExtension{
-		AlpnProtocols: append([]string(nil), nextProtos...),
-	})
-}
-
-func (p *ProxyServer) GetUConn(conn net.Conn, sni string, verifyName string, rule Rule, allowInsecure bool, alpn string, echConfig []byte) *utls.UConn {
-	nextProtos := []string{"h2", "http/1.1"}
-	if strings.EqualFold(strings.TrimSpace(alpn), "http/1.1") {
-		nextProtos = []string{"http/1.1"}
-	}
-
-	verifyConn := buildVerifyConnection(verifyName, rule.CertVerify)
-
-	// In ECH mode, ServerName must be the inner (real) target domain (verifyName).
-	// The outer SNI is automatically derived from the ECH config's public name.
-	// In non-ECH mode, ServerName uses the sni parameter (e.g., sni_fake from rule config).
-	var serverName string
-	if len(echConfig) > 0 {
-		serverName = verifyName
-	} else {
-		serverName = sni
-		if serverName == "" {
-			serverName = verifyName
-		}
-	}
-
-	skipVerify := allowInsecure
-	if rule.CertVerify.Mode != "" {
-		skipVerify = true
-	}
-
-	// Manual bypass check
-	if _, ok := p.certBypassMap.Load(normalizeHost(verifyName)); ok {
-		skipVerify = true
-		verifyConn = nil
-	}
-
-	// ECH mode verification:
-	// uTLS verifyServerCertificate has two branches:
-	//   echRejected=true  → outer cert (e.g. cloudflare-ech.com) is verified
-	//   echRejected=false → inner cert (e.g. cloudflare.com) is verified
-	//
-	// In both cases we set InsecureServerNameToVerify = "*" which tells uTLS
-	// to verify the CA trust chain but skip DNSName matching.
-	// This is correct because:
-	//   - The outer public_name is embedded in the ECH config (unknown to us)
-	//   - The inner name is authenticated by the ECH crypto binding itself
-	//   - We still want a valid CA chain to prevent MITM with rogue certs
-	if len(echConfig) > 0 {
-		skipVerify = false
-		verifyConn = nil
-	}
-
-	config := &utls.Config{
-		ServerName:                     serverName,
-		InsecureSkipVerify:             skipVerify,
-		EncryptedClientHelloConfigList: echConfig,
-		NextProtos:                     nextProtos,
-		VerifyConnection:               verifyConn,
-	}
-
-	if len(echConfig) > 0 {
-		config.InsecureServerNameToVerify = "*"
-	}
-
-	clientHelloID := chooseUTLSClientHelloID(alpn)
-	uconn := utls.UClient(conn, config, utls.HelloCustom)
-	if spec, err := utls.UTLSIdToSpec(clientHelloID); err == nil {
-		rewriteUTLSALPN(&spec, nextProtos)
-		if err := uconn.ApplyPreset(&spec); err == nil {
-			return uconn
-		}
-	}
-	uconn = utls.UClient(conn, config, clientHelloID)
-	return uconn
-}
-
-func (p *ProxyServer) resolveRuleECHConfig(host string, rule Rule) []byte {
-	if !rule.ECHEnabled {
-		return nil
-	}
-
-	// 1. 优先使用手动选择的全局 Profile
-	if rule.ECHProfileID != "" {
-		data := p.rules.GetBinaryECHConfig(rule.ECHProfileID)
-		if len(data) > 0 {
-			log.Printf("[Upstream] Using manual ECH profile %s for %s", rule.ECHProfileID, host)
-			return data
-		}
-	}
-
-	// 2. 自动更新逻辑
-	if rule.ECHAutoUpdate {
-		lookupDomain := strings.TrimSpace(rule.ECHDiscoveryDomain)
-		if lookupDomain == "" {
-			lookupDomain = host
-		}
-
-		echCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer cancel()
-
-		echConfig, err := p.FetchECH(echCtx, lookupDomain, strings.TrimSpace(rule.ECHDoHUpstream))
-		if err == nil && len(echConfig) > 0 {
-			log.Printf("[Upstream] Initial ECH fetch success for %s, syncing to profile %s", host, rule.ECHProfileID)
-			if rule.ECHProfileID != "" {
-				p.UpdateECHProfileConfig(rule.ECHProfileID, echConfig)
-			}
-			return echConfig
-		}
-	}
-
-	return nil
-}
-
-func (p *ProxyServer) NewQUICRoundTripper(host string, rule Rule) (*http3.Transport, error) {
-	targetAddr := net.JoinHostPort(host, "443")
-	dialCandidates := p.buildDialCandidates(context.Background(), host, targetAddr, rule, "quic")
-	if len(dialCandidates) == 0 {
-		dialCandidates = []string{targetAddr}
-	}
-
-	sniHost := chooseUpstreamSNI(host, rule)
-	if sniHost == "" {
-		sniHost = host
-	}
-
-	// Resolve ECH configuration
-	var echConfig []byte
-	if rule.ECHEnabled {
-		echConfig = p.resolveRuleECHConfig(host, rule)
-	}
-
-	// In ECH mode, ServerName must be the inner (real) target domain.
-	// The outer SNI is automatically derived from the ECH config's public name.
-	// In non-ECH mode, ServerName uses the chosen upstream SNI (which may be fake).
-	innerSNI := host
-	if len(echConfig) == 0 {
-		innerSNI = sniHost
-	}
-
-	verifyConn := buildVerifyConnection(host, rule.CertVerify)
-	tlsConfig := &tls.Config{
-		ServerName:         innerSNI,
-		NextProtos:         []string{"h3", "h3-29", "h3-32"},
-		InsecureSkipVerify: true,
-	}
-
-	// Enable ECH if configuration is available
-	if len(echConfig) > 0 {
-		tlsConfig.EncryptedClientHelloConfigList = echConfig
-		tlsConfig.InsecureSkipVerify = false
-		log.Printf("[QUIC] ECH enabled host=%s innerSNI=%s echLen=%d", host, innerSNI, len(echConfig))
-	}
-
-	if verifyConn != nil && len(echConfig) == 0 {
-		tlsConfig.VerifyConnection = func(cs tls.ConnectionState) error {
-			peer := make([]*x509.Certificate, len(cs.PeerCertificates))
-			copy(peer, cs.PeerCertificates)
-			return verifyConn(utls.ConnectionState{
-				Version:                     cs.Version,
-				HandshakeComplete:           cs.HandshakeComplete,
-				DidResume:                   cs.DidResume,
-				CipherSuite:                 cs.CipherSuite,
-				NegotiatedProtocol:          cs.NegotiatedProtocol,
-				NegotiatedProtocolIsMutual:  cs.NegotiatedProtocolIsMutual,
-				ServerName:                  cs.ServerName,
-				PeerCertificates:            peer,
-				VerifiedChains:              cs.VerifiedChains,
-				SignedCertificateTimestamps: cs.SignedCertificateTimestamps,
-				OCSPResponse:                cs.OCSPResponse,
-				TLSUnique:                   cs.TLSUnique,
-				ECHAccepted:                 cs.ECHAccepted,
-			})
-		}
-	}
-
-	return &http3.Transport{
-		TLSClientConfig: tlsConfig,
-		QUICConfig: &quic.Config{
-			HandshakeIdleTimeout: 10 * time.Second,
-		},
-		Dial: func(ctx context.Context, _ string, tlsCfg *tls.Config, cfg *quic.Config) (*quic.Conn, error) {
-			var errs []string
-			for _, candidate := range dialCandidates {
-				conn, err := quic.DialAddr(ctx, candidate, tlsCfg, cfg)
-				if err == nil {
-					cs := conn.ConnectionState().TLS
-					log.Printf("[QUIC] H3 dial success host=%s addr=%s sni=%s alpn=%s echAccepted=%v", host, candidate, tlsCfg.ServerName, cs.NegotiatedProtocol, cs.ECHAccepted)
-					return conn, nil
-				}
-				errs = append(errs, fmt.Sprintf("%s: %v", candidate, err))
-				log.Printf("[QUIC] H3 dial failed host=%s addr=%s err=%v", host, candidate, err)
-			}
-			if len(errs) == 0 {
-				return nil, fmt.Errorf("no QUIC dial candidates for %s", host)
-			}
-			return nil, fmt.Errorf("all QUIC dial candidates failed for %s: %s", host, strings.Join(errs, "; "))
-		},
-	}, nil
-}
-
-func (p *ProxyServer) handleQUICMITM(clientConn net.Conn, host string, rule Rule) {
-	defer clientConn.Close()
-	log.Printf("[QUICMode] Handling %s via local H3 replay", host)
-
-	if p.certGenerator == nil {
-		log.Printf("[QUICMode] No cert generator available")
-		return
-	}
-	caCert := p.certGenerator.GetCACert()
-	caKey := p.certGenerator.GetCAKey()
-	tlsConfig := p.makeMITMTLSConfig(host, caCert, caKey, []string{"http/1.1"}, "[QUICMode]")
-	clientTLS := tls.Server(clientConn, tlsConfig)
-	if err := clientTLS.Handshake(); err != nil {
-		log.Printf("[QUICMode] Client TLS handshake failed: %v", err)
-		return
-	}
-
-	quicTransport, err := p.NewQUICRoundTripper(host, rule)
-	if err != nil {
-		log.Printf("[QUICMode] Failed to create HTTP/3 transport: %v", err)
-		return
-	}
-	defer quicTransport.Close()
-
-	client := &http.Client{
-		Transport: quicTransport,
-		CheckRedirect: func(req *http.Request, via []*http.Request) error {
-			return http.ErrUseLastResponse
-		},
-	}
-
-	srv := &http.Server{
-		Handler: http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
-			path := req.URL.EscapedPath()
-			if path == "" || !strings.HasPrefix(path, "/") {
-				path = "/" + strings.TrimPrefix(path, "/")
-			}
-
-			targetURL := "https://" + host + path
-			if req.URL.RawQuery != "" {
-				targetURL += "?" + req.URL.RawQuery
-			}
-
-			newReq, err := http.NewRequestWithContext(req.Context(), req.Method, targetURL, req.Body)
-			if err != nil {
-				http.Error(w, "Bad request", http.StatusInternalServerError)
-				return
-			}
-			for k, vv := range req.Header {
-				for _, v := range vv {
-					newReq.Header.Add(k, v)
-				}
-			}
-			removeHopByHopHeaders(newReq.Header)
-			newReq.Host = host
-
-			resp, err := client.Do(newReq)
-			if err != nil {
-				log.Printf("[QUICMode] Forwarding error method=%s host=%s target=%s err=%v", req.Method, host, targetURL, err)
-				http.Error(w, "Proxy error", http.StatusBadGateway)
-				return
-			}
-			defer resp.Body.Close()
-
-			removeHopByHopHeaders(resp.Header)
-			for k, vv := range resp.Header {
-				for _, v := range vv {
-					w.Header().Add(k, v)
-				}
-			}
-			w.WriteHeader(resp.StatusCode)
-			_, _ = io.Copy(w, resp.Body)
-		}),
-	}
-
-	_ = srv.Serve(&singleConnListener{conn: clientTLS, done: make(chan struct{})})
-}
-
-func (p *ProxyServer) handleServerMITM(clientConn net.Conn, host string, rule Rule) {
-	defer clientConn.Close()
-	log.Printf("[ServerMode] Handling %s via Server", host)
-
-	if p.certGenerator == nil {
-		log.Printf("[ServerMode] No cert generator available")
-		return
-	}
-	caCert := p.certGenerator.GetCACert()
-	caKey := p.certGenerator.GetCAKey()
-	tlsConfig := p.makeMITMTLSConfig(host, caCert, caKey, []string{"http/1.1"}, "[ServerMode]")
-	clientTls := tls.Server(clientConn, tlsConfig)
-	if err := clientTls.Handshake(); err != nil {
-		log.Printf("[ServerMode] TLS handshake failed: %v", err)
-		return
-	}
-
-	serverHost := p.rules.serverHost
-	if serverHost == "" {
-		log.Printf("[ServerMode] ServerHost not configured")
-		return
-	}
-
-	dialCandidates := []string{}
-	seen := map[string]struct{}{}
-	if rule.UseCFPool && p.cfPool != nil {
-		topIPs := p.cfPool.GetTopIPs(5)
-		for _, ip := range topIPs {
-			addr := net.JoinHostPort(ip, "443")
-			if _, ok := seen[addr]; ok {
-				continue
-			}
-			seen[addr] = struct{}{}
-			dialCandidates = append(dialCandidates, addr)
-		}
-	}
-	serverAddr := net.JoinHostPort(serverHost, "443")
-	if _, ok := seen[serverAddr]; !ok {
-		dialCandidates = append(dialCandidates, serverAddr)
-	}
-
-	upstreamConn, upstreamProtocol, err := p.establishUpstreamConn(serverHost, rule, dialCandidates, "")
-	if err != nil {
-		log.Printf("[ServerMode] Failed to establish upstream connection: %v", err)
-		return
-	}
-	defer upstreamConn.Close()
-
-	log.Printf("[ServerMode] Upstream protocol: %s", upstreamProtocol)
-
-	var uconn *utls.UConn
-	if uc, ok := upstreamConn.(*utls.UConn); ok {
-		uconn = uc
-	}
-
-	var transport http.RoundTripper
-	if upstreamProtocol == "h2" || (uconn != nil && uconn.ConnectionState().NegotiatedProtocol == "h2") {
-		cs := uconn.ConnectionState()
-		peerCN := ""
-		if len(cs.PeerCertificates) > 0 {
-			peerCN = cs.PeerCertificates[0].Subject.CommonName
-		}
-		log.Printf("[ServerMode] Upstream uTLS negotiated: alpn=%s echAccepted=%v peerCN=%s", cs.NegotiatedProtocol, cs.ECHAccepted, peerCN)
-		t2 := &http2.Transport{}
-		c2, err := t2.NewClientConn(uconn)
-		if err != nil {
-			log.Printf("[ServerMode] H2 wrapper failed: %v", err)
-			return
-		}
-		transport = roundTripperFunc(func(req *http.Request) (*http.Response, error) {
-			return c2.RoundTrip(req)
-		})
-	} else {
-		transport = &http.Transport{
-			DialTLSContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
-				return upstreamConn, nil
-			},
-		}
-	}
-
-	client := &http.Client{
-		Transport: transport,
-		CheckRedirect: func(req *http.Request, via []*http.Request) error {
-			return http.ErrUseLastResponse
-		},
-	}
-
-	srv := &http.Server{
-		Handler: http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
-			targetUrl := "https://" + host + req.URL.Path
-			if req.URL.RawQuery != "" {
-				targetUrl += "?" + req.URL.RawQuery
-			}
-
-			path := req.URL.EscapedPath()
-			if path == "" || !strings.HasPrefix(path, "/") {
-				path = "/" + strings.TrimPrefix(path, "/")
-			}
-
-			workerUrlStr := "https://" + serverHost + "/" + p.rules.serverAuth + "/" + host + path
-			if req.URL.RawQuery != "" {
-				workerUrlStr += "?" + req.URL.RawQuery
-			}
-
-			newReq, err := http.NewRequest(req.Method, workerUrlStr, req.Body)
-			if err != nil {
-				http.Error(w, "Bad request", http.StatusInternalServerError)
-				return
-			}
-
-			for k, vv := range req.Header {
-				for _, v := range vv {
-					newReq.Header.Add(k, v)
-				}
-			}
-			newReq.Host = serverHost
-			log.Printf("[ServerMode] Forward request method=%s workerURL=%s host=%s target=%s contentLength=%d", req.Method, workerUrlStr, newReq.Host, targetUrl, req.ContentLength)
-
-			removeHopByHopHeaders(newReq.Header)
-
-			resp, err := client.Do(newReq)
-			if err != nil {
-				log.Printf("[ServerMode] Forwarding error method=%s workerURL=%s host=%s target=%s err=%v", req.Method, workerUrlStr, newReq.Host, targetUrl, err)
-				http.Error(w, "Proxy error", http.StatusBadGateway)
-				return
-			}
-			defer resp.Body.Close()
-			log.Printf("[ServerMode] Upstream response status=%d target=%s", resp.StatusCode, targetUrl)
-
-			removeHopByHopHeaders(resp.Header)
-			for k, vv := range resp.Header {
-				for _, v := range vv {
-					w.Header().Add(k, v)
-				}
-			}
-			w.WriteHeader(resp.StatusCode)
-			io.Copy(w, resp.Body)
-		}),
-	}
-	_ = srv.Serve(&singleConnListener{conn: clientTls, done: make(chan struct{})})
-}
-
-// establishUpstreamConn 整合多节点拨号、优选 IP、uTLS 握手及 ECH 自动提取逻辑
-// EstablishUpstreamConn is the public version of establishUpstreamConn, used by evolution mode testing
-func (p *ProxyServer) EstablishUpstreamConn(host string, rule Rule, dialCandidates []string, initialALPN string) (net.Conn, string, error) {
-	return p.establishUpstreamConn(host, rule, dialCandidates, initialALPN)
-}
-
-func (p *ProxyServer) establishUpstreamConn(host string, rule Rule, dialCandidates []string, initialALPN string) (net.Conn, string, error) {
-	// 1. 确定拨号地址
-	ordered := dialCandidates
-	if len(ordered) == 0 {
-		ordered = []string{net.JoinHostPort(host, "443")}
-	}
-
-	// 2. 预计算握手参数（按候选逐个握手重试）
-	sniHost := chooseUpstreamSNI(host, rule)
-
-	upstreamALPN := initialALPN
-	if upstreamALPN == "" {
-		upstreamALPN = "h2_h1"
-	}
-	// 3. 按候选逐个拨号+握手（关键：握手失败也要尝试下一个候选）
-	var errs []string
-	for _, addr := range ordered {
-		// [修正] 每个 IP 候选人都有 2 次机会（初始尝试 + 1 次原地纠错重试）
-		for attempt := 0; attempt < 2; attempt++ {
-			// [修正] 动态解析 ECH 配置，以便吃到上一次尝试产生的纠错缓存
-			var echConfig []byte
-			if rule.ECHEnabled {
-				echConfig = p.resolveRuleECHConfig(host, rule)
-			}
-
-			rawConn, dialErr := p.dialWithRule(context.Background(), "tcp", addr, rule)
-			if dialErr != nil {
-				errs = append(errs, fmt.Sprintf("%s dial: %v", addr, dialErr))
-				if rule.UseCFPool && p.cfPool != nil {
-					h, _, _ := net.SplitHostPort(addr)
-					if h != "" {
-						p.cfPool.ReportFailure(h)
-					}
-				}
-				break // 拨号失败换下一个 IP，不重试
-			}
-
-			allowInsecure := len(echConfig) == 0
-			// In ECH mode, we pass both Outer SNI (sniHost) and Inner SNI (host)
-			// to GetUConn to properly separate ClientHello encryption from certificate validation.
-			uconn := p.GetUConn(rawConn, sniHost, host, rule, allowInsecure, upstreamALPN, echConfig)
-			utlsErr := uconn.Handshake()
-			if utlsErr == nil {
-				// 握手成功，记录日志并返回
-				cs := uconn.ConnectionState()
-				peerCN := ""
-				peerSAN := ""
-				if len(cs.PeerCertificates) > 0 {
-					peerCN = cs.PeerCertificates[0].Subject.CommonName
-					if len(cs.PeerCertificates[0].DNSNames) > 0 {
-						peerSAN = cs.PeerCertificates[0].DNSNames[0]
-					}
-				}
-				log.Printf("[Upstream] uTLS handshake ok host=%s addr=%s outerSNI=%s alpn=%s echAccepted=%v peerCN=%s peerSAN0=%s", host, addr, sniHost, cs.NegotiatedProtocol, cs.ECHAccepted, peerCN, peerSAN)
-				if rule.UseCFPool && p.cfPool != nil {
-					h, _, _ := net.SplitHostPort(addr)
-					if h != "" {
-						p.cfPool.ReportSuccess(h)
-					}
-				}
-				return uconn, cs.NegotiatedProtocol, nil
-			}
-
-			// 握手失败，清理资源
-			rawConn.Close()
-
-			// [ECH 纠错与原地重试逻辑]
-			var echErr *utls.ECHRejectionError
-			if errors.As(utlsErr, &echErr) {
-				if attempt == 0 && rule.ECHEnabled && p.dohResolver != nil {
-					log.Printf("[Upstream] ECH REJECTED by %s. Attempting proactive DNS refresh for %s...", addr, host)
-
-					// 1. 尝试同步刷新 ECH 配置
-					refreshCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-					lookupDomain := rule.ECHDiscoveryDomain
-					if lookupDomain == "" {
-						lookupDomain = host
-					}
-					newECH, refreshErr := p.dohResolver.ResolveECHSafe(refreshCtx, lookupDomain)
-					cancel()
-
-					if refreshErr == nil && len(newECH) > 0 {
-						log.Printf("[Upstream] Successfully refreshed ECH for %s via DNS. Syncing to profile and retrying...", host)
-						if rule.ECHProfileID != "" {
-							p.UpdateECHProfileConfig(rule.ECHProfileID, newECH)
-						}
-						// 第二次尝试将自动从 Profile 读取新配置
-						continue
-					}
-
-					// 2. 如果 DNS 刷新失败，尝试使用 uTLS 提供的 RetryConfigList (如果存在)
-					if len(echErr.RetryConfigList) > 0 {
-						log.Printf("[Upstream] DNS refresh failed, but RetryConfigs available. Retrying once with server-provided configs...")
-						// 注意：由于 resolveRuleECHConfig 在循环开头调用，
-						// 这里的原地 continue 无法直接注入 RetryConfigList，
-						// 除非我们修改循环结构。但为了安全，我们优先信任 DNS 刷新。
-						// 如果 DNS 没刷新出来，这里我们选择继续尝试下一个 IP 或者报错，
-						// 因为 RetryConfigList 仅对当前握手有效，无法持久化。
-					}
-				}
-			}
-
-			// 最终失败处理
-			errs = append(errs, fmt.Sprintf("%s utls: %v", addr, utlsErr))
-			if rule.UseCFPool && p.cfPool != nil {
-				h, _, _ := net.SplitHostPort(addr)
-				if h != "" {
-					p.cfPool.ReportFailure(h)
-				}
-			}
-			break // 换下一个 IP
-		}
-	}
-
-	if len(errs) == 0 {
-		return nil, "", fmt.Errorf("all candidates failed with unknown error")
-	}
-
-	finalErr := fmt.Errorf("all candidates failed: %s", strings.Join(errs, "; "))
-
-	// 安全降级逻辑：仅支持降级到安全协议
-	fallback := strings.ToLower(strings.TrimSpace(rule.FallbackMode))
-	if (fallback == "tls-rf" || fallback == "quic") && fallback != rule.Mode {
-		log.Printf("[Upstream] ECH/Primary connection failed for %s, falling back to secure mode: %s", host, fallback)
-		fallbackRule := rule
-		fallbackRule.Mode = fallback
-		fallbackRule.ECHEnabled = false // 既然已经降级，通常不再尝试 ECH 或由新模式自行处理
-		return p.establishUpstreamConn(host, fallbackRule, dialCandidates, initialALPN)
-	}
-
-	return nil, "", finalErr
-}
-
-func (p *ProxyServer) dialWithRule(ctx context.Context, network, addr string, rule Rule) (net.Conn, error) {
-	// Default direct dialer
-	dialer := &net.Dialer{
-		Timeout:   10 * time.Second,
-		KeepAlive: 30 * time.Second,
-	}
-	return dialer.DialContext(ctx, network, addr)
-}
-
-// DialWithRule is the public version of dialWithRule, used by evolution mode testing
-func (p *ProxyServer) DialWithRule(ctx context.Context, network, addr string, rule Rule) (net.Conn, error) {
-	return p.dialWithRule(ctx, network, addr, rule)
-}
-
-// FetchECH performs a one-off ECH resolution via DoH for a specific domain and upstream
 func (p *ProxyServer) FetchECH(ctx context.Context, domain string, dohURL string) ([]byte, error) {
+	if dohURL != "" {
+		return fetchECHDirect(ctx, domain, dohURL)
+	}
 	if p.dohResolver == nil {
 		return nil, fmt.Errorf("no DoH resolver available")
 	}
-
-	// Now FetchECH ignores dohURL and just tries to resolve it with the global FailoverResolver.
-	// But we must prevent resolving Alidns or other bootstrap nodes themselves.
 	return p.dohResolver.ResolveECH(ctx, domain)
 }
 
-// --- Auto Routing ---
-
-func (rm *RuleManager) GetAutoRoutingConfig() AutoRoutingConfig {
-	rm.mu.RLock()
-	defer rm.mu.RUnlock()
-	return rm.autoRoutingConfig
-}
-
-func (rm *RuleManager) UpdateAutoRoutingConfig(cfg AutoRoutingConfig) error {
-	rm.mu.Lock()
-	rm.autoRoutingConfig = cfg
-	if rm.autoRouter != nil {
-		rm.autoRouter.UpdateConfig(cfg)
-	}
-	rm.mu.Unlock()
-	return rm.saveSettingsConfig()
-}
-
-func (rm *RuleManager) GetAutoRouter() *AutoRouter {
-	rm.mu.RLock()
-	defer rm.mu.RUnlock()
-	return rm.autoRouter
-}
-
-func (rm *RuleManager) InitAutoRouter(resolver *FailoverResolver) {
-	rm.mu.Lock()
-	defer rm.mu.Unlock()
-	rm.autoRouter = NewAutoRouter(rm.autoRoutingConfig, resolver)
-
-	// Try loading cached GFW list
-	cachePath := gfwListCachePath(rm.rulesPath)
-	if count, err := rm.autoRouter.GetGFWList().LoadFromFile(cachePath); err == nil {
-		log.Printf("[AutoRoute] Loaded %d domains from cache: %s", count, cachePath)
-	} else {
-		log.Printf("[AutoRoute] No cached GFW list at %s: %v", cachePath, err)
-	}
-}
-
-func (rm *RuleManager) RefreshGFWList() (int, error) {
-	rm.mu.RLock()
-	ar := rm.autoRouter
-	cfg := rm.autoRoutingConfig
-	rulesPath := rm.rulesPath
-	rm.mu.RUnlock()
-
-	if ar == nil {
-		return 0, fmt.Errorf("auto router not initialized")
-	}
-
-	url := cfg.GFWListURL
-	if url == "" {
-		url = defaultGFWListURL
-	}
-
-	count, err := ar.GetGFWList().LoadFromURL(url)
+// fetchECHDirect sends a plain HTTPS DoH TypeHTTPS query to the given URL,
+// bypassing configured DNS nodes. Used by ECH profile probing.
+func fetchECHDirect(ctx context.Context, domain, dohURL string) ([]byte, error) {
+	msg := new(dns.Msg)
+	msg.SetQuestion(dns.Fqdn(domain), dns.TypeHTTPS)
+	buf, err := msg.Pack()
 	if err != nil {
-		return 0, err
+		return nil, err
 	}
 
-	// Save to local cache
-	cachePath := gfwListCachePath(rulesPath)
-	if saveErr := ar.GetGFWList().SaveToFile(cachePath); saveErr != nil {
-		log.Printf("[AutoRoute] Failed to save GFW list cache: %v", saveErr)
+	req, err := http.NewRequestWithContext(ctx, "POST", dohURL, bytes.NewReader(buf))
+	if err != nil {
+		return nil, err
+	}
+	req.ContentLength = int64(len(buf))
+	req.Header.Set("Content-Type", "application/dns-message")
+	req.Header.Set("Accept", "application/dns-message")
+	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36 SNIShaper/1.0")
+
+	client := &http.Client{Timeout: 10 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("DoH server returned status %d", resp.StatusCode)
 	}
 
-	// Update last update time
-	rm.mu.Lock()
-	rm.autoRoutingConfig.LastUpdate = time.Now().Format("2006-01-02 15:04:05")
-	cfg = rm.autoRoutingConfig
-	if rm.autoRouter != nil {
-		rm.autoRouter.UpdateConfig(cfg)
+	respBuf, err := io.ReadAll(io.LimitReader(resp.Body, 64*1024))
+	if err != nil {
+		return nil, err
 	}
-	rm.mu.Unlock()
-	_ = rm.saveSettingsConfig()
 
-	return count, nil
-}
+	resMsg := new(dns.Msg)
+	if err := resMsg.Unpack(respBuf); err != nil {
+		return nil, err
+	}
 
-func (rm *RuleManager) GetAutoRoutingStatus() GFWListStatus {
-	rm.mu.RLock()
-	defer rm.mu.RUnlock()
-	if rm.autoRouter != nil {
-		return rm.autoRouter.GetStatus()
+	for _, ans := range resMsg.Answer {
+		if https, ok := ans.(*dns.HTTPS); ok {
+			for _, opt := range https.Value {
+				if ech, ok := opt.(*dns.SVCBECHConfig); ok {
+					return ech.ECH, nil
+				}
+			}
+		}
 	}
-	return GFWListStatus{
-		Enabled: false,
-		Mode:    string(rm.autoRoutingConfig.Mode),
-	}
+	return nil, fmt.Errorf("no ECH config found for %s", domain)
 }

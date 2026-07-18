@@ -16,6 +16,7 @@ import {
   EventsOn
 } from '../api/bindings';
 import { toast } from '../lib/toast';
+import { extractErrorMessage } from '../lib/utils';
 import { useTranslation } from '../i18n/I18nContext';
 
 interface FlowEntry {
@@ -76,11 +77,20 @@ const Routing: React.FC = () => {
     toast.success(t('routing.notifications.saved'), t('routing.notifications.saved_desc'));
   };
 
+  const [refreshing, setRefreshing] = useState(false);
+
   const handleRefreshGFW = async () => {
-    await RefreshGFWList();
-    const s = await GetAutoRoutingStatus();
-    setStatus(s);
-    toast.success(t('routing.notifications.updated'), t('routing.notifications.updated_desc', { count: s?.domain_count || 0 }));
+    setRefreshing(true);
+    try {
+      await RefreshGFWList();
+      const s = await GetAutoRoutingStatus();
+      setStatus(s);
+      toast.success(t('routing.notifications.updated'), t('routing.notifications.updated_desc', { count: s?.domain_count || 0 }));
+    } catch (e: any) {
+      toast.error(t('common.error'), extractErrorMessage(e));
+    } finally {
+      setRefreshing(false);
+    }
   };
 
   return (
@@ -160,10 +170,11 @@ const Routing: React.FC = () => {
                     </div>
                     <button 
                         onClick={handleRefreshGFW}
-                        className="flex items-center gap-2 px-5 py-2.5 rounded-2xl text-[10px] font-black uppercase tracking-widest bg-background-hover hover:bg-accent hover:text-white transition-all shadow-sm"
+                        disabled={refreshing}
+                        className="flex items-center gap-2 px-5 py-2.5 rounded-2xl text-[10px] font-black uppercase tracking-widest bg-background-hover hover:bg-accent hover:text-white transition-all shadow-sm disabled:opacity-50"
                     >
-                        <RefreshCw size={12} />
-                        {t('routing.update_list')}
+                        <RefreshCw size={12} className={refreshing ? 'animate-spin' : ''} />
+                        {refreshing ? t('ech_form.probing') : t('routing.update_list')}
                     </button>
                 </div>
                 <button 

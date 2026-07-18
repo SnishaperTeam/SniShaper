@@ -117,7 +117,7 @@ const Rules: React.FC = () => {
 
   const groupedResults = React.useMemo(() => {
     const filtered = groups.filter(g => {
-      const matchesSearch = (g.name || '') + (g.website || '') + (g.domains || []).join('')
+      const matchesSearch = ((g.name || '') + (g.website || '') + (g.domains || []).join(''))
         .toLowerCase().includes(search.toLowerCase());
       const matchesMode = filterMode === 'ALL' || getEffectiveMode(g) === filterMode;
       return matchesSearch && matchesMode;

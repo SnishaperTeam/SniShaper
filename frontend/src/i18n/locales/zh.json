@@ -253,7 +253,8 @@
   "settings": {
     "title": "系统设置",
     "tabs": {
-      "general": "常规",
+      "general": "通用",
+      "port": "端口",
       "proxy": "代理设置",
       "network": "网络",
       "security": "证书 & 安全",
@@ -292,8 +293,9 @@
       "title": "最小化到托盘",
       "desc": "点击关闭按钮时，程序将隐藏到系统托盘而不退出。"
     },
-    "http_port": "HTTP 代理端口",
-    "socks_port": "SOCKS5 代理端口",
+    "http_port": "HTTP",
+    "socks_port": "SOCKS5",
+    "port_title": "端口",
     "lan_sharing": {
       "title": "局域网共享",
       "desc": "允许局域网内的其他设备连接该代理。"

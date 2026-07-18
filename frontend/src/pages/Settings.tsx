@@ -202,7 +202,7 @@ const Settings: React.FC<SettingsProps> = ({ cache, onCacheUpdate, theme, toggle
             </div>
 
             <div className="space-y-4">
-              <SettingRow icon={<Monitor size={20} />}>
+              <SettingRow icon={<Monitor size={20} />} title={t('settings.port_title')}>
                 <div className="flex flex-col gap-3">
                   <div className="flex items-center gap-2">
                     <label htmlFor="http-port" className="text-[10px] text-text-secondary font-bold w-12">{t('settings.http_port')}</label>
@@ -216,7 +216,7 @@ const Settings: React.FC<SettingsProps> = ({ cache, onCacheUpdate, theme, toggle
                     <Button onClick={handleSavePort} size="xs">{t('common.apply')}</Button>
                   </div>
                   <div className="flex items-center gap-2">
-                    <label htmlFor="socks5-port" className="text-[10px] text-text-secondary font-bold w-12">SOCKS5</label>
+                    <label htmlFor="socks5-port" className="text-[10px] text-text-secondary font-bold w-12">{t('settings.socks_port')}</label>
                     <input
                       id="socks5-port"
                       type="text"

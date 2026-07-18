@@ -1,8 +1,10 @@
-package proxy
+package cfpool
 
 import (
+	"context"
 	"crypto/tls"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -14,12 +16,12 @@ import (
 )
 
 type IPStats struct {
-	IP            string `json:"ip"`
-	Latency       string `json:"latency"`
-	Failures      int    `json:"failures"`
-	LastCheck     string `json:"last_check"`
-	latencyVal    time.Duration
-	lastCheckTime time.Time
+	IP            string    `json:"ip"`
+	Latency       string    `json:"latency"`
+	Failures      int       `json:"failures"`
+	LastCheck     string    `json:"last_check"`
+	LatencyVal    time.Duration
+	LastCheckTime time.Time
 }
 
 type CloudflarePool struct {
@@ -29,6 +31,13 @@ type CloudflarePool struct {
 	stopChan  chan struct{}
 	running   bool
 	wg        sync.WaitGroup // Track goroutine lifecycle
+
+	// 最快 IP 缓存及 5分钟的过期时间
+	bestIP       string
+	bestIPExpire time.Time
+
+	// IP 拉取新鲜度：记录上次成功拉取时间
+	lastFetchTime time.Time
 }
 
 func NewCloudflarePool(ips []string) *CloudflarePool {
@@ -38,7 +47,32 @@ func NewCloudflarePool(ips []string) *CloudflarePool {
 		stopChan:  make(chan struct{}),
 	}
 	p.UpdateIPs(ips)
+	p.lastFetchTime = time.Now()
 	return p
+}
+
+// SetLastFetchTime updates the last fetch timestamp after a successful API call.
+func (p *CloudflarePool) SetLastFetchTime(t time.Time) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.lastFetchTime = t
+}
+
+// IsStale returns true if the IP pool was last fetched more than maxAge ago.
+func (p *CloudflarePool) IsStale(maxAge time.Duration) bool {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+	if p.lastFetchTime.IsZero() {
+		return true
+	}
+	return time.Since(p.lastFetchTime) > maxAge
+}
+
+// HasIPs returns true if the pool has any IPs at all.
+func (p *CloudflarePool) HasIPs() bool {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+	return len(p.allIPs) > 0
 }
 
 func (p *CloudflarePool) Start() {
@@ -97,12 +131,12 @@ func (p *CloudflarePool) UpdateIPs(ips []string) {
 	// Re-filter activeIPs to remove deleted ones
 	p.activeIPs = make([]*IPStats, 0)
 	for _, stats := range p.allIPs {
-		if stats.latencyVal > 0 && stats.Failures < 3 {
+		if stats.LatencyVal > 0 && stats.Failures < 3 {
 			p.activeIPs = append(p.activeIPs, stats)
 		}
 	}
 	sort.Slice(p.activeIPs, func(i, j int) bool {
-		return p.activeIPs[i].latencyVal < p.activeIPs[j].latencyVal
+		return p.activeIPs[i].LatencyVal < p.activeIPs[j].LatencyVal
 	})
 	p.mu.Unlock()
 
@@ -152,13 +186,13 @@ func (p *CloudflarePool) GetAllIPsWithStats() []*IPStats {
 
 	sort.Slice(stats, func(i, j int) bool {
 		// Put 0 latency (unchecked/failed) at end
-		if stats[i].latencyVal == 0 {
+		if stats[i].LatencyVal == 0 {
 			return false
 		}
-		if stats[j].latencyVal == 0 {
+		if stats[j].LatencyVal == 0 {
 			return true
 		}
-		return stats[i].latencyVal < stats[j].latencyVal
+		return stats[i].LatencyVal < stats[j].LatencyVal
 	})
 
 	return stats
@@ -168,11 +202,7 @@ func (p *CloudflarePool) healthCheckLoop() {
 	// Initial check on startup
 	go p.checkAllIPs()
 
-	// Wait for stop signal - no periodic checks needed
-	// Health checks are now event-driven:
-	// - Triggered by connection failures (ReportFailure)
-	// - Triggered by IP list updates (UpdateIPs)
-	// - Triggered manually (TriggerHealthCheck)
+	// Wait for stop signal
 	<-p.stopChan
 }
 
@@ -201,28 +231,39 @@ func (p *CloudflarePool) ReportFailure(ip string) {
 	p.mu.Lock()
 	if stats, ok := p.allIPs[ip]; ok {
 		stats.Failures++
-		stats.latencyVal += 1000 * time.Millisecond // Penalize latency
-		stats.Latency = stats.latencyVal.String()
+		stats.LatencyVal += 1000 * time.Millisecond // Penalize latency
+		stats.Latency = stats.LatencyVal.String()
 
 		// Trigger incremental check when failures reach threshold
 		if stats.Failures >= 2 {
 			go p.checkIncremental()
 		}
 	}
+	// 清空最快 IP 缓存，迫使下一次连接重新竞速
+	p.bestIP = ""
+	p.bestIPExpire = time.Time{}
 	p.mu.Unlock()
 	p.rebuildActiveIPs()
 }
 
-// checkIncremental performs health check on problematic IPs only
+func (p *CloudflarePool) ReportSuccess(ip string) {
+	p.mu.Lock()
+	if stats, ok := p.allIPs[ip]; ok {
+		if stats.Failures > 0 {
+			stats.Failures--
+		}
+	}
+	p.mu.Unlock()
+}
+
 func (p *CloudflarePool) checkIncremental() {
 	p.mu.RLock()
 	ipsToCheck := make([]string, 0)
 	now := time.Now()
 
 	for ip, stats := range p.allIPs {
-		// Check IPs with failures >= 2 or not checked in 30 minutes
 		if stats.Failures >= 2 ||
-			now.Sub(stats.lastCheckTime) > 30*time.Minute {
+			now.Sub(stats.LastCheckTime) > 30*time.Minute {
 			ipsToCheck = append(ipsToCheck, ip)
 		}
 	}
@@ -235,7 +276,6 @@ func (p *CloudflarePool) checkIncremental() {
 	p.checkIPs(ipsToCheck)
 }
 
-// checkIPs performs health check on specified IPs
 func (p *CloudflarePool) checkIPs(ipsToCheck []string) {
 	if len(ipsToCheck) == 0 {
 		return
@@ -258,14 +298,14 @@ func (p *CloudflarePool) checkIPs(ipsToCheck []string) {
 			if ok {
 				now := time.Now()
 				stats.LastCheck = now.Format(time.RFC3339)
-				stats.lastCheckTime = now
+				stats.LastCheckTime = now
 				if err != nil {
 					stats.Failures++
-					stats.latencyVal = 0 // Invalid
+					stats.LatencyVal = 0 // Invalid
 					stats.Latency = ""
 				} else {
 					stats.Failures = 0
-					stats.latencyVal = latency
+					stats.LatencyVal = latency
 					stats.Latency = latency.String()
 				}
 			}
@@ -275,16 +315,6 @@ func (p *CloudflarePool) checkIPs(ipsToCheck []string) {
 	wg.Wait()
 
 	p.rebuildActiveIPs()
-}
-
-func (p *CloudflarePool) ReportSuccess(ip string) {
-	p.mu.Lock()
-	if stats, ok := p.allIPs[ip]; ok {
-		if stats.Failures > 0 {
-			stats.Failures--
-		}
-	}
-	p.mu.Unlock()
 }
 
 func (p *CloudflarePool) checkAllIPs() {
@@ -304,13 +334,13 @@ func (p *CloudflarePool) rebuildActiveIPs() {
 
 	newActive := make([]*IPStats, 0)
 	for _, stats := range p.allIPs {
-		if stats.latencyVal > 0 && stats.Failures < 3 {
+		if stats.LatencyVal > 0 && stats.Failures < 3 {
 			newActive = append(newActive, stats)
 		}
 	}
 
 	sort.Slice(newActive, func(i, j int) bool {
-		return newActive[i].latencyVal < newActive[j].latencyVal
+		return newActive[i].LatencyVal < newActive[j].LatencyVal
 	})
 
 	p.activeIPs = newActive
@@ -329,6 +359,114 @@ func (p *CloudflarePool) testIP(ip string) (time.Duration, error) {
 	return time.Since(start), nil
 }
 
+// DialParallel 并发建连竞速并缓存最快 IP
+func (p *CloudflarePool) DialParallel(ctx context.Context, network string, port string) (net.Conn, string, error) {
+	if port == "" {
+		port = "443"
+	}
+
+	p.mu.Lock()
+	// 1. 如果缓存的 bestIP 未过期，优先进行单点连接
+	if p.bestIP != "" && time.Now().Before(p.bestIPExpire) {
+		best := p.bestIP
+		p.mu.Unlock()
+
+		dialer := &net.Dialer{Timeout: 2 * time.Second}
+		conn, err := dialer.DialContext(ctx, network, net.JoinHostPort(best, port))
+		if err == nil {
+			return conn, net.JoinHostPort(best, port), nil
+		}
+
+		// 失败了，清空 bestIP，准备开始竞速
+		p.mu.Lock()
+		p.bestIP = ""
+		p.bestIPExpire = time.Time{}
+	}
+
+	// 2. 收集候选 IP 列表
+	candidates := make([]string, 0, len(p.activeIPs))
+	for _, ip := range p.activeIPs {
+		candidates = append(candidates, ip.IP)
+	}
+	if len(candidates) == 0 {
+		for ip := range p.allIPs {
+			candidates = append(candidates, ip)
+		}
+	}
+	p.mu.Unlock()
+
+	if len(candidates) == 0 {
+		return nil, "", errors.New("no Cloudflare IPs available in pool")
+	}
+
+	// 3. 开始并发拨号竞速 (Happy Eyeballs)
+	type dialResult struct {
+		conn net.Conn
+		ip   string
+		err  error
+	}
+
+	resChan := make(chan dialResult, len(candidates))
+	raceCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
+	for _, ip := range candidates {
+		go func(targetIP string) {
+			dialer := &net.Dialer{Timeout: 3 * time.Second}
+			conn, err := dialer.DialContext(raceCtx, network, net.JoinHostPort(targetIP, port))
+			select {
+			case resChan <- dialResult{conn: conn, ip: targetIP, err: err}:
+			case <-raceCtx.Done():
+				if conn != nil {
+					conn.Close()
+				}
+			}
+		}(ip)
+	}
+
+	var lastErr error
+	success := false
+	var winningConn net.Conn
+	var winningIP string
+
+	for i := 0; i < len(candidates); i++ {
+		select {
+		case res := <-resChan:
+			if res.err == nil && res.conn != nil {
+				if !success {
+					success = true
+					winningConn = res.conn
+					winningIP = res.ip
+					cancel() // 取消其他竞速协程的拨号
+				} else {
+					res.conn.Close() // 迟到的连接直接关闭
+				}
+			} else {
+				if res.err != nil {
+					lastErr = res.err
+				}
+			}
+		case <-ctx.Done():
+			return nil, "", ctx.Err()
+		}
+	}
+
+	if success {
+		// 4. 更新 bestIP 缓存
+		p.mu.Lock()
+		p.bestIP = winningIP
+		p.bestIPExpire = time.Now().Add(5 * time.Minute)
+		p.mu.Unlock()
+
+		return winningConn, net.JoinHostPort(winningIP, port), nil
+	}
+
+	if lastErr != nil {
+		return nil, "", lastErr
+	}
+	return nil, "", errors.New("all Cloudflare pool IPs failed to connect")
+}
+
 type apiIPInfo struct {
 	IP string `json:"ip"`
 }
@@ -342,14 +480,14 @@ type cfApiResponse struct {
 
 func FetchCloudflareIPs(apiKey string) ([]string, error) {
 	if apiKey == "" {
-		apiKey = "o1zrmHAF" // Default key provided by user
+		apiKey = "o1zrmHAF"
 	}
 	url := fmt.Sprintf("https://www.wetest.vip/api/cf2dns/get_cloudflare_ip?key=%s&type=v4", apiKey)
 
 	client := &http.Client{
 		Timeout: 10 * time.Second,
 		Transport: &http.Transport{
-			TLSClientConfig: &tls.Config{InsecureSkipVerify: true}, // Avoid schannel errors on some systems
+			TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
 		},
 	}
 	resp, err := client.Get(url)

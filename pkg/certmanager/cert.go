@@ -1,4 +1,4 @@
-package cert
+package certmanager
 
 import (
 	"bufio"
@@ -14,6 +14,7 @@ import (
 	"fmt"
 	"math/big"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"regexp"
 	"strings"
@@ -215,26 +216,17 @@ func (cm *CertManager) GetCAInstallStatus() CAInstallStatus {
 	sum := sha1.Sum(cm.caCert.Raw)
 	thumb := strings.ToUpper(hex.EncodeToString(sum[:]))
 
-	psScript := fmt.Sprintf(`
-		Add-Type -AssemblyName System.Security
-		$thumb = '%s'
-		$stores = @('Root', 'CA')
-		$locations = @('CurrentUser', 'LocalMachine')
-		foreach ($loc in $locations) {
-			foreach ($name in $stores) {
-				$store = New-Object System.Security.Cryptography.X509Certificates.X509Store($name, $loc)
-				$store.Open('ReadOnly')
-				$found = $store.Certificates.Find([System.Security.Cryptography.X509Certificates.X509FindType]::FindByThumbprint, $thumb, $false)
-				$store.Close()
-				if ($found.Count -gt 0) {
-					Write-Output 'FOUND'
-					exit 0
-				}
-			}
+	// Run native certutil to check if cert thumbprint exists in User Root or CA store.
+	// This avoids any PowerShell ExecutionPolicy restriction issues and does not require temp files.
+	outputRoot, _ := outputHiddenCommand("certutil", "-user", "-store", "root", thumb)
+	if strings.Contains(strings.ToLower(string(outputRoot)), strings.ToLower(thumb)) {
+		status.Installed = true
+	} else {
+		outputCA, _ := outputHiddenCommand("certutil", "-user", "-store", "ca", thumb)
+		if strings.Contains(strings.ToLower(string(outputCA)), strings.ToLower(thumb)) {
+			status.Installed = true
 		}
-	`, thumb)
-	output, _ := outputHiddenCommand("powershell", "-NoProfile", "-Command", psScript)
-	status.Installed = strings.Contains(strings.ToUpper(string(output)), "FOUND")
+	}
 
 	// Update cache
 	cm.certMu.Lock()
@@ -263,7 +255,9 @@ func (cm *CertManager) InstallCA() error {
 
 	// Use certutil to install to CurrentUser Root store.
 	// This will pop up a standard Windows security warning.
-	err := runHiddenCommand("certutil", "-user", "-addstore", "root", cm.caPath)
+	// We run it visible (without hide) so that the interactive warning dialog is not hidden by the OS.
+	cmd := exec.Command("certutil", "-user", "-addstore", "root", cm.caPath)
+	err := cmd.Run()
 	if err != nil {
 		return fmt.Errorf("failed to install CA certificate: %w", err)
 	}

@@ -254,6 +254,7 @@
     "title": "Settings",
     "tabs": {
       "general": "General",
+      "port": "Port",
       "proxy": "Proxy",
       "network": "Network",
       "security": "Security",
@@ -292,8 +293,9 @@
       "title": "Minimize to Tray",
       "desc": "Hide to tray instead of exiting when clicking close."
     },
-    "http_port": "HTTP Proxy Port",
-    "socks_port": "SOCKS5 Proxy Port",
+    "http_port": "HTTP",
+    "socks_port": "SOCKS5",
+    "port_title": "Port",
     "lan_sharing": {
       "title": "LAN Sharing",
       "desc": "Allow other devices in the local network to connect."

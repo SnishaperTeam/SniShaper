@@ -32,6 +32,15 @@ cert/*.pem
 /config.json
 diag_report_*.json
 
+# Runtime tokens and cache
+core_rpc_token
+rules/gfwlist_cache.txt
+
+# Package certificates (never commit keys/certs)
+pkg/certmanager/*.crt
+pkg/certmanager/*.key
+pkg/certmanager/*.pem
+
 # Local temp / backups
 *.bak
 *.bak.*

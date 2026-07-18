@@ -9,7 +9,8 @@ import (
 	"sync"
 	"time"
 
-
+	"snishaper/pkg/dohresolver"
+	"snishaper/pkg/rules"
 )
 
 // AutoRoutingMode defines the auto-routing preset.
@@ -41,11 +42,11 @@ var cloudflareCIDRStrings = []string{
 // manual SiteGroup rules.
 type AutoRouter struct {
 	config      AutoRoutingConfig
-	gfwList     *GFWList
+	gfwList     *rules.GFWList
 	cfNets      []*net.IPNet
 	cfCache     map[string]cfCacheEntry
 	cfCacheMu   sync.RWMutex
-	dohResolver *FailoverResolver
+	dohResolver *dohresolver.FailoverResolver
 	stopChan    chan struct{}
 }
 
@@ -56,10 +57,10 @@ type cfCacheEntry struct {
 
 const cfCacheTTL = 30 * time.Minute
 
-func NewAutoRouter(config AutoRoutingConfig, dohResolver *FailoverResolver) *AutoRouter {
+func NewAutoRouter(config AutoRoutingConfig, dohResolver *dohresolver.FailoverResolver) *AutoRouter {
 	ar := &AutoRouter{
 		config:      config,
-		gfwList:     NewGFWList(),
+		gfwList:     rules.NewGFWList(),
 		cfCache:     make(map[string]cfCacheEntry),
 		dohResolver: dohResolver,
 		stopChan:    make(chan struct{}),
@@ -193,7 +194,7 @@ func (ar *AutoRouter) Decide(host string) Rule {
 	return rule
 }
 
-func (ar *AutoRouter) GetGFWList() *GFWList {
+func (ar *AutoRouter) GetGFWList() *rules.GFWList {
 	return ar.gfwList
 }
 

@@ -11,6 +11,7 @@ import (
 	"sync"
 	"time"
 
+	"snishaper/pkg/dohresolver"
 	"snishaper/proxy"
 )
 
@@ -21,13 +22,13 @@ type Tester struct {
 	allResults  []DomainTestResult
 	ruleManager *proxy.RuleManager
 	proxyServer *proxy.ProxyServer
-	dohResolver *proxy.FailoverResolver
+	dohResolver *dohresolver.FailoverResolver
 	autoRouter  *proxy.AutoRouter
 	logCallback func(string)
 	stopChan    chan struct{}
 }
 
-func NewTester(ruleManager *proxy.RuleManager, proxyServer *proxy.ProxyServer, dohResolver *proxy.FailoverResolver, autoRouter *proxy.AutoRouter, logCallback func(string)) *Tester {
+func NewTester(ruleManager *proxy.RuleManager, proxyServer *proxy.ProxyServer, dohResolver *dohresolver.FailoverResolver, autoRouter *proxy.AutoRouter, logCallback func(string)) *Tester {
 	return &Tester{
 		ruleManager: ruleManager,
 		proxyServer: proxyServer,

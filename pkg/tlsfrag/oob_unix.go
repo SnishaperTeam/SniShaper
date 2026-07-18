@@ -1,6 +1,6 @@
 //go:build unix
 
-package proxy
+package tlsfrag
 
 import (
 	"net"
@@ -8,10 +8,10 @@ import (
 	"golang.org/x/sys/unix"
 )
 
-func sendWithOOB(conn net.Conn, data []byte, oob byte) error {
-	rawConn, err := getRawConn(conn)
+func SendWithOOB(conn net.Conn, data []byte, oob byte) error {
+	rawConn, err := GetRawConn(conn)
 	if err != nil {
-		return wrap("get raw conn", err)
+		return Wrap("get raw conn", err)
 	}
 
 	toSend := make([]byte, len(data)+1)
@@ -25,10 +25,10 @@ func sendWithOOB(conn net.Conn, data []byte, oob byte) error {
 	})
 
 	if err != nil {
-		return wrap("rawConn.Write", err)
+		return Wrap("rawConn.Write", err)
 	}
 	if innerErr != nil {
-		return wrap("unix.Send (MSG_OOB)", innerErr)
+		return Wrap("unix.Send (MSG_OOB)", innerErr)
 	}
 	return nil
 }

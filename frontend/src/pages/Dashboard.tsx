@@ -5,9 +5,6 @@ import {
   Globe,
   Cpu,
   ShieldCheck,
-  Activity,
-  ArrowUpRight,
-  ArrowDownRight,
   Zap,
   ShieldAlert,
   Search,
@@ -31,8 +28,7 @@ import {
   GetStats,
   GetCAInstallStatus,
   OpenCAFile,
-  InstallCA,
-  EventsOn
+  InstallCA
 } from '../api/bindings';
 import { Card } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
@@ -56,8 +52,6 @@ const Dashboard: React.FC = () => {
     supported: true, running: false, enabled: false, message: t('common.loading')
   });
   const [isTUNBusy, setIsTUNBusy] = useState(false);
-  const [downSpeed, setDownSpeed] = useState(0);
-  const [upSpeed, setUpSpeed] = useState(0);
   const [caStatus, setCaStatus] = useState<any>({ Installed: false, CertPath: '', Platform: 'windows' });
   const [showCertModal, setShowCertModal] = useState(false);
   const [isInstallingCert, setIsInstallingCert] = useState(false);
@@ -116,16 +110,12 @@ const Dashboard: React.FC = () => {
     const handleVisibilityChange = () => setIsPageVisible(!document.hidden);
     document.addEventListener('visibilitychange', handleVisibilityChange);
     resetInactivityTimer();
-    const unoff = EventsOn("app:traffic", (data: any) => {
-      if (data) { setDownSpeed(data.down || 0); setUpSpeed(data.up || 0); }
-    });
     return () => {
       window.removeEventListener('mousemove', resetInactivityTimer);
       window.removeEventListener('keydown', resetInactivityTimer);
       window.removeEventListener('click', resetInactivityTimer);
       document.removeEventListener('visibilitychange', handleVisibilityChange);
       if (inactivityTimer.current) clearTimeout(inactivityTimer.current);
-      unoff();
     };
   }, []);
 
@@ -263,31 +253,6 @@ const Dashboard: React.FC = () => {
               )}>
                 {tunStatus.running ? t('common.running') : t('common.off')}
               </span>
-            </div>
-          </div>
-        </Card>
-
-        <Card title={t('dashboard.realtime_traffic')} icon={<Activity size={20} />}>
-          <div className="grid grid-cols-2 gap-4">
-            <div className="p-3 bg-background-soft/50 rounded-2xl border border-border/40 min-w-0">
-              <div className="flex items-center gap-1 text-success mb-1">
-                <ArrowDownRight size={14} aria-hidden />
-                <span className="text-[10px] font-black uppercase">{t('dashboard.download')}</span>
-              </div>
-              <div className="text-lg font-black tabular-nums truncate flex items-baseline gap-1">
-                {formatSpeed(downSpeed).split(' ')[0]}
-                <span className="text-[10px] text-text-muted font-bold uppercase">{formatSpeed(downSpeed).split(' ')[1]}</span>
-              </div>
-            </div>
-            <div className="p-3 bg-background-soft/50 rounded-2xl border border-border/40 min-w-0">
-              <div className="flex items-center gap-1 text-accent mb-1">
-                <ArrowUpRight size={14} aria-hidden />
-                <span className="text-[10px] font-black uppercase">{t('dashboard.upload')}</span>
-              </div>
-              <div className="text-lg font-black tabular-nums truncate flex items-baseline gap-1">
-                {formatSpeed(upSpeed).split(' ')[0]}
-                <span className="text-[10px] text-text-muted font-bold uppercase">{formatSpeed(upSpeed).split(' ')[1]}</span>
-              </div>
             </div>
           </div>
         </Card>

@@ -3,6 +3,7 @@ package main
 import (
 	"errors"
 	"fmt"
+	"io"
 	"log"
 	"net"
 	"os"
@@ -12,7 +13,8 @@ import (
 	"sync"
 	"time"
 
-	"snishaper/cert"
+	"snishaper/pkg/certmanager"
+	"snishaper/pkg/mihomo"
 	"snishaper/proxy"
 )
 
@@ -32,8 +34,8 @@ type coreRuntime struct {
 	certPath          string
 	ruleManager       *proxy.RuleManager
 	proxyServer       *proxy.ProxyServer
-	externalTUN       *externalMihomoManager
-	certManager       *cert.CertManager
+	externalTUN       *mihomo.ExternalMihomoManager
+	certManager       *certmanager.CertManager
 	logBuffer         *ringLogWriter
 	logCaptureMu      sync.RWMutex
 	logCaptureEnabled bool
@@ -75,7 +77,7 @@ func newCoreRuntime() (*coreRuntime, error) {
 		certPath:    filepath.Join(execDir, "cert"),
 		ruleManager: ruleManager,
 		proxyServer: proxy.NewProxyServer("127.0.0.1:" + port),
-		externalTUN: newExternalMihomoManager(),
+		externalTUN: mihomo.NewExternalMihomoManager(),
 		logBuffer:   newRingLogWriter(5000),
 	}
 	r.proxyServer.SetSocks5Addr("127.0.0.1:" + socks5Port)
@@ -90,7 +92,7 @@ func (r *coreRuntime) start() error {
 	writeCoreMarker(r.execDir, "core_runtime_start", "begin")
 	r.setupLogger()
 	var err error
-	r.certManager, err = cert.InitCertManager(r.certPath)
+	r.certManager, err = certmanager.InitCertManager(r.certPath)
 	if err != nil {
 		r.appendLog("[core] Failed to init cert manager: " + err.Error())
 	}
@@ -156,7 +158,7 @@ func (r *coreRuntime) reloadCertificate() error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	cm, err := cert.InitCertManager(r.certPath)
+	cm, err := certmanager.InitCertManager(r.certPath)
 	if err != nil {
 		return err
 	}
@@ -169,7 +171,7 @@ func (r *coreRuntime) reloadCertificate() error {
 
 func (r *coreRuntime) setupLogger() {
 	log.SetFlags(log.LstdFlags | log.Lmicroseconds)
-	log.SetOutput(newBestEffortMultiWriter(r.logBuffer, os.Stdout))
+	log.SetOutput(io.MultiWriter(r.logBuffer, os.Stdout))
 }
 
 func (r *coreRuntime) appendLog(message string) {

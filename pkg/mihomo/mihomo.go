@@ -1,4 +1,4 @@
-package main
+package mihomo
 
 import (
 	"bufio"
@@ -17,7 +17,7 @@ import (
 	"snishaper/proxy"
 )
 
-type externalMihomoManager struct {
+type ExternalMihomoManager struct {
 	mu         sync.Mutex
 	corePath   string
 	runtimeDir string
@@ -26,9 +26,9 @@ type externalMihomoManager struct {
 	logBuffer  *ringLogWriter
 }
 
-func newExternalMihomoManager() *externalMihomoManager {
+func NewExternalMihomoManager() *ExternalMihomoManager {
 	root := resolveExternalMihomoRoot()
-	return &externalMihomoManager{
+	return &ExternalMihomoManager{
 		corePath:   filepath.Join(root, "core", "mihomo", "mihomo.exe"),
 		runtimeDir: filepath.Join(root, "runtime", "mihomo"),
 		configPath: filepath.Join(root, "runtime", "mihomo", "config.yaml"),
@@ -46,7 +46,7 @@ func resolveExternalMihomoRoot() string {
 	return "."
 }
 
-func (m *externalMihomoManager) Start(cfg proxy.TUNConfig, listenPort string, logf func(string)) error {
+func (m *ExternalMihomoManager) Start(cfg proxy.TUNConfig, listenPort string, logf func(string)) error {
 	m.mu.Lock()
 
 	if runtime.GOOS != "windows" {
@@ -165,13 +165,13 @@ func (m *externalMihomoManager) Start(cfg proxy.TUNConfig, listenPort string, lo
 	}
 }
 
-func (m *externalMihomoManager) Stop(logf func(string)) error {
+func (m *ExternalMihomoManager) Stop(logf func(string)) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	return m.stopLocked(logf)
 }
 
-func (m *externalMihomoManager) stopLocked(logf func(string)) error {
+func (m *ExternalMihomoManager) stopLocked(logf func(string)) error {
 	pid, _ := m.readPIDLocked()
 	if pid == 0 {
 		_ = os.Remove(m.pidPath)
@@ -188,7 +188,7 @@ func (m *externalMihomoManager) stopLocked(logf func(string)) error {
 	return nil
 }
 
-func (m *externalMihomoManager) RestartIfRunning(cfg proxy.TUNConfig, listenPort string, logf func(string)) error {
+func (m *ExternalMihomoManager) RestartIfRunning(cfg proxy.TUNConfig, listenPort string, logf func(string)) error {
 	m.mu.Lock()
 	_, pid := m.statusMessageLocked(cfg)
 	running := pid > 0
@@ -202,7 +202,7 @@ func (m *externalMihomoManager) RestartIfRunning(cfg proxy.TUNConfig, listenPort
 	return m.Start(cfg, listenPort, logf)
 }
 
-func (m *externalMihomoManager) Status(cfg proxy.TUNConfig) proxy.TUNStatus {
+func (m *ExternalMihomoManager) Status(cfg proxy.TUNConfig) proxy.TUNStatus {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -226,7 +226,7 @@ func (m *externalMihomoManager) Status(cfg proxy.TUNConfig) proxy.TUNStatus {
 	return status
 }
 
-func (m *externalMihomoManager) ensureConfigLocked(cfg proxy.TUNConfig, listenPort string) error {
+func (m *ExternalMihomoManager) ensureConfigLocked(cfg proxy.TUNConfig, listenPort string) error {
 	listenPort = strings.TrimSpace(listenPort)
 	if listenPort == "" {
 		return fmt.Errorf("proxy listen port is empty")
@@ -248,7 +248,7 @@ func (m *externalMihomoManager) ensureConfigLocked(cfg proxy.TUNConfig, listenPo
 	return os.WriteFile(m.configPath, []byte(config), 0600)
 }
 
-func (m *externalMihomoManager) runningStateLocked(cfg proxy.TUNConfig) (bool, string) {
+func (m *ExternalMihomoManager) runningStateLocked(cfg proxy.TUNConfig) (bool, string) {
 	message, pid := m.statusMessageLocked(cfg)
 	if pid == 0 {
 		return false, message
@@ -262,7 +262,7 @@ func (m *externalMihomoManager) runningStateLocked(cfg proxy.TUNConfig) (bool, s
 	return false, message
 }
 
-func (m *externalMihomoManager) statusMessageLocked(cfg proxy.TUNConfig) (string, int) {
+func (m *ExternalMihomoManager) statusMessageLocked(cfg proxy.TUNConfig) (string, int) {
 	pid, _ := m.readPIDLocked()
 	if pid == 0 {
 		return "External Mihomo TUN is configured but not running", 0
@@ -284,14 +284,14 @@ func (m *externalMihomoManager) statusMessageLocked(cfg proxy.TUNConfig) (string
 	return "External Mihomo process is starting", pid
 }
 
-func (m *externalMihomoManager) recentLogLinesLocked(limit int) []string {
+func (m *ExternalMihomoManager) recentLogLinesLocked(limit int) []string {
 	if m.logBuffer == nil {
 		return []string{}
 	}
 	return m.logBuffer.Snapshot(limit)
 }
 
-func (m *externalMihomoManager) readPIDLocked() (int, error) {
+func (m *ExternalMihomoManager) readPIDLocked() (int, error) {
 	data, err := os.ReadFile(m.pidPath)
 	if err != nil {
 		return 0, err
