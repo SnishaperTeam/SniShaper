@@ -21,13 +21,13 @@ interface UpdateResult {
 
 const About: React.FC = () => {
   const { t } = useTranslation();
-  const [version, setVersion] = useState<string>('1.27');
+  const [version, setVersion] = useState<string>('1.29');
   const [checkingUpdate, setCheckingUpdate] = useState<boolean>(false);
   const [showUpdateModal, setShowUpdateModal] = useState<boolean>(false);
   const [updateInfo, setUpdateInfo] = useState<{ latestVersion: string; downloadURL: string } | null>(null);
 
   useEffect(() => {
-    GetAppVersion().then((v) => { if (v) setVersion(v); }).catch(() => setVersion('1.27'));
+    GetAppVersion().then((v) => { if (v) setVersion(v); }).catch(() => setVersion('1.29'));
   }, []);
 
   const handleOpenWebsite = () => OpenURL('https://github.com/SniShaper/SniShaper');

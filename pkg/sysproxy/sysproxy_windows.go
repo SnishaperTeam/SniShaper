@@ -6,6 +6,8 @@ import (
 	"sync"
 	"syscall"
 	"time"
+
+	"golang.org/x/sys/windows/registry"
 )
 
 const (
@@ -58,25 +60,24 @@ func GetSystemProxyStatus() SystemProxyStatus {
 	cacheMu.Unlock()
 
 	status := SystemProxyStatus{}
+	k, err := registry.OpenKey(registry.CURRENT_USER, proxySettingsKey, registry.QUERY_VALUE)
+	if err == nil {
+		defer k.Close()
 
-	// 查询 ProxyEnable
-	out, err := outputHiddenCommand("reg", "query", "HKCU\\"+proxySettingsKey, "/v", "ProxyEnable")
-	if err == nil && len(out) > 0 {
-		if strings.Contains(string(out), "0x1") {
+		enableVal, _, err := k.GetIntegerValue("ProxyEnable")
+		if err == nil && enableVal == 1 {
 			status.Enabled = true
 		}
-	}
 
-	// 查询 ProxyServer
-	out, err = outputHiddenCommand("reg", "query", "HKCU\\"+proxySettingsKey, "/v", "ProxyServer")
-	if err == nil && len(out) > 0 {
-		status.Server = parseRegValue(string(out))
-	}
+		server, _, err := k.GetStringValue("ProxyServer")
+		if err == nil {
+			status.Server = strings.TrimSpace(server)
+		}
 
-	// 查询 ProxyOverride
-	out, err = outputHiddenCommand("reg", "query", "HKCU\\"+proxySettingsKey, "/v", "ProxyOverride")
-	if err == nil && len(out) > 0 {
-		status.Override = parseRegValue(string(out))
+		override, _, err := k.GetStringValue("ProxyOverride")
+		if err == nil {
+			status.Override = strings.TrimSpace(override)
+		}
 	}
 
 	cacheMu.Lock()
@@ -87,40 +88,30 @@ func GetSystemProxyStatus() SystemProxyStatus {
 	return status
 }
 
-func parseRegValue(output string) string {
-	lines := strings.Split(output, "\n")
-	for _, line := range lines {
-		fields := strings.Fields(line)
-		if len(fields) >= 3 {
-			return fields[len(fields)-1]
-		}
-	}
-	return ""
-}
-
 func SetSystemProxy(enable bool, server string) error {
-	enableVal := "0"
-	if enable {
-		enableVal = "1"
+	k, err := registry.OpenKey(registry.CURRENT_USER, proxySettingsKey, registry.SET_VALUE)
+	if err != nil {
+		return fmt.Errorf("[sysproxy] failed to open registry key: %w", err)
 	}
+	defer k.Close()
 
-	// Set ProxyEnable using reg command
-	if err := runHiddenCommand("reg", "add", "HKCU\\"+proxySettingsKey, "/v", "ProxyEnable", "/t", "REG_DWORD", "/d", enableVal, "/f"); err != nil {
+	enableVal := uint64(0)
+	if enable {
+		enableVal = 1
+	}
+	if err := k.SetDWordValue("ProxyEnable", uint32(enableVal)); err != nil {
 		return fmt.Errorf("[sysproxy] failed to set ProxyEnable: %w", err)
 	}
 
-	// Set ProxyServer if enabling
 	if enable {
 		if server == "" {
 			return fmt.Errorf("[sysproxy] server cannot be empty when enabling proxy")
 		}
-		if err := runHiddenCommand("reg", "add", "HKCU\\"+proxySettingsKey, "/v", "ProxyServer", "/t", "REG_SZ", "/d", server, "/f"); err != nil {
+		if err := k.SetStringValue("ProxyServer", server); err != nil {
 			return fmt.Errorf("[sysproxy] failed to set ProxyServer: %w", err)
 		}
-
-		// Set ProxyOverride
 		override := "<local>"
-		if err := runHiddenCommand("reg", "add", "HKCU\\"+proxySettingsKey, "/v", "ProxyOverride", "/t", "REG_SZ", "/d", override, "/f"); err != nil {
+		if err := k.SetStringValue("ProxyOverride", override); err != nil {
 			return fmt.Errorf("[sysproxy] failed to set ProxyOverride: %w", err)
 		}
 	}
@@ -167,19 +158,22 @@ func RestoreOriginalProxySettings() error {
 		return nil
 	}
 
-	enableVal := "0"
-	if originalProxySettings.Enabled {
-		enableVal = "1"
+	k, err := registry.OpenKey(registry.CURRENT_USER, proxySettingsKey, registry.SET_VALUE)
+	if err != nil {
+		return fmt.Errorf("[sysproxy] failed to open registry key for restore: %w", err)
 	}
+	defer k.Close()
 
-	// Restore ProxyEnable
-	runHiddenCommand("reg", "add", "HKCU\\"+proxySettingsKey, "/v", "ProxyEnable", "/t", "REG_DWORD", "/d", enableVal, "/f")
+	enableVal := uint64(0)
+	if originalProxySettings.Enabled {
+		enableVal = 1
+	}
+	_ = k.SetDWordValue("ProxyEnable", uint32(enableVal))
 
-	// Restore ProxyServer if it was enabled
 	if originalProxySettings.Enabled && originalProxySettings.Server != "" {
-		runHiddenCommand("reg", "add", "HKCU\\"+proxySettingsKey, "/v", "ProxyServer", "/t", "REG_SZ", "/d", originalProxySettings.Server, "/f")
+		_ = k.SetStringValue("ProxyServer", originalProxySettings.Server)
 		if originalProxySettings.Override != "" {
-			runHiddenCommand("reg", "add", "HKCU\\"+proxySettingsKey, "/v", "ProxyOverride", "/t", "REG_SZ", "/d", originalProxySettings.Override, "/f")
+			_ = k.SetStringValue("ProxyOverride", originalProxySettings.Override)
 		}
 	}
 
@@ -190,8 +184,7 @@ func RestoreOriginalProxySettings() error {
 	return notifyProxyChange()
 }
 
-// SetSystemProxyManual 允许用户通过 Windows 设置界面手动配置代理
+// SetSystemProxyManual opens the Windows proxy settings UI
 func SetSystemProxyManual() error {
-	// 打开 Windows 代理设置界面
 	return startHiddenCommand("cmd", "/c", "start", "ms-settings:network-proxy")
 }

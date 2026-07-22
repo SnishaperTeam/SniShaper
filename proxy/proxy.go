@@ -208,6 +208,8 @@ type ProxyServer struct {
 	// CF IP pool 刷新回调：当池过期时由 app 层注入
 	cfRefreshCallback func()
 
+	OnStop func(error)
+
 	// migrationCache holds persistent session tickets for migration mode,
 	// keyed by host name. Tickets are reused across requests until they fail.
 	migrationCache *migrationSessionCache
@@ -534,15 +536,23 @@ func (p *ProxyServer) Start() error {
 			proxy:    p,
 		}
 
-		if err := srv.Serve(tl); err != nil && err != http.ErrServerClosed {
-			log.Printf("[Proxy] HTTP server error: %v", err)
-		}
+		serveErr := srv.Serve(tl)
 
 		p.mu.Lock()
+		isUnexpected := serveErr != nil && serveErr != http.ErrServerClosed && p.running
 		if p.Server == srv {
 			p.running = false
 		}
 		p.mu.Unlock()
+
+		if isUnexpected {
+			log.Printf("[Proxy] HTTP server stopped unexpectedly: %v", serveErr)
+			if p.OnStop != nil {
+				p.OnStop(serveErr)
+			}
+		} else if serveErr == http.ErrServerClosed {
+			log.Printf("[Proxy] HTTP server closed normally")
+		}
 	}()
 
 	if p.socks5Enabled {

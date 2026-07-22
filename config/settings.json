@@ -15,7 +15,7 @@
     "auto_route": true
   },
   "language": "zh",
-  "theme": "light",
+  "theme": "dark",
   "cloudflare_config": {
     "preferred_ips": [
       "104.17.112.37",
@@ -43,6 +43,5 @@
     "api_key": ""
   },
   "socks5_enabled": false,
-  "migration_enabled": true,
-  "migration_server": ""
+  "migration_enabled": true
 }

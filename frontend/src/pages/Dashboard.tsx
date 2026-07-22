@@ -129,12 +129,16 @@ const Dashboard: React.FC = () => {
     };
     const timer = setInterval(refresh, getInterval());
 
-    // Real-time state sync from backend (tray toggle, etc.)
     const unlisten = EventsOn("app:state_changed", (state: any) => {
       if (!state) return;
       if (typeof state.proxyRunning === 'boolean') setProxyRunning(state.proxyRunning);
       if (typeof state.systemProxyActive === 'boolean') setSysProxyEnabled(state.systemProxyActive);
       if (typeof state.proxyMode === 'string') setProxyMode(state.proxyMode.toUpperCase());
+      if (typeof state.tunRunning === 'boolean') {
+        setTunStatus(prev => ({ ...prev, running: state.tunRunning, enabled: state.tunRunning }));
+      }
+      // Force full refresh immediately to catch any missed states
+      setTimeout(refresh, 50);
     });
 
     return () => {

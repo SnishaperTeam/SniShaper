@@ -37,7 +37,7 @@ type App struct {
 	trayMenuV3        *application.Menu
 	proxyItemV3       *application.MenuItem
 	systemProxyItemV3 *application.MenuItem
-	proxyOpMu         sync.Mutex
+	proxyOpMu         sync.Mutex // lock order: proxyOpMu → systemProxyOpMu (never reverse)
 	systemProxyOpMu   sync.Mutex
 	wg                sync.WaitGroup
 	ctx               context.Context
@@ -90,25 +90,22 @@ func (a *App) setupFileLogger() {
 }
 
 func (a *App) appendLog(message string) {
-	if !a.IsLogCaptureEnabled() {
-		return
-	}
-	if a.logBuffer == nil {
-		a.logBuffer = common.NewRingLogWriter(500)
-	}
 	trimmed := strings.TrimSpace(message)
 	if trimmed == "" {
 		return
 	}
-	if !strings.HasSuffix(trimmed, "\n") {
-		trimmed += "\n"
-	}
+
+	var formatted string
 	if matched, _ := regexp.MatchString(`^\d{4}/\d{2}/\d{2} \d{2}:\d{2}:\d{2}`, trimmed); matched {
-		a.logBuffer.Write([]byte(trimmed))
-		return
+		formatted = trimmed
+	} else {
+		formatted = time.Now().Format("2006/01/02 15:04:05.000000") + " " + trimmed
 	}
-	formatted := time.Now().Format("2006/01/02 15:04:05.000000") + " " + trimmed
-	a.logBuffer.Write([]byte(formatted))
+
+	if a.logBuffer == nil {
+		a.logBuffer = common.NewRingLogWriter(500)
+	}
+	a.logBuffer.Write([]byte(formatted + "\n"))
 }
 
 func (a *App) IsLogCaptureEnabled() bool {
@@ -194,23 +191,38 @@ func (a *App) shutdown() {
 
 	var errs []string
 
-	// Shut down the core process if it's managing the proxy
+	// 1. Stop TUN first (depends on core/proxy running)
 	if a.core != nil {
-		a.core.ShutdownIfRunning()
+		tunStatus := a.core.GetTUNStatus()
+		if tunStatus.Running {
+			a.appendLog("[shutdown] Stopping TUN...")
+			if err := a.core.StopTUN(); err != nil {
+				errs = append(errs, "StopTUN: "+err.Error())
+			}
+		}
 	}
 
+	// 2. Disable system proxy synchronously
 	status := a.GetSystemProxyStatus()
-	if status.Enabled && a.isManagedSystemProxy(status) {
-		a.appendLog("[shutdown] Restoring original system proxy...")
-		if err := a.applySystemProxy(false, 0); err != nil {
-			errs = append(errs, err.Error())
+	if status.Enabled {
+		a.appendLog("[shutdown] Disabling system proxy...")
+		if err := a.applySystemProxySync(false, 0, true); err != nil {
+			errs = append(errs, "SystemProxy: "+err.Error())
 		}
 	}
 
+	// 3. Stop proxy server
 	if a.IsProxyRunning() {
+		a.appendLog("[shutdown] Stopping proxy...")
 		if err := a.proxyServer.Stop(); err != nil {
-			errs = append(errs, err.Error())
+			errs = append(errs, "StopProxy: "+err.Error())
 		}
+	}
+
+	// 4. Shut down core process
+	if a.core != nil {
+		a.appendLog("[shutdown] Shutting down core...")
+		a.core.ShutdownIfRunning()
 	}
 
 	if len(errs) > 0 {
@@ -270,17 +282,24 @@ func (a *App) UpdateTrayMenu() {
 }
 
 func (a *App) emitFrontendState() {
+	if a.shouldQuit {
+		return
+	}
+	a.UpdateTrayMenu()
 	if a.mainWindow == nil {
 		return
 	}
 	application.InvokeAsync(func() {
-		if a.mainWindow == nil {
+		if a.mainWindow == nil || a.shouldQuit {
 			return
 		}
+		tunStatus := a.GetTUNStatus()
 		a.mainWindow.EmitEvent("app:state_changed", map[string]interface{}{
 			"proxyRunning":      a.IsProxyRunning(),
 			"systemProxyActive": a.GetSystemProxyStatus().Enabled,
 			"proxyMode":         a.GetProxyMode(),
+			"tunRunning":        tunStatus.Running,
+			"tunMessage":        tunStatus.Message,
 		})
 	})
 }

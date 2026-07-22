@@ -92,5 +92,7 @@ build/bin/markers/
 docs/
 .opencode/
 
+AGENTS.md
+
 # Development certificate
 devcert.pfx

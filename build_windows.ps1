@@ -1,4 +1,4 @@
-﻿param(
+param(
     [ValidateSet("frontend", "backend", "all")]
     [string]$Build,
 
@@ -45,11 +45,12 @@ try {
 $ProjectRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
 Set-Location $ProjectRoot
 
-function Show-ErrorPopup($msg) {
-    if ($Silent -and -not $env:CI -and -not $env:GITHUB_ACTIONS) {
-        try { $wshell = New-Object -ComObject WScript.Shell; $wshell.Popup("Build failed!`n$msg", 0, "SniShaper Build", 0x00000010) } catch {}
-    }
+# Kill any running snishaper instances before build
+Get-Process -Name "snishaper" -ErrorAction SilentlyContinue | ForEach-Object {
+    Write-Host "[build] Killing snishaper process (PID: $($_.Id))..." -ForegroundColor Yellow
+    $_ | Stop-Process -Force
 }
+Start-Sleep -Milliseconds 500
 
 $messages = @{
     "LangTitle" = "Please select your language / 请选择语言 / Выберите язык"
@@ -220,7 +221,6 @@ if ($Build) {
 # Validate choice
 if ($choice -ne "1" -and $choice -ne "2" -and $choice -ne "3") {
     Write-Host "[ERROR] Invalid choice: $choice. Please enter 1, 2, or 3." -ForegroundColor Red
-    Show-ErrorPopup "Invalid choice: $choice"
     if (-not $Silent) { Read-Host $messages["$($lang)_Exit"] }
     exit 1
 }
@@ -274,7 +274,6 @@ if ($choice -eq "1" -or $choice -eq "3") {
         }
     } catch {
         Write-Host "[ERROR] npm is not installed or not in PATH. Please install Node.js first." -ForegroundColor Red
-        Show-ErrorPopup "npm is not installed or not in PATH"
         if (-not $Silent) { Read-Host $messages["$($lang)_Exit"] }
         exit 1
     }
@@ -282,7 +281,6 @@ if ($choice -eq "1" -or $choice -eq "3") {
     $FrontendPath = Join-Path $ProjectRoot "frontend"
     if (-not (Test-Path $FrontendPath -PathType Container)) {
         Write-Host "[ERROR] Cannot find frontend directory: $FrontendPath" -ForegroundColor Red
-        Show-ErrorPopup "Cannot find frontend directory"
         if (-not $Silent) { Read-Host $messages["$($lang)_Exit"] }
         exit 1
     }
@@ -291,7 +289,6 @@ if ($choice -eq "1" -or $choice -eq "3") {
         Set-Location $FrontendPath
     } catch {
         Write-Host $messages["$($lang)_FrontErrDir"] -ForegroundColor Red
-        Show-ErrorPopup "Failed to enter frontend directory"
         if (-not $Silent) { Read-Host $messages["$($lang)_Exit"] }
         exit 1
     }
@@ -302,7 +299,6 @@ if ($choice -eq "1" -or $choice -eq "3") {
         if ($LASTEXITCODE -ne 0) {
             Write-Host $messages["$($lang)_FrontErrInstall"] -ForegroundColor Red
             Set-Location $ProjectRoot
-            Show-ErrorPopup "npm install failed"
             if (-not $Silent) { Read-Host $messages["$($lang)_Exit"] }
             exit 1
         }
@@ -313,7 +309,6 @@ if ($choice -eq "1" -or $choice -eq "3") {
     if ($LASTEXITCODE -ne 0) {
         Write-Host $messages["$($lang)_FrontErrBuild"] -ForegroundColor Red
         Set-Location $ProjectRoot
-        Show-ErrorPopup "npm run build failed"
         if (-not $Silent) { Read-Host $messages["$($lang)_Exit"] }
         exit 1
     }
@@ -332,7 +327,6 @@ if ($choice -eq "2" -or $choice -eq "3") {
         }
     } catch {
         Write-Host "[ERROR] Go is not installed or not in PATH. Please install Go first." -ForegroundColor Red
-        Show-ErrorPopup "Go is not installed or not in PATH"
         if (-not $Silent) { Read-Host $messages["$($lang)_Exit"] }
         exit 1
     }
@@ -343,7 +337,6 @@ if ($choice -eq "2" -or $choice -eq "3") {
     go mod download
     if ($LASTEXITCODE -ne 0) {
         Write-Host $messages["$($lang)_BackErrInstallDeps"] -ForegroundColor Red
-        Show-ErrorPopup "go mod download failed"
         if (-not $Silent) { Read-Host $messages["$($lang)_Exit"] }
         exit 1
     }
@@ -358,7 +351,6 @@ if ($choice -eq "2" -or $choice -eq "3") {
     go build -ldflags="-s -w -H windowsgui" -o "$BuildBinPath\snishaper.exe" .
     if ($LASTEXITCODE -ne 0) {
         Write-Host $messages["$($lang)_BackErrBuild"] -ForegroundColor Red
-        Show-ErrorPopup "Go build failed"
         if (-not $Silent) { Read-Host $messages["$($lang)_Exit"] }
         exit 1
     }
@@ -372,7 +364,6 @@ if ($choice -eq "2" -or $choice -eq "3") {
             Copy-Item -Path $RulesSrc -Destination $RulesDst -Recurse -Force -ErrorAction Stop
         } catch {
             Write-Host "[ERROR] Failed to copy 'rules' folder! $_" -ForegroundColor Red
-            Show-ErrorPopup "Failed to copy 'rules' folder"
             if (-not $Silent) { Read-Host $messages["$($lang)_Exit"] }
             exit 1
         }
@@ -389,7 +380,6 @@ if ($choice -eq "2" -or $choice -eq "3") {
             Copy-Item -Path $ConfigSrc -Destination $ConfigDst -Recurse -Force -ErrorAction Stop
         } catch {
             Write-Host "[ERROR] Failed to copy 'config' folder! $_" -ForegroundColor Red
-            Show-ErrorPopup "Failed to copy 'config' folder"
             if (-not $Silent) { Read-Host $messages["$($lang)_Exit"] }
             exit 1
         }
@@ -422,7 +412,6 @@ if ($BuildMsix) {
         }
     } catch {
         Write-Host "[ERROR] WinApp CLI is not installed. Please install it via: winget install Microsoft.WinAppCLI" -ForegroundColor Red
-        Show-ErrorPopup "WinApp CLI not installed"
         if (-not $Silent) { Read-Host $messages["$($lang)_Exit"] }
         exit 1
     }
@@ -431,7 +420,6 @@ if ($BuildMsix) {
     $ManifestPath = Join-Path $ProjectRoot "Package.appxmanifest"
     if (-not (Test-Path $ManifestPath)) {
         Write-Host "[ERROR] Manifest file not found at $ManifestPath" -ForegroundColor Red
-        Show-ErrorPopup "Manifest not found"
         if (-not $Silent) { Read-Host $messages["$($lang)_Exit"] }
         exit 1
     }
@@ -444,7 +432,6 @@ if ($BuildMsix) {
             winapp cert generate --manifest $ManifestPath --output $CertPath --install
             if ($LASTEXITCODE -ne 0) {
                 Write-Host "[ERROR] Failed to generate certificate." -ForegroundColor Red
-                Show-ErrorPopup "Certificate generation failed"
                 if (-not $Silent) { Read-Host $messages["$($lang)_Exit"] }
                 exit 1
             }
@@ -457,7 +444,6 @@ if ($BuildMsix) {
     
     if (-not (Test-Path $SourceDir -PathType Container)) {
         Write-Host "[ERROR] Source directory not found: $SourceDir" -ForegroundColor Red
-        Show-ErrorPopup "Source directory not found"
         if (-not $Silent) { Read-Host $messages["$($lang)_Exit"] }
         exit 1
     }
@@ -490,7 +476,6 @@ if ($BuildMsix) {
     winapp pack $SourceDir --manifest $ManifestPath --output (Join-Path $OutputDir $MsixFileName)
     if ($LASTEXITCODE -ne 0) {
         Write-Host "[ERROR] winapp pack failed." -ForegroundColor Red
-        Show-ErrorPopup "winapp pack failed"
         if (-not $Silent) { Read-Host $messages["$($lang)_Exit"] }
         exit 1
     }
@@ -499,7 +484,6 @@ if ($BuildMsix) {
     $MsixFile = Get-Item (Join-Path $OutputDir $MsixFileName) -ErrorAction SilentlyContinue
     if (-not $MsixFile) {
         Write-Host "[ERROR] No .msix file found in $OutputDir." -ForegroundColor Red
-        Show-ErrorPopup "No MSIX file to sign"
         if (-not $Silent) { Read-Host $messages["$($lang)_Exit"] }
         exit 1
     }
@@ -510,7 +494,6 @@ if ($BuildMsix) {
         winapp sign $MsixFile.FullName $CertPath
         if ($LASTEXITCODE -ne 0) {
             Write-Host "[ERROR] winapp sign failed." -ForegroundColor Red
-            Show-ErrorPopup "winapp sign failed"
             if (-not $Silent) { Read-Host $messages["$($lang)_Exit"] }
             exit 1
         }
@@ -531,8 +514,6 @@ Write-Host "==========================================" -ForegroundColor Cyan
 Write-Host $messages["$($lang)_AllDone"] -ForegroundColor Cyan
 Write-Host "==========================================" -ForegroundColor Cyan
 
-if ($Silent -and -not $env:CI -and -not $env:GITHUB_ACTIONS) {
-    try { $wshell = New-Object -ComObject WScript.Shell; $wshell.Popup("Build completed successfully!`n构建完毕！", 0, "SniShaper Build", 0x00000040) } catch {}
-} else {
+if (-not $Silent) {
     Read-Host $messages["$($lang)_Exit"]
 }

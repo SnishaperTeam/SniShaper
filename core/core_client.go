@@ -100,7 +100,7 @@ func (c *CoreClient) ensureRunningWithElevation(requireElevated bool) error {
 	if err := startCoreProcess(execPath, requireElevated); err != nil {
 		return err
 	}
-	for i := 0; i < 30; i++ {
+	for i := 0; i < 75; i++ {
 		time.Sleep(200 * time.Millisecond)
 		if err := c.Call("Core.Ping", EmptyArgs{}, &pong); err == nil && pong.Value {
 			// Authenticate with the core process
@@ -133,7 +133,7 @@ func (c *CoreClient) ensureRunningWithElevation(requireElevated bool) error {
 			return nil
 		}
 	}
-	return fmt.Errorf("core did not become ready")
+	return fmt.Errorf("core process did not become ready after 75 retries (15s): check admin rights, antivirus, and core process logs")
 }
 
 func (c *CoreClient) getInfo() (CoreInfoReply, error) {
@@ -199,6 +199,9 @@ func (c *CoreClient) GetStats() (int64, int64, int64) {
 }
 
 func (c *CoreClient) StartTUN() error {
+	if err := checkWintun(); err != nil {
+		return fmt.Errorf("wintun check: %w", err)
+	}
 	if err := c.ensureRunningWithElevation(true); err != nil {
 		return fmt.Errorf("ensure elevated core failed: %w", err)
 	}
@@ -207,10 +210,10 @@ func (c *CoreClient) StartTUN() error {
 		return fmt.Errorf("Core.StartTUN RPC failed: %w", err)
 	}
 
-	deadline := time.Now().Add(2 * time.Second)
+	deadline := time.Now().Add(15 * time.Second)
 	var lastStatus proxy.TUNStatus
 	for time.Now().Before(deadline) {
-		time.Sleep(200 * time.Millisecond)
+		time.Sleep(500 * time.Millisecond)
 		status, err := c.getTUNStatusWithError()
 		if err != nil {
 			return fmt.Errorf("Core.GetTUNStatus RPC failed: %w", err)

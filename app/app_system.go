@@ -3,6 +3,7 @@ package app
 import (
 	"encoding/json"
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
 	"strings"
@@ -56,14 +57,17 @@ func (a *App) clearManagedSystemProxyMarker() error {
 }
 
 func (a *App) applySystemProxy(enabled bool, port int) error {
-	a.systemProxyOpMu.Lock()
-	defer a.systemProxyOpMu.Unlock()
+	return a.applySystemProxySync(enabled, port, false)
+}
 
+func (a *App) applySystemProxySync(enabled bool, port int, sync bool) error {
+	a.systemProxyOpMu.Lock()
 	status := a.GetSystemProxyStatus()
 	expected := fmt.Sprintf("127.0.0.1:%d", port)
 
 	if enabled {
 		if status.Enabled && strings.EqualFold(strings.TrimSpace(status.Server), expected) {
+			a.systemProxyOpMu.Unlock()
 			if err := a.saveManagedSystemProxyMarker(expected); err != nil {
 				a.appendLog("[warn] Failed to save managed system proxy marker: " + err.Error())
 			}
@@ -74,6 +78,7 @@ func (a *App) applySystemProxy(enabled bool, port int) error {
 		}
 	} else {
 		if !status.Enabled {
+			a.systemProxyOpMu.Unlock()
 			if err := a.clearManagedSystemProxyMarker(); err != nil {
 				a.appendLog("[warn] Failed to clear managed system proxy marker: " + err.Error())
 			}
@@ -83,33 +88,53 @@ func (a *App) applySystemProxy(enabled bool, port int) error {
 			return nil
 		}
 	}
+	a.systemProxyOpMu.Unlock()
 
-	a.appendLog("[action] Dispatching system proxy setting change asynchronously...")
+	a.appendLog(fmt.Sprintf("[action] %s system proxy %s...", map[bool]string{true: "Enabling", false: "Disabling"}[enabled], map[bool]string{true: "synchronously", false: "asynchronously"}[sync]))
 
-	go func() {
+	work := func() error {
 		var err error
 		if enabled {
 			err = sysproxy.EnableSystemProxy(port)
 		} else {
 			err = sysproxy.DisableSystemProxy()
 		}
-
 		if err != nil {
-			a.appendLog("[error] Async ApplySystemProxy failed: " + err.Error())
-		} else {
-			if enabled {
-				if err := a.saveManagedSystemProxyMarker(expected); err != nil {
-					a.appendLog("[warn] Failed to save managed system proxy marker: " + err.Error())
-				}
-				a.appendLog(fmt.Sprintf("[action] Async EnableSystemProxy success: 127.0.0.1:%d", port))
-			} else {
-				if err := a.clearManagedSystemProxyMarker(); err != nil {
-					a.appendLog("[warn] Failed to clear managed system proxy marker: " + err.Error())
-				}
-				a.appendLog("[action] Async DisableSystemProxy success")
-			}
+			return err
 		}
+		if enabled {
+			if err := a.saveManagedSystemProxyMarker(expected); err != nil {
+				a.appendLog("[warn] Failed to save managed system proxy marker: " + err.Error())
+			}
+			a.appendLog(fmt.Sprintf("[action] EnableSystemProxy success: 127.0.0.1:%d", port))
+		} else {
+			if err := a.clearManagedSystemProxyMarker(); err != nil {
+				a.appendLog("[warn] Failed to clear managed system proxy marker: " + err.Error())
+			}
+			a.appendLog("[action] DisableSystemProxy success")
+		}
+		return nil
+	}
 
+	if sync {
+		a.systemProxyOpMu.Lock()
+		err := work()
+		a.systemProxyOpMu.Unlock()
+		if err != nil {
+			a.appendLog("[error] Sync ApplySystemProxy failed: " + err.Error())
+		}
+		a.UpdateTrayMenu()
+		a.refreshTrayMenuLater(300 * time.Millisecond)
+		a.emitFrontendState()
+		return err
+	}
+
+	go func() {
+		a.systemProxyOpMu.Lock()
+		defer a.systemProxyOpMu.Unlock()
+		if err := work(); err != nil {
+			a.appendLog("[error] Async ApplySystemProxy failed: " + err.Error())
+		}
 		a.UpdateTrayMenu()
 		a.refreshTrayMenuLater(300 * time.Millisecond)
 		a.emitFrontendState()
@@ -143,7 +168,7 @@ func (a *App) EnableSystemProxy() error {
 		a.appendLog("[error] EnableSystemProxy failed: " + err.Error())
 		return err
 	}
-	a.appendLog(fmt.Sprintf("[action] EnableSystemProxy success: 127.0.0.1:%d", port))
+	a.appendLog(fmt.Sprintf("[action] EnableSystemProxy requested (async): 127.0.0.1:%d", port))
 	return nil
 }
 
@@ -154,7 +179,7 @@ func (a *App) DisableSystemProxy() error {
 		a.appendLog("[error] DisableSystemProxy failed: " + err.Error())
 		return err
 	}
-	a.appendLog("[action] DisableSystemProxy success")
+	a.appendLog("[action] DisableSystemProxy requested (async)")
 	return nil
 }
 
@@ -221,6 +246,28 @@ func (a *App) GetAutoEnableProxyOnAutoStart() bool {
 func (a *App) SetAutoEnableProxyOnAutoStart(enabled bool) error {
 	a.appendLog(fmt.Sprintf("[action] SetAutoEnableProxyOnAutoStart called: %v", enabled))
 	return a.ruleManager.SetAutoEnableProxyOnAutoStart(enabled)
+}
+
+// ForceCleanup is a last-resort synchronous cleanup for crash/force-exit paths.
+// It stops TUN, core, proxy, and system proxy without checking state.
+func (a *App) ForceCleanup() {
+	defer func() {
+		if r := recover(); r != nil {
+			log.Printf("[ForceCleanup] panic: %v", r)
+		}
+	}()
+	a.systemProxyOpMu.Lock()
+	defer a.systemProxyOpMu.Unlock()
+	if a.core != nil {
+		_ = a.core.StopTUN()
+		a.core.ShutdownIfRunning()
+	}
+	if a.proxyServer != nil {
+		_ = a.proxyServer.Stop()
+	}
+	if err := sysproxy.DisableSystemProxy(); err != nil {
+		log.Printf("[ForceCleanup] sysproxy disable: %v", err)
+	}
 }
 
 func (a *App) RevealMainWindow() {

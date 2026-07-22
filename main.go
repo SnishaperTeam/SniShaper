@@ -6,6 +6,7 @@ import (
 
 	"snishaper/app"
 	"snishaper/core"
+	"snishaper/pkg/sysproxy"
 
 	"github.com/wailsapp/wails/v3/pkg/application"
 	"github.com/wailsapp/wails/v3/pkg/events"
@@ -28,6 +29,15 @@ func main() {
 	app.RecoverBrokenSingleInstance("com.snishaper.desktop")
 
 	a := app.NewApp()
+
+	defer func() {
+		if r := recover(); r != nil {
+			log.Printf("[main] Panic recovered, forcing cleanup: %v", r)
+		}
+		a.ForceCleanup()
+		// Force-disable system proxy even if ForceCleanup missed it
+		_ = sysproxy.DisableSystemProxy()
+	}()
 
 	wailsApp := application.New(application.Options{
 		Name:        "snishaper",
@@ -55,6 +65,10 @@ func main() {
 	tray.SetIcon(trayIcon)
 	tray.SetDarkModeIcon(trayIcon)
 	tray.SetTooltip("SniShaper")
+	// ponytail: single click on tray icon shows main window
+	tray.OnClick(func() {
+		a.RevealMainWindow()
+	})
 	a.SetSystemTray(tray)
 
 	// Define Tray Menu

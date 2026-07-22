@@ -199,6 +199,7 @@
         "fanbox.cc",
         "v2ex.com",
         "twitter.com",
+        "x.com",
         "t.co",
         "wallhaven.cc",
         "substack.com",
@@ -1927,7 +1928,8 @@
         "chrome.com",
         "chromebook.com",
         "withgoogle.com",
-        "gmail.com"
+        "gmail.com",
+        "gstatic.com"
       ],
       "ech_enabled": false,
       "use_cf_pool": false,
@@ -3660,17 +3662,17 @@
       "id": "1784437653624307800",
       "name": "nat",
       "mode": "mitm",
-      "domains": [
-        "chatgpt.com",
-        "grok.com",
-        "arena.ai",
-        "openai.com",
-        "x.ai",
-        "poe.com"
-      ],
-      "ech_enabled": true,
-      "ech_profile_id": "legacy-cloudflare",
-      "use_cf_pool": true,
+        "domains": [
+          "chatgpt.com",
+          "grok.com",
+          "arena.ai",
+          "openai.com",
+          "x.ai",
+          "poe.com"
+        ],
+        "ech_enabled": false,
+        "ech_profile_id": "legacy-cloudflare",
+        "use_cf_pool": false,
       "cert_verify": {
         "mode": "strict_real"
       },

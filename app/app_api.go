@@ -48,10 +48,11 @@ func NewApp() *App {
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
+	proxyServer := proxy.NewProxyServer("127.0.0.1:" + port)
 	a := &App{
 		ctx:               ctx,
 		cancel:            cancel,
-		proxyServer:       proxy.NewProxyServer("127.0.0.1:" + port),
+		proxyServer:       proxyServer,
 		ruleManager:       ruleManager,
 		certPath:          filepath.Join(execDir, "cert"),
 		proxyMarkerPath:   filepath.Join(execDir, "config", "system_proxy_owner.json"),
@@ -59,6 +60,26 @@ func NewApp() *App {
 		core:              core.NewCoreClient(),
 	}
 	a.proxyServer.SetSocks5Addr("127.0.0.1:" + socks5Port)
+
+	// Auto-restart when proxy server stops unexpectedly
+	a.proxyServer.OnStop = func(err error) {
+		a.appendLog("[error] Proxy server stopped unexpectedly: " + err.Error())
+		a.UpdateTrayMenu()
+		a.RunSafeAsync("proxy auto-restart", func() {
+			time.Sleep(2 * time.Second)
+			a.proxyOpMu.Lock()
+			defer a.proxyOpMu.Unlock()
+			if !a.proxyServer.IsRunning() {
+				if err2 := a.proxyServer.Start(); err2 != nil {
+					a.appendLog("[error] Proxy auto-restart failed: " + err2.Error())
+				} else {
+					a.appendLog("[action] Proxy auto-restarted successfully")
+				}
+				a.UpdateTrayMenu()
+				a.emitFrontendState()
+			}
+		})
+	}
 
 	// Set CF pool refresh callback — called async when pool is stale (>1 day)
 	a.proxyServer.SetCFRefreshCallback(func() {
@@ -92,6 +113,9 @@ func (a *App) Greet(name string) string {
 }
 
 func (a *App) StartProxy() error {
+	a.proxyOpMu.Lock()
+	defer a.proxyOpMu.Unlock()
+
 	if a.core != nil {
 		err := a.core.StartProxy()
 		a.UpdateTrayMenu()
@@ -99,8 +123,6 @@ func (a *App) StartProxy() error {
 		a.emitFrontendState()
 		return err
 	}
-	a.proxyOpMu.Lock()
-	defer a.proxyOpMu.Unlock()
 
 	a.appendLog("[action] StartProxy called")
 
@@ -177,6 +199,9 @@ func (a *App) StartProxy() error {
 }
 
 func (a *App) StopProxy() error {
+	a.proxyOpMu.Lock()
+	defer a.proxyOpMu.Unlock()
+
 	if a.core != nil {
 		err := a.core.StopProxy()
 		a.UpdateTrayMenu()
@@ -184,8 +209,6 @@ func (a *App) StopProxy() error {
 		a.emitFrontendState()
 		return err
 	}
-	a.proxyOpMu.Lock()
-	defer a.proxyOpMu.Unlock()
 
 	a.appendLog("[action] StopProxy called")
 
@@ -239,6 +262,38 @@ func (a *App) GetListenPort() int {
 	return port
 }
 
+func (a *App) restartProxy() error {
+	a.proxyOpMu.Lock()
+	defer a.proxyOpMu.Unlock()
+
+	a.appendLog("[action] restartProxy called")
+
+	if a.core != nil {
+		if err := a.core.StopProxy(); err != nil {
+			return err
+		}
+		if err := a.core.StartProxy(); err != nil {
+			return err
+		}
+		a.UpdateTrayMenu()
+		a.refreshTrayMenuLater(300*time.Millisecond, time.Second)
+		a.emitFrontendState()
+		return nil
+	}
+
+	if err := a.proxyServer.Stop(); err != nil {
+		return err
+	}
+	time.Sleep(100 * time.Millisecond)
+	if err := a.proxyServer.Start(); err != nil {
+		return err
+	}
+	a.UpdateTrayMenu()
+	a.refreshTrayMenuLater(300*time.Millisecond, time.Second)
+	a.emitFrontendState()
+	return nil
+}
+
 func (a *App) SetListenPort(port int) error {
 	a.appendLog(fmt.Sprintf("[action] SetListenPort called: %d", port))
 	if port < 1 || port > 65535 {
@@ -257,9 +312,7 @@ func (a *App) SetListenPort(port int) error {
 
 	if a.IsProxyRunning() {
 		a.appendLog("[info] Port configuration updated. Restarting proxy to apply new port...")
-		_ = a.StopProxy()
-		time.Sleep(100 * time.Millisecond)
-		if err := a.StartProxy(); err != nil {
+		if err := a.restartProxy(); err != nil {
 			a.appendLog("[error] Failed to restart proxy on new port: " + err.Error())
 			return err
 		}
@@ -917,7 +970,7 @@ func (a *App) RefreshGFWList() error {
 }
 
 func (a *App) GetAppVersion() string {
-	return "1.28"
+	return "1.29"
 }
 
 func (a *App) CheckUpdate() CheckUpdateResult {
