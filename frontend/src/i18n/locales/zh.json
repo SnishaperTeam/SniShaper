@@ -72,14 +72,6 @@
   },
   "proxies": {
     "title": "代理",
-    "server_node": "Server 节点",
-    "testing": "测试中...",
-    "test_conn": "测试连接",
-    "test_hint": "测试内置链路连通性 (绕过分流规则)",
-    "node_host": "节点 Host 名",
-    "auth_secret": "鉴权令牌 (AUTH_SECRET)",
-    "auth_placeholder": "输入服务端设置的密码",
-    "save_node": "保存节点配置",
     "ech_management": "ECH 配置管理",
     "add_ech": "添加配置",
     "no_ech": "暂无 ECH 配置",
@@ -89,7 +81,19 @@
     "edit_ech": "编辑 ECH 配置",
     "probe_ech": "探测并创建 ECH 配置",
     "modifying": "正在修改",
-    "probe_hint": "通过域名进行 DoH 探测获取 ECH 资源"
+    "probe_hint": "通过域名进行 DoH 探测获取 ECH 资源",
+    "nat64_management": "NAT64 配置管理",
+    "add_nat64": "添加 NAT64 配置",
+    "edit_nat64": "编辑 NAT64 配置",
+    "no_nat64": "暂无 NAT64 配置",
+    "delete_nat64_confirm": "确定要删除此 NAT64 配置吗？",
+    "nat64_form_subtitle": "配置独立规则前缀以便绕过特定黑名单封锁",
+    "nat64_form_name": "配置名称",
+    "nat64_form_prefix": "NAT64 前缀",
+    "migration_service": "连接迁移服务",
+    "migration_service_title": "迁移 API 地址",
+    "migration_service_desc": "配置连接迁移服务地址",
+    "migration_service_hint": "输入迁移服务 API 地址"
   },
   "ech_form": {
     "title": "ECH 借力探测",
@@ -181,14 +185,17 @@
       "ech_enable": "ECH 加密",
       "ech_hint": "启用后尝试使用 ECH 连接",
       "cf_pool": "优选 IP 池",
-      "cf_pool_hint": "优先使用 Cloudflare 优选 IP"
+      "cf_pool_hint": "优先使用 Cloudflare 优选 IP",
+      "nat64_enable": "启用 NAT64 映射",
+      "nat64_hint": "开启此功能以执行 NAT64 映射转换",
+      "nat64_profile": "NAT64 配置"
     },
     "modes": {
       "mitm": "修改 SNI 或注入 ECH 配置",
-      "server": "连接上游反代",
       "tls-rf": "TLS 分片",
       "quic": "QUIC 分片混淆",
-      "transparent": "不解密 TLS，仅透传"
+      "transparent": "不解密 TLS，仅透传",
+      "migration": "TLS 1.2 会话恢复"
     },
     "cert_policy": {
       "ignore": "忽略证书验证",
@@ -204,7 +211,8 @@
     "display": {
       "transparent": "透传",
       "direct": "直连",
-      "fragment": "分片"
+      "fragment": "分片",
+      "migration": "迁移"
     },
     "notifications": {
       "deleted": "规则已删除"
@@ -230,8 +238,7 @@
     "mode_switch": "分流模式切换",
     "modes": {
       "off": "关闭",
-      "smart": "智能",
-      "server": "Server"
+      "smart": "智能"
     },
     "gfwlist_check": "GFWList 状态检测",
     "preloaded": "已预加载 {count} 条路由规则",

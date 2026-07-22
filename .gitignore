@@ -55,6 +55,7 @@ rules/*.v2.json
 Thumbs.db
 .vscode/
 .idea/
+.mimocode/
 
 # Custom ignores
 echproxy/
@@ -76,6 +77,7 @@ third_party/windivert-cache/
 wiki_repo/
 
 snishaper
+build_output/
 
 sniproxy-tls-rf/
 

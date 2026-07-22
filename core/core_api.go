@@ -1,4 +1,4 @@
-package main
+package core
 
 import (
 	"crypto/rand"
@@ -61,6 +61,7 @@ type CoreInfoReply struct {
 	PID        int
 	Executable string
 	Elevated   bool
+	ModTime    int64
 }
 
 type TUNStatusReply struct {
@@ -89,6 +90,11 @@ func (s *coreService) GetInfo(_ EmptyArgs, reply *CoreInfoReply) error {
 	reply.PID = os.Getpid()
 	reply.Executable = s.runtime.execPath
 	reply.Elevated = isProcessElevated()
+	
+	info, err := os.Stat(s.runtime.execPath)
+	if err == nil {
+		reply.ModTime = info.ModTime().UnixNano()
+	}
 	return nil
 }
 
@@ -214,7 +220,8 @@ func (s *coreService) SetSocks5Port(args StringReply, _ *EmptyArgs) error {
 	return s.runtime.ruleManager.SaveConfig()
 }
 
-func runCoreMain() error {
+// RunCoreMain starts the core RPC server. Called from main when --core flag is present.
+func RunCoreMain() error {
 	runtime, err := newCoreRuntime()
 	if err != nil {
 		return err

@@ -1,4 +1,4 @@
-package main
+package core
 
 import (
 	"errors"
@@ -13,6 +13,7 @@ import (
 	"sync"
 	"time"
 
+	"snishaper/common"
 	"snishaper/pkg/certmanager"
 	"snishaper/pkg/mihomo"
 	"snishaper/proxy"
@@ -36,7 +37,7 @@ type coreRuntime struct {
 	proxyServer       *proxy.ProxyServer
 	externalTUN       *mihomo.ExternalMihomoManager
 	certManager       *certmanager.CertManager
-	logBuffer         *ringLogWriter
+	logBuffer         *common.RingLogWriter
 	logCaptureMu      sync.RWMutex
 	logCaptureEnabled bool
 	proxyOpMu         sync.Mutex
@@ -53,8 +54,8 @@ func newCoreRuntime() (*coreRuntime, error) {
 		return nil, err
 	}
 	execDir := filepath.Dir(execPath)
-	settingsPath := resolveRuntimeFile(execDir, filepath.Join("config", "settings.json"))
-	rulesPath := resolveRuntimeFile(execDir, filepath.Join("rules", "config.json"))
+	settingsPath := common.ResolveRuntimeFile(execDir, filepath.Join("config", "settings.json"))
+	rulesPath := common.ResolveRuntimeFile(execDir, filepath.Join("rules", "config.json"))
 
 	ruleManager := proxy.NewRuleManager(settingsPath, rulesPath)
 	if err := ruleManager.LoadConfig(); err != nil {
@@ -78,7 +79,7 @@ func newCoreRuntime() (*coreRuntime, error) {
 		ruleManager: ruleManager,
 		proxyServer: proxy.NewProxyServer("127.0.0.1:" + port),
 		externalTUN: mihomo.NewExternalMihomoManager(),
-		logBuffer:   newRingLogWriter(5000),
+		logBuffer:   common.NewRingLogWriter(5000),
 	}
 	r.proxyServer.SetSocks5Addr("127.0.0.1:" + socks5Port)
 
@@ -148,7 +149,15 @@ func (r *coreRuntime) reloadConfig() error {
 	r.proxyServer.SetSocks5Enabled(r.ruleManager.GetSocks5Enabled())
 	r.ruleManager.InitAutoRouter(r.proxyServer.GetDoHResolver())
 	if r.externalTUN != nil {
-		_ = r.externalTUN.RestartIfRunning(r.ruleManager.GetTUNConfig(), r.currentListenPort(), r.appendLog)
+		var nat64Prefixes []string
+		if r.ruleManager != nil {
+			for _, p := range r.ruleManager.GetNAT64Profiles() {
+				if strings.TrimSpace(p.Prefix) != "" {
+					nat64Prefixes = append(nat64Prefixes, p.Prefix)
+				}
+			}
+		}
+		_ = r.externalTUN.RestartIfRunning(r.ruleManager.GetTUNConfig(), r.currentListenPort(), nat64Prefixes, r.appendLog)
 	}
 	r.appendLog("[core] config reloaded")
 	return nil
@@ -176,7 +185,7 @@ func (r *coreRuntime) setupLogger() {
 
 func (r *coreRuntime) appendLog(message string) {
 	if r.logBuffer == nil {
-		r.logBuffer = newRingLogWriter(500)
+		r.logBuffer = common.NewRingLogWriter(500)
 	}
 	trimmed := strings.TrimSpace(message)
 	if trimmed == "" {
@@ -317,7 +326,15 @@ func (r *coreRuntime) startTUN() (err error) {
 		return err
 	}
 	writeCoreMarker(r.execDir, "start_tun", "before externalTUN.Start")
-	if err = r.externalTUN.Start(r.ruleManager.GetTUNConfig(), listenPort, r.appendLog); err != nil {
+	var nat64Prefixes []string
+	if r.ruleManager != nil {
+		for _, p := range r.ruleManager.GetNAT64Profiles() {
+			if strings.TrimSpace(p.Prefix) != "" {
+				nat64Prefixes = append(nat64Prefixes, p.Prefix)
+			}
+		}
+	}
+	if err = r.externalTUN.Start(r.ruleManager.GetTUNConfig(), listenPort, nat64Prefixes, r.appendLog); err != nil {
 		writeCoreMarker(r.execDir, "start_tun", markerDetail("externalTUN.Start failed: %v", err))
 		return err
 	}

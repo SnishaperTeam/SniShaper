@@ -1,6 +1,6 @@
 //go:build windows
 
-package main
+package app
 
 import (
 	"os"
@@ -39,7 +39,8 @@ type processEntry32 struct {
 	ExeFile         [windows.MAX_PATH]uint16
 }
 
-func recoverBrokenSingleInstance(uniqueID string) {
+// RecoverBrokenSingleInstance recovers from a broken single instance state.
+func RecoverBrokenSingleInstance(uniqueID string) {
 	if strings.TrimSpace(uniqueID) == "" {
 		return
 	}

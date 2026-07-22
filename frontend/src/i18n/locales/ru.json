@@ -72,14 +72,6 @@
   },
   "proxies": {
     "title": "Прокси",
-    "server_node": "Серверный узел",
-    "testing": "Тестирование...",
-    "test_conn": "Тест подключения",
-    "test_hint": "Тестирование встроенного подключения (вне правил)",
-    "node_host": "Имя хоста узла",
-    "auth_secret": "Токен авторизации (AUTH_SECRET)",
-    "auth_placeholder": "Введите пароль сервера",
-    "save_node": "Сохранить конфигурацию узла",
     "ech_management": "Управление ECH",
     "add_ech": "Добавить конфигурацию",
     "no_ech": "Нет конфигураций ECH",
@@ -89,7 +81,19 @@
     "edit_ech": "Редактировать ECH",
     "probe_ech": "Определить и создать ECH",
     "modifying": "Изменение...",
-    "probe_hint": "Определение ECH через DoH"
+    "probe_hint": "Определение ECH через DoH",
+    "nat64_management": "Управление конфигурацией NAT64",
+    "add_nat64": "Добавить конфигурацию NAT64",
+    "edit_nat64": "Изменить конфигурацию NAT64",
+    "no_nat64": "Нет конфигураций NAT64",
+    "delete_nat64_confirm": "Вы уверены, что хотите удалить эту конфигурацию NAT64?",
+    "nat64_form_subtitle": "Настроить префикс для обхода блокировок определенных IP",
+    "nat64_form_name": "Имя конфигурации",
+    "nat64_form_prefix": "Префикс NAT64",
+    "migration_service": "Служба миграции соединений",
+    "migration_service_title": "URL API миграции",
+    "migration_service_desc": "Настроить URL службы миграции соединений",
+    "migration_service_hint": "Введите URL API миграции"
   },
   "ech_form": {
     "title": "Определение ECH",
@@ -181,14 +185,17 @@
       "ech_enable": "Шифрование ECH",
       "ech_hint": "Использовать ECH при включении",
       "cf_pool": "Пул предпочтительных IP",
-      "cf_pool_hint": "Приоритетные IP Cloudflare"
+      "cf_pool_hint": "Приоритетные IP Cloudflare",
+      "nat64_enable": "Включить сопоставление NAT64",
+      "nat64_hint": "Включить преобразование NAT64 для этого правила",
+      "nat64_profile": "Конфигурация NAT64"
     },
     "modes": {
       "mitm": "Изменение SNI или инъекция ECH",
-      "server": "Подключение к вышестоящему прокси",
       "tls-rf": "Фрагментация TLS",
       "quic": "Фрагментация QUIC",
-      "transparent": "Без расшифровки TLS, прозрачный"
+      "transparent": "Без расшифровки TLS, прозрачный",
+      "migration": "Восстановление сессии TLS 1.2"
     },
     "cert_policy": {
       "ignore": "Игнорировать проверку сертификатов",
@@ -204,7 +211,8 @@
     "display": {
       "transparent": "Прозрачный",
       "direct": "Прямой",
-      "fragment": "Фрагмент"
+      "fragment": "Фрагмент",
+      "migration": "Миграция"
     },
     "notifications": {
       "deleted": "Правило удалено"
@@ -230,8 +238,7 @@
     "mode_switch": "Переключение режима",
     "modes": {
       "off": "Выкл",
-      "smart": "Умный",
-      "server": "Сервер"
+      "smart": "Умный"
     },
     "gfwlist_check": "Статус GFWList",
     "preloaded": "Загружено {count} правил маршрутизации",

@@ -1,17 +1,18 @@
-package main
+package app
 
 import (
 	"context"
 	"io"
 	"log"
 	"os"
-	"path/filepath"
 	"regexp"
 	"runtime/debug"
 	"strings"
 	"sync"
 	"time"
 
+	"snishaper/common"
+	"snishaper/core"
 	"snishaper/evolution"
 	"snishaper/pkg/certmanager"
 	"snishaper/proxy"
@@ -28,7 +29,7 @@ type App struct {
 	evolutionTester   *evolution.Tester
 	certPath          string
 	proxyMarkerPath   string
-	logBuffer         *ringLogWriter
+	logBuffer         *common.RingLogWriter
 	logCaptureMu      sync.RWMutex
 	logCaptureEnabled bool
 	shouldQuit        bool
@@ -42,8 +43,32 @@ type App struct {
 	ctx               context.Context
 	cancel            context.CancelFunc
 	launchedAtStartup bool
-	core              *coreClient
+	core              *core.CoreClient
 }
+
+// SetWailsApp sets the wails application instance.
+func (a *App) SetWailsApp(w *application.App) { a.wailsApp = w }
+
+// SetMainWindow sets the main window reference.
+func (a *App) SetMainWindow(w *application.WebviewWindow) { a.mainWindow = w }
+
+// SetSystemTray sets the system tray reference.
+func (a *App) SetSystemTray(t *application.SystemTray) { a.systemTray = t }
+
+// SetTrayMenu sets the tray menu reference.
+func (a *App) SetTrayMenu(m *application.Menu) { a.trayMenuV3 = m }
+
+// SetProxyMenuItem sets the proxy menu item reference.
+func (a *App) SetProxyMenuItem(i *application.MenuItem) { a.proxyItemV3 = i }
+
+// SetSystemProxyMenuItem sets the system proxy menu item reference.
+func (a *App) SetSystemProxyMenuItem(i *application.MenuItem) { a.systemProxyItemV3 = i }
+
+// ShouldQuit returns whether the app should quit.
+func (a *App) ShouldQuit() bool { return a.shouldQuit }
+
+// RunSafeAsync runs a function safely in a goroutine.
+func (a *App) RunSafeAsync(taskName string, fn func()) { a.runSafeAsync(taskName, fn) }
 
 type gatedLogWriter struct {
 	app *App
@@ -56,73 +81,9 @@ func (g *gatedLogWriter) Write(p []byte) (n int, err error) {
 	return len(p), nil
 }
 
-type ringLogWriter struct {
-	mu       sync.Mutex
-	lines    []string
-	capacity int
-	size     int
-	start    int
-}
-
-func newRingLogWriter(capacity int) *ringLogWriter {
-	return &ringLogWriter{
-		lines:    make([]string, capacity),
-		capacity: capacity,
-	}
-}
-
-func (w *ringLogWriter) Write(p []byte) (n int, err error) {
-	w.mu.Lock()
-	defer w.mu.Unlock()
-
-	msg := string(p)
-	lines := strings.Split(msg, "\n")
-	for _, line := range lines {
-		trimmed := strings.TrimSpace(line)
-		if trimmed == "" {
-			continue
-		}
-		if w.size < w.capacity {
-			w.lines[w.size] = trimmed
-			w.size++
-		} else {
-			w.lines[w.start] = trimmed
-			w.start = (w.start + 1) % w.capacity
-		}
-	}
-	return len(p), nil
-}
-
-func (w *ringLogWriter) Clear() {
-	w.mu.Lock()
-	defer w.mu.Unlock()
-	w.start = 0
-	w.size = 0
-}
-
-func (w *ringLogWriter) Snapshot(limit int) []string {
-	w.mu.Lock()
-	defer w.mu.Unlock()
-
-	if limit <= 0 || limit > w.size {
-		limit = w.size
-	}
-
-	result := make([]string, limit)
-	if w.size < w.capacity {
-		copy(result, w.lines[w.size-limit:w.size])
-	} else {
-		for i := 0; i < limit; i++ {
-			idx := (w.start + w.size - limit + i) % w.capacity
-			result[i] = w.lines[idx]
-		}
-	}
-	return result
-}
-
 func (a *App) setupFileLogger() {
 	if a.logBuffer == nil {
-		a.logBuffer = newRingLogWriter(500)
+		a.logBuffer = common.NewRingLogWriter(500)
 	}
 	log.SetFlags(log.LstdFlags | log.Lmicroseconds)
 	log.SetOutput(io.MultiWriter(&gatedLogWriter{app: a}, os.Stdout))
@@ -133,7 +94,7 @@ func (a *App) appendLog(message string) {
 		return
 	}
 	if a.logBuffer == nil {
-		a.logBuffer = newRingLogWriter(500)
+		a.logBuffer = common.NewRingLogWriter(500)
 	}
 	trimmed := strings.TrimSpace(message)
 	if trimmed == "" {
@@ -206,7 +167,7 @@ func (a *App) startupV3() {
 	}
 
 	if a.core != nil {
-		if err := a.core.ensureRunning(); err != nil {
+		if err := a.core.EnsureRunning(); err != nil {
 			a.appendLog("[startup] WARNING: Core service client start failed: " + err.Error())
 		} else {
 			a.appendLog("[startup] Core process synchronized successfully")
@@ -235,7 +196,7 @@ func (a *App) shutdown() {
 
 	// Shut down the core process if it's managing the proxy
 	if a.core != nil {
-		a.core.shutdownIfRunning()
+		a.core.ShutdownIfRunning()
 	}
 
 	status := a.GetSystemProxyStatus()
@@ -354,22 +315,14 @@ type DNSTestResult struct {
 }
 
 // Helpers
-func hasLaunchArg(arg string) bool {
+// HasLaunchArg checks if the given argument was passed to the application.
+func HasLaunchArg(arg string) bool {
 	for _, a := range os.Args {
 		if strings.EqualFold(a, arg) {
 			return true
 		}
 	}
 	return false
-}
-
-func resolveRuntimeFile(execDir, relPath string) string {
-	absPath := filepath.Join(execDir, relPath)
-	if _, err := os.Stat(absPath); err == nil {
-		return absPath
-	}
-	fallback := filepath.Join(".", relPath)
-	return fallback
 }
 
 func (a *App) ShouldStartHidden() bool {

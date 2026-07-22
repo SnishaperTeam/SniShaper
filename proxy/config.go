@@ -31,6 +31,8 @@ type ConfigRule struct {
 	ECHDomain     string           `json:"ech_domain,omitempty"`
 	UseCFPool     bool             `json:"use_cf_pool,omitempty"`
 	CertVerify    CertVerifyConfig `json:"cert_verify,omitempty"`
+	NAT64Enabled  bool             `json:"nat64_enabled,omitempty"`
+	NAT64ProfileID string           `json:"nat64_profile_id,omitempty"`
 }
 
 type ImportSummary struct {
@@ -165,7 +167,7 @@ func (rm *RuleManager) ImportConfigWithSummary(content string) (ImportSummary, e
 			if ruleMode == "" {
 				ruleMode = mode
 			}
-			if ruleMode != "mitm" && ruleMode != "transparent" && ruleMode != "server" && ruleMode != "tls-rf" && ruleMode != "quic" && ruleMode != "warp" {
+			if ruleMode != "mitm" && ruleMode != "transparent" && ruleMode != "tls-rf" && ruleMode != "quic" && ruleMode != "migration" {
 				skipped++
 				continue
 			}
@@ -187,6 +189,8 @@ func (rm *RuleManager) ImportConfigWithSummary(content string) (ImportSummary, e
 				ECHDomain:     rule.ECHDomain,
 				UseCFPool:     rule.UseCFPool,
 				CertVerify:    rule.CertVerify,
+				NAT64Enabled:  rule.NAT64Enabled,
+				NAT64ProfileID: rule.NAT64ProfileID,
 			}
 			if sg.Name == "" {
 				sg.Name = sg.Domains[0]

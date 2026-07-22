@@ -99,8 +99,6 @@ type ECHProfile struct {
 type SettingsConfig struct {
 	ListenPort                 string            `json:"listen_port"`
 	Socks5Port                 string            `json:"socks5_port,omitempty"`
-	ServerHost                 string            `json:"server_host,omitempty"`
-	ServerAuth                 string            `json:"server_auth,omitempty"`
 	CloseToTray                *bool             `json:"close_to_tray,omitempty"`
 	AutoStart                  *bool             `json:"auto_start,omitempty"`
 	ShowMainWindowOnAutoStart  *bool             `json:"show_main_window_on_auto_start,omitempty"`
@@ -111,6 +109,14 @@ type SettingsConfig struct {
 	Theme                      string            `json:"theme,omitempty"`
 	CloudflareConfig           CloudflareConfig  `json:"cloudflare_config,omitempty"`
 	Socks5Enabled              *bool             `json:"socks5_enabled,omitempty"`
+	MigrationEnabled           *bool             `json:"migration_enabled,omitempty"`
+	MigrationServer            string            `json:"migration_server,omitempty"`
+}
+
+type NAT64Profile struct {
+	ID     string `json:"id"`
+	Name   string `json:"name"`
+	Prefix string `json:"prefix"`
 }
 
 type Rule struct {
@@ -118,7 +124,7 @@ type Rule struct {
 	Upstream           string           `json:"upstream,omitempty"`
 	Upstreams          []string         `json:"upstreams,omitempty"`
 	DNSMode            string           `json:"dns_mode,omitempty"`
-	Mode               string           `json:"mode"` // "mitm", "transparent", "tls-rf", "quic", "server", "direct"
+	Mode               string           `json:"mode"` // "mitm", "transparent", "tls-rf", "quic", "direct"
 	SniFake            string           `json:"sni_fake,omitempty"`
 	ConnectPolicy      string           `json:"connect_policy,omitempty"`
 	SniPolicy          string           `json:"sni_policy,omitempty"`
@@ -133,6 +139,8 @@ type Rule struct {
 	CertVerify         CertVerifyConfig `json:"cert_verify,omitempty"`
 	ECHAutoUpdate      bool             `json:"ech_auto_update"`
 	AutoRouted         bool             `json:"auto_routed,omitempty"`
+	NAT64Enabled       bool             `json:"nat64_enabled"`
+	NAT64ProfileID     string           `json:"nat64_profile_id,omitempty"`
 }
 
 type SiteGroup struct {
@@ -156,6 +164,8 @@ type SiteGroup struct {
 	Upstream           string           `json:"upstream,omitempty"`
 	Upstreams          []string         `json:"upstreams,omitempty"`
 	ECHDomain          string           `json:"ech_domain,omitempty"`
+	NAT64Enabled       bool             `json:"nat64_enabled"`
+	NAT64ProfileID     string           `json:"nat64_profile_id,omitempty"`
 }
 
 type Upstream struct {
@@ -197,6 +207,10 @@ type ProxyServer struct {
 
 	// CF IP pool 刷新回调：当池过期时由 app 层注入
 	cfRefreshCallback func()
+
+	// migrationCache holds persistent session tickets for migration mode,
+	// keyed by host name. Tickets are reused across requests until they fail.
+	migrationCache *migrationSessionCache
 }
 
 type dohProxyAdapter struct {
@@ -344,6 +358,12 @@ func (p *ProxyServer) SetCFPoolFetchTime(t time.Time) {
 	if p.cfPool != nil {
 		p.cfPool.SetLastFetchTime(t)
 	}
+}
+
+func (p *ProxyServer) GetCFPool() *cfpool.CloudflarePool {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+	return p.cfPool
 }
 
 // CFPoolUsable returns true when the CF pool exists, has IPs, and is not stale (>1 day).

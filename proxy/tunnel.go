@@ -49,30 +49,7 @@ func (p *ProxyServer) handleConnect(w http.ResponseWriter, req *http.Request, ru
 		return
 	}
 
-	if cr.effectiveMode == "server" {
-		hijacker, ok := w.(http.Hijacker)
-		if !ok {
-			http.Error(w, "Hijack not supported", http.StatusInternalServerError)
-			return
-		}
-		clientConn, rw, err := hijacker.Hijack()
-		if err != nil {
-			log.Printf("[Connect] Server hijack failed: %v", err)
-			return
-		}
-		if _, err := rw.WriteString("HTTP/1.1 200 Connection Established\r\n\r\n"); err != nil {
-			clientConn.Close()
-			return
-		}
-		if err := rw.Flush(); err != nil {
-			clientConn.Close()
-			return
-		}
-		clientConn = wrapHijackedConn(clientConn, rw)
-		_ = clientConn.SetDeadline(time.Time{})
-		p.handleServerMITM(clientConn, cr.targetHost, cr.rule)
-		return
-	}
+
 
 	if cr.effectiveMode == "quic" {
 		hijacker, ok := w.(http.Hijacker)
@@ -99,9 +76,30 @@ func (p *ProxyServer) handleConnect(w http.ResponseWriter, req *http.Request, ru
 		return
 	}
 
+	if cr.effectiveMode == "migration" {
+		hijacker, ok := w.(http.Hijacker)
+		if !ok {
+			http.Error(w, "Hijack not supported", http.StatusInternalServerError)
+			return
+		}
+		clientConn, rw, err := hijacker.Hijack()
+		if err != nil {
+			log.Printf("[Connect] Migration hijack failed: %v", err)
+			return
+		}
+		clientConn = wrapHijackedConn(clientConn, rw)
+		_ = clientConn.SetDeadline(time.Time{})
+		_, targetPort, _ := net.SplitHostPort(cr.targetAddr)
+		if targetPort == "" {
+			targetPort = "443"
+		}
+		p.handleMigration(clientConn, cr.targetHost, targetPort, cr.rule)
+		return
+	}
+
 	if err := p.dialUpstream(cr); err != nil {
 		http.Error(w, "Failed to connect to upstream", http.StatusBadGateway)
-		p.tracef("[Connect] All upstream connect attempts failed: %v", cr.dialCandidates)
+		p.tracef("[Connect] All upstream connect attempts failed: %v, error: %v", cr.dialCandidates, err)
 		return
 	}
 

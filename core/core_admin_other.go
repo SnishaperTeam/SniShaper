@@ -1,6 +1,6 @@
 //go:build !windows
 
-package main
+package core
 
 func isProcessElevated() bool {
 	return true

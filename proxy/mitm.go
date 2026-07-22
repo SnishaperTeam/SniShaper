@@ -22,6 +22,7 @@ import (
 
 	"github.com/quic-go/quic-go"
 	"github.com/quic-go/quic-go/http3"
+
 	utls "github.com/refraction-networking/utls"
 )
 
@@ -612,6 +613,10 @@ func removeHopByHopHeaders(h http.Header) {
 	}
 }
 
+type roundTripperFunc func(*http.Request) (*http.Response, error)
+
+func (f roundTripperFunc) RoundTrip(req *http.Request) (*http.Response, error) { return f(req) }
+
 // oneConnListener exposes a single net.Conn to http.Server.Serve and keeps
 // Accept blocked until that connection (or the listener) is closed. This
 // prevents Serve from returning early and tearing down the request path.
@@ -722,117 +727,7 @@ func (l *singleConnListener) Close() error {
 }
 func (l *singleConnListener) Addr() net.Addr { return l.conn.LocalAddr() }
 
-func (p *ProxyServer) handleServerMITM(clientConn net.Conn, host string, rule Rule) {
-	p.tracef("[Server-MITM] Intercepting connection for %s", host)
 
-	if p.certGenerator == nil {
-		log.Printf("[Server-MITM] CertGenerator not configured, falling back to transparent proxy")
-		p.handleTransparent(clientConn, nil, host, rule)
-		return
-	}
-
-	caCert := p.certGenerator.GetCACert()
-	caKey := p.certGenerator.GetCAKey()
-	if caCert == nil || caKey == nil {
-		log.Printf("[Server-MITM] CA cert or key not loaded, falling back to transparent proxy")
-		p.handleTransparent(clientConn, nil, host, rule)
-		return
-	}
-
-	p.tracef("[Server-MITM] Connecting to upstream for %s...", host)
-	dialer := &net.Dialer{
-		Timeout:   10 * time.Second,
-		KeepAlive: 30 * time.Second,
-	}
-
-	var upstreamConn net.Conn
-	var err error
-	defaultPort := "443"
-	targetAddr := ensureAddrWithPort(host, defaultPort)
-	dialCandidates := p.buildDialCandidates(context.Background(), normalizeHost(host), targetAddr, rule, rule.Mode)
-	if len(dialCandidates) == 0 {
-		dialCandidates = []string{targetAddr}
-	}
-
-	var lastErr error
-	for _, cand := range dialCandidates {
-		upstreamConn, err = dialer.Dial("tcp", cand)
-		if err == nil {
-			break
-		}
-		lastErr = err
-	}
-	if err != nil {
-		log.Printf("[Server-MITM] Dial upstream failed: %v", lastErr)
-		clientConn.Close()
-		return
-	}
-
-	tlsConfig := &tls.Config{
-		ServerName: host,
-	}
-	if rule.CertVerify.AllowUnknownAuthority {
-		tlsConfig.InsecureSkipVerify = true
-	} else if len(rule.CertVerify.Names) > 0 || len(rule.CertVerify.Suffixes) > 0 || len(rule.CertVerify.SPKISHA256) > 0 {
-		tlsConfig.VerifyConnection = func(cs tls.ConnectionState) error {
-			verifyConn := buildVerifyConnection(host, rule.CertVerify)
-			if verifyConn == nil {
-				return nil
-			}
-			peer := make([]*x509.Certificate, len(cs.PeerCertificates))
-			copy(peer, cs.PeerCertificates)
-			return verifyConn(utls.ConnectionState{
-				Version:                     cs.Version,
-				HandshakeComplete:           cs.HandshakeComplete,
-				DidResume:                   cs.DidResume,
-				CipherSuite:                 cs.CipherSuite,
-				NegotiatedProtocol:          cs.NegotiatedProtocol,
-				NegotiatedProtocolIsMutual:  cs.NegotiatedProtocolIsMutual,
-				ServerName:                  cs.ServerName,
-				PeerCertificates:            peer,
-				VerifiedChains:              cs.VerifiedChains,
-				SignedCertificateTimestamps: cs.SignedCertificateTimestamps,
-				OCSPResponse:                cs.OCSPResponse,
-				TLSUnique:                   cs.TLSUnique,
-				ECHAccepted:                 cs.ECHAccepted,
-			})
-		}
-	}
-
-	tlsUpstreamConn := tls.Client(upstreamConn, tlsConfig)
-	ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
-	defer cancel()
-
-	if err := tlsUpstreamConn.HandshakeContext(ctx); err != nil {
-		log.Printf("[Server-MITM] Upstream TLS handshake failed: %v", err)
-		clientConn.Close()
-		upstreamConn.Close()
-		return
-	}
-
-	cert, err := p.generateCert(host, caCert, caKey)
-	if err != nil {
-		log.Printf("[Server-MITM] Generate certificate failed: %v", err)
-		clientConn.Close()
-		tlsUpstreamConn.Close()
-		return
-	}
-
-	clientTLSConfig := p.makeMITMTLSConfig(host, caCert, caKey, []string{"http/1.1"}, "[Server-MITM]")
-	clientTLSConfig.Certificates = []tls.Certificate{*cert}
-
-	tlsClientConn := tls.Server(clientConn, clientTLSConfig)
-	_ = tlsClientConn.SetDeadline(time.Now().Add(10 * time.Second))
-	if err := tlsClientConn.Handshake(); err != nil {
-		log.Printf("[Server-MITM] Client TLS handshake failed: %v", err)
-		tlsClientConn.Close()
-		tlsUpstreamConn.Close()
-		return
-	}
-	_ = tlsClientConn.SetDeadline(time.Time{})
-
-	p.directTunnel(tlsClientConn, tlsUpstreamConn)
-}
 
 func (p *ProxyServer) ClearCertCache() {
 	p.certCacheMu.Lock()

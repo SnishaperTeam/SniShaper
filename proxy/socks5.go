@@ -116,18 +116,7 @@ func (p *ProxyServer) handleSocks5Connect(ctx context.Context, writer io.Writer,
 		return nil
 	}
 
-	if cr.effectiveMode == "server" {
-		p.tracef("[SOCKS5] server mode")
-		socks5.SendReply(writer, statute.RepSuccess, req.LocalAddr)
-		hijackConn := &socks5HijackConn{
-			Conn:   clientConn,
-			reader: req.Reader,
-			writer: writer,
-		}
-		_ = hijackConn.SetDeadline(time.Time{})
-		p.handleServerMITM(hijackConn, cr.targetHost, cr.rule)
-		return nil
-	}
+
 
 	if cr.effectiveMode == "quic" {
 		p.tracef("[SOCKS5] quic mode")

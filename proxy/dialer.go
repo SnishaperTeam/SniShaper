@@ -11,6 +11,39 @@ import (
 	utls "github.com/refraction-networking/utls"
 )
 
+func mapNAT64Addr(ipStr string, prefix string) (string, bool) {
+	prefix = strings.TrimSpace(prefix)
+	if prefix == "" {
+		return ipStr, true
+	}
+	parsedIP := net.ParseIP(ipStr)
+	if parsedIP == nil {
+		return ipStr, true
+	}
+	ipv4 := parsedIP.To4()
+	if ipv4 == nil {
+		return ipStr, false
+	}
+
+	var prefixIP net.IP
+	if strings.Contains(prefix, "/") {
+		_, ipnet, err := net.ParseCIDR(prefix)
+		if err == nil && ipnet != nil {
+			prefixIP = ipnet.IP
+		}
+	} else {
+		prefixIP = net.ParseIP(prefix)
+	}
+
+	if prefixIP == nil || len(prefixIP) != 16 {
+		return ipStr, true
+	}
+	mappedIP := make(net.IP, 16)
+	copy(mappedIP, prefixIP[:12])
+	copy(mappedIP[12:], ipv4)
+	return mappedIP.String(), true
+}
+
 func (p *ProxyServer) resolveDomainCandidates(ctx context.Context, host, port, dnsMode string) []string {
 	if isLiteralIP(host) {
 		return []string{net.JoinHostPort(host, port)}
@@ -120,7 +153,11 @@ func (p *ProxyServer) dialUpstream(cr *connectResult) error {
 		if port == "" {
 			port = "443"
 		}
-		conn, dialedAddr, err := p.cfPool.DialParallel(context.Background(), "tcp", port)
+		var prefix string
+		if cr.rule.NAT64Enabled && cr.rule.NAT64ProfileID != "" {
+			prefix = p.rules.GetNAT64PrefixByID(cr.rule.NAT64ProfileID)
+		}
+		conn, dialedAddr, err := p.cfPool.DialParallel(context.Background(), "tcp", port, prefix)
 		if err == nil {
 			cr.dialCandidates = []string{dialedAddr}
 			cr.dialAddr = dialedAddr
@@ -138,6 +175,32 @@ func (p *ProxyServer) dialUpstream(cr *connectResult) error {
 	if len(dialCandidates) == 0 {
 		dialCandidates = []string{cr.targetAddr}
 	}
+
+	if cr.rule.NAT64Enabled && cr.rule.NAT64ProfileID != "" {
+		prefix := p.rules.GetNAT64PrefixByID(cr.rule.NAT64ProfileID)
+		if prefix != "" {
+			var mapped []string
+			for _, candidate := range dialCandidates {
+				host, port, err := net.SplitHostPort(candidate)
+				if err != nil {
+					host = candidate
+					port = "443"
+				}
+				mappedIP, ok := mapNAT64Addr(host, prefix)
+				if ok {
+					mapped = append(mapped, net.JoinHostPort(mappedIP, port))
+				} else {
+					p.tracef("[NAT64] Drop native IPv6 candidate: %s", host)
+				}
+			}
+			dialCandidates = mapped
+		}
+	}
+
+	if len(dialCandidates) == 0 {
+		return errors.New("no valid NAT64 candidates available for dial")
+	}
+
 	cr.dialCandidates = dialCandidates
 	cr.dialAddr = dialCandidates[0]
 
@@ -182,6 +245,19 @@ func (p *ProxyServer) dialUpstream(cr *connectResult) error {
 }
 
 func (p *ProxyServer) dialWithRule(ctx context.Context, network, addr string, rule Rule) (net.Conn, error) {
+	if rule.NAT64Enabled && rule.NAT64ProfileID != "" {
+		prefix := p.rules.GetNAT64PrefixByID(rule.NAT64ProfileID)
+		if prefix != "" {
+			host, port, err := net.SplitHostPort(addr)
+			if err == nil {
+				mappedIP, ok := mapNAT64Addr(host, prefix)
+				if ok {
+					addr = net.JoinHostPort(mappedIP, port)
+				}
+			}
+		}
+	}
+
 	dialer := &net.Dialer{
 		Timeout:   10 * time.Second,
 		KeepAlive: 30 * time.Second,
@@ -244,13 +320,8 @@ func (p *ProxyServer) establishUpstreamConn(host string, rule Rule, dialCandidat
 				}
 			}
 
-			verifyName := host
-			if rule.SniFake != "" {
-				verifyName = rule.SniFake
-			}
-
 			allowInsecure := len(echBytes) == 0
-			uconn := p.GetUConn(conn, rule.SniFake, verifyName, rule, allowInsecure, initialALPN, echBytes)
+			uconn := p.GetUConn(conn, rule.SniFake, host, rule, allowInsecure, initialALPN, echBytes)
 
 			ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
 			err := uconn.HandshakeContext(ctx)
@@ -309,16 +380,12 @@ func (p *ProxyServer) establishUpstreamConn(host string, rule Rule, dialCandidat
 				}
 
 				// 2. TLS 握手
-				verifyName := host
-				if rule.SniFake != "" {
-					verifyName = rule.SniFake
-				}
 				var echBytes []byte
 				if rule.ECHEnabled {
 					echBytes = p.resolveRuleECHConfig(host, rule)
 				}
 				allowInsecure := len(echBytes) == 0
-				uconn := p.GetUConn(tcpConn, rule.SniFake, verifyName, rule, allowInsecure, initialALPN, echBytes)
+				uconn := p.GetUConn(tcpConn, rule.SniFake, host, rule, allowInsecure, initialALPN, echBytes)
 
 				handshakeCtx, handshakeCancel := context.WithTimeout(raceCtx, 5*time.Second)
 				defer handshakeCancel()

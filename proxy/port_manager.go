@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"strings"
 	"syscall"
+	"time"
 )
 
 // FindProcessByPort 返回占用指定端口的 PID。目前仅支持 TCP。
@@ -82,44 +83,38 @@ func KillProcessByPID(pid int) error {
 
 // EnsurePortAvailable 检查端口占用：
 // 1. 如果被 selfNames 列表中的进程占用，尝试 Kill。
-// 2. 如果被其他进程占用或 Kill 失败，则寻找下一个空闲端口。
-func EnsurePortAvailable(startPort int, selfNames []string) (int, error) {
-	currentPort := startPort
-	maxAttempts := 10 // 避免无限死循环
-
-	for i := 0; i < maxAttempts; i++ {
-		pid, err := FindProcessByPort(currentPort)
-		if err != nil || pid == 0 {
-			// 端口空闲，二次确认真正可用
-			ln, err := net.Listen("tcp", fmt.Sprintf("127.0.0.1:%d", currentPort))
-			if err == nil {
-				ln.Close()
-				return currentPort, nil
-			}
-			// net.Listen 失败说明还是不可用，跳过找下一个
-		} else {
-			// 端口被占用，检查进程名
-			name, _ := GetProcessNameByPID(pid)
-			isSelf := false
-			for _, self := range selfNames {
-				if strings.EqualFold(name, self) || strings.EqualFold(name, self+".exe") {
-					isSelf = true
-					break
-				}
-			}
-
-			if isSelf {
-				// 是己方进程，尝试 Kill
-				if err := KillProcessByPID(pid); err == nil {
-					// 给系统一点时间回收资源
-					return currentPort, nil
-				}
+// 2. 如果被其他进程占用或 Kill 失败，则返回错误，不再自动跳端口。
+func EnsurePortAvailable(port int, selfNames []string) (int, error) {
+	pid, err := FindProcessByPort(port)
+	if err == nil && pid > 0 {
+		// 端口被占用，检查进程名
+		name, _ := GetProcessNameByPID(pid)
+		isSelf := false
+		for _, self := range selfNames {
+			if strings.EqualFold(name, self) || strings.EqualFold(name, self+".exe") {
+				isSelf = true
+				break
 			}
 		}
 
-		// 冲突且无法处理，尝试下一个端口
-		currentPort++
+		if isSelf {
+			// 是己方进程，尝试 Kill 并等待释放
+			if err := KillProcessByPID(pid); err != nil {
+				return port, fmt.Errorf("port %d is occupied by self process (PID: %d) and failed to kill: %w", port, pid, err)
+			}
+			// 给系统短暂的时间回收套接字资源
+			time.Sleep(100 * time.Millisecond)
+		} else {
+			return port, fmt.Errorf("port %d is occupied by process %s (PID: %d)", port, name, pid)
+		}
 	}
 
-	return startPort, fmt.Errorf("could not find available port after %d attempts", maxAttempts)
+	// 二次确认套接字是否真正可用
+	ln, err := net.Listen("tcp", fmt.Sprintf("127.0.0.1:%d", port))
+	if err != nil {
+		return port, fmt.Errorf("port %d is occupied or not available: %w", port, err)
+	}
+	ln.Close()
+
+	return port, nil
 }

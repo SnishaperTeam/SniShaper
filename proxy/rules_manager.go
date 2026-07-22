@@ -29,10 +29,9 @@ type RuleManager struct {
 	autoEnableProxyOnAutoStart bool
 	socks5Enabled              bool
 	socks5Port                 string
-	serverHost                 string
-	serverAuth                 string
 	listenPort                 string
 	echProfiles                []ECHProfile
+	nat64Profiles              []NAT64Profile
 	autoRouter                 *AutoRouter
 	autoRoutingConfig          AutoRoutingConfig
 	mu                         sync.RWMutex
@@ -40,6 +39,8 @@ type RuleManager struct {
 	onConfigSaved              func()
 	language                   string
 	theme                      string
+	migrationEnabled           bool
+	migrationServer            string
 }
 
 func (r *RuleManager) SetRouteEventCallback(cb func(domain, mode string)) {
@@ -80,10 +81,11 @@ func (r *RuleManager) triggerConfigSaved() {
 }
 
 type RulesConfig struct {
-	SiteGroups  []SiteGroup  `json:"site_groups"`
-	Upstreams   []Upstream   `json:"upstreams"`
-	DNSNodes    []DNSNode    `json:"dns_nodes,omitempty"`
-	ECHProfiles []ECHProfile `json:"ech_profiles,omitempty"`
+	SiteGroups    []SiteGroup    `json:"site_groups"`
+	Upstreams     []Upstream     `json:"upstreams"`
+	DNSNodes      []DNSNode      `json:"dns_nodes,omitempty"`
+	ECHProfiles   []ECHProfile   `json:"ech_profiles,omitempty"`
+	NAT64Profiles []NAT64Profile `json:"nat64_profiles,omitempty"`
 }
 
 // DNSNode defines a DoH upstream with optional SNI obfuscation.
@@ -224,6 +226,9 @@ func (rm *RuleManager) LoadConfig() error {
 	if rm.echProfiles == nil {
 		rm.echProfiles = []ECHProfile{}
 	}
+	if rm.nat64Profiles == nil {
+		rm.nat64Profiles = []NAT64Profile{}
+	}
 	for i := range rm.echProfiles {
 		normalizeECHProfile(&rm.echProfiles[i])
 	}
@@ -289,8 +294,7 @@ func (rm *RuleManager) loadSettingsConfig() error {
 	// 2. Override with JSON values if they exist
 	rm.cloudflareConfig = config.CloudflareConfig
 	rm.tunConfig = config.TUN
-	rm.serverHost = config.ServerHost
-	rm.serverAuth = config.ServerAuth
+
 	if config.ListenPort != "" {
 		rm.listenPort = config.ListenPort
 	}
@@ -320,6 +324,10 @@ func (rm *RuleManager) loadSettingsConfig() error {
 	if config.Socks5Enabled != nil {
 		rm.socks5Enabled = *config.Socks5Enabled
 	}
+	if config.MigrationEnabled != nil {
+		rm.migrationEnabled = *config.MigrationEnabled
+	}
+	rm.migrationServer = config.MigrationServer
 	rm.applySettingsDefaults()
 	return nil
 }
@@ -342,6 +350,7 @@ func (rm *RuleManager) loadRulesConfig() error {
 	rm.upstreams = config.Upstreams
 	rm.dnsNodes = config.DNSNodes
 	rm.echProfiles = config.ECHProfiles
+	rm.nat64Profiles = config.NAT64Profiles
 	// Ensure at least the default Ali DoH bootstrap node exists
 	if len(rm.dnsNodes) == 0 {
 		rm.dnsNodes = defaultDNSNodes()
@@ -363,6 +372,7 @@ func (rm *RuleManager) saveDefaultRulesConfig() error {
 	rm.upstreams = []Upstream{}
 	rm.dnsNodes = defaultDNSNodes()
 	rm.echProfiles = []ECHProfile{}
+	rm.nat64Profiles = []NAT64Profile{}
 	rm.buildRules()
 	return rm.saveRulesConfig()
 }
@@ -438,6 +448,8 @@ func (rm *RuleManager) buildRules() {
 				ECHDoHUpstream:     echProfile.DoHUpstream,
 				ECHAutoUpdate:      echProfile.AutoUpdate,
 				CertVerify:         sg.CertVerify,
+				NAT64Enabled:       sg.NAT64Enabled,
+				NAT64ProfileID:     sg.NAT64ProfileID,
 			}
 			rm.rules = append(rm.rules, rule)
 		}
@@ -458,17 +470,7 @@ func (rm *RuleManager) GetSiteGroups() []SiteGroup {
 	return rm.siteGroups
 }
 
-func (rm *RuleManager) GetServerHost() string {
-	rm.mu.RLock()
-	defer rm.mu.RUnlock()
-	return rm.serverHost
-}
 
-func (rm *RuleManager) GetServerAuth() string {
-	rm.mu.RLock()
-	defer rm.mu.RUnlock()
-	return rm.serverAuth
-}
 
 func (rm *RuleManager) GetListenPort() string {
 	rm.mu.RLock()
@@ -515,13 +517,7 @@ func (rm *RuleManager) SaveConfig() error {
 	return rm.saveRulesConfig()
 }
 
-func (rm *RuleManager) UpdateServerConfig(host, auth string) error {
-	rm.mu.Lock()
-	rm.serverHost = host
-	rm.serverAuth = auth
-	rm.mu.Unlock()
-	return rm.saveSettingsConfig()
-}
+
 
 func (rm *RuleManager) GetCloudflareConfig() CloudflareConfig {
 	rm.mu.RLock()
@@ -807,13 +803,13 @@ func (rm *RuleManager) saveSettingsConfig() error {
 	showMainOnAutoStart := rm.showMainOnAutoStart
 	autoEnableProxyOnAutoStart := rm.autoEnableProxyOnAutoStart
 	socks5Enabled := rm.socks5Enabled
+	migrationEnabled := rm.migrationEnabled
 	cloudflareConfig := rm.cloudflareConfig
 	tunConfig := normalizeTUNConfig(rm.tunConfig)
 	settings := SettingsConfig{
 		ListenPort:                 listenPort,
 		Socks5Port:                 socks5Port,
-		ServerHost:                 rm.serverHost,
-		ServerAuth:                 rm.serverAuth,
+
 		CloseToTray:                &closeToTray,
 		AutoStart:                  &autoStart,
 		ShowMainWindowOnAutoStart:  &showMainOnAutoStart,
@@ -824,6 +820,8 @@ func (rm *RuleManager) saveSettingsConfig() error {
 		Language:                   rm.language,
 		Theme:                      rm.theme,
 		Socks5Enabled:              &socks5Enabled,
+		MigrationEnabled:           &migrationEnabled,
+		MigrationServer:            rm.migrationServer,
 	}
 
 	data, err := json.MarshalIndent(settings, "", "  ")
@@ -844,10 +842,11 @@ func (rm *RuleManager) saveSettingsConfig() error {
 
 func (rm *RuleManager) saveRulesConfig() error {
 	config := RulesConfig{
-		SiteGroups:  rm.siteGroups,
-		Upstreams:   rm.upstreams,
-		DNSNodes:    rm.dnsNodes,
-		ECHProfiles: rm.echProfiles,
+		SiteGroups:    rm.siteGroups,
+		Upstreams:     rm.upstreams,
+		DNSNodes:      rm.dnsNodes,
+		ECHProfiles:   rm.echProfiles,
+		NAT64Profiles: rm.nat64Profiles,
 	}
 
 	data, err := json.MarshalIndent(config, "", "  ")
@@ -1044,3 +1043,88 @@ func (rm *RuleManager) GetAutoRoutingStatus() GFWListStatus {
 		Mode:    string(rm.autoRoutingConfig.Mode),
 	}
 }
+
+func (rm *RuleManager) GetNAT64Profiles() []NAT64Profile {
+	rm.mu.RLock()
+	defer rm.mu.RUnlock()
+	if rm.nat64Profiles == nil {
+		return []NAT64Profile{}
+	}
+	out := make([]NAT64Profile, len(rm.nat64Profiles))
+	copy(out, rm.nat64Profiles)
+	return out
+}
+
+func (rm *RuleManager) AddNAT64Profile(p NAT64Profile) error {
+	rm.mu.Lock()
+	defer rm.mu.Unlock()
+
+	p.ID = generateID()
+	rm.nat64Profiles = append(rm.nat64Profiles, p)
+	return rm.saveRulesConfig()
+}
+
+func (rm *RuleManager) UpdateNAT64Profile(p NAT64Profile) error {
+	rm.mu.Lock()
+	defer rm.mu.Unlock()
+
+	for i, profile := range rm.nat64Profiles {
+		if profile.ID == p.ID {
+			rm.nat64Profiles[i] = p
+			break
+		}
+	}
+	return rm.saveRulesConfig()
+}
+
+func (rm *RuleManager) DeleteNAT64Profile(id string) error {
+	rm.mu.Lock()
+	defer rm.mu.Unlock()
+
+	for i, profile := range rm.nat64Profiles {
+		if profile.ID == id {
+			rm.nat64Profiles = append(rm.nat64Profiles[:i], rm.nat64Profiles[i+1:]...)
+			break
+		}
+	}
+	return rm.saveRulesConfig()
+}
+
+func (rm *RuleManager) GetNAT64PrefixByID(id string) string {
+	rm.mu.RLock()
+	defer rm.mu.RUnlock()
+	for _, p := range rm.nat64Profiles {
+		if p.ID == id {
+			return p.Prefix
+		}
+	}
+	return ""
+}
+
+func (rm *RuleManager) GetMigrationEnabled() bool {
+	rm.mu.RLock()
+	defer rm.mu.RUnlock()
+	return rm.migrationEnabled
+}
+
+func (rm *RuleManager) SetMigrationEnabled(enabled bool) error {
+	rm.mu.Lock()
+	rm.migrationEnabled = enabled
+	rm.mu.Unlock()
+	return rm.saveSettingsConfig()
+}
+
+func (rm *RuleManager) GetMigrationServer() string {
+	rm.mu.RLock()
+	defer rm.mu.RUnlock()
+	return rm.migrationServer
+}
+
+func (rm *RuleManager) SetMigrationServer(server string) error {
+	rm.mu.Lock()
+	rm.migrationServer = strings.TrimSpace(server)
+	rm.mu.Unlock()
+	return rm.saveSettingsConfig()
+}
+
+

@@ -72,14 +72,6 @@
   },
   "proxies": {
     "title": "Proxies",
-    "server_node": "Server Node",
-    "testing": "Testing...",
-    "test_conn": "Test Connection",
-    "test_hint": "Test internal connectivity (bypassing rules)",
-    "node_host": "Node Host",
-    "auth_secret": "Auth Secret (AUTH_SECRET)",
-    "auth_placeholder": "Enter server password",
-    "save_node": "Save Node Config",
     "ech_management": "ECH Config Management",
     "add_ech": "Add Config",
     "no_ech": "No ECH Configs",
@@ -89,7 +81,19 @@
     "edit_ech": "Edit ECH Config",
     "probe_ech": "Probe & Create ECH Config",
     "modifying": "Modifying",
-    "probe_hint": "Probe ECH resources via DoH domain"
+    "probe_hint": "Probe ECH resources via DoH domain",
+    "nat64_management": "NAT64 Configuration Management",
+    "add_nat64": "Add NAT64 Config",
+    "edit_nat64": "Edit NAT64 Config",
+    "no_nat64": "No NAT64 configurations",
+    "delete_nat64_confirm": "Are you sure you want to delete this NAT64 config?",
+    "nat64_form_subtitle": "Configure separate prefix mapping to bypass specific IP blacklists",
+    "nat64_form_name": "Config Name",
+    "nat64_form_prefix": "NAT64 Prefix",
+    "migration_service": "Connection Migration Service",
+    "migration_service_title": "Migration API URL",
+    "migration_service_desc": "Configure connection migration service URL",
+    "migration_service_hint": "Enter migration service API URL"
   },
   "ech_form": {
     "title": "ECH Assisted Discovery",
@@ -181,14 +185,17 @@
       "ech_enable": "ECH Encryption",
       "ech_hint": "Try ECH connection if enabled",
       "cf_pool": "Preferred IP Pool",
-      "cf_pool_hint": "Prioritize using Cloudflare Preferred IPs"
+      "cf_pool_hint": "Prioritize using Cloudflare Preferred IPs",
+      "nat64_enable": "Enable NAT64 Mapping",
+      "nat64_hint": "Enable NAT64 mapping transformation for this rule",
+      "nat64_profile": "NAT64 Configuration"
     },
     "modes": {
       "mitm": "Modify SNI or inject ECH config",
-      "server": "Connect to upstream reverse proxy",
       "tls-rf": "TLS Fragmenting",
       "quic": "QUIC Fragment Obfuscation",
-      "transparent": "No TLS decryption, pass-through"
+      "transparent": "No TLS decryption, pass-through",
+      "migration": "TLS 1.2 Session Resumption"
     },
     "cert_policy": {
       "ignore": "Ignore Cert Verification",
@@ -204,7 +211,8 @@
     "display": {
       "transparent": "Pass-through",
       "direct": "Direct",
-      "fragment": "Fragment"
+      "fragment": "Fragment",
+      "migration": "Migration"
     },
     "notifications": {
       "deleted": "Rule deleted"
@@ -230,8 +238,7 @@
     "mode_switch": "Routing Mode Switch",
     "modes": {
       "off": "OFF",
-      "smart": "Smart",
-      "server": "Server"
+      "smart": "Smart"
     },
     "gfwlist_check": "GFWList Status",
     "preloaded": "Preloaded {count} routing rules",

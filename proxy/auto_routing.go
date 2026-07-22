@@ -19,7 +19,6 @@ type AutoRoutingMode string
 const (
 	AutoRoutingOff            AutoRoutingMode = ""
 	AutoRoutingDefault        AutoRoutingMode = "default" // ECH / TLS-RF / direct
-	AutoRoutingServerFallback AutoRoutingMode = "server"  // + Server fallback
 )
 
 // AutoRoutingConfig is persisted in settings.json.
@@ -188,9 +187,6 @@ func (ar *AutoRouter) Decide(host string) Rule {
 		Enabled:    true,
 		AutoRouted: true,
 	}
-	if ar.config.Mode == AutoRoutingServerFallback {
-		rule.FallbackMode = "server"
-	}
 	return rule
 }
 
@@ -227,15 +223,5 @@ func (ar *AutoRouter) GetStatus() GFWListStatus {
 
 // DialFallback dials targetAddr through the specified fallback transport.
 func DialFallback(fallbackMode string, targetAddr string, serverHost string) (net.Conn, error) {
-	switch fallbackMode {
-	case "server":
-		if serverHost == "" {
-			return nil, fmt.Errorf("server host not configured")
-		}
-		d := &net.Dialer{Timeout: 10 * time.Second}
-		return d.Dial("tcp", ensureAddrWithPort(serverHost, "443"))
-
-	default:
-		return nil, fmt.Errorf("unknown fallback: %s", fallbackMode)
-	}
+	return nil, fmt.Errorf("unknown fallback: %s", fallbackMode)
 }

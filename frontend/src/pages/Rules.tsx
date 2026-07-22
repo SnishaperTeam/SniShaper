@@ -13,7 +13,7 @@ import { toast } from '../lib/toast';
 import { cn } from '../lib/utils';
 import { useTranslation } from '../i18n/I18nContext';
 
-const FILTER_MODES = ['ALL', 'MITM', 'SERVER', 'TLS-RF', 'QUIC', 'TRANSPARENT'] as const;
+const FILTER_MODES = ['ALL', 'MITM', 'TLS-RF', 'QUIC', 'TRANSPARENT', 'MIGRATION'] as const;
 
 const normalizeMode = (value: unknown) => String(value || '').trim().toLowerCase();
 
@@ -22,9 +22,9 @@ const getEffectiveMode = (group: any) => {
   const upstream = normalizeMode(group?.upstream);
   if (mode === 'quic') return 'QUIC';
   if (mode === 'tls-rf') return 'TLS-RF';
-  if (mode === 'server') return 'SERVER';
   if (mode === 'mitm') return 'MITM';
   if (mode === 'transparent') return 'TRANSPARENT';
+  if (mode === 'migration') return 'MIGRATION';
   return mode ? mode.toUpperCase() : 'DIRECT';
 };
 
@@ -35,21 +35,21 @@ const RuleItem: React.FC<{ group: any; onEdit: (group: any) => void; onDelete: (
       case 'TRANSPARENT': return t('rules.display.transparent');
       case 'DIRECT': return t('rules.display.direct');
       case 'TLS-RF': return t('rules.display.fragment');
+      case 'MIGRATION': return t('rules.display.migration') || 'Migration';
       default: return mode;
     }
   };
   const modeColors: Record<string, string> = {
-    'server': 'text-purple-600 dark:text-purple-400',
     'mitm': 'text-amber-600 dark:text-amber-400',
     'transparent': 'text-danger',
     'quic': 'text-success',
-    'tls-rf': 'text-blue-600 dark:text-blue-400'
+    'tls-rf': 'text-blue-600 dark:text-blue-400',
+    'migration': 'text-purple-600 dark:text-purple-400'
   };
   const getEffectiveUpstream = (group: any) => {
     const upstream = String(group.upstream || '').trim();
     if (upstream && upstream.toUpperCase() !== 'DIRECT') return upstream;
     if (group.use_cf_pool) return 'CF IP POOL';
-    if (group.mode === 'server') return 'REMOTE SERVER';
     return 'DOH DYNAMIC';
   };
   const effectiveMode = getEffectiveMode(group);
@@ -153,7 +153,7 @@ const Rules: React.FC = () => {
           {FILTER_MODES.map((m) => (
             <button key={m} onClick={() => setFilterMode(m)} role="tab" aria-selected={filterMode === m}
               className={cn('px-4 py-1.5 rounded-lg text-[10px] font-black tracking-widest uppercase transition-all', filterMode === m ? 'bg-accent text-white shadow-md shadow-accent/20' : 'text-text-secondary hover:bg-background-hover')}>
-              {m === 'TLS-RF' ? t('rules.display.fragment') : m === 'TRANSPARENT' ? t('rules.display.transparent') : m}
+              {m === 'TLS-RF' ? t('rules.display.fragment') : m === 'TRANSPARENT' ? t('rules.display.transparent') : m === 'MIGRATION' ? (t('rules.display.migration') || '迁移') : m}
             </button>
           ))}
         </div>

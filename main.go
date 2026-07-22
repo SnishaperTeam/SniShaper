@@ -4,6 +4,9 @@ import (
 	"embed"
 	"log"
 
+	"snishaper/app"
+	"snishaper/core"
+
 	"github.com/wailsapp/wails/v3/pkg/application"
 	"github.com/wailsapp/wails/v3/pkg/events"
 )
@@ -15,16 +18,16 @@ var assets embed.FS
 var trayIcon []byte
 
 func main() {
-	if hasLaunchArg("--core") {
-		if err := runCoreMain(); err != nil {
+	if app.HasLaunchArg("--core") {
+		if err := core.RunCoreMain(); err != nil {
 			log.Fatal(err)
 		}
 		return
 	}
 
-	recoverBrokenSingleInstance("com.snishaper.desktop")
+	app.RecoverBrokenSingleInstance("com.snishaper.desktop")
 
-	app := NewApp()
+	a := app.NewApp()
 
 	wailsApp := application.New(application.Options{
 		Name:        "snishaper",
@@ -33,102 +36,101 @@ func main() {
 			Handler: application.BundledAssetFileServer(assets),
 		},
 		Services: []application.Service{
-			application.NewService(app),
+			application.NewService(a),
 		},
 		SingleInstance: &application.SingleInstanceOptions{
 			UniqueID: "com.snishaper.desktop",
 			OnSecondInstanceLaunch: func(data application.SecondInstanceData) {
-				app.RevealMainWindow()
+				a.RevealMainWindow()
 			},
 			ExitCode: 0,
 		},
 		Icon: trayIcon,
 	})
 
-	app.wailsApp = wailsApp
+	a.SetWailsApp(wailsApp)
 
 	// Create Tray
 	tray := wailsApp.SystemTray.New()
 	tray.SetIcon(trayIcon)
 	tray.SetDarkModeIcon(trayIcon)
 	tray.SetTooltip("SniShaper")
-	app.systemTray = tray
+	a.SetSystemTray(tray)
 
 	// Define Tray Menu
 	trayMenu := application.NewMenu()
 	trayMenu.Add("仪表盘").OnClick(func(ctx *application.Context) {
-		app.RevealMainWindow()
+		a.RevealMainWindow()
 	})
 	trayMenu.AddSeparator()
 
 	proxyLabel := "代理: 关"
-	if app.IsProxyRunning() {
+	if a.IsProxyRunning() {
 		proxyLabel = "代理: 开"
 	}
-	app.proxyItemV3 = trayMenu.AddCheckbox(proxyLabel, app.IsProxyRunning())
-	app.proxyItemV3.OnClick(func(ctx *application.Context) {
-		app.runSafeAsync("tray proxy toggle", func() {
-			if app.IsProxyRunning() {
-				_ = app.StopProxy()
+	proxyItem := trayMenu.AddCheckbox(proxyLabel, a.IsProxyRunning())
+	proxyItem.OnClick(func(ctx *application.Context) {
+		a.RunSafeAsync("tray proxy toggle", func() {
+			if a.IsProxyRunning() {
+				_ = a.StopProxy()
 			} else {
-				_ = app.StartProxy()
+				_ = a.StartProxy()
 			}
 		})
 	})
+	a.SetProxyMenuItem(proxyItem)
 
 	systemProxyLabel := "系统代理: 关"
-	if app.GetSystemProxyStatus().Enabled {
+	if a.GetSystemProxyStatus().Enabled {
 		systemProxyLabel = "系统代理: 开"
 	}
-	app.systemProxyItemV3 = trayMenu.Add(systemProxyLabel)
-	app.systemProxyItemV3.OnClick(func(ctx *application.Context) {
-		app.runSafeAsync("tray system proxy toggle", func() {
-			if app.GetSystemProxyStatus().Enabled {
-				_ = app.DisableSystemProxy()
+	systemProxyItem := trayMenu.Add(systemProxyLabel)
+	systemProxyItem.OnClick(func(ctx *application.Context) {
+		a.RunSafeAsync("tray system proxy toggle", func() {
+			if a.GetSystemProxyStatus().Enabled {
+				_ = a.DisableSystemProxy()
 				return
 			}
-			if !app.IsProxyRunning() {
-				if err := app.StartProxy(); err != nil {
+			if !a.IsProxyRunning() {
+				if err := a.StartProxy(); err != nil {
 					return
 				}
 			}
-			_ = app.EnableSystemProxy()
+			_ = a.EnableSystemProxy()
 		})
 	})
-
+	a.SetSystemProxyMenuItem(systemProxyItem)
 
 	trayMenu.AddSeparator()
 	trayMenu.Add("退出").OnClick(func(ctx *application.Context) {
-		app.QuitApp()
+		a.QuitApp()
 	})
 
 	tray.SetMenu(trayMenu)
-	app.trayMenuV3 = trayMenu
+	a.SetTrayMenu(trayMenu)
 
 	// Create Main Window
-	app.mainWindow = wailsApp.Window.NewWithOptions(application.WebviewWindowOptions{
+	mainWindow := wailsApp.Window.NewWithOptions(application.WebviewWindowOptions{
 		Name:             "main",
 		Title:            "snishaper",
 		Width:            1024,
 		Height:           768,
 		URL:              "/",
 		Frameless:        true,
-		Hidden:           app.ShouldStartHidden(),
+		Hidden:           a.ShouldStartHidden(),
 		BackgroundColour: application.NewRGB(27, 38, 54),
 	})
-	app.mainWindow.OnWindowEvent(events.Common.WindowClosing, func(event *application.WindowEvent) {
-		if !app.shouldQuit {
-			if app.GetCloseToTray() {
+	mainWindow.OnWindowEvent(events.Common.WindowClosing, func(event *application.WindowEvent) {
+		if !a.ShouldQuit() {
+			if a.GetCloseToTray() {
 				event.Cancel()
-				app.mainWindow.Hide()
+				mainWindow.Hide()
 			} else {
-				app.QuitApp()
+				a.QuitApp()
 			}
 		}
 	})
-	tray.OnClick(func() {
-		app.RevealMainWindow()
-	})
+	a.SetMainWindow(mainWindow)
 
 	err := wailsApp.Run()
 	if err != nil {

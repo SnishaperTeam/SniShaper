@@ -1,6 +1,6 @@
 //go:build !windows
 
-package main
+package app
 
 func buildAutoStartCommand(execPath string) string {
 	return execPath

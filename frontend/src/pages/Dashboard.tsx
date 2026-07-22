@@ -28,7 +28,8 @@ import {
   GetStats,
   GetCAInstallStatus,
   OpenCAFile,
-  InstallCA
+  InstallCA,
+  EventsOn
 } from '../api/bindings';
 import { Card } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
@@ -127,7 +128,19 @@ const Dashboard: React.FC = () => {
       return 5000;
     };
     const timer = setInterval(refresh, getInterval());
-    return () => clearInterval(timer);
+
+    // Real-time state sync from backend (tray toggle, etc.)
+    const unlisten = EventsOn("app:state_changed", (state: any) => {
+      if (!state) return;
+      if (typeof state.proxyRunning === 'boolean') setProxyRunning(state.proxyRunning);
+      if (typeof state.systemProxyActive === 'boolean') setSysProxyEnabled(state.systemProxyActive);
+      if (typeof state.proxyMode === 'string') setProxyMode(state.proxyMode.toUpperCase());
+    });
+
+    return () => {
+      clearInterval(timer);
+      if (unlisten) unlisten();
+    };
   }, [isActive, isPageVisible]);
 
   const handleToggleProxy = async () => {
@@ -136,7 +149,7 @@ const Dashboard: React.FC = () => {
     try {
       if (proxyRunning) await StopProxy();
       else await StartProxy();
-      await new Promise(r => setTimeout(r, 600));
+      await new Promise(r => setTimeout(r, 100));
       await refresh();
     } catch (err) { console.error("Failed to toggle proxy:", err);
     } finally { setIsOperating(false); }
@@ -148,7 +161,7 @@ const Dashboard: React.FC = () => {
     try {
       if (sysProxyEnabled) await DisableSystemProxy();
       else await EnableSystemProxy();
-      await new Promise(r => setTimeout(r, 800));
+      await new Promise(r => setTimeout(r, 100));
       await refresh();
     } catch (err) { console.error("Failed to toggle system proxy:", err);
     } finally { setIsOperating(false); }
@@ -161,7 +174,7 @@ const Dashboard: React.FC = () => {
     try {
       if (nextEnabled) await StartTUN();
       else await StopTUN();
-      await new Promise(r => setTimeout(r, nextEnabled ? 1200 : 500));
+      await new Promise(r => setTimeout(r, nextEnabled ? 200 : 100));
       const state = await refresh();
       const running = Boolean(state?.tunState?.running);
       if (nextEnabled && !running) {

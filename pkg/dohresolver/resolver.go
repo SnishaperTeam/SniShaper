@@ -3,6 +3,7 @@ package dohresolver
 import (
 	"bytes"
 	"context"
+	"crypto/tls"
 	"errors"
 	"fmt"
 	"io"
@@ -14,6 +15,8 @@ import (
 	"time"
 
 	"github.com/miekg/dns"
+	"github.com/quic-go/quic-go"
+	"github.com/quic-go/quic-go/http3"
 	utls "github.com/refraction-networking/utls"
 )
 
@@ -89,6 +92,55 @@ func (r *FailoverResolver) getNodeClient(ctx context.Context, node DNSNode) (*ht
 		ECHAutoUpdate: node.ECHAutoUpdate,
 	}
 
+	// QUIC/HTTP3 path
+	if node.QUIC {
+		echBytes := r.proxy.ResolveRuleECHConfig(host, rule)
+		tlsConfig := &tls.Config{
+			ServerName:         host,
+			NextProtos:         []string{"h3", "h3-29", "h3-32"},
+			InsecureSkipVerify: true,
+		}
+		if len(echBytes) > 0 {
+			tlsConfig.EncryptedClientHelloConfigList = echBytes
+			tlsConfig.InsecureSkipVerify = false
+		}
+		if rule.SniFake != "" {
+			tlsConfig.ServerName = rule.SniFake
+		}
+
+		var dialAddrs []string
+		if len(node.IPs) > 0 {
+			port := parsedURL.Port()
+			if port == "" {
+				port = "443"
+			}
+			for _, ip := range node.IPs {
+				dialAddrs = append(dialAddrs, net.JoinHostPort(ip, port))
+			}
+		} else {
+			dialAddrs = []string{net.JoinHostPort(host, "443")}
+		}
+
+		tr := &http3.Transport{
+			TLSClientConfig: tlsConfig,
+			Dial: func(ctx context.Context, _ string, tlsCfg *tls.Config, cfg *quic.Config) (*quic.Conn, error) {
+				for _, addr := range dialAddrs {
+					conn, err := quic.DialAddr(ctx, addr, tlsCfg, cfg)
+					if err == nil {
+						return conn, nil
+					}
+				}
+				return nil, fmt.Errorf("all QUIC dial failed for %s", host)
+			},
+		}
+
+		return &http.Client{
+			Transport: tr,
+			Timeout:   10 * time.Second,
+		}, nil
+	}
+
+	// TCP/TLS path (default)
 	tr := &http.Transport{
 		DialTLSContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
 			// 收集拨号候选 IP

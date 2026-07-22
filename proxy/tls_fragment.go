@@ -105,16 +105,7 @@ func (p *ProxyServer) handleTLSRFFallback(clientConn net.Conn, host string, rule
 
 	targetAddr := net.JoinHostPort(host, "443")
 
-	p.mu.RLock()
-	rules := p.rules
-	p.mu.RUnlock()
-
-	var serverHost string
-	if rules != nil {
-		serverHost = rules.GetServerHost()
-	}
-
-	newConn, err := DialFallback(rule.FallbackMode, targetAddr, serverHost)
+	newConn, err := DialFallback(rule.FallbackMode, targetAddr, "")
 	if err != nil {
 		p.tracef("[TLS-RF] Fallback %s dial failed for %s: %v", rule.FallbackMode, host, err)
 		clientConn.Close()

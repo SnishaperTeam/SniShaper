@@ -50,8 +50,7 @@ const Routing: React.FC = () => {
         let modeDisplay = mode.toUpperCase();
         const lowerMode = mode.toLowerCase();
         
-        if (lowerMode.includes('server')) modeClass = 'bg-purple-600';
-        else if (lowerMode.includes('direct') || lowerMode.includes('tcp')) { 
+        if (lowerMode.includes('direct') || lowerMode.includes('tcp')) { 
             modeClass = 'bg-gray-500'; modeDisplay = 'DIRECT'; 
         }
         else if (lowerMode.includes('transparent')) modeClass = 'bg-red-500';
@@ -140,8 +139,7 @@ const Routing: React.FC = () => {
                     <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                         {[
                             { id: '', label: t('routing.modes.off'), icon: Power, color: 'text-text-muted' },
-                            { id: 'default', label: t('routing.modes.smart'), icon: Zap, color: 'text-success' },
-                            { id: 'server', label: t('routing.modes.server'), icon: Activity, color: 'text-purple-500' }
+                            { id: 'default', label: t('routing.modes.smart'), icon: Zap, color: 'text-success' }
                         ].map((opt) => (
                             <button
                                 key={opt.id}

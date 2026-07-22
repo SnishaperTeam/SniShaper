@@ -1,6 +1,6 @@
 import { Call, Events } from '@wailsio/runtime';
 
-const appCall = (name: string, ...args: any[]) => Call.ByName(`main.App.${name}`, ...args);
+const appCall = (name: string, ...args: any[]) => Call.ByName(`snishaper/app.App.${name}`, ...args);
 
 export const EventsOn = (eventName: string, callback: (data: any) => void) =>
   Events.On(eventName, (event) => callback(event.data));
@@ -45,7 +45,7 @@ export const GetListenPort = () => appCall('GetListenPort');
 export const GetProxyDiagnostics = () => appCall('GetProxyDiagnostics');
 export const GetProxyMode = () => appCall('GetProxyMode');
 export const GetRecentLogs = (limit: number) => appCall('GetRecentLogs', limit);
-export const GetServerConfig = () => appCall('GetServerConfig');
+
 export const GetSiteGroups = () => appCall('GetSiteGroups');
 export const GetStats = () => appCall('GetStats');
 export const GetSystemProxyStatus = () => appCall('GetSystemProxyStatus');
@@ -77,7 +77,7 @@ export const StopProxy = () => appCall('StopProxy');
 export const TriggerCFHealthCheck = () => appCall('TriggerCFHealthCheck');
 export const UninstallCert = (thumbprint: string) => appCall('UninstallCert', thumbprint);
 export const UpdateCloudflareConfig = (cfg: any) => appCall('UpdateCloudflareConfig', cfg);
-export const UpdateServerConfig = (host: string, auth: string) => appCall('UpdateServerConfig', host, auth);
+
 export const UpdateSiteGroup = (sg: any) => appCall('UpdateSiteGroup', sg);
 export const UpdateTrayMenu = () => appCall('UpdateTrayMenu');
 export const UpdateUpstream = (u: any) => appCall('UpdateUpstream', u);
@@ -89,7 +89,7 @@ export const GetAutoRoutingConfig = () => appCall('GetAutoRoutingConfig');
 export const UpdateAutoRoutingConfig = (cfg: any) => appCall('UpdateAutoRoutingConfig', cfg);
 export const GetAutoRoutingStatus = () => appCall('GetAutoRoutingStatus');
 export const RefreshGFWList = () => appCall('RefreshGFWList');
-export const TestServerNode = () => appCall('TestServerNode');
+
 
 // About API
 export const GetAppVersion = () => appCall('GetAppVersion');
@@ -109,3 +109,18 @@ export const UpdateDNSNode = (n: any) => appCall('UpdateDNSNode', n);
 export const DeleteDNSNode = (id: string) => appCall('DeleteDNSNode', id);
 export const SetDNSNodePriority = (id: string, targetIndex: number) => appCall('SetDNSNodePriority', id, targetIndex);
 export const TestDNSNode = (nodeID: string) => appCall('TestDNSNode', nodeID);
+
+// NAT64 Profile API
+export const GetNAT64Profiles = () => appCall('GetNAT64Profiles');
+export const AddNAT64Profile = (p: any) => appCall('AddNAT64Profile', p);
+export const UpdateNAT64Profile = (p: any) => appCall('UpdateNAT64Profile', p);
+export const DeleteNAT64Profile = (id: string) => appCall('DeleteNAT64Profile', id);
+export const TestNAT64Profile = (prefix: string) => appCall('TestNAT64Profile', prefix);
+
+// Migration API
+export const GetMigrationEnabled = () => appCall('GetMigrationEnabled');
+export const SetMigrationEnabled = (enabled: boolean) => appCall('SetMigrationEnabled', enabled);
+export const GetMigrationServer = () => appCall('GetMigrationServer');
+export const SetMigrationServer = (server: string) => appCall('SetMigrationServer', server);
+export const TestMigration = (server: string) => appCall('TestMigration', server);
+

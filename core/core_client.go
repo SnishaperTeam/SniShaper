@@ -1,4 +1,4 @@
-package main
+package core
 
 import (
 	"errors"
@@ -14,15 +14,17 @@ import (
 	"snishaper/proxy"
 )
 
-type coreClient struct {
+// CoreClient is an RPC client that communicates with the core process.
+type CoreClient struct {
 	token string
 }
 
-func newCoreClient() *coreClient {
-	return &coreClient{}
+// NewCoreClient creates a new core RPC client.
+func NewCoreClient() *CoreClient {
+	return &CoreClient{}
 }
 
-func (c *coreClient) readToken() string {
+func (c *CoreClient) readToken() string {
 	if c.token != "" {
 		return c.token
 	}
@@ -39,7 +41,7 @@ func (c *coreClient) readToken() string {
 	return c.token
 }
 
-func (c *coreClient) dial() (*rpc.Client, error) {
+func (c *CoreClient) dial() (*rpc.Client, error) {
 	conn, err := net.DialTimeout("tcp", coreRPCAddr, 400*time.Millisecond)
 	if err != nil {
 		return nil, err
@@ -47,7 +49,8 @@ func (c *coreClient) dial() (*rpc.Client, error) {
 	return rpc.NewClient(conn), nil
 }
 
-func (c *coreClient) call(method string, args any, reply any) error {
+// Call invokes an RPC method on the core process.
+func (c *CoreClient) Call(method string, args any, reply any) error {
 	client, err := c.dial()
 	if err != nil {
 		return err
@@ -56,15 +59,16 @@ func (c *coreClient) call(method string, args any, reply any) error {
 	return client.Call(method, args, reply)
 }
 
-func (c *coreClient) ensureRunning() error {
+// EnsureRunning makes sure the core process is alive and responding.
+func (c *CoreClient) EnsureRunning() error {
 	return c.ensureRunningWithElevation(false)
 }
 
-func (c *coreClient) ensureRunningWithElevation(requireElevated bool) error {
+func (c *CoreClient) ensureRunningWithElevation(requireElevated bool) error {
 	wasLogCaptureEnabled := false
 	wasProxyRunning := false
 	var pong BoolReply
-	if err := c.call("Core.Ping", EmptyArgs{}, &pong); err == nil && pong.Value {
+	if err := c.Call("Core.Ping", EmptyArgs{}, &pong); err == nil && pong.Value {
 		wasLogCaptureEnabled = c.IsLogCaptureEnabled()
 		wasProxyRunning = c.IsProxyRunning()
 		execPath, pathErr := os.Executable()
@@ -72,14 +76,19 @@ func (c *coreClient) ensureRunningWithElevation(requireElevated bool) error {
 			return pathErr
 		}
 		info, infoErr := c.getInfo()
-		if infoErr == nil && sameExecutable(info.Executable, execPath) && (!requireElevated || info.Elevated) {
+		currentFileInfo, currentErr := os.Stat(execPath)
+		isSameFile := false
+		if infoErr == nil && currentErr == nil {
+			isSameFile = sameExecutable(info.Executable, execPath) && (info.ModTime == currentFileInfo.ModTime().UnixNano())
+		}
+		if isSameFile && (!requireElevated || info.Elevated) {
 			return nil
 		}
 		var empty EmptyArgs
-		_ = c.call("Core.Shutdown", EmptyArgs{}, &empty)
+		_ = c.Call("Core.Shutdown", EmptyArgs{}, &empty)
 		for i := 0; i < 10; i++ {
 			time.Sleep(100 * time.Millisecond)
-			if err := c.call("Core.Ping", EmptyArgs{}, &pong); err != nil || !pong.Value {
+			if err := c.Call("Core.Ping", EmptyArgs{}, &pong); err != nil || !pong.Value {
 				break
 			}
 		}
@@ -93,22 +102,22 @@ func (c *coreClient) ensureRunningWithElevation(requireElevated bool) error {
 	}
 	for i := 0; i < 30; i++ {
 		time.Sleep(200 * time.Millisecond)
-		if err := c.call("Core.Ping", EmptyArgs{}, &pong); err == nil && pong.Value {
+		if err := c.Call("Core.Ping", EmptyArgs{}, &pong); err == nil && pong.Value {
 			// Authenticate with the core process
 			token := c.readToken()
 			if token != "" {
 				var authReply BoolReply
-				if err := c.call("Core.Authenticate", AuthArgs{Token: token}, &authReply); err != nil || !authReply.Value {
+				if err := c.Call("Core.Authenticate", AuthArgs{Token: token}, &authReply); err != nil || !authReply.Value {
 					continue // Authentication failed, retry
 				}
 			}
 			if wasLogCaptureEnabled {
 				var empty EmptyArgs
-				_ = c.call("Core.StartLogCapture", EmptyArgs{}, &empty)
+				_ = c.Call("Core.StartLogCapture", EmptyArgs{}, &empty)
 			}
 			if wasProxyRunning {
 				var empty EmptyArgs
-				if err := c.call("Core.StartProxy", EmptyArgs{}, &empty); err != nil {
+				if err := c.Call("Core.StartProxy", EmptyArgs{}, &empty); err != nil {
 					return fmt.Errorf("restore proxy after core restart: %w", err)
 				}
 			}
@@ -127,71 +136,74 @@ func (c *coreClient) ensureRunningWithElevation(requireElevated bool) error {
 	return fmt.Errorf("core did not become ready")
 }
 
-func (c *coreClient) getInfo() (CoreInfoReply, error) {
+func (c *CoreClient) getInfo() (CoreInfoReply, error) {
 	var reply CoreInfoReply
-	err := c.call("Core.GetInfo", EmptyArgs{}, &reply)
+	err := c.Call("Core.GetInfo", EmptyArgs{}, &reply)
 	return reply, err
 }
 
-func (c *coreClient) reloadIfRunning() {
+// ReloadIfRunning tells the core to reload its configuration.
+func (c *CoreClient) ReloadIfRunning() {
 	var pong BoolReply
-	if err := c.call("Core.Ping", EmptyArgs{}, &pong); err != nil || !pong.Value {
+	if err := c.Call("Core.Ping", EmptyArgs{}, &pong); err != nil || !pong.Value {
 		return
 	}
 	var empty EmptyArgs
-	_ = c.call("Core.ReloadConfig", EmptyArgs{}, &empty)
+	_ = c.Call("Core.ReloadConfig", EmptyArgs{}, &empty)
 }
 
-func (c *coreClient) reloadCertificateIfRunning() {
+// ReloadCertificateIfRunning tells the core to reload its certificate.
+func (c *CoreClient) ReloadCertificateIfRunning() {
 	var pong BoolReply
-	if err := c.call("Core.Ping", EmptyArgs{}, &pong); err != nil || !pong.Value {
+	if err := c.Call("Core.Ping", EmptyArgs{}, &pong); err != nil || !pong.Value {
 		return
 	}
 	var empty EmptyArgs
-	_ = c.call("Core.ReloadCertificate", EmptyArgs{}, &empty)
+	_ = c.Call("Core.ReloadCertificate", EmptyArgs{}, &empty)
 }
 
-func (c *coreClient) shutdownIfRunning() {
+// ShutdownIfRunning shuts down the core process if it's alive.
+func (c *CoreClient) ShutdownIfRunning() {
 	var pong BoolReply
-	if err := c.call("Core.Ping", EmptyArgs{}, &pong); err != nil || !pong.Value {
+	if err := c.Call("Core.Ping", EmptyArgs{}, &pong); err != nil || !pong.Value {
 		return
 	}
 	var empty EmptyArgs
-	_ = c.call("Core.Shutdown", EmptyArgs{}, &empty)
+	_ = c.Call("Core.Shutdown", EmptyArgs{}, &empty)
 }
 
-func (c *coreClient) StartProxy() error {
-	if err := c.ensureRunning(); err != nil {
+func (c *CoreClient) StartProxy() error {
+	if err := c.EnsureRunning(); err != nil {
 		return err
 	}
 	var empty EmptyArgs
-	return c.call("Core.StartProxy", EmptyArgs{}, &empty)
+	return c.Call("Core.StartProxy", EmptyArgs{}, &empty)
 }
 
-func (c *coreClient) StopProxy() error {
+func (c *CoreClient) StopProxy() error {
 	var empty EmptyArgs
-	return c.call("Core.StopProxy", EmptyArgs{}, &empty)
+	return c.Call("Core.StopProxy", EmptyArgs{}, &empty)
 }
 
-func (c *coreClient) IsProxyRunning() bool {
+func (c *CoreClient) IsProxyRunning() bool {
 	var reply BoolReply
-	return c.call("Core.IsProxyRunning", EmptyArgs{}, &reply) == nil && reply.Value
+	return c.Call("Core.IsProxyRunning", EmptyArgs{}, &reply) == nil && reply.Value
 }
 
-func (c *coreClient) GetStats() (int64, int64, int64) {
+func (c *CoreClient) GetStats() (int64, int64, int64) {
 	var reply StatsReply
-	if err := c.call("Core.GetStats", EmptyArgs{}, &reply); err != nil {
+	if err := c.Call("Core.GetStats", EmptyArgs{}, &reply); err != nil {
 		return 0, 0, 0
 	}
 	return reply.Down, reply.Up, reply.Etc
 }
 
-func (c *coreClient) StartTUN() error {
+func (c *CoreClient) StartTUN() error {
 	if err := c.ensureRunningWithElevation(true); err != nil {
 		return fmt.Errorf("ensure elevated core failed: %w", err)
 	}
 	var empty EmptyArgs
-	if err := c.call("Core.StartTUN", EmptyArgs{}, &empty); err != nil {
+	if err := c.Call("Core.StartTUN", EmptyArgs{}, &empty); err != nil {
 		return fmt.Errorf("Core.StartTUN RPC failed: %w", err)
 	}
 
@@ -223,12 +235,12 @@ func (c *coreClient) StartTUN() error {
 	return fmt.Errorf("TUN did not enter running state")
 }
 
-func (c *coreClient) StopTUN() error {
+func (c *CoreClient) StopTUN() error {
 	var empty EmptyArgs
-	return c.call("Core.StopTUN", EmptyArgs{}, &empty)
+	return c.Call("Core.StopTUN", EmptyArgs{}, &empty)
 }
 
-func (c *coreClient) GetTUNStatus() proxy.TUNStatus {
+func (c *CoreClient) GetTUNStatus() proxy.TUNStatus {
 	status, err := c.getTUNStatusWithError()
 	if err != nil {
 		status.Supported = runtime.GOOS == "windows"
@@ -237,39 +249,39 @@ func (c *coreClient) GetTUNStatus() proxy.TUNStatus {
 	return status
 }
 
-func (c *coreClient) getTUNStatusWithError() (proxy.TUNStatus, error) {
+func (c *CoreClient) getTUNStatusWithError() (proxy.TUNStatus, error) {
 	var reply TUNStatusReply
-	err := c.call("Core.GetTUNStatus", EmptyArgs{}, &reply)
+	err := c.Call("Core.GetTUNStatus", EmptyArgs{}, &reply)
 	return reply.Status, err
 }
 
-func (c *coreClient) StartLogCapture() error {
-	if err := c.ensureRunning(); err != nil {
+func (c *CoreClient) StartLogCapture() error {
+	if err := c.EnsureRunning(); err != nil {
 		return err
 	}
 	var empty EmptyArgs
-	return c.call("Core.StartLogCapture", EmptyArgs{}, &empty)
+	return c.Call("Core.StartLogCapture", EmptyArgs{}, &empty)
 }
 
-func (c *coreClient) StopLogCapture() error {
+func (c *CoreClient) StopLogCapture() error {
 	var empty EmptyArgs
-	return c.call("Core.StopLogCapture", EmptyArgs{}, &empty)
+	return c.Call("Core.StopLogCapture", EmptyArgs{}, &empty)
 }
 
-func (c *coreClient) IsLogCaptureEnabled() bool {
+func (c *CoreClient) IsLogCaptureEnabled() bool {
 	var reply BoolReply
-	return c.call("Core.IsLogCaptureEnabled", EmptyArgs{}, &reply) == nil && reply.Value
+	return c.Call("Core.IsLogCaptureEnabled", EmptyArgs{}, &reply) == nil && reply.Value
 }
 
-func (c *coreClient) GetRecentLogs(limit int) string {
+func (c *CoreClient) GetRecentLogs(limit int) string {
 	var reply StringReply
-	_ = c.call("Core.GetRecentLogs", LogsArgs{Limit: limit}, &reply)
+	_ = c.Call("Core.GetRecentLogs", LogsArgs{Limit: limit}, &reply)
 	return reply.Value
 }
 
-func (c *coreClient) ClearLogs() error {
+func (c *CoreClient) ClearLogs() error {
 	var empty EmptyArgs
-	return c.call("Core.ClearLogs", EmptyArgs{}, &empty)
+	return c.Call("Core.ClearLogs", EmptyArgs{}, &empty)
 }
 
 type RouteEvent struct {
@@ -281,25 +293,25 @@ type RouteEventsReply struct {
 	Events []RouteEvent
 }
 
-func (c *coreClient) GetRouteEvents() []RouteEvent {
+func (c *CoreClient) GetRouteEvents() []RouteEvent {
 	var reply RouteEventsReply
-	if err := c.call("Core.GetRouteEvents", EmptyArgs{}, &reply); err != nil {
+	if err := c.Call("Core.GetRouteEvents", EmptyArgs{}, &reply); err != nil {
 		return nil
 	}
 	return reply.Events
 }
 
-func (c *coreClient) SetProxyMode(mode string) error {
-	if err := c.ensureRunning(); err != nil {
+func (c *CoreClient) SetProxyMode(mode string) error {
+	if err := c.EnsureRunning(); err != nil {
 		return err
 	}
 	var empty EmptyArgs
-	return c.call("Core.SetProxyMode", SetModeArgs{Mode: mode}, &empty)
+	return c.Call("Core.SetProxyMode", SetModeArgs{Mode: mode}, &empty)
 }
 
-func (c *coreClient) GetProxyMode() string {
+func (c *CoreClient) GetProxyMode() string {
 	var reply StringReply
-	_ = c.call("Core.GetProxyMode", EmptyArgs{}, &reply)
+	_ = c.Call("Core.GetProxyMode", EmptyArgs{}, &reply)
 	return reply.Value
 }
 

@@ -14,7 +14,7 @@ import {
   Settings,
   AlertCircle
 } from '../lib/icons';
-import { AddSiteGroup, UpdateSiteGroup, GetECHProfiles } from '../api/bindings';
+import { AddSiteGroup, UpdateSiteGroup, GetECHProfiles, GetNAT64Profiles } from '../api/bindings';
 import { useTranslation } from '../i18n/I18nContext';
 
 interface RuleFormProps {
@@ -60,10 +60,10 @@ const RuleForm: React.FC<RuleFormProps> = ({ initialData, onSuccess, onCancel })
   
   const MODES = [
     { id: 'mitm', label: 'MITM', icon: <Zap size={14} />, desc: t('rules.modes.mitm') },
-    { id: 'server', label: 'Server', icon: <Server size={14} />, desc: t('rules.modes.server') },
     { id: 'tls-rf', label: t('rules.display.fragment'), icon: <Monitor size={14} />, desc: t('rules.modes.tls-rf') },
     { id: 'quic', label: 'QUIC', icon: <Zap size={14} />, desc: t('rules.modes.quic') },
-    { id: 'transparent', label: t('rules.display.transparent'), icon: <Monitor size={14} />, desc: t('rules.modes.transparent') }
+    { id: 'transparent', label: t('rules.display.transparent'), icon: <Monitor size={14} />, desc: t('rules.modes.transparent') },
+    { id: 'migration', label: t('rules.display.migration') || '迁移', icon: <Globe size={14} />, desc: t('rules.modes.migration') }
   ];
 
   const DNS_OPTIONS = [
@@ -83,48 +83,54 @@ const RuleForm: React.FC<RuleFormProps> = ({ initialData, onSuccess, onCancel })
     { id: '', label: t('rules.cert_policy.ignore'), desc: t('rules.cert_policy.ignore_hint') }
   ];
 
-  const [formData, setFormData] = useState<any>({
-    id: '',
-    name: '',
-    website: '',
-    mode: 'mitm',
-    upstream: '',
-    domains: [] as string[],
-    dns_mode: '',
-    sni_fake: '',
-    enabled: true,
-    ech_enabled: false,
-    ech_profile_id: '',
-    ech_domain: '',
-    use_cf_pool: false,
-    cert_verify: {
-      mode: '',
-      names: [],
-      suffixes: [],
-      spki_sha256: [],
-      allow_unknown_authority: false
-    }
-  });
-  const [domainInput, setDomainInput] = useState('');
-  const [showAdvanced, setShowAdvanced] = useState(false);
-  const [echProfiles, setEchProfiles] = useState<any[]>([]);
-
-  useEffect(() => {
-    const loadProfiles = async () => {
-      const ps = await GetECHProfiles();
-      setEchProfiles(ps || []);
-    };
-    loadProfiles();
-
-    if (initialData) {
-      const data = { ...initialData };
-      if (String(data.upstream || '').trim().toUpperCase() === 'DIRECT') {
-        data.upstream = '';
+    const [formData, setFormData] = useState<any>({
+      id: '',
+      name: '',
+      website: '',
+      mode: 'mitm',
+      upstream: '',
+      domains: [] as string[],
+      dns_mode: '',
+      sni_fake: '',
+      enabled: true,
+      ech_enabled: false,
+      ech_profile_id: '',
+      ech_domain: '',
+      use_cf_pool: false,
+      nat64_enabled: false,
+      nat64_profile_id: '',
+      cert_verify: {
+        mode: '',
+        names: [],
+        suffixes: [],
+        spki_sha256: [],
+        allow_unknown_authority: false
       }
-      data.cert_verify = normalizeCertVerify(data.cert_verify);
-      setFormData(data);
-    }
-  }, [initialData]);
+    });
+    const [domainInput, setDomainInput] = useState('');
+    const [showAdvanced, setShowAdvanced] = useState(false);
+    const [echProfiles, setEchProfiles] = useState<any[]>([]);
+    const [nat64Profiles, setNat64Profiles] = useState<any[]>([]);
+
+    useEffect(() => {
+      const loadProfiles = async () => {
+        const [ps, ns] = await Promise.all([GetECHProfiles(), GetNAT64Profiles()]);
+        setEchProfiles(ps || []);
+        setNat64Profiles(ns || []);
+      };
+      loadProfiles();
+  
+      if (initialData) {
+        const data = { ...initialData };
+        if (String(data.upstream || '').trim().toUpperCase() === 'DIRECT') {
+          data.upstream = '';
+        }
+        data.cert_verify = normalizeCertVerify(data.cert_verify);
+        data.nat64_enabled = Boolean(data.nat64_enabled);
+        data.nat64_profile_id = String(data.nat64_profile_id || '');
+        setFormData(data);
+      }
+    }, [initialData]);
 
   const handleAddDomain = () => {
     if (!domainInput.trim()) return;
@@ -168,13 +174,15 @@ const RuleForm: React.FC<RuleFormProps> = ({ initialData, onSuccess, onCancel })
       ...patch
     }
   });
-  const toggleBooleanField = (field: 'enabled' | 'ech_enabled' | 'use_cf_pool') =>
+  const toggleBooleanField = (field: 'enabled' | 'ech_enabled' | 'use_cf_pool' | 'nat64_enabled') =>
     setFormData({ ...formData, [field]: !formData[field] });
 
   const currentMode = String(formData.mode || '').trim().toLowerCase();
-  const showSniFake = ['mitm', 'quic'].includes(currentMode);
-  const showEchConfig = ['mitm', 'server', 'quic'].includes(currentMode);
-  const showCertVerify = ['mitm', 'quic'].includes(currentMode);
+  const showSniFake = ['mitm', 'quic', 'migration'].includes(currentMode);
+  const showEchConfig = ['mitm', 'quic'].includes(currentMode);
+  const showCertVerify = ['mitm', 'quic', 'migration'].includes(currentMode);
+  const showNat64Config = ['mitm', 'quic', 'tls-rf', 'transparent', 'migration'].includes(currentMode);
+  const showCfPool = ['mitm', 'transparent', 'tls-rf', 'quic'].includes(currentMode);
 
   const splitListInput = (value: string) =>
     value
@@ -384,9 +392,44 @@ const RuleForm: React.FC<RuleFormProps> = ({ initialData, onSuccess, onCancel })
                     </div>
                   </div>
                 )}
+                {showNat64Config && formData.nat64_enabled && (
+                  <div className="space-y-1.5 mt-4">
+                    <label className="text-[10px] font-black text-text-secondary uppercase tracking-widest px-1">
+                      {t('rules.form.nat64_profile') || 'NAT64 配置'}
+                    </label>
+                    <div className="space-y-2">
+                      {nat64Profiles.length === 0 ? (
+                        <div className="text-[10px] text-text-muted px-1 font-bold">
+                          {t('proxies.no_nat64') || '暂无可用 NAT64 配置，请先至代理页面创建'}
+                        </div>
+                      ) : (
+                        <div className="grid grid-cols-1 gap-2 max-h-44 overflow-y-auto pr-1">
+                          {nat64Profiles.map((p) => {
+                            const active = formData.nat64_profile_id === p.id;
+                            return (
+                              <button
+                                key={p.id}
+                                type="button"
+                                onClick={() => setFormData({ ...formData, nat64_profile_id: p.id })}
+                                className={`rounded-xl border px-4 py-3 text-left transition-all ${
+                                  active
+                                    ? 'border-accent/40 bg-accent/10 text-accent shadow-[inset_0_0_0_1px_rgba(47,129,247,0.14)]'
+                                    : 'border-border/40 bg-background-card text-text-secondary hover:border-accent/30 hover:text-text-primary'
+                                }`}
+                              >
+                                <div className="text-[11px] font-black tracking-wide">{p.name}</div>
+                                <div className="mt-1 text-[10px] opacity-80">前缀：{p.prefix}</div>
+                              </button>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-3 p-4 bg-background-card border border-border/40 rounded-2xl">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 p-4 bg-background-card border border-border/40 rounded-2xl">
                   <button
                     type="button"
                     onClick={() => toggleBooleanField('enabled')}
@@ -425,6 +468,28 @@ const RuleForm: React.FC<RuleFormProps> = ({ initialData, onSuccess, onCancel })
                       </div>
                     </button>
                   )}
+                  {showNat64Config && (
+                    <button
+                      type="button"
+                      onClick={() => toggleBooleanField('nat64_enabled')}
+                      className={`flex items-center justify-between rounded-2xl border px-4 py-3 text-left transition-all ${
+                        formData.nat64_enabled
+                          ? 'border-accent/40 bg-accent/10'
+                          : 'border-border/40 bg-background-hover/60 hover:border-accent/25'
+                      }`}
+                    >
+                      <div className="space-y-0.5">
+                        <div className="text-[11px] font-bold text-text-primary flex items-center gap-1">
+                          <Globe size={12} className="text-purple-500" /> {t('rules.form.nat64_enable') || '启用 NAT64 映射'}
+                        </div>
+                        <div className="text-[10px] text-text-muted">{t('rules.form.nat64_hint') || '开启此功能以执行 NAT64 映射转换'}</div>
+                      </div>
+                      <div className={`relative h-5 w-9 rounded-full transition-all ${formData.nat64_enabled ? 'bg-accent' : 'bg-background-hover border border-border/50'}`}>
+                        <div className={`absolute top-0.5 h-4 w-4 rounded-full bg-white shadow-sm transition-transform duration-200 ${formData.nat64_enabled ? 'left-0 translate-x-[18px]' : 'left-0.5'}`} />
+                      </div>
+                    </button>
+                  )}
+                  {showCfPool && (
                   <button
                     type="button"
                     onClick={() => toggleBooleanField('use_cf_pool')}
@@ -442,6 +507,7 @@ const RuleForm: React.FC<RuleFormProps> = ({ initialData, onSuccess, onCancel })
                       <div className={`absolute top-0.5 h-4 w-4 rounded-full bg-white shadow-sm transition-transform duration-200 ${formData.use_cf_pool ? 'left-0 translate-x-[18px]' : 'left-0.5'}`} />
                     </div>
                   </button>
+                  )}
               </div>
 
               {/* Advanced Cert Verify */}

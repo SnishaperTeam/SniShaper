@@ -22,7 +22,8 @@
       },
       "website": "proton",
       "enabled": true,
-      "upstream": "185.70.42.20:443"
+      "upstream": "185.70.42.20:443",
+      "nat64_enabled": false
     },
     {
       "id": "sg-1771319670672-2",
@@ -46,7 +47,8 @@
       },
       "website": "proton",
       "enabled": true,
-      "upstream": "185.70.42.36:443"
+      "upstream": "185.70.42.36:443",
+      "nat64_enabled": false
     },
     {
       "id": "sg-1771319670672-3",
@@ -65,7 +67,8 @@
         ]
       },
       "website": "amazon",
-      "enabled": true
+      "enabled": true,
+      "nat64_enabled": false
     },
     {
       "id": "sg-1771319670672-6",
@@ -83,7 +86,8 @@
       "use_cf_pool": false,
       "cert_verify": {},
       "website": "bbc",
-      "enabled": true
+      "enabled": true,
+      "nat64_enabled": false
     },
     {
       "id": "sg-1771319670672-7",
@@ -97,7 +101,8 @@
       "cert_verify": {},
       "website": "bbc",
       "enabled": true,
-      "upstream": "13.35.186.119:443"
+      "upstream": "13.35.186.119:443",
+      "nat64_enabled": false
     },
     {
       "id": "sg-1771319670672-8",
@@ -118,7 +123,8 @@
       },
       "website": "e-hentai",
       "enabled": true,
-      "upstream": "5.79.104.110:443"
+      "upstream": "5.79.104.110:443",
+      "nat64_enabled": false
     },
     {
       "id": "sg-1771319670672-10",
@@ -140,7 +146,8 @@
       },
       "website": "github",
       "enabled": true,
-      "upstream": "20.205.243.168:443,20.27.177.116:443,20.200.245.245:443"
+      "upstream": "20.205.243.168:443,20.27.177.116:443,20.200.245.245:443",
+      "nat64_enabled": false
     },
     {
       "id": "sg-1771319670672-11",
@@ -161,7 +168,8 @@
       },
       "website": "mega",
       "enabled": true,
-      "upstream": "66.203.125.15:443"
+      "upstream": "66.203.125.15:443",
+      "nat64_enabled": false
     },
     {
       "id": "sg-1771319670672-12",
@@ -192,7 +200,6 @@
         "v2ex.com",
         "twitter.com",
         "t.co",
-        "x.com",
         "wallhaven.cc",
         "substack.com",
         "south-plus.net",
@@ -249,7 +256,8 @@
         "trycloudflare.com",
         "greasyfork.com",
         "sourceforge.net",
-        "kotaku.com"
+        "kotaku.com",
+        "polymarket.com"
       ],
       "ech_enabled": true,
       "ech_profile_id": "legacy-cloudflare",
@@ -258,7 +266,8 @@
         "mode": "strict_real"
       },
       "website": "ECH",
-      "enabled": true
+      "enabled": true,
+      "nat64_enabled": false
     },
     {
       "id": "sg-1771319670672-13",
@@ -279,7 +288,8 @@
       },
       "website": "archiveofourown",
       "enabled": true,
-      "upstream": "104.20.9.2:443"
+      "upstream": "104.20.9.2:443",
+      "nat64_enabled": false
     },
     {
       "id": "sg-1771319670672-15",
@@ -299,7 +309,8 @@
         ]
       },
       "website": "audiomack",
-      "enabled": true
+      "enabled": true,
+      "nat64_enabled": false
     },
     {
       "id": "sg-1771319670672-17",
@@ -318,6 +329,7 @@
       "ech_profile_id": "1777882016619662900",
       "use_cf_pool": false,
       "cert_verify": {
+        "mode": "strict_real",
         "names": [
           "*.facebook.com",
           "*.facebook.net",
@@ -338,7 +350,8 @@
       },
       "website": "meta",
       "enabled": true,
-      "upstream": "157.240.22.169:443"
+      "upstream": "157.240.22.169:443",
+      "nat64_enabled": false
     },
     {
       "id": "sg-1771319670672-18",
@@ -362,7 +375,8 @@
       },
       "website": "proton",
       "enabled": true,
-      "upstream": "185.70.42.39:443"
+      "upstream": "185.70.42.39:443",
+      "nat64_enabled": false
     },
     {
       "id": "sg-1771319670672-20",
@@ -383,7 +397,8 @@
       },
       "website": "jsdelivr",
       "enabled": true,
-      "upstream": "151.101.65.229:443"
+      "upstream": "151.101.65.229:443",
+      "nat64_enabled": false
     },
     {
       "id": "sg-1771319670672-21",
@@ -401,7 +416,8 @@
       "cert_verify": {},
       "website": "Telegram",
       "enabled": true,
-      "upstream": "34.111.15.3:443"
+      "upstream": "34.111.15.3:443",
+      "nat64_enabled": false
     },
     {
       "id": "sg-1771319670672-22",
@@ -419,7 +435,8 @@
       "cert_verify": {},
       "website": "Telegram",
       "enabled": true,
-      "upstream": "34.111.35.152:443"
+      "upstream": "34.111.35.152:443",
+      "nat64_enabled": false
     },
     {
       "id": "sg-1771319670672-23",
@@ -437,7 +454,8 @@
       "cert_verify": {},
       "website": "Telegram",
       "enabled": true,
-      "upstream": "34.111.108.175:443"
+      "upstream": "34.111.108.175:443",
+      "nat64_enabled": false
     },
     {
       "id": "sg-1771319670672-24",
@@ -466,7 +484,8 @@
         ]
       },
       "website": "meta",
-      "enabled": true
+      "enabled": true,
+      "nat64_enabled": false
     },
     {
       "id": "sg-1771319670672-25",
@@ -490,7 +509,8 @@
       },
       "website": "github",
       "enabled": true,
-      "upstream": "140.82.112.21:443,140.82.112.22:443,140.82.113.21:443,140.82.113.22:443,140.82.114.21:443,140.82.114.22:443"
+      "upstream": "140.82.112.21:443,140.82.112.22:443,140.82.113.21:443,140.82.113.22:443,140.82.114.21:443,140.82.114.22:443",
+      "nat64_enabled": false
     },
     {
       "id": "sg-1771319670672-26",
@@ -511,7 +531,8 @@
       },
       "website": "github",
       "enabled": true,
-      "upstream": "20.205.243.165:443,20.27.177.114:443,20.200.245.246:443"
+      "upstream": "20.205.243.165:443,20.27.177.114:443,20.200.245.246:443",
+      "nat64_enabled": false
     },
     {
       "id": "sg-1771319670672-27",
@@ -536,7 +557,8 @@
       },
       "website": "github",
       "enabled": true,
-      "upstream": "140.82.112.17:443,140.82.113.17:443,140.82.114.17:443,140.82.112.18:443,140.82.113.18:443,140.82.114.18:443"
+      "upstream": "140.82.112.17:443,140.82.113.17:443,140.82.114.17:443,140.82.112.18:443,140.82.113.18:443,140.82.114.18:443",
+      "nat64_enabled": false
     },
     {
       "id": "sg-1771319670672-30",
@@ -589,7 +611,8 @@
       },
       "website": "dropbox",
       "enabled": true,
-      "upstream": "162.125.1.15:443,162.125.2.15:443,162.125.13.15:443,162.125.8.15:443,162.125.69.15:443,162.125.64.15:443,162.125.68.15:443,162.125.71.15:443,162.125.72.15:443,162.125.65.15:443,162.125.81.15:443,162.125.80.15:443,162.125.85.15:443"
+      "upstream": "162.125.1.15:443,162.125.2.15:443,162.125.13.15:443,162.125.8.15:443,162.125.69.15:443,162.125.64.15:443,162.125.68.15:443,162.125.71.15:443,162.125.72.15:443,162.125.65.15:443,162.125.81.15:443,162.125.80.15:443,162.125.85.15:443",
+      "nat64_enabled": false
     },
     {
       "id": "sg-1771319670672-32",
@@ -612,7 +635,8 @@
         ]
       },
       "website": "github",
-      "enabled": true
+      "enabled": true,
+      "nat64_enabled": false
     },
     {
       "id": "sg-1771319670672-33",
@@ -632,7 +656,8 @@
       },
       "website": "tails",
       "enabled": true,
-      "upstream": "204.13.164.63:443"
+      "upstream": "204.13.164.63:443",
+      "nat64_enabled": false
     },
     {
       "id": "sg-1771319670672-34",
@@ -656,7 +681,8 @@
       },
       "website": "proton",
       "enabled": true,
-      "upstream": "185.70.42.40:443"
+      "upstream": "185.70.42.40:443",
+      "nat64_enabled": false
     },
     {
       "id": "sg-1771319670672-35",
@@ -677,7 +703,8 @@
       },
       "website": "duckduckgo",
       "enabled": true,
-      "upstream": "20.43.161.105:443"
+      "upstream": "20.43.161.105:443",
+      "nat64_enabled": false
     },
     {
       "id": "sg-1771319670672-37",
@@ -698,7 +725,8 @@
         ]
       },
       "website": "e-hentai",
-      "enabled": true
+      "enabled": true,
+      "nat64_enabled": false
     },
     {
       "id": "sg-1771319670672-38",
@@ -730,7 +758,8 @@
       },
       "website": "nytimes",
       "enabled": true,
-      "upstream": "146.75.117.164:443"
+      "upstream": "146.75.117.164:443",
+      "nat64_enabled": false
     },
     {
       "id": "sg-1771319670672-39",
@@ -759,7 +788,8 @@
         ]
       },
       "website": "etsy",
-      "enabled": true
+      "enabled": true,
+      "nat64_enabled": false
     },
     {
       "id": "sg-1771319670672-41",
@@ -786,7 +816,8 @@
       },
       "website": "f-droid",
       "enabled": true,
-      "upstream": "37.218.243.72:443"
+      "upstream": "37.218.243.72:443",
+      "nat64_enabled": false
     },
     {
       "id": "sg-1771319670672-43",
@@ -809,7 +840,8 @@
       },
       "website": "flickr",
       "enabled": true,
-      "upstream": "13.33.142.102:443"
+      "upstream": "13.33.142.102:443",
+      "nat64_enabled": false
     },
     {
       "id": "sg-1771319670672-46",
@@ -829,7 +861,8 @@
       },
       "website": "f-droid",
       "enabled": true,
-      "upstream": "37.218.242.53:443"
+      "upstream": "37.218.242.53:443",
+      "nat64_enabled": false
     },
     {
       "id": "sg-1771319670672-48",
@@ -859,7 +892,8 @@
       },
       "website": "google",
       "enabled": true,
-      "upstream": "47.102.115.14"
+      "upstream": "47.102.115.14",
+      "nat64_enabled": false
     },
     {
       "id": "sg-1771319670672-50",
@@ -881,7 +915,8 @@
       },
       "website": "google",
       "enabled": true,
-      "upstream": "47.102.115.14"
+      "upstream": "47.102.115.14",
+      "nat64_enabled": false
     },
     {
       "id": "sg-1771319670672-52",
@@ -903,7 +938,8 @@
       },
       "website": "github",
       "enabled": true,
-      "upstream": "20.27.177.113,20.205.243.166,20.27.177.113,20.200.245.247"
+      "upstream": "20.27.177.113,20.205.243.166,20.27.177.113,20.200.245.247",
+      "nat64_enabled": false
     },
     {
       "id": "sg-1771319670672-53",
@@ -923,7 +959,8 @@
         ]
       },
       "website": "twitch",
-      "enabled": true
+      "enabled": true,
+      "nat64_enabled": false
     },
     {
       "id": "sg-1771319670672-55",
@@ -944,7 +981,8 @@
       },
       "website": "gravatar",
       "enabled": true,
-      "upstream": "192.0.80.240:443"
+      "upstream": "192.0.80.240:443",
+      "nat64_enabled": false
     },
     {
       "id": "sg-1771319670672-59",
@@ -959,7 +997,8 @@
       "use_cf_pool": false,
       "cert_verify": {},
       "website": "flickr",
-      "enabled": true
+      "enabled": true,
+      "nat64_enabled": false
     },
     {
       "id": "sg-1771319670672-60",
@@ -983,7 +1022,8 @@
       },
       "website": "prismic",
       "enabled": true,
-      "upstream": "151.101.78.208:443"
+      "upstream": "151.101.78.208:443",
+      "nat64_enabled": false
     },
     {
       "id": "sg-1771319670672-61",
@@ -1003,7 +1043,8 @@
       },
       "website": "imgur",
       "enabled": true,
-      "upstream": "199.232.196.158"
+      "upstream": "199.232.196.158",
+      "nat64_enabled": false
     },
     {
       "id": "sg-1771319670672-65",
@@ -1058,7 +1099,8 @@
       },
       "website": "wikipedia",
       "enabled": true,
-      "upstream": "185.15.58.224,103.102.166.224,185.15.58.224,195.200.68.224"
+      "upstream": "185.15.58.224,103.102.166.224,185.15.58.224,195.200.68.224",
+      "nat64_enabled": false
     },
     {
       "id": "sg-1771319670672-66",
@@ -1082,7 +1124,8 @@
       },
       "website": "proton",
       "enabled": true,
-      "upstream": "185.70.42.37:443"
+      "upstream": "185.70.42.37:443",
+      "nat64_enabled": false
     },
     {
       "id": "sg-1771319670672-67",
@@ -1103,7 +1146,8 @@
       },
       "website": "mega",
       "enabled": true,
-      "upstream": "66.203.127.11:443"
+      "upstream": "66.203.127.11:443",
+      "nat64_enabled": false
     },
     {
       "id": "sg-1771319670672-68",
@@ -1124,7 +1168,8 @@
       },
       "website": "mega",
       "enabled": true,
-      "upstream": "31.216.144.5:443"
+      "upstream": "31.216.144.5:443",
+      "nat64_enabled": false
     },
     {
       "id": "sg-1771319670672-69",
@@ -1154,7 +1199,8 @@
       },
       "website": "odnoklassniki",
       "enabled": true,
-      "upstream": "5.61.23.11:443"
+      "upstream": "5.61.23.11:443",
+      "nat64_enabled": false
     },
     {
       "id": "sg-1771319670672-70",
@@ -1168,7 +1214,8 @@
       "use_cf_pool": false,
       "cert_verify": {},
       "website": "nyaa",
-      "enabled": true
+      "enabled": true,
+      "nat64_enabled": false
     },
     {
       "id": "sg-1771319670672-71",
@@ -1183,7 +1230,8 @@
       "cert_verify": {},
       "website": "okx",
       "enabled": true,
-      "upstream": "8.212.101.92"
+      "upstream": "8.212.101.92",
+      "nat64_enabled": false
     },
     {
       "id": "sg-1771319670672-73",
@@ -1207,7 +1255,8 @@
       },
       "website": "proton",
       "enabled": true,
-      "upstream": "185.70.42.63:443"
+      "upstream": "185.70.42.63:443",
+      "nat64_enabled": false
     },
     {
       "id": "sg-1771319670672-74",
@@ -1228,7 +1277,8 @@
       },
       "website": "patreon",
       "enabled": true,
-      "upstream": "104.16.25.14:443"
+      "upstream": "104.16.25.14:443",
+      "nat64_enabled": false
     },
     {
       "id": "sg-1771319670672-75",
@@ -1249,7 +1299,8 @@
       },
       "website": "patreonusercontent",
       "enabled": true,
-      "upstream": "104.18.70.106:443"
+      "upstream": "104.18.70.106:443",
+      "nat64_enabled": false
     },
     {
       "id": "sg-1771319670672-76",
@@ -1281,7 +1332,8 @@
       },
       "website": "pinimg",
       "enabled": true,
-      "upstream": "151.101.0.84:443"
+      "upstream": "151.101.0.84:443",
+      "nat64_enabled": false
     },
     {
       "id": "sg-1771319670672-79",
@@ -1295,7 +1347,8 @@
       "cert_verify": {},
       "website": "amazon",
       "enabled": true,
-      "upstream": "52.217.230.98:443,52.216.63.42:443"
+      "upstream": "52.217.230.98:443,52.216.63.42:443",
+      "nat64_enabled": false
     },
     {
       "id": "sg-1771319670672-80",
@@ -1319,7 +1372,8 @@
       },
       "website": "proton",
       "enabled": true,
-      "upstream": "185.70.42.45:443"
+      "upstream": "185.70.42.45:443",
+      "nat64_enabled": false
     },
     {
       "id": "sg-1771319670672-81",
@@ -1341,7 +1395,8 @@
       },
       "website": "pximg",
       "enabled": true,
-      "upstream": "210.140.139.135:443"
+      "upstream": "210.140.139.135:443",
+      "nat64_enabled": false
     },
     {
       "id": "sg-1771319670672-82",
@@ -1355,7 +1410,8 @@
       "use_cf_pool": false,
       "cert_verify": {},
       "website": "quora",
-      "enabled": true
+      "enabled": true,
+      "nat64_enabled": false
     },
     {
       "id": "sg-1771319670672-83",
@@ -1378,7 +1434,8 @@
         ]
       },
       "website": "redd",
-      "enabled": true
+      "enabled": true,
+      "nat64_enabled": false
     },
     {
       "id": "sg-1771319670672-85",
@@ -1399,7 +1456,8 @@
       },
       "website": "rumble",
       "enabled": true,
-      "upstream": "205.220.231.24:443"
+      "upstream": "205.220.231.24:443",
+      "nat64_enabled": false
     },
     {
       "id": "sg-1771319670672-86",
@@ -1421,7 +1479,8 @@
       },
       "website": "rutube",
       "enabled": true,
-      "upstream": "178.248.233.148:443"
+      "upstream": "178.248.233.148:443",
+      "nat64_enabled": false
     },
     {
       "id": "sg-steam-store-1",
@@ -1435,7 +1494,8 @@
       "cert_verify": {},
       "website": "steam",
       "enabled": true,
-      "upstream": "23.203.76.5,23.213.217.37,23.1.172.140,184.87.237.200"
+      "upstream": "23.203.76.5,23.213.217.37,23.1.172.140,184.87.237.200",
+      "nat64_enabled": false
     },
     {
       "id": "sg-1771319670672-91",
@@ -1463,7 +1523,8 @@
       },
       "website": "telegram",
       "enabled": true,
-      "upstream": "149.154.161.145"
+      "upstream": "149.154.161.145",
+      "nat64_enabled": false
     },
     {
       "id": "sg-1771319670672-92",
@@ -1486,7 +1547,8 @@
       },
       "website": "thetvdb",
       "enabled": true,
-      "upstream": "13.35.222.88:443"
+      "upstream": "13.35.222.88:443",
+      "nat64_enabled": false
     },
     {
       "id": "sg-1771319670672-94",
@@ -1502,7 +1564,8 @@
       "cert_verify": {},
       "website": "e-hentai",
       "enabled": true,
-      "upstream": "95.211.208.236"
+      "upstream": "95.211.208.236",
+      "nat64_enabled": false
     },
     {
       "id": "sg-1771319670672-95",
@@ -1526,7 +1589,8 @@
       },
       "website": "wikipedia",
       "enabled": true,
-      "upstream": "208.80.154.240"
+      "upstream": "208.80.154.240",
+      "nat64_enabled": false
     },
     {
       "id": "sg-1771319670673-98",
@@ -1555,7 +1619,8 @@
       },
       "website": "meta",
       "enabled": true,
-      "upstream": "157.240.225.60"
+      "upstream": "157.240.225.60",
+      "nat64_enabled": false
     },
     {
       "id": "sg-1771319670673-99",
@@ -1573,7 +1638,8 @@
       },
       "website": "xnxx",
       "enabled": true,
-      "upstream": "152.233.100.3:443"
+      "upstream": "152.233.100.3:443",
+      "nat64_enabled": false
     },
     {
       "id": "1771408944930",
@@ -1594,7 +1660,8 @@
       },
       "website": "dropbox",
       "enabled": true,
-      "upstream": "162.125.80.18:443"
+      "upstream": "162.125.80.18:443",
+      "nat64_enabled": false
     },
     {
       "id": "1771408944931",
@@ -1619,7 +1686,8 @@
       },
       "website": "dropbox",
       "enabled": true,
-      "upstream": "162.125.40.1:443"
+      "upstream": "162.125.40.1:443",
+      "nat64_enabled": false
     },
     {
       "id": "1771408944932",
@@ -1640,7 +1708,8 @@
       },
       "website": "dropbox",
       "enabled": true,
-      "upstream": "162.125.6.20:443"
+      "upstream": "162.125.6.20:443",
+      "nat64_enabled": false
     },
     {
       "id": "1771408944933",
@@ -1668,7 +1737,8 @@
       },
       "website": "dropbox",
       "enabled": true,
-      "upstream": "162.125.83.16:443"
+      "upstream": "162.125.83.16:443",
+      "nat64_enabled": false
     },
     {
       "id": "1771408944934",
@@ -1693,7 +1763,8 @@
       },
       "website": "dropbox",
       "enabled": true,
-      "upstream": "162.125.40.1:443"
+      "upstream": "162.125.40.1:443",
+      "nat64_enabled": false
     },
     {
       "id": "1771408944935",
@@ -1718,7 +1789,8 @@
       },
       "website": "dropbox",
       "enabled": true,
-      "upstream": "162.125.40.1:443"
+      "upstream": "162.125.40.1:443",
+      "nat64_enabled": false
     },
     {
       "id": "1771408944936",
@@ -1732,7 +1804,8 @@
       "cert_verify": {},
       "website": "dropbox",
       "enabled": true,
-      "upstream": "3.164.85.85:443"
+      "upstream": "3.164.85.85:443",
+      "nat64_enabled": false
     },
     {
       "id": "1771408944937",
@@ -1746,7 +1819,8 @@
       "cert_verify": {},
       "website": "dropbox",
       "enabled": true,
-      "upstream": "216.137.39.27:443"
+      "upstream": "216.137.39.27:443",
+      "nat64_enabled": false
     },
     {
       "id": "sg-1771319670673-102",
@@ -1767,7 +1841,8 @@
       },
       "website": "dropbox",
       "enabled": true,
-      "upstream": "162.125.248.18:443"
+      "upstream": "162.125.248.18:443",
+      "nat64_enabled": false
     },
     {
       "id": "sg-1771319670673-103",
@@ -1788,7 +1863,8 @@
       },
       "website": "duckduckgo",
       "enabled": true,
-      "upstream": "52.250.30.213:443"
+      "upstream": "52.250.30.213:443",
+      "nat64_enabled": false
     },
     {
       "id": "sg-1771319670673-108",
@@ -1808,7 +1884,8 @@
       },
       "website": "tails",
       "enabled": true,
-      "upstream": "94.142.244.34:443"
+      "upstream": "94.142.244.34:443",
+      "nat64_enabled": false
     },
     {
       "id": "sg-1771319670676-mitm-google",
@@ -1862,7 +1939,8 @@
       },
       "website": "google",
       "enabled": true,
-      "upstream": "47.102.115.14"
+      "upstream": "47.102.115.14",
+      "nat64_enabled": false
     },
     {
       "id": "1773045366962644100",
@@ -1877,7 +1955,8 @@
       "cert_verify": {},
       "website": "z-lib",
       "enabled": true,
-      "upstream": "94.231.223.5"
+      "upstream": "94.231.223.5",
+      "nat64_enabled": false
     },
     {
       "id": "1773135185399537900",
@@ -1905,7 +1984,9 @@
       },
       "website": "steam",
       "enabled": true,
-      "upstream": "173.222.146.99,23.41.77.123,23.41.239.243"
+      "upstream": "173.222.146.99,23.41.77.123,23.41.239.243",
+      "nat64_enabled": false,
+      "nat64_profile_id": "1784437584701131300"
     },
     {
       "id": "1773135753390794800",
@@ -1923,7 +2004,8 @@
         ]
       },
       "website": "steam",
-      "enabled": true
+      "enabled": true,
+      "nat64_enabled": false
     },
     {
       "id": "1773135933462451200",
@@ -1944,7 +2026,8 @@
       },
       "website": "huggingface",
       "enabled": true,
-      "upstream": "3.167.200.113:443"
+      "upstream": "3.167.200.113:443",
+      "nat64_enabled": false
     },
     {
       "id": "sg-manual-archive-org",
@@ -1961,7 +2044,8 @@
       },
       "website": "archive",
       "enabled": true,
-      "upstream": "207.241.225.120"
+      "upstream": "207.241.225.120",
+      "nat64_enabled": false
     },
     {
       "id": "sg-manual-web-archive-org",
@@ -1978,7 +2062,8 @@
       },
       "website": "archive",
       "enabled": true,
-      "upstream": "207.241.237.3"
+      "upstream": "207.241.237.3",
+      "nat64_enabled": false
     },
     {
       "id": "sg-manual-uploads-github",
@@ -1999,7 +2084,8 @@
       },
       "website": "github",
       "enabled": true,
-      "upstream": "20.207.73.81:443"
+      "upstream": "20.207.73.81:443",
+      "nat64_enabled": false
     },
     {
       "id": "sg-manual-alive-github",
@@ -2020,7 +2106,8 @@
       },
       "website": "github",
       "enabled": true,
-      "upstream": "140.82.112.26:443"
+      "upstream": "140.82.112.26:443",
+      "nat64_enabled": false
     },
     {
       "id": "sg-manual-platform-twitter",
@@ -2043,7 +2130,8 @@
       },
       "website": "twitter",
       "enabled": true,
-      "upstream": "146.75.120.157:443"
+      "upstream": "146.75.120.157:443",
+      "nat64_enabled": false
     },
     {
       "id": "sg-manual-video-pscp",
@@ -2064,7 +2152,8 @@
       },
       "website": "twitter",
       "enabled": true,
-      "upstream": "146.75.34.164:443"
+      "upstream": "146.75.34.164:443",
+      "nat64_enabled": false
     },
     {
       "id": "1774600064500732300",
@@ -2082,7 +2171,8 @@
       },
       "website": "xvideos",
       "enabled": true,
-      "upstream": "89.222.127.11:443"
+      "upstream": "89.222.127.11:443",
+      "nat64_enabled": false
     },
     {
       "id": "1774697448523203200",
@@ -2096,7 +2186,8 @@
       "cert_verify": {},
       "website": "hacker news",
       "enabled": true,
-      "upstream": "209.216.230.207"
+      "upstream": "209.216.230.207",
+      "nat64_enabled": false
     },
     {
       "id": "1774755148574888600",
@@ -2114,7 +2205,8 @@
       },
       "website": "google",
       "enabled": true,
-      "upstream": "142.250.73.86"
+      "upstream": "142.250.73.86",
+      "nat64_enabled": false
     },
     {
       "id": "1774756254331082900",
@@ -2135,7 +2227,8 @@
       },
       "website": "google",
       "enabled": true,
-      "upstream": "47.102.115.14"
+      "upstream": "47.102.115.14",
+      "nat64_enabled": false
     },
     {
       "id": "1774782086542746000",
@@ -2149,7 +2242,8 @@
       "cert_verify": {},
       "website": "rule34",
       "enabled": true,
-      "upstream": "194.1.140.1:443"
+      "upstream": "194.1.140.1:443",
+      "nat64_enabled": false
     },
     {
       "id": "1774925504423577200",
@@ -2162,7 +2256,8 @@
       "use_cf_pool": true,
       "cert_verify": {},
       "website": "matrix",
-      "enabled": true
+      "enabled": true,
+      "nat64_enabled": false
     },
     {
       "id": "1774951766458996400",
@@ -2176,7 +2271,8 @@
       "use_cf_pool": false,
       "cert_verify": {},
       "website": "bbc",
-      "enabled": true
+      "enabled": true,
+      "nat64_enabled": false
     },
     {
       "id": "1774952077943977400",
@@ -2193,7 +2289,8 @@
       },
       "website": "bbc",
       "enabled": true,
-      "upstream": "146.75.36.81:443"
+      "upstream": "146.75.36.81:443",
+      "nat64_enabled": false
     },
     {
       "id": "1774953793009945300",
@@ -2208,7 +2305,8 @@
       "cert_verify": {},
       "website": "meta",
       "enabled": true,
-      "upstream": "57.144.188.141"
+      "upstream": "57.144.188.141",
+      "nat64_enabled": false
     },
     {
       "id": "1774953956497541500",
@@ -2222,42 +2320,8 @@
       "cert_verify": {},
       "website": "meta",
       "enabled": true,
-      "upstream": "57.144.44.128:443"
-    },
-    {
-      "id": "1775029108271862700",
-      "name": "spotify",
-      "mode": "quic",
-      "domains": [
-        "spotify.com"
-      ],
-      "ech_enabled": false,
-      "use_cf_pool": false,
-      "cert_verify": {
-        "mode": "strict_real"
-      },
-      "website": "spotify",
-      "enabled": true
-    },
-    {
-      "id": "1775029961585569800",
-      "name": "open",
-      "mode": "mitm",
-      "sni_fake": "spotify.com",
-      "domains": [
-        "open.spotify.com"
-      ],
-      "ech_enabled": false,
-      "use_cf_pool": false,
-      "cert_verify": {
-        "mode": "allow_names",
-        "names": [
-          "*.spotify.com"
-        ]
-      },
-      "website": "spotify",
-      "enabled": true,
-      "upstream": "2001:67c:2960:6464::9765:c32a"
+      "upstream": "57.144.44.128:443",
+      "nat64_enabled": false
     },
     {
       "id": "1775127344454748400",
@@ -2271,7 +2335,8 @@
       "cert_verify": {},
       "website": "bbc",
       "enabled": true,
-      "upstream": "203.235.96.134:443"
+      "upstream": "203.235.96.134:443",
+      "nat64_enabled": false
     },
     {
       "id": "1775733151073116400",
@@ -2291,7 +2356,8 @@
         ]
       },
       "website": "google",
-      "enabled": true
+      "enabled": true,
+      "nat64_enabled": false
     },
     {
       "id": "1776158640034895300",
@@ -2306,7 +2372,8 @@
       "cert_verify": {},
       "website": "Pornhub",
       "enabled": true,
-      "upstream": "66.254.114.41"
+      "upstream": "66.254.114.41",
+      "nat64_enabled": false
     },
     {
       "id": "1776233294223090800",
@@ -2320,7 +2387,8 @@
       "cert_verify": {},
       "website": "dailymotion",
       "enabled": true,
-      "upstream": "195.8.215.137"
+      "upstream": "195.8.215.137",
+      "nat64_enabled": false
     },
     {
       "id": "1776498789082786100",
@@ -2337,7 +2405,8 @@
       "cert_verify": {},
       "website": "webflow",
       "enabled": true,
-      "upstream": "198.202.211.2"
+      "upstream": "198.202.211.2",
+      "nat64_enabled": false
     },
     {
       "id": "1776499764168894900",
@@ -2354,7 +2423,8 @@
       },
       "website": "archive",
       "enabled": true,
-      "upstream": "107.189.8.227"
+      "upstream": "107.189.8.227",
+      "nat64_enabled": false
     },
     {
       "id": "1776501197319615800",
@@ -2370,7 +2440,8 @@
         "mode": "strict_real"
       },
       "website": "bluesky",
-      "enabled": true
+      "enabled": true,
+      "nat64_enabled": false
     },
     {
       "id": "1776501456736746100",
@@ -2387,7 +2458,8 @@
       "cert_verify": {},
       "website": "bluesky",
       "enabled": true,
-      "upstream": "156.146.56.168,169.150.220.229"
+      "upstream": "156.146.56.168,169.150.220.229",
+      "nat64_enabled": false
     },
     {
       "id": "1776502143537573900",
@@ -2400,7 +2472,8 @@
       "use_cf_pool": false,
       "cert_verify": {},
       "website": "bluesky",
-      "enabled": true
+      "enabled": true,
+      "nat64_enabled": false
     },
     {
       "id": "1776502780689735900",
@@ -2414,7 +2487,8 @@
       "cert_verify": {},
       "website": "deviantart",
       "enabled": true,
-      "upstream": "13.226.69.51,18.164.21.5"
+      "upstream": "13.226.69.51,18.164.21.5",
+      "nat64_enabled": false
     },
     {
       "id": "1776503128248731700",
@@ -2428,7 +2502,8 @@
       "cert_verify": {},
       "website": "deviantart",
       "enabled": true,
-      "upstream": "54.230.71.9,3.170.221.40,54.192.248.54"
+      "upstream": "54.230.71.9,3.170.221.40,54.192.248.54",
+      "nat64_enabled": false
     },
     {
       "id": "1776503940561665500",
@@ -2443,7 +2518,8 @@
       "cert_verify": {},
       "website": "hanime1",
       "enabled": true,
-      "upstream": "89.187.163.20,95.173.204.24"
+      "upstream": "89.187.163.20,95.173.204.24",
+      "nat64_enabled": false
     },
     {
       "id": "1776504135440635100",
@@ -2456,7 +2532,8 @@
       "use_cf_pool": false,
       "cert_verify": {},
       "website": "annas archive",
-      "enabled": true
+      "enabled": true,
+      "nat64_enabled": false
     },
     {
       "id": "1776504545633190700",
@@ -2469,7 +2546,8 @@
       "use_cf_pool": false,
       "cert_verify": {},
       "website": "annas archive",
-      "enabled": true
+      "enabled": true,
+      "nat64_enabled": false
     },
     {
       "id": "1776504615025860200",
@@ -2482,7 +2560,8 @@
       "use_cf_pool": false,
       "cert_verify": {},
       "website": "annas archive",
-      "enabled": true
+      "enabled": true,
+      "nat64_enabled": false
     },
     {
       "id": "1776505040496380800",
@@ -2496,7 +2575,8 @@
       "cert_verify": {},
       "website": "shutterstock",
       "enabled": true,
-      "upstream": "3.169.121.40,65.8.76.57,3.163.125.108"
+      "upstream": "3.169.121.40,65.8.76.57,3.163.125.108",
+      "nat64_enabled": false
     },
     {
       "id": "1776505722408926900",
@@ -2509,7 +2589,8 @@
       "use_cf_pool": false,
       "cert_verify": {},
       "website": "hitomi",
-      "enabled": true
+      "enabled": true,
+      "nat64_enabled": false
     },
     {
       "id": "1776506732202979900",
@@ -2523,7 +2604,8 @@
       "cert_verify": {},
       "website": "dlsite",
       "enabled": true,
-      "upstream": "210.140.64.86"
+      "upstream": "210.140.64.86",
+      "nat64_enabled": false
     },
     {
       "id": "1776507574583383700",
@@ -2537,7 +2619,8 @@
       "cert_verify": {},
       "website": "mastodon",
       "enabled": true,
-      "upstream": "151.101.65.55"
+      "upstream": "151.101.65.55",
+      "nat64_enabled": false
     },
     {
       "id": "1776507691754603900",
@@ -2551,7 +2634,8 @@
       "cert_verify": {},
       "website": "mastodon",
       "enabled": true,
-      "upstream": "151.101.129.91"
+      "upstream": "151.101.129.91",
+      "nat64_enabled": false
     },
     {
       "id": "1776508184396385000",
@@ -2565,7 +2649,8 @@
       "cert_verify": {},
       "website": "yande",
       "enabled": true,
-      "upstream": "198.251.89.183"
+      "upstream": "198.251.89.183",
+      "nat64_enabled": false
     },
     {
       "id": "1776508599801408500",
@@ -2582,7 +2667,8 @@
       },
       "website": "sankakucomplex",
       "enabled": true,
-      "upstream": "143.192.150.194"
+      "upstream": "143.192.150.194",
+      "nat64_enabled": false
     },
     {
       "id": "1776508820266278200",
@@ -2598,7 +2684,8 @@
       },
       "website": "urbandictionary",
       "enabled": true,
-      "upstream": "138.199.46.68"
+      "upstream": "138.199.46.68",
+      "nat64_enabled": false
     },
     {
       "id": "1776509861419390200",
@@ -2615,7 +2702,8 @@
       },
       "website": "startpage",
       "enabled": true,
-      "upstream": "67.63.59.232"
+      "upstream": "67.63.59.232",
+      "nat64_enabled": false
     },
     {
       "id": "1777022343274016300",
@@ -2632,7 +2720,8 @@
         "mode": "strict_real"
       },
       "website": "jotform",
-      "enabled": true
+      "enabled": true,
+      "nat64_enabled": false
     },
     {
       "id": "1777460595908512600",
@@ -2645,7 +2734,8 @@
       "use_cf_pool": false,
       "cert_verify": {},
       "website": "github",
-      "enabled": true
+      "enabled": true,
+      "nat64_enabled": false
     },
     {
       "id": "1777876742497748900",
@@ -2659,7 +2749,8 @@
       "cert_verify": {},
       "website": "github",
       "enabled": true,
-      "upstream": "20.27.177.113"
+      "upstream": "20.27.177.113",
+      "nat64_enabled": false
     },
     {
       "id": "1777877938013008200",
@@ -2675,7 +2766,8 @@
       "cert_verify": {},
       "website": "nextapple",
       "enabled": true,
-      "upstream": "3.164.143.10"
+      "upstream": "3.164.143.10",
+      "nat64_enabled": false
     },
     {
       "id": "1777878258650970400",
@@ -2689,7 +2781,8 @@
       "cert_verify": {},
       "website": "nextapple",
       "enabled": true,
-      "upstream": "198.49.23.144"
+      "upstream": "198.49.23.144",
+      "nat64_enabled": false
     },
     {
       "id": "1777879815669080400",
@@ -2699,27 +2792,31 @@
         "playboyplus.com",
         "i-scmp.com",
         "scmp.com",
-        "element.io"
+        "element.io",
+        "x.com"
       ],
       "ech_enabled": false,
       "ech_profile_id": "legacy-cloudflare",
       "use_cf_pool": true,
       "cert_verify": {},
       "website": "cf",
-      "enabled": true
+      "enabled": true,
+      "nat64_enabled": false
     },
     {
       "id": "1777880502869331800",
-      "name": "gg",
+      "name": "cf2",
       "mode": "tls-rf",
       "domains": [
-        "discord.gg"
+        "discord.gg",
+        "ws.chatgpt.com"
       ],
       "ech_enabled": false,
       "use_cf_pool": true,
       "cert_verify": {},
       "website": "discord",
-      "enabled": true
+      "enabled": true,
+      "nat64_enabled": false
     },
     {
       "id": "1777882255406021900",
@@ -2733,7 +2830,8 @@
       "use_cf_pool": false,
       "cert_verify": {},
       "website": "xchat",
-      "enabled": true
+      "enabled": true,
+      "nat64_enabled": false
     },
     {
       "id": "1777882469149587200",
@@ -2746,21 +2844,26 @@
       "use_cf_pool": true,
       "cert_verify": {},
       "website": "xchat",
-      "enabled": true
+      "enabled": true,
+      "nat64_enabled": false
     },
     {
       "id": "1777882761173319600",
       "name": "ai",
-      "mode": "quic",
+      "mode": "mitm",
       "domains": [
         "meta.ai"
       ],
       "ech_enabled": true,
       "ech_profile_id": "1777882016619662900",
       "use_cf_pool": false,
-      "cert_verify": {},
+      "cert_verify": {
+        "mode": "strict_real"
+      },
       "website": "meta",
-      "enabled": true
+      "enabled": true,
+      "nat64_enabled": true,
+      "nat64_profile_id": "1784437584701131300"
     },
     {
       "id": "1777949160486082000",
@@ -2768,9 +2871,8 @@
       "mode": "mitm",
       "sni_fake": "vercel.com",
       "domains": [
-        "vercel.app",
         "lumalabs.ai",
-        "polymarket.com"
+        "vercel.app"
       ],
       "ech_enabled": false,
       "use_cf_pool": false,
@@ -2782,24 +2884,8 @@
       },
       "website": "vercel",
       "enabled": true,
-      "upstream": "64.29.17.1"
-    },
-    {
-      "id": "1777969418784774200",
-      "name": "cdn",
-      "mode": "server",
-      "sni_fake": "45.133.44.23",
-      "domains": [
-        "static.cdnsolutions.media",
-        "arena.ai",
-        "syssec.dpss.inesc-id.pt"
-      ],
-      "ech_enabled": true,
-      "ech_profile_id": "legacy-cloudflare",
-      "use_cf_pool": true,
-      "cert_verify": {},
-      "website": "cdnsolution",
-      "enabled": true
+      "upstream": "64.29.17.1",
+      "nat64_enabled": false
     },
     {
       "id": "1777970965696331600",
@@ -2812,7 +2898,8 @@
       "use_cf_pool": false,
       "cert_verify": {},
       "website": "nicovideo",
-      "enabled": true
+      "enabled": true,
+      "nat64_enabled": false
     },
     {
       "id": "1777971841080514500",
@@ -2825,7 +2912,8 @@
       "use_cf_pool": false,
       "cert_verify": {},
       "website": "dailymotion",
-      "enabled": true
+      "enabled": true,
+      "nat64_enabled": false
     },
     {
       "id": "1777990521969620000",
@@ -2842,7 +2930,8 @@
       },
       "website": "snapchat",
       "enabled": true,
-      "upstream": "34.149.46.130"
+      "upstream": "34.149.46.130",
+      "nat64_enabled": false
     },
     {
       "id": "1777990600585297400",
@@ -2857,7 +2946,8 @@
       "use_cf_pool": false,
       "cert_verify": {},
       "website": "snapchat",
-      "enabled": true
+      "enabled": true,
+      "nat64_enabled": false
     },
     {
       "id": "1777991000052868600",
@@ -2874,7 +2964,8 @@
       },
       "website": "snapchat",
       "enabled": true,
-      "upstream": "34.86.118.39"
+      "upstream": "34.86.118.39",
+      "nat64_enabled": false
     },
     {
       "id": "1777991677379032300",
@@ -2888,7 +2979,8 @@
       "use_cf_pool": false,
       "cert_verify": {},
       "website": "suno",
-      "enabled": true
+      "enabled": true,
+      "nat64_enabled": false
     },
     {
       "id": "1777992066109751100",
@@ -2902,7 +2994,8 @@
       "use_cf_pool": false,
       "cert_verify": {},
       "website": "reuters",
-      "enabled": true
+      "enabled": true,
+      "nat64_enabled": false
     },
     {
       "id": "1778034575453819700",
@@ -2915,7 +3008,8 @@
       "use_cf_pool": false,
       "cert_verify": {},
       "website": "news",
-      "enabled": true
+      "enabled": true,
+      "nat64_enabled": false
     },
     {
       "id": "1778034905961291900",
@@ -2936,7 +3030,8 @@
       },
       "website": "news",
       "enabled": true,
-      "upstream": "203.69.75.164"
+      "upstream": "203.69.75.164",
+      "nat64_enabled": false
     },
     {
       "id": "1778036011421889900",
@@ -2949,7 +3044,8 @@
       "use_cf_pool": false,
       "cert_verify": {},
       "website": "news",
-      "enabled": true
+      "enabled": true,
+      "nat64_enabled": false
     },
     {
       "id": "1778036561780740200",
@@ -2962,7 +3058,8 @@
       "use_cf_pool": false,
       "cert_verify": {},
       "website": "news",
-      "enabled": true
+      "enabled": true,
+      "nat64_enabled": false
     },
     {
       "id": "1778037077406013000",
@@ -2975,7 +3072,8 @@
       "use_cf_pool": false,
       "cert_verify": {},
       "website": "news",
-      "enabled": true
+      "enabled": true,
+      "nat64_enabled": false
     },
     {
       "id": "1778048379037363100",
@@ -2989,7 +3087,8 @@
       "cert_verify": {},
       "website": "rule34",
       "enabled": true,
-      "upstream": "190.115.31.243"
+      "upstream": "190.115.31.243",
+      "nat64_enabled": false
     },
     {
       "id": "1778048751037918800",
@@ -3003,7 +3102,8 @@
       "cert_verify": {},
       "website": "archive",
       "enabled": true,
-      "upstream": "103.70.115.11"
+      "upstream": "103.70.115.11",
+      "nat64_enabled": false
     },
     {
       "id": "1778079404259723700",
@@ -3016,7 +3116,8 @@
       "use_cf_pool": false,
       "cert_verify": {},
       "website": "pwc",
-      "enabled": true
+      "enabled": true,
+      "nat64_enabled": false
     },
     {
       "id": "1778128774520803500",
@@ -3029,11 +3130,15 @@
       "ech_enabled": false,
       "use_cf_pool": false,
       "cert_verify": {
-        "mode": "strict_real"
+        "mode": "allow_names",
+        "names": [
+          "onedrive.com"
+        ]
       },
       "website": "onedrive",
       "enabled": true,
-      "upstream": "13.107.42.13"
+      "upstream": "13.107.42.13",
+      "nat64_enabled": false
     },
     {
       "id": "1778129989586388800",
@@ -3046,22 +3151,8 @@
       "use_cf_pool": false,
       "cert_verify": {},
       "website": "gettyimage",
-      "enabled": true
-    },
-    {
-      "id": "1778230837518204800",
-      "name": "login",
-      "mode": "transparent",
-      "domains": [
-        "login.microsoftonline.com",
-        "login.live.com"
-      ],
-      "ech_enabled": false,
-      "use_cf_pool": false,
-      "cert_verify": {},
-      "website": "microsoft",
       "enabled": true,
-      "upstream": "20.190.148.163"
+      "nat64_enabled": false
     },
     {
       "id": "1778231012246449600",
@@ -3075,21 +3166,8 @@
       "cert_verify": {},
       "website": "microsoft",
       "enabled": true,
-      "upstream": "150.171.110.131"
-    },
-    {
-      "id": "1778231364129161100",
-      "name": "bing",
-      "mode": "transparent",
-      "domains": [
-        "bing.com"
-      ],
-      "ech_enabled": false,
-      "use_cf_pool": false,
-      "cert_verify": {},
-      "website": "microsoft",
-      "enabled": true,
-      "upstream": "202.89.233.100"
+      "upstream": "150.171.110.131",
+      "nat64_enabled": false
     },
     {
       "id": "1778331911590601500",
@@ -3103,7 +3181,8 @@
       "cert_verify": {},
       "website": "google",
       "enabled": true,
-      "upstream": "216.239.32.21"
+      "upstream": "216.239.32.21",
+      "nat64_enabled": false
     },
     {
       "id": "1778381030020592500",
@@ -3117,7 +3196,8 @@
       "use_cf_pool": false,
       "cert_verify": {},
       "website": "news",
-      "enabled": true
+      "enabled": true,
+      "nat64_enabled": false
     },
     {
       "id": "1778381113182241300",
@@ -3130,7 +3210,8 @@
       "use_cf_pool": false,
       "cert_verify": {},
       "website": "news",
-      "enabled": true
+      "enabled": true,
+      "nat64_enabled": false
     },
     {
       "id": "1778594059294803800",
@@ -3144,7 +3225,8 @@
       "cert_verify": {},
       "website": "kiwix",
       "enabled": true,
-      "upstream": "51.159.101.162"
+      "upstream": "51.159.101.162",
+      "nat64_enabled": false
     },
     {
       "id": "1778683233214430600",
@@ -3162,7 +3244,8 @@
       "cert_verify": {},
       "website": "github",
       "enabled": true,
-      "upstream": "185.199.110.154"
+      "upstream": "185.199.110.154",
+      "nat64_enabled": false
     },
     {
       "id": "1778740245266254000",
@@ -3176,7 +3259,8 @@
       "use_cf_pool": false,
       "cert_verify": {},
       "website": "anydomain",
-      "enabled": true
+      "enabled": true,
+      "nat64_enabled": false
     },
     {
       "id": "1778742699505842800",
@@ -3190,7 +3274,8 @@
       "cert_verify": {},
       "website": "github",
       "enabled": true,
-      "upstream": "185.199.110.105,185.199.110.215,185.199.110.154"
+      "upstream": "185.199.110.105,185.199.110.215,185.199.110.154",
+      "nat64_enabled": false
     },
     {
       "id": "1778915834873728400",
@@ -3210,7 +3295,8 @@
       },
       "website": "github",
       "enabled": true,
-      "upstream": "146.75.48.0"
+      "upstream": "146.75.48.0",
+      "nat64_enabled": false
     },
     {
       "id": "1778917013096331500",
@@ -3225,7 +3311,8 @@
         "mode": "strict_real"
       },
       "website": "bbc",
-      "enabled": true
+      "enabled": true,
+      "nat64_enabled": false
     },
     {
       "id": "1778920276240001700",
@@ -3240,7 +3327,8 @@
       "use_cf_pool": false,
       "cert_verify": {},
       "website": "bbc",
-      "enabled": true
+      "enabled": true,
+      "nat64_enabled": false
     },
     {
       "id": "1779017085118409500",
@@ -3256,7 +3344,8 @@
       },
       "website": "archive",
       "enabled": true,
-      "upstream": "207.241.224.44"
+      "upstream": "207.241.224.44",
+      "nat64_enabled": false
     },
     {
       "id": "1779348250719023200",
@@ -3270,7 +3359,8 @@
       "cert_verify": {},
       "website": "speedtest",
       "enabled": true,
-      "upstream": "151.101.2.219"
+      "upstream": "151.101.2.219",
+      "nat64_enabled": false
     },
     {
       "id": "1779679710086389000",
@@ -3290,7 +3380,8 @@
       },
       "website": "google",
       "enabled": true,
-      "upstream": "47.102.115.14"
+      "upstream": "47.102.115.14",
+      "nat64_enabled": false
     },
     {
       "id": "1780134394671870800",
@@ -3307,7 +3398,8 @@
         ]
       },
       "website": "bangumi",
-      "enabled": true
+      "enabled": true,
+      "nat64_enabled": false
     },
     {
       "id": "1780408215178416400",
@@ -3325,7 +3417,8 @@
       },
       "website": "piped",
       "enabled": true,
-      "upstream": "76.76.21.21"
+      "upstream": "76.76.21.21",
+      "nat64_enabled": false
     },
     {
       "id": "1780409611912355100",
@@ -3340,7 +3433,8 @@
       "use_cf_pool": false,
       "cert_verify": {},
       "website": "check",
-      "enabled": true
+      "enabled": true,
+      "nat64_enabled": false
     },
     {
       "id": "1780742400406918600",
@@ -3354,7 +3448,8 @@
       "cert_verify": {},
       "website": "deepwiki",
       "enabled": true,
-      "upstream": "64.29.17.1"
+      "upstream": "64.29.17.1",
+      "nat64_enabled": false
     },
     {
       "id": "1780805939763197900",
@@ -3368,7 +3463,8 @@
       "cert_verify": {},
       "website": "google",
       "enabled": true,
-      "upstream": "35.241.11.240"
+      "upstream": "35.241.11.240",
+      "nat64_enabled": false
     },
     {
       "id": "1780806385586765900",
@@ -3382,7 +3478,8 @@
       "cert_verify": {},
       "website": "google",
       "enabled": true,
-      "upstream": "130.211.9.172"
+      "upstream": "130.211.9.172",
+      "nat64_enabled": false
     },
     {
       "id": "1780832422513980600",
@@ -3395,7 +3492,8 @@
       "use_cf_pool": false,
       "cert_verify": {},
       "website": "ai",
-      "enabled": true
+      "enabled": true,
+      "nat64_enabled": false
     },
     {
       "id": "1781239859359540900",
@@ -3407,9 +3505,15 @@
       ],
       "ech_enabled": false,
       "use_cf_pool": false,
-      "cert_verify": {},
+      "cert_verify": {
+        "mode": "allow_names",
+        "names": [
+          "onedrive.com"
+        ]
+      },
       "website": "onedrive",
-      "enabled": true
+      "enabled": true,
+      "nat64_enabled": false
     },
     {
       "id": "1781576748532970100",
@@ -3423,7 +3527,8 @@
       "cert_verify": {},
       "website": "arxiv",
       "enabled": true,
-      "upstream": "151.101.131.42"
+      "upstream": "151.101.131.42",
+      "nat64_enabled": false
     },
     {
       "id": "1781678643318094200",
@@ -3441,23 +3546,8 @@
         ]
       },
       "website": "google",
-      "enabled": true
-    },
-    {
-      "id": "1781680987176561400",
-      "name": "any",
-      "mode": "tls-rf",
-      "domains": [
-        "grok.com",
-        "claude.ai",
-        "anthropic.com"
-      ],
-      "ech_enabled": false,
-      "use_cf_pool": false,
-      "cert_verify": {},
-      "website": "any",
       "enabled": true,
-      "upstream": "2604:abc0:50::11:608f"
+      "nat64_enabled": false
     },
     {
       "id": "1782121445296625900",
@@ -3472,7 +3562,8 @@
       "use_cf_pool": true,
       "cert_verify": {},
       "website": "cf",
-      "enabled": true
+      "enabled": true,
+      "nat64_enabled": false
     },
     {
       "id": "1782986809103543500",
@@ -3485,7 +3576,8 @@
       "use_cf_pool": false,
       "cert_verify": {},
       "website": "libgen",
-      "enabled": true
+      "enabled": true,
+      "nat64_enabled": false
     },
     {
       "id": "1783328180744309700",
@@ -3499,7 +3591,8 @@
       "cert_verify": {},
       "website": "render",
       "enabled": true,
-      "upstream": "216.24.57.2"
+      "upstream": "216.24.57.2",
+      "nat64_enabled": false
     },
     {
       "id": "1783400773359014700",
@@ -3513,7 +3606,8 @@
       "cert_verify": {},
       "website": "google",
       "enabled": true,
-      "upstream": "47.102.115.14"
+      "upstream": "47.102.115.14",
+      "nat64_enabled": false
     },
     {
       "id": "1783434202924217200",
@@ -3527,7 +3621,8 @@
       "use_cf_pool": false,
       "cert_verify": {},
       "website": "yandex",
-      "enabled": true
+      "enabled": true,
+      "nat64_enabled": false
     },
     {
       "id": "1784023912092944100",
@@ -3543,7 +3638,8 @@
       },
       "website": "bitbucket",
       "enabled": true,
-      "upstream": "185.166.143.49,185.166.143.50,104.192.140.25,104.192.140.24,104.192.140.26"
+      "upstream": "185.166.143.49,185.166.143.50,104.192.140.25,104.192.140.24,104.192.140.26",
+      "nat64_enabled": false
     },
     {
       "id": "1784179065294563200",
@@ -3557,7 +3653,99 @@
       "cert_verify": {},
       "website": "microsoft",
       "enabled": true,
-      "upstream": "150.171.110.135"
+      "upstream": "150.171.110.135",
+      "nat64_enabled": false
+    },
+    {
+      "id": "1784437653624307800",
+      "name": "nat",
+      "mode": "mitm",
+      "domains": [
+        "chatgpt.com",
+        "grok.com",
+        "arena.ai",
+        "openai.com",
+        "x.ai",
+        "poe.com"
+      ],
+      "ech_enabled": true,
+      "ech_profile_id": "legacy-cloudflare",
+      "use_cf_pool": true,
+      "cert_verify": {
+        "mode": "strict_real"
+      },
+      "website": "ech",
+      "enabled": true,
+      "nat64_enabled": true,
+      "nat64_profile_id": "1784437584701131300"
+    },
+    {
+      "id": "1784440099323967600",
+      "name": "m365",
+      "mode": "transparent",
+      "domains": [
+        "m365.cloud.microsoft",
+        "strate.office.com",
+        "admin.microsoft.com",
+        "bingapis.com",
+        "login.live.com",
+        "login.microsoftonline.com"
+      ],
+      "ech_enabled": false,
+      "use_cf_pool": false,
+      "cert_verify": {
+        "mode": "strict_real"
+      },
+      "website": "microsoft",
+      "enabled": true,
+      "nat64_enabled": true,
+      "nat64_profile_id": "1784437584701131300"
+    },
+    {
+      "id": "1784442113231675300",
+      "name": "tch",
+      "mode": "tls-rf",
+      "domains": [
+        "tch.poe.com"
+      ],
+      "ech_enabled": false,
+      "use_cf_pool": false,
+      "cert_verify": {},
+      "website": "poe",
+      "enabled": true,
+      "nat64_enabled": false
+    },
+    {
+      "id": "1784442815166571800",
+      "name": "direct",
+      "mode": "tls-rf",
+      "domains": [
+        "cdn.openai.com",
+        "go.trouter.skype.com",
+        "substrate.office.com"
+      ],
+      "ech_enabled": false,
+      "use_cf_pool": false,
+      "cert_verify": {},
+      "website": "direct",
+      "enabled": true,
+      "nat64_enabled": false,
+      "nat64_profile_id": "1784441518390966200"
+    },
+    {
+      "id": "1784444555902122400",
+      "name": "bing",
+      "mode": "transparent",
+      "domains": [
+        "bing.com"
+      ],
+      "ech_enabled": false,
+      "use_cf_pool": false,
+      "cert_verify": {},
+      "website": "microsoft",
+      "enabled": true,
+      "upstream": "150.171.28.10",
+      "nat64_enabled": false
     }
   ],
   "upstreams": [],
@@ -3596,7 +3784,7 @@
     {
       "id": "legacy-cloudflare",
       "name": "Cloudflare",
-      "config": "AEX+DQBBvgAgACCrAiQq1okUGBp83EJq5oA+4dl361HAVqysCpHEAHVvEQAEAAEAAQASY2xvdWRmbGFyZS1lY2guY29tAAA=",
+      "config": "AEX+DQBBWwAgACCUBXGiLqn/cDEhgdTg28RwBKatg69MIC7HxIe9jA/oPQAEAAEAAQASY2xvdWRmbGFyZS1lY2guY29tAAA=",
       "discovery_domain": "crypto.cloudflare.com",
       "doh_upstream": "https://xwfpeb16ii.cloudflare-gateway.com/dns-query",
       "auto_update": true
@@ -3606,6 +3794,23 @@
       "name": "Meta",
       "config": "AEj+DQBEAQAgACAdd+scUi0IYFsXnUIU7ko2Nd9+F8M26pAGZVpz/KrWPgAEAAEAAWQVZWNoLXB1YmxpYy5hdG1ldGEuY29tAAA=",
       "auto_update": false
+    }
+  ],
+  "nat64_profiles": [
+    {
+      "id": "1784437584701131300",
+      "name": "level66",
+      "prefix": "2001:67c:2960:6464::"
+    },
+    {
+      "id": "1784441518390966200",
+      "name": "nat64.net",
+      "prefix": "2a01:4f9:c010:3f02:64::"
+    },
+    {
+      "id": "1784441622119719800",
+      "name": "ZTVI.org",
+      "prefix": "2602:fc59:11:64::"
     }
   ]
 }

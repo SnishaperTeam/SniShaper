@@ -1,8 +1,10 @@
-package main
+package app
 
 import (
 	"context"
+
 	"encoding/base64"
+	"encoding/json"
 	"fmt"
 	"io"
 	"log"
@@ -16,16 +18,19 @@ import (
 	"strings"
 	"time"
 
+	"snishaper/common"
+	"snishaper/core"
 	"snishaper/pkg/certmanager"
 	"snishaper/pkg/cfpool"
+	"snishaper/pkg/dohresolver"
 	"snishaper/proxy"
 )
 
 func NewApp() *App {
 	execPath, _ := os.Executable()
 	execDir := filepath.Dir(execPath)
-	settingsPath := resolveRuntimeFile(execDir, filepath.Join("config", "settings.json"))
-	rulesPath := resolveRuntimeFile(execDir, filepath.Join("rules", "config.json"))
+	settingsPath := common.ResolveRuntimeFile(execDir, filepath.Join("config", "settings.json"))
+	rulesPath := common.ResolveRuntimeFile(execDir, filepath.Join("rules", "config.json"))
 
 	ruleManager := proxy.NewRuleManager(settingsPath, rulesPath)
 	if err := ruleManager.LoadConfig(); err != nil {
@@ -50,8 +55,8 @@ func NewApp() *App {
 		ruleManager:       ruleManager,
 		certPath:          filepath.Join(execDir, "cert"),
 		proxyMarkerPath:   filepath.Join(execDir, "config", "system_proxy_owner.json"),
-		launchedAtStartup: hasLaunchArg("--startup"),
-		core:              newCoreClient(),
+		launchedAtStartup: HasLaunchArg("--startup"),
+		core:              core.NewCoreClient(),
 	}
 	a.proxyServer.SetSocks5Addr("127.0.0.1:" + socks5Port)
 
@@ -139,6 +144,7 @@ func (a *App) StartProxy() error {
 		a.proxyServer.SetSocks5Addr(fmt.Sprintf("127.0.0.1:%d", socks5Available))
 	}
 
+	a.syncCFPoolNAT64Prefix()
 	err = a.proxyServer.Start()
 	if err != nil {
 		msg := err.Error()
@@ -245,6 +251,7 @@ func (a *App) SetListenPort(port int) error {
 	}
 
 	a.ruleManager.SetListenPort(strconv.Itoa(port))
+	_ = a.ruleManager.SaveConfig()
 
 	_ = a.proxyServer.SetListenAddr(fmt.Sprintf("127.0.0.1:%d", port))
 
@@ -258,7 +265,7 @@ func (a *App) SetListenPort(port int) error {
 		}
 	} else {
 		if a.core != nil {
-			a.core.reloadIfRunning()
+			a.core.ReloadIfRunning()
 		}
 	}
 
@@ -275,8 +282,8 @@ func (a *App) SetSocks5Enabled(enabled bool) error {
 	a.ruleManager.SetSocks5Enabled(enabled)
 	_ = a.ruleManager.SaveConfig()
 	if a.core != nil {
-		var empty EmptyArgs
-		_ = a.core.call("Core.SetSocks5Enabled", BoolReply{Value: enabled}, &empty)
+		var empty core.EmptyArgs
+		_ = a.core.Call("Core.SetSocks5Enabled", core.BoolReply{Value: enabled}, &empty)
 	}
 	return nil
 }
@@ -291,8 +298,8 @@ func (a *App) SetSocks5Port(port string) error {
 	_ = a.ruleManager.SaveConfig()
 	a.proxyServer.SetSocks5Addr("127.0.0.1:" + port)
 	if a.core != nil {
-		var empty EmptyArgs
-		_ = a.core.call("Core.SetSocks5Port", StringReply{Value: port}, &empty)
+		var empty core.EmptyArgs
+		_ = a.core.Call("Core.SetSocks5Port", core.StringReply{Value: port}, &empty)
 	}
 	return nil
 }
@@ -345,7 +352,7 @@ func (a *App) UpdateTUNConfig(cfg proxy.TUNConfig) error {
 	err := a.ruleManager.UpdateTUNConfig(cfg)
 	if err == nil {
 		if a.core != nil {
-			a.core.reloadIfRunning()
+			a.core.ReloadIfRunning()
 		}
 	}
 	return err
@@ -414,7 +421,7 @@ func (a *App) ImportConfig(content string) error {
 	if err == nil {
 		a.proxyServer.UpdateCloudflareConfig(a.ruleManager.GetCloudflareConfig())
 		if a.core != nil {
-			a.core.reloadIfRunning()
+			a.core.ReloadIfRunning()
 		}
 		a.UpdateTrayMenu()
 	}
@@ -427,7 +434,7 @@ func (a *App) ImportConfigWithSummary(content string) (proxy.ImportSummary, erro
 	if err == nil {
 		a.proxyServer.UpdateCloudflareConfig(a.ruleManager.GetCloudflareConfig())
 		if a.core != nil {
-			a.core.reloadIfRunning()
+			a.core.ReloadIfRunning()
 		}
 		a.UpdateTrayMenu()
 	}
@@ -473,7 +480,7 @@ func (a *App) RegenerateCert() error {
 		return err
 	}
 	if a.core != nil {
-		a.core.reloadCertificateIfRunning()
+		a.core.ReloadCertificateIfRunning()
 	}
 	a.appendLog("[cert] RegenerateCert succeeded")
 	return nil
@@ -527,15 +534,15 @@ func (a *App) ClearLogs() error {
 	return nil
 }
 
-func (a *App) GetStats() StatsReply {
+func (a *App) GetStats() core.StatsReply {
 	if a.core != nil {
-		var stats StatsReply
-		if err := a.core.call("Core.GetStats", EmptyArgs{}, &stats); err == nil {
+		var stats core.StatsReply
+		if err := a.core.Call("Core.GetStats", core.EmptyArgs{}, &stats); err == nil {
 			return stats
 		}
 	}
 	down, up, etc := a.proxyServer.GetStats()
-	return StatsReply{
+	return core.StatsReply{
 		Down: down,
 		Up:   up,
 		Etc:  etc,
@@ -605,15 +612,27 @@ func (a *App) GetSiteGroups() []proxy.SiteGroup {
 }
 
 func (a *App) AddSiteGroup(sg proxy.SiteGroup) error {
-	return a.ruleManager.AddSiteGroup(sg)
+	err := a.ruleManager.AddSiteGroup(sg)
+	if err == nil && a.core != nil {
+		a.core.ReloadIfRunning()
+	}
+	return err
 }
 
 func (a *App) UpdateSiteGroup(sg proxy.SiteGroup) error {
-	return a.ruleManager.UpdateSiteGroup(sg)
+	err := a.ruleManager.UpdateSiteGroup(sg)
+	if err == nil && a.core != nil {
+		a.core.ReloadIfRunning()
+	}
+	return err
 }
 
 func (a *App) DeleteSiteGroup(id string) error {
-	return a.ruleManager.DeleteSiteGroup(id)
+	err := a.ruleManager.DeleteSiteGroup(id)
+	if err == nil && a.core != nil {
+		a.core.ReloadIfRunning()
+	}
+	return err
 }
 
 func (a *App) GetUpstreams() []proxy.Upstream {
@@ -621,15 +640,27 @@ func (a *App) GetUpstreams() []proxy.Upstream {
 }
 
 func (a *App) AddUpstream(u proxy.Upstream) error {
-	return a.ruleManager.AddUpstream(u)
+	err := a.ruleManager.AddUpstream(u)
+	if err == nil && a.core != nil {
+		a.core.ReloadIfRunning()
+	}
+	return err
 }
 
 func (a *App) UpdateUpstream(u proxy.Upstream) error {
-	return a.ruleManager.UpdateUpstream(u)
+	err := a.ruleManager.UpdateUpstream(u)
+	if err == nil && a.core != nil {
+		a.core.ReloadIfRunning()
+	}
+	return err
 }
 
 func (a *App) DeleteUpstream(id string) error {
-	return a.ruleManager.DeleteUpstream(id)
+	err := a.ruleManager.DeleteUpstream(id)
+	if err == nil && a.core != nil {
+		a.core.ReloadIfRunning()
+	}
+	return err
 }
 
 func (a *App) GetCloudflareConfig() proxy.CloudflareConfig {
@@ -643,7 +674,7 @@ func (a *App) UpdateCloudflareConfig(cfg proxy.CloudflareConfig) error {
 	if err == nil {
 		a.proxyServer.UpdateCloudflareConfig(cfg)
 		if a.core != nil {
-			a.core.reloadIfRunning()
+			a.core.ReloadIfRunning()
 		}
 		if cfg.AutoUpdate && !oldCfg.AutoUpdate {
 			a.appendLog("[Cloudflare] Auto update enabled, triggering fetch...")
@@ -676,7 +707,7 @@ func (a *App) RefreshCloudflareIPPool() {
 		cfg.PreferredIPs = ips
 		_ = a.ruleManager.UpdateCloudflareConfig(cfg)
 		if a.core != nil {
-			a.core.reloadIfRunning()
+			a.core.ReloadIfRunning()
 		}
 	}
 }
@@ -698,7 +729,7 @@ func (a *App) ForceFetchCloudflareIPs() error {
 		cfg.PreferredIPs = ips
 		_ = a.ruleManager.UpdateCloudflareConfig(cfg)
 		if a.core != nil {
-			a.core.reloadIfRunning()
+			a.core.ReloadIfRunning()
 		}
 		a.proxyServer.TriggerCFHealthCheck()
 	}
@@ -722,11 +753,19 @@ func (a *App) GetECHProfiles() []proxy.ECHProfile {
 }
 
 func (a *App) UpsertECHProfile(p proxy.ECHProfile) error {
-	return a.ruleManager.UpsertECHProfile(p)
+	err := a.ruleManager.UpsertECHProfile(p)
+	if err == nil && a.core != nil {
+		a.core.ReloadIfRunning()
+	}
+	return err
 }
 
 func (a *App) DeleteECHProfile(id string) error {
-	return a.ruleManager.DeleteECHProfile(id)
+	err := a.ruleManager.DeleteECHProfile(id)
+	if err == nil && a.core != nil {
+		a.core.ReloadIfRunning()
+	}
+	return err
 }
 
 func (a *App) FetchECHConfig(domain string, dohURL string) (string, error) {
@@ -755,19 +794,94 @@ func (a *App) GetDNSNodes() []proxy.DNSNode {
 }
 
 func (a *App) AddDNSNode(n proxy.DNSNode) error {
-	return a.ruleManager.AddDNSNode(n)
+	err := a.ruleManager.AddDNSNode(n)
+	if err == nil && a.core != nil {
+		a.core.ReloadIfRunning()
+	}
+	return err
 }
 
 func (a *App) UpdateDNSNode(n proxy.DNSNode) error {
-	return a.ruleManager.UpdateDNSNode(n)
+	err := a.ruleManager.UpdateDNSNode(n)
+	if err == nil && a.core != nil {
+		a.core.ReloadIfRunning()
+	}
+	return err
 }
 
 func (a *App) DeleteDNSNode(id string) error {
-	return a.ruleManager.DeleteDNSNode(id)
+	err := a.ruleManager.DeleteDNSNode(id)
+	if err == nil && a.core != nil {
+		a.core.ReloadIfRunning()
+	}
+	return err
 }
 
 func (a *App) SetDNSNodePriority(id string, targetIndex int) error {
-	return a.ruleManager.SetDNSNodePriority(id, targetIndex)
+	err := a.ruleManager.SetDNSNodePriority(id, targetIndex)
+	if err == nil && a.core != nil {
+		a.core.ReloadIfRunning()
+	}
+	return err
+}
+
+type DNSNodeTestResult struct {
+	Success bool   `json:"success"`
+	Latency int64  `json:"latency"`
+	Error   string `json:"error,omitempty"`
+	IPs     []string `json:"ips,omitempty"`
+}
+
+func (a *App) TestDNSNode(id string) (DNSNodeTestResult, error) {
+	nodes := a.ruleManager.GetDNSNodes()
+	var node *proxy.DNSNode
+	for i := range nodes {
+		if nodes[i].ID == id {
+			node = &nodes[i]
+			break
+		}
+	}
+	if node == nil {
+		return DNSNodeTestResult{Success: false, Error: "node not found"}, nil
+	}
+
+	resolver := a.proxyServer.GetDoHResolver()
+	if resolver == nil {
+		return DNSNodeTestResult{Success: false, Error: "DNS resolver not initialized"}, nil
+	}
+
+	// Convert proxy.DNSNode to dohresolver.DNSNode
+	dohNode := dohresolver.DNSNode{
+		Name:          node.Name,
+		URL:           node.URL,
+		SNI:           node.SNI,
+		IPs:           node.IPs,
+		ECHEnabled:    node.ECHEnabled,
+		ECHProfileID:  node.ECHProfileID,
+		ECHAutoUpdate: node.ECHAutoUpdate,
+		QUIC:          node.QUIC,
+		Enabled:       node.Enabled,
+		CertVerify: dohresolver.CertVerifyConfig{
+			Mode:                  node.CertVerify.Mode,
+			Names:                 node.CertVerify.Names,
+			Suffixes:              node.CertVerify.Suffixes,
+			SPKISHA256:            node.CertVerify.SPKISHA256,
+			AllowUnknownAuthority: node.CertVerify.AllowUnknownAuthority,
+		},
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	start := time.Now()
+	ips, err := resolver.TestNode(ctx, dohNode)
+	latency := time.Since(start).Milliseconds()
+
+	if err != nil {
+		return DNSNodeTestResult{Success: false, Latency: latency, Error: err.Error()}, nil
+	}
+
+	return DNSNodeTestResult{Success: true, Latency: latency, IPs: ips}, nil
 }
 
 func (a *App) GetAutoRoutingConfig() proxy.AutoRoutingConfig {
@@ -778,7 +892,7 @@ func (a *App) UpdateAutoRoutingConfig(cfg proxy.AutoRoutingConfig) error {
 	err := a.ruleManager.UpdateAutoRoutingConfig(cfg)
 	if err == nil {
 		if a.core != nil {
-			a.core.reloadIfRunning()
+			a.core.ReloadIfRunning()
 		}
 	}
 	return err
@@ -796,7 +910,7 @@ func (a *App) RefreshGFWList() error {
 	} else {
 		a.appendLog("[action] RefreshGFWList success")
 		if a.core != nil {
-			a.core.reloadIfRunning()
+			a.core.ReloadIfRunning()
 		}
 	}
 	return err
@@ -964,4 +1078,191 @@ func (a *App) waitForProxyListen(addr string, timeout time.Duration) error {
 		lastErr = fmt.Errorf("timeout")
 	}
 	return lastErr
+}
+
+func (a *App) syncCFPoolNAT64Prefix() {
+	if a.proxyServer != nil && a.proxyServer.GetCFPool() != nil {
+		profiles := a.ruleManager.GetNAT64Profiles()
+		var defaultPrefix string
+		for _, p := range profiles {
+			if strings.TrimSpace(p.Prefix) != "" {
+				defaultPrefix = p.Prefix
+				break
+			}
+		}
+		a.proxyServer.GetCFPool().SetNAT64Prefix(defaultPrefix)
+	}
+}
+
+func (a *App) GetNAT64Profiles() []proxy.NAT64Profile {
+	return a.ruleManager.GetNAT64Profiles()
+}
+
+func (a *App) AddNAT64Profile(p proxy.NAT64Profile) error {
+	err := a.ruleManager.AddNAT64Profile(p)
+	if err == nil {
+		a.syncCFPoolNAT64Prefix()
+		if a.core != nil {
+			a.core.ReloadIfRunning()
+		}
+	}
+	return err
+}
+
+func (a *App) UpdateNAT64Profile(p proxy.NAT64Profile) error {
+	err := a.ruleManager.UpdateNAT64Profile(p)
+	if err == nil {
+		a.syncCFPoolNAT64Prefix()
+		if a.core != nil {
+			a.core.ReloadIfRunning()
+		}
+	}
+	return err
+}
+
+func (a *App) DeleteNAT64Profile(id string) error {
+	err := a.ruleManager.DeleteNAT64Profile(id)
+	if err == nil {
+		a.syncCFPoolNAT64Prefix()
+		if a.core != nil {
+			a.core.ReloadIfRunning()
+		}
+	}
+	return err
+}
+
+func (a *App) TestNAT64Profile(prefix string) (int64, error) {
+	ips, err := net.LookupIP("www.cloudflare.com")
+	if err != nil || len(ips) == 0 {
+		return 0, fmt.Errorf("DNS lookup failed: %w", err)
+	}
+
+	var mappedIP string
+	for _, ip := range ips {
+		if ip.To4() != nil {
+			mapped, ok := mapNAT64AddrForTest(ip.String(), prefix)
+			if ok {
+				mappedIP = mapped
+				break
+			}
+		}
+	}
+
+	if mappedIP == "" {
+		return 0, fmt.Errorf("no IPv4 address available for mapping")
+	}
+
+	target := net.JoinHostPort(mappedIP, "443")
+	dialer := &net.Dialer{Timeout: 4 * time.Second}
+	start := time.Now()
+	conn, err := dialer.Dial("tcp", target)
+	if err != nil {
+		return 0, err
+	}
+	defer conn.Close()
+
+	return time.Since(start).Milliseconds(), nil
+}
+
+func mapNAT64AddrForTest(ipStr string, prefix string) (string, bool) {
+	prefix = strings.TrimSpace(prefix)
+	if prefix == "" {
+		return ipStr, true
+	}
+	parsedIP := net.ParseIP(ipStr)
+	if parsedIP == nil {
+		return ipStr, true
+	}
+	ipv4 := parsedIP.To4()
+	if ipv4 == nil {
+		return ipStr, false
+	}
+
+	var prefixIP net.IP
+	if strings.Contains(prefix, "/") {
+		_, ipnet, err := net.ParseCIDR(prefix)
+		if err == nil && ipnet != nil {
+			prefixIP = ipnet.IP
+		}
+	} else {
+		prefixIP = net.ParseIP(prefix)
+	}
+
+	if prefixIP == nil || len(prefixIP) != 16 {
+		return ipStr, true
+	}
+	mappedIP := make(net.IP, 16)
+	copy(mappedIP, prefixIP[:12])
+	copy(mappedIP[12:], ipv4)
+	return mappedIP.String(), true
+}
+
+func (a *App) GetMigrationEnabled() bool {
+	return a.ruleManager.GetMigrationEnabled()
+}
+
+func (a *App) SetMigrationEnabled(enabled bool) error {
+	a.appendLog(fmt.Sprintf("[action] SetMigrationEnabled: %v", enabled))
+	return a.ruleManager.SetMigrationEnabled(enabled)
+}
+
+func (a *App) GetMigrationServer() string {
+	return a.ruleManager.GetMigrationServer()
+}
+
+func (a *App) SetMigrationServer(server string) error {
+	a.appendLog(fmt.Sprintf("[action] SetMigrationServer: %s", server))
+	return a.ruleManager.SetMigrationServer(server)
+}
+
+func (a *App) TestMigration(server string) (string, error) {
+	server = strings.TrimSpace(server)
+	if server == "" {
+		return "", fmt.Errorf("migration server URL is empty")
+	}
+	a.appendLog(fmt.Sprintf("[action] TestMigration: %s", server))
+
+	// Test by connecting to cloudflare.com:443
+	testTarget := "cloudflare.com:443"
+	apiURL := fmt.Sprintf("%s?target=%s&ip=1.1.1.1", server, testTarget)
+	a.appendLog(fmt.Sprintf("[Migration] GET %s", apiURL))
+
+	httpClient := &http.Client{Timeout: 15 * time.Second}
+	req, err := http.NewRequest(http.MethodGet, apiURL, nil)
+	if err != nil {
+		return "", err
+	}
+	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
+
+	resp, err := httpClient.Do(req)
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+
+	body, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
+
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("API returned %d: %s", resp.StatusCode, string(body))
+	}
+
+	// Parse response to check if we got a valid ticket
+	var result struct {
+		Ticket      string `json:"ticket"`
+		CipherSuite uint16 `json:"cipher_suite"`
+		Version     uint16 `json:"version"`
+		TargetIP    string `json:"target_ip"`
+	}
+	if err := json.Unmarshal(body, &result); err != nil {
+		return "", fmt.Errorf("invalid response: %v", err)
+	}
+
+	if result.Ticket == "" {
+		return "", fmt.Errorf("no session ticket in response")
+	}
+
+	msg := fmt.Sprintf("Session ticket acquired! IP: %s, Cipher: 0x%04X, Version: 0x%04X",
+		result.TargetIP, result.CipherSuite, result.Version)
+	a.appendLog(fmt.Sprintf("[Migration] Test success: %s", msg))
+	return msg, nil
 }

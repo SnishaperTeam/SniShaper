@@ -46,7 +46,7 @@ func resolveExternalMihomoRoot() string {
 	return "."
 }
 
-func (m *ExternalMihomoManager) Start(cfg proxy.TUNConfig, listenPort string, logf func(string)) error {
+func (m *ExternalMihomoManager) Start(cfg proxy.TUNConfig, listenPort string, nat64Prefixes []string, logf func(string)) error {
 	m.mu.Lock()
 
 	if runtime.GOOS != "windows" {
@@ -58,7 +58,7 @@ func (m *ExternalMihomoManager) Start(cfg proxy.TUNConfig, listenPort string, lo
 		m.mu.Unlock()
 		return fmt.Errorf("proxy listen port is empty")
 	}
-	if err := m.ensureConfigLocked(cfg, listenPort); err != nil {
+	if err := m.ensureConfigLocked(cfg, listenPort, nat64Prefixes); err != nil {
 		m.mu.Unlock()
 		return err
 	}
@@ -188,7 +188,7 @@ func (m *ExternalMihomoManager) stopLocked(logf func(string)) error {
 	return nil
 }
 
-func (m *ExternalMihomoManager) RestartIfRunning(cfg proxy.TUNConfig, listenPort string, logf func(string)) error {
+func (m *ExternalMihomoManager) RestartIfRunning(cfg proxy.TUNConfig, listenPort string, nat64Prefixes []string, logf func(string)) error {
 	m.mu.Lock()
 	_, pid := m.statusMessageLocked(cfg)
 	running := pid > 0
@@ -199,7 +199,7 @@ func (m *ExternalMihomoManager) RestartIfRunning(cfg proxy.TUNConfig, listenPort
 	if logf != nil {
 		logf("[mihomo] reloading external TUN config")
 	}
-	return m.Start(cfg, listenPort, logf)
+	return m.Start(cfg, listenPort, nat64Prefixes, logf)
 }
 
 func (m *ExternalMihomoManager) Status(cfg proxy.TUNConfig) proxy.TUNStatus {
@@ -226,7 +226,7 @@ func (m *ExternalMihomoManager) Status(cfg proxy.TUNConfig) proxy.TUNStatus {
 	return status
 }
 
-func (m *ExternalMihomoManager) ensureConfigLocked(cfg proxy.TUNConfig, listenPort string) error {
+func (m *ExternalMihomoManager) ensureConfigLocked(cfg proxy.TUNConfig, listenPort string, nat64Prefixes []string) error {
 	listenPort = strings.TrimSpace(listenPort)
 	if listenPort == "" {
 		return fmt.Errorf("proxy listen port is empty")
@@ -243,8 +243,23 @@ func (m *ExternalMihomoManager) ensureConfigLocked(cfg proxy.TUNConfig, listenPo
 			appProcess = name
 		}
 	}
+	var nat64Rules []string
+	for _, prefix := range nat64Prefixes {
+		prefix = strings.TrimSpace(prefix)
+		if prefix == "" {
+			continue
+		}
+		cidr := prefix
+		if !strings.Contains(cidr, "/") {
+			cidr = cidr + "/96"
+		}
+		nat64Rules = append(nat64Rules, fmt.Sprintf("  - IP-CIDR6,%s,DIRECT,no-resolve", cidr))
+	}
+	nat64RulesStr := strings.Join(nat64Rules, "\n")
+
 	config := strings.ReplaceAll(mihomoConfigTemplate, "__SNISHAPER_PORT__", listenPort)
 	config = strings.ReplaceAll(config, "__APP_PROCESS__", appProcess)
+	config = strings.ReplaceAll(config, "__NAT64_RULES__", nat64RulesStr)
 	return os.WriteFile(m.configPath, []byte(config), 0600)
 }
 
@@ -395,6 +410,7 @@ rules:
   - IP-CIDR6,::1/128,DIRECT,no-resolve
   - IP-CIDR6,fc00::/7,DIRECT,no-resolve
   - IP-CIDR6,fe80::/10,DIRECT,no-resolve
+__NAT64_RULES__
   - MATCH,PROXY
 
 tun:

@@ -38,6 +38,19 @@ type CloudflarePool struct {
 
 	// IP 拉取新鲜度：记录上次成功拉取时间
 	lastFetchTime time.Time
+	nat64Prefix   string
+}
+
+func (p *CloudflarePool) SetNAT64Prefix(prefix string) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.nat64Prefix = prefix
+}
+
+func (p *CloudflarePool) getNAT64Prefix() string {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+	return p.nat64Prefix
 }
 
 func NewCloudflarePool(ips []string) *CloudflarePool {
@@ -346,11 +359,50 @@ func (p *CloudflarePool) rebuildActiveIPs() {
 	p.activeIPs = newActive
 }
 
+func mapNAT64Addr(ipStr string, prefix string) (string, bool) {
+	prefix = strings.TrimSpace(prefix)
+	if prefix == "" {
+		return ipStr, true
+	}
+	parsedIP := net.ParseIP(ipStr)
+	if parsedIP == nil {
+		return ipStr, true
+	}
+	ipv4 := parsedIP.To4()
+	if ipv4 == nil {
+		return ipStr, false
+	}
+
+	var prefixIP net.IP
+	if strings.Contains(prefix, "/") {
+		_, ipnet, err := net.ParseCIDR(prefix)
+		if err == nil && ipnet != nil {
+			prefixIP = ipnet.IP
+		}
+	} else {
+		prefixIP = net.ParseIP(prefix)
+	}
+
+	if prefixIP == nil || len(prefixIP) != 16 {
+		return ipStr, true
+	}
+	mappedIP := make(net.IP, 16)
+	copy(mappedIP, prefixIP[:12])
+	copy(mappedIP[12:], ipv4)
+	return mappedIP.String(), true
+}
+
 func (p *CloudflarePool) testIP(ip string) (time.Duration, error) {
+	prefix := p.getNAT64Prefix()
+	mappedIP, ok := mapNAT64Addr(ip, prefix)
+	if !ok {
+		return 0, fmt.Errorf("native IPv6 %s excluded under NAT64 mode", ip)
+	}
+
 	dialer := &net.Dialer{Timeout: 3 * time.Second}
 	start := time.Now()
 
-	conn, err := dialer.Dial("tcp", net.JoinHostPort(ip, "443"))
+	conn, err := dialer.Dial("tcp", net.JoinHostPort(mappedIP, "443"))
 	if err != nil {
 		return 0, err
 	}
@@ -360,9 +412,14 @@ func (p *CloudflarePool) testIP(ip string) (time.Duration, error) {
 }
 
 // DialParallel 并发建连竞速并缓存最快 IP
-func (p *CloudflarePool) DialParallel(ctx context.Context, network string, port string) (net.Conn, string, error) {
+func (p *CloudflarePool) DialParallel(ctx context.Context, network string, port string, nat64Prefix string) (net.Conn, string, error) {
 	if port == "" {
 		port = "443"
+	}
+
+	// 优先回退到全局前缀
+	if nat64Prefix == "" {
+		nat64Prefix = p.getNAT64Prefix()
 	}
 
 	p.mu.Lock()
@@ -371,10 +428,13 @@ func (p *CloudflarePool) DialParallel(ctx context.Context, network string, port 
 		best := p.bestIP
 		p.mu.Unlock()
 
-		dialer := &net.Dialer{Timeout: 2 * time.Second}
-		conn, err := dialer.DialContext(ctx, network, net.JoinHostPort(best, port))
-		if err == nil {
-			return conn, net.JoinHostPort(best, port), nil
+		mappedBest, ok := mapNAT64Addr(best, nat64Prefix)
+		if ok {
+			dialer := &net.Dialer{Timeout: 2 * time.Second}
+			conn, err := dialer.DialContext(ctx, network, net.JoinHostPort(mappedBest, port))
+			if err == nil {
+				return conn, net.JoinHostPort(mappedBest, port), nil
+			}
 		}
 
 		// 失败了，清空 bestIP，准备开始竞速
@@ -384,50 +444,65 @@ func (p *CloudflarePool) DialParallel(ctx context.Context, network string, port 
 	}
 
 	// 2. 收集候选 IP 列表
-	candidates := make([]string, 0, len(p.activeIPs))
+	var activeIPs []string
 	for _, ip := range p.activeIPs {
-		candidates = append(candidates, ip.IP)
+		activeIPs = append(activeIPs, ip.IP)
 	}
-	if len(candidates) == 0 {
+	if len(activeIPs) == 0 {
 		for ip := range p.allIPs {
-			candidates = append(candidates, ip)
+			activeIPs = append(activeIPs, ip)
 		}
 	}
 	p.mu.Unlock()
 
+	// 过滤与映射候选 IP
+	type mappedCandidate struct {
+		rawIP    string
+		mappedIP string
+	}
+	candidates := make([]mappedCandidate, 0, len(activeIPs))
+	for _, ip := range activeIPs {
+		mapped, ok := mapNAT64Addr(ip, nat64Prefix)
+		if ok {
+			candidates = append(candidates, mappedCandidate{rawIP: ip, mappedIP: mapped})
+		}
+	}
+
 	if len(candidates) == 0 {
-		return nil, "", errors.New("no Cloudflare IPs available in pool")
+		return nil, "", errors.New("no valid Cloudflare IPs available in pool under NAT64 mode")
 	}
 
 	// 3. 开始并发拨号竞速 (Happy Eyeballs)
 	type dialResult struct {
-		conn net.Conn
-		ip   string
-		err  error
+		conn     net.Conn
+		mappedIP string
+		rawIP    string
+		err      error
 	}
 
 	resChan := make(chan dialResult, len(candidates))
 	raceCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
-	for _, ip := range candidates {
-		go func(targetIP string) {
+	for _, c := range candidates {
+		go func(item mappedCandidate) {
 			dialer := &net.Dialer{Timeout: 3 * time.Second}
-			conn, err := dialer.DialContext(raceCtx, network, net.JoinHostPort(targetIP, port))
+			conn, err := dialer.DialContext(raceCtx, network, net.JoinHostPort(item.mappedIP, port))
 			select {
-			case resChan <- dialResult{conn: conn, ip: targetIP, err: err}:
+			case resChan <- dialResult{conn: conn, mappedIP: item.mappedIP, rawIP: item.rawIP, err: err}:
 			case <-raceCtx.Done():
 				if conn != nil {
 					conn.Close()
 				}
 			}
-		}(ip)
+		}(c)
 	}
 
 	var lastErr error
 	success := false
 	var winningConn net.Conn
-	var winningIP string
+	var winningAddr string
+	var winningRawIP string
 
 	for i := 0; i < len(candidates); i++ {
 		select {
@@ -436,10 +511,11 @@ func (p *CloudflarePool) DialParallel(ctx context.Context, network string, port 
 				if !success {
 					success = true
 					winningConn = res.conn
-					winningIP = res.ip
+					winningAddr = net.JoinHostPort(res.mappedIP, port)
+					winningRawIP = res.rawIP
 					cancel() // 取消其他竞速协程的拨号
 				} else {
-					res.conn.Close() // 迟到的连接直接关闭
+					res.conn.Close()
 				}
 			} else {
 				if res.err != nil {
@@ -454,17 +530,17 @@ func (p *CloudflarePool) DialParallel(ctx context.Context, network string, port 
 	if success {
 		// 4. 更新 bestIP 缓存
 		p.mu.Lock()
-		p.bestIP = winningIP
+		p.bestIP = winningRawIP
 		p.bestIPExpire = time.Now().Add(5 * time.Minute)
 		p.mu.Unlock()
 
-		return winningConn, net.JoinHostPort(winningIP, port), nil
+		return winningConn, winningAddr, nil
 	}
 
 	if lastErr != nil {
 		return nil, "", lastErr
 	}
-	return nil, "", errors.New("all Cloudflare pool IPs failed to connect")
+	return nil, "", errors.New("all Cloudflare pool IPs failed to connect under NAT64 mode")
 }
 
 type apiIPInfo struct {

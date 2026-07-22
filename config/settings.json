@@ -42,5 +42,7 @@
     "auto_update": false,
     "api_key": ""
   },
-  "socks5_enabled": false
+  "socks5_enabled": false,
+  "migration_enabled": true,
+  "migration_server": ""
 }

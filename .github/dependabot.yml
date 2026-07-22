@@ -8,10 +8,7 @@ updates:
     directory: "/utls"
     schedule:
       interval: "daily"
-  - package-ecosystem: "gomod"
-    directory: "/sni-server"
-    schedule:
-      interval: "daily"
+
   - package-ecosystem: "npm"
     directory: "/frontend"
     schedule:
