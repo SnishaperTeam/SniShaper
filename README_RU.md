@@ -4,7 +4,7 @@
 
 [![Go Version](https://img.shields.io/badge/Go-1.25+-00ADD8?style=flat-square&logo=go)](https://golang.org)
 [![License](https://img.shields.io/badge/License-MIT-blue?style=flat-square)]()
-[![Wiki](https://img.shields.io/badge/Docs-Wiki-orange?style=flat-square)](https://github.com/coolapijust/snishaper/wiki)
+[![Wiki](https://img.shields.io/badge/Docs-Wiki-orange?style=flat-square)](https://github.com/SniShaper/SniShaper/wiki)
 [![GitHub Release](https://img.shields.io/github/v/release/SniShaper/SniShaper?style=flat-square&logo=github)](https://github.com/SniShaper/SniShaper/releases)
 [![GitHub Downloads](https://img.shields.io/github/downloads/SniShaper/SniShaper/total?style=flat-square&logo=github)](https://github.com/SniShaper/SniShaper/releases)
 [![GitHub last commit](https://img.shields.io/github/last-commit/SniShaper/SniShaper?style=flat-square&logo=git)](https://github.com/SniShaper/SniShaper/commits/main)
@@ -16,19 +16,21 @@
 
 ## Возможности
 
-- **Шесть режимов проксирования**: поддержка широкого спектра режимов от легковесного `transparent` до продвинутого `server` проксирования для любых задач.
-- **Гибкие стратегии**:
-  - **TLS-RF (фрагментация TLS)**: обход точечных блокировок по SNI с помощью фрагментации.
-  - **Реплей QUIC**: обход стандартного обнаружения SNI с помощью функций quic-go.
-  - **Инъекция ECH**: автоматическое получение и внедрение echconfig.
-- **Интеллектуальная маршрутизация**: автоматическое определение заблокированных доменов на основе GFWList, позволяющее подключаться к большинству сайтов вне правил без ручной настройки.
+- **Многорежимное прокси**: MITM, Transparent, TLS-RF (фрагментация TLS), QUIC, Migration (перенос сессий), Direct — для различных сценариев.
+- **TUN виртуальный сетевой адаптер**: нативная поддержка TUN для глобального перехвата трафика, авто-маршрутизации и перехвата DNS.
+- **Инъекция ECH**: автоматическое получение и внедрение ECH Config с DoH-обнаружением и горячей заменой.
+- **Интеллектуальная маршрутизация**: автоматическое определение заблокированных доменов на основе GFWList без ручной настройки.
+- **DoH шифрованный DNS**: встроенный защищённый DNS-резолвер с балансировкой узлов.
+- **Cloudflare IP пул**: автоматическое измерение скорости, проверка работоспособности и обновление.
+- **SOCKS5 прокси**: встроенный SOCKS5 сервер с поддержкой отдельного порта.
+- **NAT64 трансляция**: автоматическое преобразование IPv4-адресов в чистых IPv6-сетях.
 
 ---
 
 ## Быстрый старт
 
 ### 1. Запуск
-Скачайте [последнюю версию](https://github.com/coolapijust/snishaper/releases) и запустите `snishaper.exe`.
+Скачайте [последнюю версию](https://github.com/SniShaper/SniShaper/releases) и запустите `snishaper.exe`. Приложение автоматически запрашивает права администратора (требуются для TUN). Если повышение прав не удалось, TUN недоступен, но остальные функции работают.
 
 ### 2. Переустановка сертификата
 В главном интерфейсе нажмите «Управление сертификатами» -> «**Нажмите для переустановки сертификата**».
@@ -40,13 +42,13 @@
 
 ## Документация
 
-Для получения подробных технических принципов, руководств по развертыванию и настройке, пожалуйста, обратитесь к [**GitHub Wiki**](https://github.com/coolapijust/snishaper/wiki):
+Для получения подробных технических принципов, руководств по развертыванию и настройке, пожалуйста, обратитесь к [**GitHub Wiki**](https://github.com/SniShaper/SniShaper/wiki):
 
-- **[Основные режимы прокси](https://github.com/coolapijust/snishaper/wiki/Core-Proxy-Modes)**: понимание принципов работы TLS-RF, QUIC и серверного режима.
-- **[Руководство по правилам](https://github.com/coolapijust/snishaper/wiki/Custom-Rules-Guide)**: как разрабатывать целевые правила.
-- **[Настройка GUI](https://github.com/coolapijust/snishaper/wiki/GUI-Configuration)**: быстрая настройка правил в интерфейсе.
-- **[Развертывание сервера](https://github.com/coolapijust/snishaper/wiki/Server-Deployment)**: настройка собственного серверного узла на CF Workers или VPS.
-- **[Устранение неполадок](https://github.com/coolapijust/snishaper/wiki/FAQ)**: решение проблем с сертификатами, правилами и другим.
+- **[Основные режимы прокси](https://github.com/SniShaper/SniShaper/wiki/Core-Proxy-Modes)**: понимание принципов работы TLS-RF, QUIC и серверного режима.
+- **[Руководство по правилам](https://github.com/SniShaper/SniShaper/wiki/Custom-Rules-Guide)**: как разрабатывать целевые правила.
+- **[Настройка GUI](https://github.com/SniShaper/SniShaper/wiki/GUI-Configuration)**: быстрая настройка правил в интерфейсе.
+- **[Развертывание сервера](https://github.com/SniShaper/SniShaper/wiki/Server-Deployment)**: настройка собственного серверного узла на CF Workers или VPS.
+- **[Устранение неполадок](https://github.com/SniShaper/SniShaper/wiki/FAQ)**: решение проблем с сертификатами, правилами и другим.
 
 ---
 
@@ -74,7 +76,7 @@ powershell -ExecutionPolicy Bypass -File .\build_windows.ps1
 pwsh -ExecutionPolicy Bypass -File .\build_windows.ps1
 
 # Компиляция основной программы на Go (скрипт автоматически выполняет go mod download)
-go build -ldflags="-s -w" -o "build/bin/snishaper.exe"
+go build -tags with_gvisor -ldflags="-s -w" -o "build/bin/snishaper.exe"
 ```
 
 ### Параметры командной строки скрипта сборки
@@ -123,6 +125,7 @@ go build -ldflags="-s -w" -o "build/bin/snishaper.exe"
 - `Go 1.25+`
 - `Node.js 24+`
 - `npm 11+`
+- `gVisor` (требуется для TUN режима)
 
 Результаты сборки:
 

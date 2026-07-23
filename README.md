@@ -4,7 +4,7 @@
 
 [![Go Version](https://img.shields.io/badge/Go-1.25+-00ADD8?style=flat-square&logo=go)](https://golang.org)
 [![License](https://img.shields.io/badge/License-MIT-blue?style=flat-square)]()
-[![Wiki](https://img.shields.io/badge/Docs-Wiki-orange?style=flat-square)](https://github.com/coolapijust/snishaper/wiki)
+[![Wiki](https://img.shields.io/badge/Docs-Wiki-orange?style=flat-square)](https://github.com/SniShaper/SniShaper/wiki)
 [![GitHub Release](https://img.shields.io/github/v/release/SniShaper/SniShaper?style=flat-square&logo=github)](https://github.com/SniShaper/SniShaper/releases)
 [![GitHub Downloads](https://img.shields.io/github/downloads/SniShaper/SniShaper/total?style=flat-square&logo=github)](https://github.com/SniShaper/SniShaper/releases)
 [![GitHub last commit](https://img.shields.io/github/last-commit/SniShaper/SniShaper?style=flat-square&logo=git)](https://github.com/SniShaper/SniShaper/commits/main)
@@ -16,20 +16,20 @@
 
 ## 特性
 
-- **六模式全方位覆盖**：支持从轻量级的 `transparent` 到高级的 `server` 转发，满足不同需求。
-- **灵活策略**：
-  - **TLS-RF (TLS 分片)**：通过分片规避针对 SNI 的精准阻断。
-  - **QUIC 重建**：利用 quic-go 的混淆特性绕过常规 SNI 检测。
-  - **ECH 注入**：自动获取并注入 echconfig。
-- **智能分流**：基于 GFWList 自动识别被屏蔽域名，大多数规则外网站无需手动配置即可连接。
-
-- 内置的**抗DNS污染能力**，复用软件能力使用本被阻断的加密DNS服务。
+- **多模式代理**：MITM（中间人）、Transparent（透明）、TLS-RF（TLS 分片）、QUIC、Migration（会话迁移）、Direct（直连）等多种模式覆盖不同场景。
+- **TUN 虚拟网卡**：原生 TUN 支持，全局流量劫持，自动路由与 DNS 劫持。
+- **ECH 注入**：自动获取并注入 ECH Config，支持 DoH 发现与热更新。
+- **智能分流**：基于 GFWList 自动识别被屏蔽域名，自动路由引擎无需手动配置即可分流。
+- **DoH 加密 DNS**：内置抗污染 DNS 解析器，支持多节点故障转移。
+- **Cloudflare IP 优选池**：自动测速、健康检查与刷新。
+- **SOCKS5 代理**：内置 SOCKS5 服务端，支持独立端口。
+- **NAT64 转换**：在纯 IPv6 网络下自动转换 IPv4 地址。
 ---
 
 ## 快速开始
 
 ### 1. 运行
-下载 [最新版本](https://github.com/coolapijust/snishaper/releases) 并运行 `snishaper.exe`。
+下载 [最新版本](https://github.com/SniShaper/SniShaper/releases) 并运行 `snishaper.exe`。程序会自动申请管理员权限（TUN 模式需要），如提权失败则 TUN 功能不可用但其他功能正常。
 
 <a href="https://apps.microsoft.com/detail/9n11mrrsfs8n" target="_self">
 <img src="https://get.microsoft.com/images/zh-cn%20dark.svg" width="200"/>
@@ -45,13 +45,13 @@
 
 ## 文档 
 
-想要了解更详细的技术原理、部署教程和自定义指南，请参阅 [**GitHub Wiki**](https://github.com/coolapijust/snishaper/wiki)：
+想要了解更详细的技术原理、部署教程和自定义指南，请参阅 [**GitHub Wiki**](https://github.com/SniShaper/SniShaper/wiki)：
 
--  **[核心模式介绍](https://github.com/coolapijust/snishaper/wiki/Core-Proxy-Modes)**：了解 TLS-RF、QUIC 与 Server 模式的运行原理。
--  **[规则自定义指南](https://github.com/coolapijust/snishaper/wiki/Custom-Rules-Guide)**：了解如何开发针对性的规则。
--  **[界面配置实操](https://github.com/coolapijust/snishaper/wiki/GUI-Configuration)**：了解在GUI快速配置规则。
--  **[服务端部署](https://github.com/coolapijust/snishaper/wiki/Server-Deployment)**：在 CF Workers 或 VPS 上架设你自己的 Server 节点。
--  **[常见问题排除](https://github.com/coolapijust/snishaper/wiki/FAQ)**：解决证书警告、规则不生效等常见问题。
+-  **[核心模式介绍](https://github.com/SniShaper/SniShaper/wiki/Core-Proxy-Modes)**：了解 TLS-RF、QUIC 与 Server 模式的运行原理。
+-  **[规则自定义指南](https://github.com/SniShaper/SniShaper/wiki/Custom-Rules-Guide)**：了解如何开发针对性的规则。
+-  **[界面配置实操](https://github.com/SniShaper/SniShaper/wiki/GUI-Configuration)**：了解在GUI快速配置规则。
+-  **[服务端部署](https://github.com/SniShaper/SniShaper/wiki/Server-Deployment)**：在 CF Workers 或 VPS 上架设你自己的 Server 节点。
+-  **[常见问题排除](https://github.com/SniShaper/SniShaper/wiki/FAQ)**：解决证书警告、规则不生效等常见问题。
 
 ---
 
@@ -79,7 +79,7 @@ powershell -ExecutionPolicy Bypass -File .\build_windows.ps1
 pwsh -ExecutionPolicy Bypass -File .\build_windows.ps1
 
 # Go主程序编译（脚本会自动执行 go mod download）
-go build -ldflags="-s -w" -o "build/bin/snishaper.exe"
+go build -tags with_gvisor -ldflags="-s -w" -o "build/bin/snishaper.exe"
 ```
 
 ### 构建脚本命令行参数
@@ -128,6 +128,7 @@ go build -ldflags="-s -w" -o "build/bin/snishaper.exe"
 - `Go 1.25+`
 - `Node.js 24+`
 - `npm 11+`
+- `gVisor`（TUN 模式需要，Linux 需安装 `gvisor` 包）
 
 构建产物：
 

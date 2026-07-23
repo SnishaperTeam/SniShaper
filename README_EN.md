@@ -4,7 +4,7 @@
 
 [![Go Version](https://img.shields.io/badge/Go-1.25+-00ADD8?style=flat-square&logo=go)](https://golang.org)
 [![License](https://img.shields.io/badge/License-MIT-blue?style=flat-square)]()
-[![Wiki](https://img.shields.io/badge/Docs-Wiki-orange?style=flat-square)](https://github.com/coolapijust/snishaper/wiki)
+[![Wiki](https://img.shields.io/badge/Docs-Wiki-orange?style=flat-square)](https://github.com/SniShaper/SniShaper/wiki)
 [![GitHub Release](https://img.shields.io/github/v/release/SniShaper/SniShaper?style=flat-square&logo=github)](https://github.com/SniShaper/SniShaper/releases)
 [![GitHub Downloads](https://img.shields.io/github/downloads/SniShaper/SniShaper/total?style=flat-square&logo=github)](https://github.com/SniShaper/SniShaper/releases)
 [![GitHub last commit](https://img.shields.io/github/last-commit/SniShaper/SniShaper?style=flat-square&logo=git)](https://github.com/SniShaper/SniShaper/commits/main)
@@ -16,19 +16,21 @@
 
 ## Features
 
-- **Six-mode comprehensive coverage**: Supports everything from lightweight `transparent` to advanced `server` forwarding to meet different needs.
-- **Flexible strategies**:
-  - **TLS-RF (TLS Fragmentation)**: Bypasses precise SNI-based blocking through fragmentation.
-  - **QUIC Replay**: Bypasses conventional SNI detection using quic-go's obfuscation features.
-  - **ECH Injection**: Automatically fetches and injects echconfig.
-- **Smart Routing**: Automatically identifying blocked domains based on GFWList, allowing connection to most sites outside rules without manual configuration.
+- **Multi-Mode Proxy**: MITM, Transparent, TLS-RF (TLS Fragmentation), QUIC, Migration (session persistence), Direct — covering diverse scenarios.
+- **TUN Virtual NIC**: Native TUN support for global traffic hijacking, auto-routing, and DNS hijacking.
+- **ECH Injection**: Automatically fetches and injects ECH Config, with DoH discovery and hot-reload.
+- **Smart Routing**: Auto-identifies blocked domains based on GFWList; auto-routing engine handles most sites without manual config.
+- **DoH Encrypted DNS**: Built-in anti-pollution DNS resolver with multi-node failover.
+- **Cloudflare IP Pool**: Auto-speedtest, health check, and refresh.
+- **SOCKS5 Proxy**: Built-in SOCKS5 server with independent port support.
+- **NAT64 Translation**: Automatic IPv4 address translation on pure IPv6 networks.
 
 ---
 
 ## Quick Start
 
 ### 1. Run
-Download the [latest version](https://github.com/coolapijust/snishaper/releases) and run `snishaper.exe`.
+Download the [latest version](https://github.com/SniShaper/SniShaper/releases) and run `snishaper.exe`. The app automatically requests admin elevation (required for TUN mode). If elevation fails, TUN is unavailable but other features work normally.
 
 ### 2. Certificate Reinstallation
 Click "Certificate Management" -> "**Click to Reinstall Certificate**" in the main interface.
@@ -40,13 +42,13 @@ The software includes a rich set of official rules. You can also customize your 
 
 ## Documentation
 
-For more detailed technical principles, deployment tutorials, and customization guides, please refer to the [**GitHub Wiki**](https://github.com/coolapijust/snishaper/wiki):
+For more detailed technical principles, deployment tutorials, and customization guides, please refer to the [**GitHub Wiki**](https://github.com/SniShaper/SniShaper/wiki):
 
-- **[Core Mode Introduction](https://github.com/coolapijust/snishaper/wiki/Core-Proxy-Modes)**: Learn about the operation principles of TLS-RF, QUIC, and Server modes.
-- **[Rule Customization Guide](https://github.com/coolapijust/snishaper/wiki/Custom-Rules-Guide)**: Learn how to develop targeted rules.
-- **[Interface Configuration Practice](https://github.com/coolapijust/snishaper/wiki/GUI-Configuration)**: Learn how to quickly configure rules in the GUI.
-- **[Server Deployment](https://github.com/coolapijust/snishaper/wiki/Server-Deployment)**: Set up your own Server node on CF Workers or VPS.
-- **[Common Troubleshooting](https://github.com/coolapijust/snishaper/wiki/FAQ)**: Resolve certificate warnings, ineffective rules, and other common issues.
+- **[Core Mode Introduction](https://github.com/SniShaper/SniShaper/wiki/Core-Proxy-Modes)**: Learn about the operation principles of TLS-RF, QUIC, and Server modes.
+- **[Rule Customization Guide](https://github.com/SniShaper/SniShaper/wiki/Custom-Rules-Guide)**: Learn how to develop targeted rules.
+- **[Interface Configuration Practice](https://github.com/SniShaper/SniShaper/wiki/GUI-Configuration)**: Learn how to quickly configure rules in the GUI.
+- **[Server Deployment](https://github.com/SniShaper/SniShaper/wiki/Server-Deployment)**: Set up your own Server node on CF Workers or VPS.
+- **[Common Troubleshooting](https://github.com/SniShaper/SniShaper/wiki/FAQ)**: Resolve certificate warnings, ineffective rules, and other common issues.
 
 ---
 
@@ -74,7 +76,7 @@ powershell -ExecutionPolicy Bypass -File .\build_windows.ps1
 pwsh -ExecutionPolicy Bypass -File .\build_windows.ps1
 
 # Go main program compilation (script auto-runs go mod download)
-go build -ldflags="-s -w" -o "build/bin/snishaper.exe"
+go build -tags with_gvisor -ldflags="-s -w" -o "build/bin/snishaper.exe"
 ```
 
 ### Build Script Command-Line Parameters
@@ -123,6 +125,7 @@ Development environment recommendations:
 - `Go 1.25+`
 - `Node.js 24+`
 - `npm 11+`
+- `gVisor` (required for TUN mode)
 
 Build outputs:
 
