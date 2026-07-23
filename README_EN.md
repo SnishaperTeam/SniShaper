@@ -10,7 +10,7 @@
 [![GitHub last commit](https://img.shields.io/github/last-commit/SniShaper/SniShaper?style=flat-square&logo=git)](https://github.com/SniShaper/SniShaper/commits/main)
 [![GitHub Actions Workflow Status](https://img.shields.io/github/actions/workflow/status/SniShaper/SniShaper/build.yml?style=flat-square&logo=githubactions&label=CI)](https://github.com/SniShaper/SniShaper/actions)
 
-**SniShaper** is a local proxy tool designed for complex network environments. It integrates multiple technologies, including **ECH Injection**, **TLS-RF Fragmentation**, **QUIC Connection Rebuilding**, and **Lightweight Server Mode Relay**, aiming to provide users with a stable access experience.
+**SniShaper** is a local proxy tool designed for complex network environments, integrating **ECH Injection**, **TLS-RF Fragmentation**, **QUIC Obfuscation**, **Session Migration**, and other protocol stack technologies, paired with **TUN Virtual NIC** for full traffic takeover, delivering a stable and flexible browsing experience.
 
 ---
 

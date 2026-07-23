@@ -10,7 +10,7 @@
 [![GitHub last commit](https://img.shields.io/github/last-commit/SniShaper/SniShaper?style=flat-square&logo=git)](https://github.com/SniShaper/SniShaper/commits/main)
 [![GitHub Actions Workflow Status](https://img.shields.io/github/actions/workflow/status/SniShaper/SniShaper/build.yml?style=flat-square&logo=githubactions&label=CI)](https://github.com/SniShaper/SniShaper/actions)
 
-**SniShaper** 是一款专为复杂网络环境设计的本地代理工具。它集成了多种技术，包括 **ECH 注入**、**TLS-RF 分片**、**QUIC 重建连接** 以及 **Server 模式轻量中转**，旨在为用户提供稳定的访问体验。
+**SniShaper** 是一款专为复杂网络环境设计的本地代理工具，集成 **ECH 注入**、**TLS-RF 分片**、**QUIC 混淆**、**会话迁移** 等多种协议栈，配合 **TUN 虚拟网卡** 实现全流量接管，提供稳定、灵活的科学上网体验。
 
 ---
 
