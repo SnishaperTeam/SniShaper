@@ -15,7 +15,7 @@ const emitToast = (payload: Omit<ToastPayload, 'id'>) => {
     new CustomEvent<ToastPayload>(TOAST_EVENT, {
       detail: {
         id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-        duration: 2600,
+        duration: 8000,
         ...payload
       }
     })

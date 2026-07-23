@@ -21,13 +21,16 @@ func normalizeHost(hostport string) string {
 
 	host, _, err := net.SplitHostPort(hostport)
 	if err == nil {
-		return strings.ToLower(strings.TrimSpace(host))
+		// 去掉 DNS FQDN 格式的尾点（perplexity.ai. → perplexity.ai）
+		// 否则 domainMatchScore 会因尾点不匹配规则
+		return strings.ToLower(strings.TrimSuffix(strings.TrimSpace(host), "."))
 	}
 
 	if strings.HasPrefix(hostport, "[") && strings.HasSuffix(hostport, "]") {
 		return strings.ToLower(strings.TrimSuffix(strings.TrimPrefix(hostport, "["), "]"))
 	}
-	return strings.ToLower(hostport)
+	// 同上去尾点
+	return strings.ToLower(strings.TrimSuffix(hostport, "."))
 }
 
 func ensureAddrWithPort(addr, defaultPort string) string {

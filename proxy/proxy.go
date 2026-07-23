@@ -213,6 +213,9 @@ type ProxyServer struct {
 	// migrationCache holds persistent session tickets for migration mode,
 	// keyed by host name. Tickets are reused across requests until they fail.
 	migrationCache *migrationSessionCache
+
+	// tunMode indicates TUN is active, outbound connections should bind physical NIC
+	tunMode bool
 }
 
 type dohProxyAdapter struct {
@@ -254,6 +257,22 @@ func (a *dohProxyAdapter) ResolveRuleECHConfig(host string, rule dohresolver.Rul
 
 func (a *dohProxyAdapter) UpdateECHProfileConfig(profileID string, configBytes []byte) {
 	a.p.UpdateECHProfileConfig(profileID, configBytes)
+}
+
+// GetPhysicalBindAddr 返回与目标 IP 族匹配的物理网卡 IP（TUN 模式下绑物理网卡用）
+func (a *dohProxyAdapter) GetPhysicalBindAddr(targetAddr string) net.IP {
+	addr := a.p.getPhysicalLocalAddr(targetAddr)
+	if addr == nil {
+		return nil
+	}
+	return addr.IP
+}
+
+// SetTUNMode 设置 TUN 模式标记，启用后出站连接绑定物理网卡
+func (p *ProxyServer) SetTUNMode(enabled bool) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.tunMode = enabled
 }
 
 func NewProxyServer(addr string) *ProxyServer {

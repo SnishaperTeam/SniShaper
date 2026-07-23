@@ -199,9 +199,7 @@ func (c *CoreClient) GetStats() (int64, int64, int64) {
 }
 
 func (c *CoreClient) StartTUN() error {
-	if err := checkWintun(); err != nil {
-		return fmt.Errorf("wintun check: %w", err)
-	}
+	// sing-tun 内置 wintun，无需检查外部 wintun.dll
 	if err := c.ensureRunningWithElevation(true); err != nil {
 		return fmt.Errorf("ensure elevated core failed: %w", err)
 	}

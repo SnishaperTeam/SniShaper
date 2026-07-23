@@ -226,6 +226,7 @@
     "pause": "Pause",
     "scroll_top": "Scroll to Top",
     "clear": "Clear",
+    "export": "Export",
     "search_placeholder": "Search keywords, domains, error codes...",
     "capture_hint": "Log capture is disabled by default. Click 'Capture Logs' to start temporary collection and auto-scroll to the latest logs.",
     "no_logs": "No logs collected"

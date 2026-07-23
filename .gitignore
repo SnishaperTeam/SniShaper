@@ -62,6 +62,8 @@ echproxy/
 doc/
 shaper-next/
 snishaper.zip
+Apppackage/
+blindtls-vercel/
 
 # Custom ignores - added for mitmverify and cmd
 mitmverify.exe

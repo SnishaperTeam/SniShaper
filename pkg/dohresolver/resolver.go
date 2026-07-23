@@ -55,6 +55,9 @@ type ProxyServer interface {
 	GetUConn(conn net.Conn, sni, verifyName string, rule Rule, allowUnknownAuthority bool, alpn string, ech []byte) *utls.UConn
 	ResolveRuleECHConfig(host string, rule Rule) []byte
 	UpdateECHProfileConfig(profileID string, configBytes []byte)
+	// GetPhysicalBindAddr 返回与目标地址 IP 族匹配的物理网卡 IP
+	// TUN 模式下用于绑定物理网卡绕过 TUN，避免 QUIC/UDP 流量被 TUN 捕获循环
+	GetPhysicalBindAddr(targetAddr string) net.IP
 }
 
 type dnsCacheEntry struct {
@@ -125,10 +128,24 @@ func (r *FailoverResolver) getNodeClient(ctx context.Context, node DNSNode) (*ht
 			TLSClientConfig: tlsConfig,
 			Dial: func(ctx context.Context, _ string, tlsCfg *tls.Config, cfg *quic.Config) (*quic.Conn, error) {
 				for _, addr := range dialAddrs {
-					conn, err := quic.DialAddr(ctx, addr, tlsCfg, cfg)
+					// TUN 模式下绑物理网卡，避免 QUIC/UDP 流量被 TUN 捕获循环
+					udpAddr, err := net.ResolveUDPAddr("udp", addr)
+					if err != nil {
+						continue
+					}
+					var laddr *net.UDPAddr
+					if bindIP := r.proxy.GetPhysicalBindAddr(addr); bindIP != nil {
+						laddr = &net.UDPAddr{IP: bindIP}
+					}
+					pc, err := net.ListenUDP("udp", laddr)
+					if err != nil {
+						continue
+					}
+					conn, err := quic.Dial(ctx, pc, udpAddr, tlsCfg, cfg)
 					if err == nil {
 						return conn, nil
 					}
+					pc.Close()
 				}
 				return nil, fmt.Errorf("all QUIC dial failed for %s", host)
 			},

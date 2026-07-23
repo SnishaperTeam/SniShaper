@@ -64,11 +64,24 @@ func (p *ProxyServer) resolveDomainCandidates(ctx context.Context, host, port, d
 	if p.dohResolver != nil {
 		ips, err := p.dohResolver.ResolveIPs(ctx, host)
 		if err == nil && len(ips) > 0 {
-			candidates := make([]string, 0, len(ips))
+			// IPv4 优先：除非 dnsMode == "ipv6_only"，否则 IPv4 排在前面
+			// 避免 IPv6 成为唯一候选导致连接失败
+			var v4, v6 []string
 			for _, ip := range ips {
-				candidates = append(candidates, net.JoinHostPort(ip, port))
+				parsed := net.ParseIP(ip)
+				if parsed == nil {
+					continue
+				}
+				if parsed.To4() != nil {
+					v4 = append(v4, net.JoinHostPort(ip, port))
+				} else {
+					v6 = append(v6, net.JoinHostPort(ip, port))
+				}
 			}
-			return candidates
+			if dnsMode == "ipv6_only" {
+				return append(v6, v4...)
+			}
+			return append(v4, v6...)
 		}
 	}
 
@@ -87,7 +100,7 @@ func (p *ProxyServer) buildDialCandidates(ctx context.Context, targetHost, targe
 		return []string{targetAddr}
 	}
 
-	if effectiveMode == "mitm" || effectiveMode == "transparent" || effectiveMode == "tls-rf" || effectiveMode == "quic" {
+	if effectiveMode == "mitm" || effectiveMode == "transparent" || effectiveMode == "tls-rf" || effectiveMode == "quic" || effectiveMode == "direct" {
 		if strings.TrimSpace(resolvedUpstream) != "" {
 			upstreamCandidates := splitUpstreamCandidates(targetHost, resolvedUpstream, defaultPort)
 			if len(upstreamCandidates) == 0 {
@@ -262,7 +275,116 @@ func (p *ProxyServer) dialWithRule(ctx context.Context, network, addr string, ru
 		Timeout:   10 * time.Second,
 		KeepAlive: 30 * time.Second,
 	}
+
+	// TUN 模式下绑定物理网卡，避免出站流量被 TUN 捕获形成循环
+	p.mu.RLock()
+	tunMode := p.tunMode
+	p.mu.RUnlock()
+	if tunMode {
+		// 如果目标是域名，通过 DoH 解析器解析（不走系统 DNS，系统 DNS 被 TUN 劫持返回 fake-ip）
+		// 用 context 标记防止递归：DoH 解析器内部也会调 DialWithRule → dialWithRule
+		host, port, splitErr := net.SplitHostPort(addr)
+		if splitErr == nil && !isLiteralIP(host) && ctx.Value(dohResolveCtxKey) == nil && p.dohResolver != nil {
+			dohCtx := context.WithValue(ctx, dohResolveCtxKey, true)
+			if ips, err := p.dohResolver.ResolveIPs(dohCtx, host); err == nil && len(ips) > 0 {
+				for _, ip := range ips {
+					if net.ParseIP(ip).To4() != nil {
+						addr = net.JoinHostPort(ip, port)
+						break
+					}
+				}
+			}
+		}
+		if localAddr := p.getPhysicalLocalAddr(addr); localAddr != nil {
+			dialer.LocalAddr = localAddr
+		}
+	}
+
 	return dialer.DialContext(ctx, network, addr)
+}
+
+// dohResolveCtxKey 用于防止 DoH 解析器和 dialWithRule 之间无限递归
+type dohResolveCtxKeyType int
+
+const dohResolveCtxKey dohResolveCtxKeyType = 0
+
+// getPhysicalLocalAddr 根据目标地址的 IP 族选择对应的物理网卡本地地址
+// IPv4 目标 → 返回 IPv4 地址，IPv6 目标 → 返回 IPv6 地址
+// 避免绑定 IPv4 去连 IPv6（会导致 dial 失败 → 502）
+func (p *ProxyServer) getPhysicalLocalAddr(targetAddr string) *net.TCPAddr {
+	host, _, err := net.SplitHostPort(targetAddr)
+	if err != nil {
+		host = targetAddr
+	}
+	targetIP := net.ParseIP(host)
+	wantIPv6 := targetIP != nil && targetIP.To4() == nil
+
+	interfaces, err := net.Interfaces()
+	if err != nil {
+		return nil
+	}
+	for _, iface := range interfaces {
+		if iface.Flags&net.FlagLoopback != 0 || iface.Flags&net.FlagUp == 0 {
+			continue
+		}
+		name := iface.Name
+		if strings.Contains(name, "SniShaper") || strings.Contains(name, "tun") || strings.Contains(name, "TAP") {
+			continue
+		}
+		addrs, err := iface.Addrs()
+		if err != nil || len(addrs) == 0 {
+			continue
+		}
+		for _, addr := range addrs {
+			ipNet, ok := addr.(*net.IPNet)
+			if !ok {
+				continue
+			}
+			if wantIPv6 {
+				// IPv6 目标：跳过 IPv4 地址
+				if ipNet.IP.To4() != nil {
+					continue
+				}
+				return &net.TCPAddr{IP: ipNet.IP}
+			}
+			// IPv4 目标：跳过 IPv6 地址
+			if ipNet.IP.To4() == nil {
+				continue
+			}
+			return &net.TCPAddr{IP: ipNet.IP}
+		}
+	}
+	return nil
+}
+
+// getPhysicalInterfaceAddr 获取物理网卡的 IPv4 地址（排除 TUN/Loopback）
+// 已废弃，保留向后兼容，新代码应使用 getPhysicalLocalAddr
+func (p *ProxyServer) getPhysicalInterfaceAddr() *net.TCPAddr {
+	interfaces, err := net.Interfaces()
+	if err != nil {
+		return nil
+	}
+	for _, iface := range interfaces {
+		if iface.Flags&net.FlagLoopback != 0 || iface.Flags&net.FlagUp == 0 {
+			continue
+		}
+		name := iface.Name
+		if strings.Contains(name, "SniShaper") || strings.Contains(name, "tun") || strings.Contains(name, "TAP") {
+			continue
+		}
+		addrs, err := iface.Addrs()
+		if err != nil || len(addrs) == 0 {
+			continue
+		}
+		for _, addr := range addrs {
+			ipNet, ok := addr.(*net.IPNet)
+			if !ok || ipNet.IP.To4() == nil {
+				continue
+			}
+			return &net.TCPAddr{IP: ipNet.IP}
+		}
+	}
+	return nil
 }
 
 func (p *ProxyServer) DialWithRule(ctx context.Context, network, addr string, rule Rule) (net.Conn, error) {

@@ -15,7 +15,7 @@ import (
 
 	"snishaper/common"
 	"snishaper/pkg/certmanager"
-	"snishaper/pkg/mihomo"
+	"snishaper/pkg/singtun"
 	"snishaper/proxy"
 )
 
@@ -35,7 +35,7 @@ type coreRuntime struct {
 	certPath          string
 	ruleManager       *proxy.RuleManager
 	proxyServer       *proxy.ProxyServer
-	externalTUN       *mihomo.ExternalMihomoManager
+	nativeTUN         *singtun.Manager
 	certManager       *certmanager.CertManager
 	logBuffer         *common.RingLogWriter
 	logCaptureMu      sync.RWMutex
@@ -78,9 +78,10 @@ func newCoreRuntime() (*coreRuntime, error) {
 		certPath:    filepath.Join(execDir, "cert"),
 		ruleManager: ruleManager,
 		proxyServer: proxy.NewProxyServer("127.0.0.1:" + port),
-		externalTUN: mihomo.NewExternalMihomoManager(),
 		logBuffer:   common.NewRingLogWriter(5000),
 	}
+	// Initialize nativeTUN with DoH resolver
+	r.nativeTUN = singtun.NewManager(r.proxyServer.GetDoHResolver(), r.appendLog)
 	r.proxyServer.SetSocks5Addr("127.0.0.1:" + socks5Port)
 
 	if err := r.start(); err != nil {
@@ -122,8 +123,8 @@ func (r *coreRuntime) start() error {
 }
 
 func (r *coreRuntime) shutdown() {
-	if r.externalTUN != nil {
-		_ = r.externalTUN.Stop(nil)
+	if r.nativeTUN != nil {
+		_ = r.nativeTUN.Stop()
 	}
 	_ = r.proxyServer.Stop()
 	r.appendLog("[core] runtime stopped")
@@ -148,17 +149,7 @@ func (r *coreRuntime) reloadConfig() error {
 	r.proxyServer.SetCertGenerator(r.certManager)
 	r.proxyServer.SetSocks5Enabled(r.ruleManager.GetSocks5Enabled())
 	r.ruleManager.InitAutoRouter(r.proxyServer.GetDoHResolver())
-	if r.externalTUN != nil {
-		var nat64Prefixes []string
-		if r.ruleManager != nil {
-			for _, p := range r.ruleManager.GetNAT64Profiles() {
-				if strings.TrimSpace(p.Prefix) != "" {
-					nat64Prefixes = append(nat64Prefixes, p.Prefix)
-				}
-			}
-		}
-		_ = r.externalTUN.RestartIfRunning(r.ruleManager.GetTUNConfig(), r.currentListenPort(), nat64Prefixes, r.appendLog)
-	}
+	// nativeTUN doesn't need restart on config reload
 	r.appendLog("[core] config reloaded")
 	return nil
 }
@@ -314,9 +305,9 @@ func (r *coreRuntime) startTUN() (err error) {
 		}
 		writeCoreMarker(r.execDir, "start_tun", "after startProxy")
 	}
-	if r.externalTUN == nil {
-		err = fmt.Errorf("external mihomo manager is not initialized")
-		writeCoreMarker(r.execDir, "start_tun", "external manager missing")
+	if r.nativeTUN == nil {
+		err = fmt.Errorf("native TUN manager is not initialized")
+		writeCoreMarker(r.execDir, "start_tun", "native TUN manager missing")
 		return err
 	}
 	listenPort := r.currentListenPort()
@@ -325,46 +316,46 @@ func (r *coreRuntime) startTUN() (err error) {
 		writeCoreMarker(r.execDir, "start_tun", "empty listen port")
 		return err
 	}
-	writeCoreMarker(r.execDir, "start_tun", "before externalTUN.Start")
-	var nat64Prefixes []string
-	if r.ruleManager != nil {
-		for _, p := range r.ruleManager.GetNAT64Profiles() {
-			if strings.TrimSpace(p.Prefix) != "" {
-				nat64Prefixes = append(nat64Prefixes, p.Prefix)
-			}
-		}
-	}
-	if err = r.externalTUN.Start(r.ruleManager.GetTUNConfig(), listenPort, nat64Prefixes, r.appendLog); err != nil {
-		writeCoreMarker(r.execDir, "start_tun", markerDetail("externalTUN.Start failed: %v", err))
+	writeCoreMarker(r.execDir, "start_tun", "before nativeTUN.Start")
+	r.appendLog("[core] startTUN: calling nativeTUN.Start with proxy=" + "127.0.0.1:" + listenPort)
+	proxyAddr := "127.0.0.1:" + listenPort
+	if err = r.nativeTUN.Start(r.ruleManager.GetTUNConfig(), proxyAddr); err != nil {
+		writeCoreMarker(r.execDir, "start_tun", markerDetail("nativeTUN.Start failed: %v", err))
+		r.appendLog("[core] startTUN: nativeTUN.Start failed: " + err.Error())
 		return err
 	}
-	writeCoreMarker(r.execDir, "start_tun", "after externalTUN.Start")
-	r.appendLog("[core] external mihomo tun started")
+	writeCoreMarker(r.execDir, "start_tun", "after nativeTUN.Start")
+	r.appendLog("[core] native sing-tun started, status=" + fmt.Sprintf("%v", r.nativeTUN.Status().Running))
+	// 通知 ProxyServer 启用 TUN 模式，出站连接绑物理网卡
+	r.proxyServer.SetTUNMode(true)
 	return nil
 }
 
 func (r *coreRuntime) stopTUN() error {
 	r.setTUNStartState(false, nil)
-	if r.externalTUN == nil {
-		return fmt.Errorf("external mihomo manager is not initialized")
+	if r.nativeTUN == nil {
+		return fmt.Errorf("native TUN manager is not initialized")
 	}
-	if err := r.externalTUN.Stop(r.appendLog); err != nil {
+	// 通知 ProxyServer 退出 TUN 模式
+	r.proxyServer.SetTUNMode(false)
+	if err := r.nativeTUN.Stop(); err != nil {
 		return err
 	}
-	r.appendLog("[core] external mihomo tun stopped")
+	r.appendLog("[core] native sing-tun stopped")
 	return nil
 }
 
 func (r *coreRuntime) getTUNStatus() proxy.TUNStatus {
 	var status proxy.TUNStatus
-	if r.externalTUN != nil {
-		status = r.externalTUN.Status(r.ruleManager.GetTUNConfig())
+	if r.nativeTUN != nil {
+		status = r.nativeTUN.Status()
+		r.appendLog(fmt.Sprintf("[core] getTUNStatus: Running=%v, Message=%s", status.Running, status.Message))
 	} else {
 		status = proxy.TUNStatus{
 			Supported: false,
 			Enabled:   false,
 			Running:   false,
-			Message:   "External Mihomo TUN is not initialized",
+			Message:   "Native TUN is not initialized",
 		}
 	}
 

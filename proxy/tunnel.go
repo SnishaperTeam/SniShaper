@@ -44,10 +44,9 @@ func (p *ProxyServer) handleConnect(w http.ResponseWriter, req *http.Request, ru
 
 	cr := p.prepareConnect(targetHost, targetAddr, rule)
 
-	if cr.effectiveMode == "direct" {
-		p.directConnect(w, req)
-		return
-	}
+	// direct 模式不再特殊处理，统一走 dialUpstream + handleTransparent 路径
+	// 这样直连也用 DoH 解析器选 IP（而非系统 DNS，避免 TUN 模式下系统 DNS 进 TUN 死循环）
+	// 且 IPv4 优先，避免 IPv6 成为唯一候选
 
 
 
@@ -155,6 +154,17 @@ func (p *ProxyServer) directConnect(w http.ResponseWriter, req *http.Request) {
 		Timeout:   10 * time.Second,
 		KeepAlive: 30 * time.Second,
 	}
+
+	// TUN 模式下绑定物理网卡，避免出站流量被 TUN 捕获
+	p.mu.RLock()
+	tunMode := p.tunMode
+	p.mu.RUnlock()
+	if tunMode {
+		if localAddr := p.getPhysicalLocalAddr(targetAddr); localAddr != nil {
+			dialer.LocalAddr = localAddr
+		}
+	}
+
 	conn, err := dialer.Dial("tcp", targetAddr)
 	if err != nil {
 		http.Error(w, "Failed to connect", http.StatusBadGateway)

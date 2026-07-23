@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback, useDeferredValue } from 'react';
 import {
-  FileText, Trash2, Pause, Play, Search, ChevronsUp, Radio, ArrowDown
+  FileText, Trash2, Pause, Play, Search, ChevronsUp, Radio, ArrowDown, Download
 } from '../lib/icons';
 import {
   ClearLogs, GetRecentLogs, IsLogCaptureEnabled,
@@ -133,6 +133,19 @@ const Logs: React.FC = () => {
   const handleClear = async () => { await ClearLogs(); setLines([]); prevRef.current = ''; };
   const handleScrollTop = () => { if (scrollRef.current) scrollRef.current.scrollTop = 0; };
 
+  const handleExport = () => {
+    const content = filteredLines.join('\n');
+    const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `snishaper-logs-${new Date().toISOString().slice(0, 19).replace(/[T:]/g, '-')}.txt`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+
   const renderedContent = useMemo(() => {
     if (!captureEnabled || filteredLines.length === 0) return null;
     let lastDate = '';
@@ -171,6 +184,10 @@ const Logs: React.FC = () => {
           <Button onClick={handleClear} variant="ghost" size="sm"
             className="hover:bg-danger/10 hover:text-danger" icon={<Trash2 size={14} />}>
             {t('logs.clear')}
+          </Button>
+          <Button onClick={handleExport} disabled={!captureEnabled || filteredLines.length === 0}
+            variant="ghost" size="sm" icon={<Download size={14} />}>
+            {t('logs.export')}
           </Button>
         </div>
       </header>
