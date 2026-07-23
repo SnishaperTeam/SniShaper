@@ -26,6 +26,17 @@ func main() {
 		return
 	}
 
+	if app.HasLaunchArg("--elevated") {
+		// Already elevated, continue
+	} else if !core.IsProcessElevated() {
+		// ponytail: auto-elevate with runas, no re-arguing
+		if err := core.ElevateSelf(); err != nil {
+			log.Printf("[main] Auto-elevate failed: %v, continuing without admin", err)
+		} else {
+			return // elevated instance will start
+		}
+	}
+
 	app.RecoverBrokenSingleInstance("com.snishaper.desktop")
 
 	a := app.NewApp()

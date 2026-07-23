@@ -44,6 +44,7 @@ type App struct {
 	cancel            context.CancelFunc
 	launchedAtStartup bool
 	core              *core.CoreClient
+	tunRestoreSysProxy bool
 }
 
 // SetWailsApp sets the wails application instance.

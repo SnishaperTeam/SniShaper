@@ -124,7 +124,6 @@ func (a *App) applySystemProxySync(enabled bool, port int, sync bool) error {
 			a.appendLog("[error] Sync ApplySystemProxy failed: " + err.Error())
 		}
 		a.UpdateTrayMenu()
-		a.refreshTrayMenuLater(300 * time.Millisecond)
 		a.emitFrontendState()
 		return err
 	}
@@ -136,7 +135,6 @@ func (a *App) applySystemProxySync(enabled bool, port int, sync bool) error {
 			a.appendLog("[error] Async ApplySystemProxy failed: " + err.Error())
 		}
 		a.UpdateTrayMenu()
-		a.refreshTrayMenuLater(300 * time.Millisecond)
 		a.emitFrontendState()
 	}()
 

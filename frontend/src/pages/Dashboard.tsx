@@ -45,6 +45,7 @@ const Dashboard: React.FC = () => {
   const [proxyMode, setProxyMode] = useState('MITM');
   const [port, setPort] = useState(8080);
   const [isOperating, setIsOperating] = useState(false);
+  const operatingRef = useRef(false);
   const [isActive, setIsActive] = useState(true);
   const [isPageVisible, setIsPageVisible] = useState(true);
   const inactivityTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -135,7 +136,16 @@ const Dashboard: React.FC = () => {
       if (typeof state.systemProxyActive === 'boolean') setSysProxyEnabled(state.systemProxyActive);
       if (typeof state.proxyMode === 'string') setProxyMode(state.proxyMode.toUpperCase());
       if (typeof state.tunRunning === 'boolean') {
-        setTunStatus(prev => ({ ...prev, running: state.tunRunning, enabled: state.tunRunning }));
+        setTunStatus((prev: any) => ({ ...prev, running: state.tunRunning, enabled: state.tunRunning }));
+        if (state.tunRunning) setIsTUNBusy(false);
+      }
+      if (typeof state.tunMessage === 'string') {
+        setTunStatus((prev: any) => ({ ...prev, message: state.tunMessage }));
+        // Clear TUN busy state on error (non-startup, non-off messages)
+        if (!state.tunRunning && state.tunMessage && state.tunMessage !== 'TUN is not running') {
+          setIsTUNBusy(false);
+          toast.error(t('dashboard.notifications.tun_failed'), state.tunMessage);
+        }
       }
       // Force full refresh immediately to catch any missed states
       setTimeout(refresh, 50);
@@ -148,27 +158,37 @@ const Dashboard: React.FC = () => {
   }, [isActive, isPageVisible]);
 
   const handleToggleProxy = async () => {
-    if (isOperating) return;
+    if (operatingRef.current) return;
+    operatingRef.current = true;
     setIsOperating(true);
     try {
       if (proxyRunning) await StopProxy();
       else await StartProxy();
-      await new Promise(r => setTimeout(r, 100));
-      await refresh();
-    } catch (err) { console.error("Failed to toggle proxy:", err);
-    } finally { setIsOperating(false); }
+    } catch (err) {
+      console.error("[UI] Failed to toggle proxy:", err);
+      toast.error('代理操作失败', extractErrorMessage(err));
+    } finally {
+      refresh();
+      operatingRef.current = false;
+      setIsOperating(false);
+    }
   };
 
   const handleToggleSysProxy = async () => {
-    if (isOperating) return;
+    if (operatingRef.current) return;
+    operatingRef.current = true;
     setIsOperating(true);
     try {
       if (sysProxyEnabled) await DisableSystemProxy();
       else await EnableSystemProxy();
-      await new Promise(r => setTimeout(r, 100));
-      await refresh();
-    } catch (err) { console.error("Failed to toggle system proxy:", err);
-    } finally { setIsOperating(false); }
+    } catch (err) {
+      console.error("[UI] Failed to toggle system proxy:", err);
+      toast.error('系统代理操作失败', extractErrorMessage(err));
+    } finally {
+      refresh();
+      operatingRef.current = false;
+      setIsOperating(false);
+    }
   };
 
   const handleToggleTUN = async () => {
@@ -176,20 +196,20 @@ const Dashboard: React.FC = () => {
     setIsTUNBusy(true);
     const nextEnabled = !tunStatus.running;
     try {
-      if (nextEnabled) await StartTUN();
-      else await StopTUN();
-      await new Promise(r => setTimeout(r, nextEnabled ? 200 : 100));
-      const state = await refresh();
-      const running = Boolean(state?.tunState?.running);
-      if (nextEnabled && !running) {
-        toast.error(t('dashboard.notifications.tun_not_running'), String(state?.tunState?.message || 'TUN 配置已启用，但运行状态仍为关闭。'));
-        return;
+      if (nextEnabled) {
+        await StartTUN();
+        toast.success(t('dashboard.notifications.tun_updated'), 'TUN 启动中，请稍候...');
+      } else {
+        await StopTUN();
+        toast.success(t('dashboard.notifications.tun_updated'), '已关闭 TUN 路径。');
+        refresh();
+        setIsTUNBusy(false);
       }
-      toast.success(t('dashboard.notifications.tun_updated'), nextEnabled ? 'TUN 已进入运行态。' : '已关闭 TUN 路径。');
     } catch (err) {
-      await refresh();
       toast.error(t('dashboard.notifications.tun_failed'), extractErrorMessage(err));
-    } finally { setIsTUNBusy(false); }
+      refresh();
+      setIsTUNBusy(false);
+    }
   };
 
   const handleInstallCA = async () => {

@@ -199,16 +199,22 @@ func (c *CoreClient) GetStats() (int64, int64, int64) {
 }
 
 func (c *CoreClient) StartTUN() error {
-	// sing-tun 内置 wintun，无需检查外部 wintun.dll
-	if err := c.ensureRunningWithElevation(true); err != nil {
-		return fmt.Errorf("ensure elevated core failed: %w", err)
+	// Fast check: is the core already elevated? If not, tell user to restart as admin instead of
+	// attempting a costly restart-with-elevation that can hang on UAC for 15+ seconds.
+	var info CoreInfoReply
+	if err := c.Call("Core.GetInfo", EmptyArgs{}, &info); err != nil {
+		return fmt.Errorf("core not reachable: %w", err)
 	}
+	if !info.Elevated {
+		return fmt.Errorf("TUN 需要管理员权限，请以管理员身份重新运行 SniShaper")
+	}
+
 	var empty EmptyArgs
 	if err := c.Call("Core.StartTUN", EmptyArgs{}, &empty); err != nil {
 		return fmt.Errorf("Core.StartTUN RPC failed: %w", err)
 	}
 
-	deadline := time.Now().Add(15 * time.Second)
+	deadline := time.Now().Add(10 * time.Second)
 	var lastStatus proxy.TUNStatus
 	for time.Now().Before(deadline) {
 		time.Sleep(500 * time.Millisecond)
@@ -233,7 +239,7 @@ func (c *CoreClient) StartTUN() error {
 	if strings.TrimSpace(lastStatus.Message) != "" {
 		return fmt.Errorf("TUN startup failed: %s", strings.TrimSpace(lastStatus.Message))
 	}
-	return fmt.Errorf("TUN did not enter running state")
+	return fmt.Errorf("TUN did not enter running state (10s timeout)")
 }
 
 func (c *CoreClient) StopTUN() error {

@@ -348,7 +348,7 @@ if ($choice -eq "2" -or $choice -eq "3") {
         New-Item -ItemType Directory -Path $BuildBinPath -Force | Out-Null
     }
     
-    go build -ldflags="-s -w -H windowsgui" -o "$BuildBinPath\snishaper.exe" .
+    go build -tags with_gvisor -ldflags="-s -w -H windowsgui" -o "$BuildBinPath\snishaper.exe" .
     if ($LASTEXITCODE -ne 0) {
         Write-Host $messages["$($lang)_BackErrBuild"] -ForegroundColor Red
         if (-not $Silent) { Read-Host $messages["$($lang)_Exit"] }

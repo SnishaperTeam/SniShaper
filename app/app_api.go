@@ -119,7 +119,6 @@ func (a *App) StartProxy() error {
 	if a.core != nil {
 		err := a.core.StartProxy()
 		a.UpdateTrayMenu()
-		a.refreshTrayMenuLater(300*time.Millisecond, time.Second)
 		a.emitFrontendState()
 		return err
 	}
@@ -181,7 +180,6 @@ func (a *App) StartProxy() error {
 	addr := a.proxyServer.GetListenAddr()
 	if err := a.waitForProxyListen(addr, 2*time.Second); err != nil {
 		_ = a.proxyServer.Stop()
-		a.refreshTrayMenuLater(200 * time.Millisecond)
 		a.appendLog("[error] StartProxy self-check failed: " + err.Error())
 		return fmt.Errorf("proxy started but not listening on %s: %w", addr, err)
 	}
@@ -192,7 +190,6 @@ func (a *App) StartProxy() error {
 		_ = a.applySystemProxy(true, availablePort)
 	}
 
-	a.refreshTrayMenuLater(200 * time.Millisecond)
 	a.appendLog("[action] StartProxy success")
 	a.emitFrontendState()
 	return nil
@@ -205,7 +202,6 @@ func (a *App) StopProxy() error {
 	if a.core != nil {
 		err := a.core.StopProxy()
 		a.UpdateTrayMenu()
-		a.refreshTrayMenuLater(300*time.Millisecond, time.Second)
 		a.emitFrontendState()
 		return err
 	}
@@ -226,7 +222,6 @@ func (a *App) StopProxy() error {
 	}
 
 	a.UpdateTrayMenu()
-	a.refreshTrayMenuLater(200 * time.Millisecond)
 	a.emitFrontendState()
 
 	if len(errs) > 0 {
@@ -276,7 +271,6 @@ func (a *App) restartProxy() error {
 			return err
 		}
 		a.UpdateTrayMenu()
-		a.refreshTrayMenuLater(300*time.Millisecond, time.Second)
 		a.emitFrontendState()
 		return nil
 	}
@@ -289,7 +283,6 @@ func (a *App) restartProxy() error {
 		return err
 	}
 	a.UpdateTrayMenu()
-	a.refreshTrayMenuLater(300*time.Millisecond, time.Second)
 	a.emitFrontendState()
 	return nil
 }
@@ -427,29 +420,54 @@ func (a *App) StartTUN() error {
 	}
 
 	a.appendLog("[action] StartTUN called")
+
+	// Disable managed system proxy before TUN to avoid port/resource conflicts
+	status := a.GetSystemProxyStatus()
+	if status.Enabled && a.isManagedSystemProxy(status) {
+		a.appendLog("[action] StartTUN: disabling managed system proxy before TUN")
+		if err := a.applySystemProxy(false, 0); err != nil {
+			a.appendLog("[warn] StartTUN: failed to disable system proxy: " + err.Error())
+		}
+		a.tunRestoreSysProxy = true
+	}
+
 	captureEnabled := a.IsLogCaptureEnabled()
 
-	err := a.core.StartTUN()
-	if err == nil && captureEnabled {
-		_ = a.core.StartLogCapture()
-	}
-	a.emitFrontendState()
-	if err != nil {
-		a.appendLog("[error] StartTUN failed: " + err.Error())
-	}
-	return err
+	a.runSafeAsync("start TUN", func() {
+		err := a.core.StartTUN()
+		if err == nil && captureEnabled {
+			_ = a.core.StartLogCapture()
+		}
+		if err != nil {
+			a.appendLog("[error] StartTUN failed: " + err.Error())
+		}
+		a.emitFrontendState()
+	})
+	return nil
 }
 
 func (a *App) StopTUN() error {
-	if a.core != nil {
-		err := a.core.StopTUN()
-		a.emitFrontendState()
-		if err != nil {
-			a.appendLog("[error] StopTUN failed: " + err.Error())
-		}
-		return err
+	if a.core == nil {
+		return fmt.Errorf("core client not initialized")
 	}
-	return fmt.Errorf("core client not initialized")
+
+	err := a.core.StopTUN()
+	if err != nil {
+		a.appendLog("[error] StopTUN failed: " + err.Error())
+	}
+
+	// Restore system proxy if it was disabled for TUN
+	if a.tunRestoreSysProxy {
+		a.tunRestoreSysProxy = false
+		port := a.GetListenPort()
+		a.appendLog(fmt.Sprintf("[action] StopTUN: restoring managed system proxy on :%d", port))
+		if err2 := a.applySystemProxy(true, port); err2 != nil {
+			a.appendLog("[error] StopTUN: failed to restore system proxy: " + err2.Error())
+		}
+	}
+
+	a.emitFrontendState()
+	return err
 }
 
 func (a *App) ExportCert() string {
