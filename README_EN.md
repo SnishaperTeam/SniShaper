@@ -17,13 +17,12 @@
 ## Features
 
 - **Multi-Mode Proxy**: MITM, Transparent, TLS-RF (TLS Fragmentation), QUIC, Migration (session persistence), Direct — covering diverse scenarios.
-- **TUN Virtual NIC**: Native TUN support for global traffic hijacking, auto-routing, and DNS hijacking.
+- **TUN Virtual NIC**: Native TUN support for transparent global traffic hijacking, auto-routing, and DNS hijacking.
 - **ECH Injection**: Automatically fetches and injects ECH Config, with DoH discovery and hot-reload.
 - **Smart Routing**: Auto-identifies blocked domains based on GFWList; auto-routing engine handles most sites without manual config.
-- **DoH Encrypted DNS**: Built-in anti-pollution DNS resolver with multi-node failover.
+- **Encrypted DNS**: Built-in anti-pollution DNS resolver with multi-node failover.
 - **Cloudflare IP Pool**: Auto-speedtest, health check, and refresh.
-- **SOCKS5 Proxy**: Built-in SOCKS5 server with independent port support.
-- **NAT64 Translation**: Automatic IPv4 address translation on pure IPv6 networks.
+- **NAT64 Support**: Flexible IP egress and service access.
 
 ---
 
@@ -33,7 +32,7 @@
 Download the [latest version](https://github.com/SniShaper/SniShaper/releases) and run `snishaper.exe`. The app automatically requests admin elevation (required for TUN mode). If elevation fails, TUN is unavailable but other features work normally.
 
 ### 2. Certificate Reinstallation
-Click "Certificate Management" -> "**Click to Reinstall Certificate**" in the main interface.
+Click "Certificate Management" -> "**Click to Reset Root Certificate**" in the main interface.
 
 ### 3. Configure and Start
 The software includes a rich set of official rules. You can also customize your own rules in the "Rule Panel" based on actual conditions, and finally click "**Start Proxy**".
@@ -47,7 +46,6 @@ For more detailed technical principles, deployment tutorials, and customization 
 - **[Core Mode Introduction](https://github.com/SniShaper/SniShaper/wiki/Core-Proxy-Modes)**: Learn about the operation principles of TLS-RF, QUIC, and Server modes.
 - **[Rule Customization Guide](https://github.com/SniShaper/SniShaper/wiki/Custom-Rules-Guide)**: Learn how to develop targeted rules.
 - **[Interface Configuration Practice](https://github.com/SniShaper/SniShaper/wiki/GUI-Configuration)**: Learn how to quickly configure rules in the GUI.
-- **[Server Deployment](https://github.com/SniShaper/SniShaper/wiki/Server-Deployment)**: Set up your own Server node on CF Workers or VPS.
 - **[Common Troubleshooting](https://github.com/SniShaper/SniShaper/wiki/FAQ)**: Resolve certificate warnings, ineffective rules, and other common issues.
 
 ---
@@ -83,14 +81,14 @@ go build -tags with_gvisor -ldflags="-s -w" -o "build/bin/snishaper.exe"
 
 `build_windows.ps1` supports the following parameters to skip interactive prompts:
 
-| Parameter | Values | Description |
-|-----------|--------|-------------|
-| `-Build` | `frontend` / `backend` / `all` | Specify build target |
-| `-Lang` | `en` / `cn` / `ru` | Specify interface language |
-| `-InstallDeps` | No value (switch) | Install frontend npm dependencies |
-| `-BuildMsix` | No value (switch) | Build MSIX installation package |
-| `-SkipSign` | No value (switch) | Skip MSIX signing, output file will have `unsigned_` prefix (requires `-BuildMsix`) |
-| `-Silent` | No value (switch) | Silent mode, skip all interactive prompts |
+| Parameter     | Values                         | Description                                                         |
+| ------------- | ------------------------------ | ------------------------------------------------------------------- |
+| `-Build`      | `frontend` / `backend` / `all` | Specify build target                                                |
+| `-Lang`       | `en` / `cn` / `ru`             | Specify interface language                                          |
+| `-InstallDeps` | No value (switch)              | Install frontend npm dependencies                                   |
+| `-BuildMsix`  | No value (switch)              | Build MSIX installation package                                     |
+| `-SkipSign`   | No value (switch)              | Skip MSIX signing, output file will have `unsigned_` prefix (requires `-BuildMsix`) |
+| `-Silent`     | No value (switch)              | Silent mode, skip all interactive prompts                          |
 
 **Usage examples:**
 
@@ -142,15 +140,14 @@ This project has benefited from the inspiration of the following excellent open-
 
 - [DoH-ECH-Demo](https://github.com/0xCaner/DoH-ECH-Demo)
 - [lumine](https://github.com/moi-si/lumine)
-- [usque](https://github.com/Diniboy1123/usque)
 
 ## Contributors
 
 Thanks to the following contributors for their contributions to this repository:
 
 | <a href="https://github.com/mechrevo"><img src="https://avatars.githubusercontent.com/mechrevo" width="40" height="40" style="border-radius: 50%;" alt="mechrevo" /></a> | <a href="https://github.com/dongzheyu"><img src="https://avatars.githubusercontent.com/dongzheyu" width="40" height="40" style="border-radius: 50%;" alt="dongzheyu" /></a> | <a href="https://github.com/JetCPP-dongle"><img src="https://avatars.githubusercontent.com/JetCPP-dongle" width="40" height="40" style="border-radius: 50%;" alt="JetCPP-dongle" /></a> |
-| :---: | :---: | :---: |
-| [mechrevo](https://github.com/mechrevo) | [dongzheyu](https://github.com/dongzheyu) | [JetCPP-dongle](https://github.com/JetCPP-dongle) |
+| :----------------------------------------------------------: | :----------------------------------------------------------: | :----------------------------------------------------------: |
+|           [mechrevo](https://github.com/mechrevo)            |          [dongzheyu](https://github.com/dongzheyu)           |      [JetCPP-dongle](https://github.com/JetCPP-dongle)       |
 ## Star History
 
 <a href="https://www.star-history.com/?repos=snishaper/snishaper&type=date&legend=top-left">

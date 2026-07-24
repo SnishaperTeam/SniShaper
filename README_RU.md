@@ -10,20 +10,19 @@
 [![GitHub last commit](https://img.shields.io/github/last-commit/SniShaper/SniShaper?style=flat-square&logo=git)](https://github.com/SniShaper/SniShaper/commits/main)
 [![GitHub Actions Workflow Status](https://img.shields.io/github/actions/workflow/status/SniShaper/SniShaper/build.yml?style=flat-square&logo=githubactions&label=CI)](https://github.com/SniShaper/SniShaper/actions)
 
-**SniShaper** — это локальный прокси-инструмент, разработанный специально для сложных сетевых условий. Он интегрирует различные технологии обхода блокировок, включая **инъекцию ECH**, **фрагментацию TLS-RF**, **реконструкцию соединений QUIC** и **легковесное проксирование в режиме сервера**, обеспечивая стабильный доступ в интернет.
+**SniShaper** — это локальный прокси-инструмент, разработанный специально для сложных сетевых условий, интегрирующий **инъекцию ECH**, **фрагментацию TLS-RF**, **маскировку QUIC**, **миграцию сессий** и другие технологии стека протоколов, в сочетании с **виртуальным TUN-интерфейсом** для полного перехвата трафика, обеспечивая стабильный и гибкий доступ в интернет.
 
 ---
 
 ## Возможности
 
 - **Многорежимное прокси**: MITM, Transparent, TLS-RF (фрагментация TLS), QUIC, Migration (перенос сессий), Direct — для различных сценариев.
-- **TUN виртуальный сетевой адаптер**: нативная поддержка TUN для глобального перехвата трафика, авто-маршрутизации и перехвата DNS.
+- **TUN виртуальный сетевой адаптер**: нативная поддержка TUN для прозрачного глобального перехвата трафика, авто-маршрутизации и перехвата DNS.
 - **Инъекция ECH**: автоматическое получение и внедрение ECH Config с DoH-обнаружением и горячей заменой.
 - **Интеллектуальная маршрутизация**: автоматическое определение заблокированных доменов на основе GFWList без ручной настройки.
-- **DoH шифрованный DNS**: встроенный защищённый DNS-резолвер с балансировкой узлов.
+- **Шифрованный DNS**: встроенный защищённый DNS-резолвер с балансировкой узлов.
 - **Cloudflare IP пул**: автоматическое измерение скорости, проверка работоспособности и обновление.
-- **SOCKS5 прокси**: встроенный SOCKS5 сервер с поддержкой отдельного порта.
-- **NAT64 трансляция**: автоматическое преобразование IPv4-адресов в чистых IPv6-сетях.
+- **NAT64 поддержка**: гибкий IP-выход и доступ к сервисам.
 
 ---
 
@@ -33,7 +32,7 @@
 Скачайте [последнюю версию](https://github.com/SniShaper/SniShaper/releases) и запустите `snishaper.exe`. Приложение автоматически запрашивает права администратора (требуются для TUN). Если повышение прав не удалось, TUN недоступен, но остальные функции работают.
 
 ### 2. Переустановка сертификата
-В главном интерфейсе нажмите «Управление сертификатами» -> «**Нажмите для переустановки сертификата**».
+В главном интерфейсе нажмите «Управление сертификатами» -> «**Нажмите для сброса корневого сертификата**».
 
 ### 3. Настройка и запуск
 Программное обеспечение поставляется с богатым набором официальных правил. Вы также можете настроить собственные правила на панели правил и нажать кнопку «**Запустить прокси**».
@@ -47,7 +46,6 @@
 - **[Основные режимы прокси](https://github.com/SniShaper/SniShaper/wiki/Core-Proxy-Modes)**: понимание принципов работы TLS-RF, QUIC и серверного режима.
 - **[Руководство по правилам](https://github.com/SniShaper/SniShaper/wiki/Custom-Rules-Guide)**: как разрабатывать целевые правила.
 - **[Настройка GUI](https://github.com/SniShaper/SniShaper/wiki/GUI-Configuration)**: быстрая настройка правил в интерфейсе.
-- **[Развертывание сервера](https://github.com/SniShaper/SniShaper/wiki/Server-Deployment)**: настройка собственного серверного узла на CF Workers или VPS.
 - **[Устранение неполадок](https://github.com/SniShaper/SniShaper/wiki/FAQ)**: решение проблем с сертификатами, правилами и другим.
 
 ---
@@ -83,14 +81,14 @@ go build -tags with_gvisor -ldflags="-s -w" -o "build/bin/snishaper.exe"
 
 `build_windows.ps1` поддерживает следующие параметры для пропуска интерактивных запросов:
 
-| Параметр | Значения | Описание |
-|----------|----------|----------|
-| `-Build` | `frontend` / `backend` / `all` | Цель сборки |
-| `-Lang` | `en` / `cn` / `ru` | Язык интерфейса |
-| `-InstallDeps` | без значений (флаг) | Установить npm зависимости |
-| `-BuildMsix` | без значений (флаг) | Собрать MSIX-пакет |
-| `-SkipSign` | без значений (флаг) | Пропустить подпись MSIX, выходной файл будет иметь префикс `unsigned_` (требуется `-BuildMsix`) |
-| `-Silent` | без значений (флаг) | Тихий режим, пропуск всех интерактивных запросов |
+| Параметр     | Значения                         | Описание                                                         |
+| ------------ | -------------------------------- | ---------------------------------------------------------------- |
+| `-Build`     | `frontend` / `backend` / `all`   | Цель сборки                                                      |
+| `-Lang`      | `en` / `cn` / `ru`               | Язык интерфейса                                                  |
+| `-InstallDeps` | без значений (флаг)              | Установить npm зависимости                                       |
+| `-BuildMsix` | без значений (флаг)              | Собрать MSIX-пакет                                               |
+| `-SkipSign`  | без значений (флаг)              | Пропустить подпись MSIX, выходной файл будет иметь префикс `unsigned_` (требуется `-BuildMsix`) |
+| `-Silent`    | без значений (флаг)              | Тихий режим, пропуск всех интерактивных запросов                 |
 
 **Примеры использования:**
 
@@ -142,15 +140,14 @@ go build -tags with_gvisor -ldflags="-s -w" -o "build/bin/snishaper.exe"
 
 - [DoH-ECH-Demo](https://github.com/0xCaner/DoH-ECH-Demo)
 - [lumine](https://github.com/moi-si/lumine)
-- [usque](https://github.com/Diniboy1123/usque)
 
 ## Участники
 
 Благодарим следующих участников за их вклад в этот репозиторий:
 
 | <a href="https://github.com/mechrevo"><img src="https://avatars.githubusercontent.com/mechrevo" width="40" height="40" style="border-radius: 50%;" alt="mechrevo" /></a> | <a href="https://github.com/dongzheyu"><img src="https://avatars.githubusercontent.com/dongzheyu" width="40" height="40" style="border-radius: 50%;" alt="dongzheyu" /></a> | <a href="https://github.com/JetCPP-dongle"><img src="https://avatars.githubusercontent.com/JetCPP-dongle" width="40" height="40" style="border-radius: 50%;" alt="JetCPP-dongle" /></a> |
-| :---: | :---: | :---: |
-| [mechrevo](https://github.com/mechrevo) | [dongzheyu](https://github.com/dongzheyu) | [JetCPP-dongle](https://github.com/JetCPP-dongle) |
+| :----------------------------------------------------------: | :----------------------------------------------------------: | :----------------------------------------------------------: |
+|           [mechrevo](https://github.com/mechrevo)            |          [dongzheyu](https://github.com/dongzheyu)           |      [JetCPP-dongle](https://github.com/JetCPP-dongle)       |
 
 ## История звёзд
 
