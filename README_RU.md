@@ -10,13 +10,69 @@
 [![GitHub last commit](https://img.shields.io/github/last-commit/SniShaper/SniShaper?style=flat-square&logo=git)](https://github.com/SniShaper/SniShaper/commits/main)
 [![GitHub Actions Workflow Status](https://img.shields.io/github/actions/workflow/status/SniShaper/SniShaper/build.yml?style=flat-square&logo=githubactions&label=CI)](https://github.com/SniShaper/SniShaper/actions)
 
-**SniShaper** — это локальный прокси-инструмент, разработанный специально для сложных сетевых условий, интегрирующий **инъекцию ECH**, **фрагментацию TLS-RF**, **маскировку QUIC**, **миграцию сессий** и другие технологии стека протоколов, в сочетании с **виртуальным TUN-интерфейсом** для полного перехвата трафика, обеспечивая стабильный и гибкий доступ в интернет.
+**SniShaper** -- это локальный прокси-инструмент, разработанный специально для сложных сетевых условий, интегрирующий **инъекцию ECH**, **фрагментацию TLS**, **маскировку QUIC**, **миграцию сессий** и другие технологии стека протоколов, в сочетании с **виртуальным TUN-интерфейсом** для полного перехвата трафика, обеспечивая стабильный и гибкий доступ в интернет.
+
+---
+
+## Основной поток обработки запросов
+
+```mermaid
+flowchart TD
+    A[Запрос браузера/приложения] --> B[ProxyServer.handleRequest]
+    B --> C{Сопоставление правил matchRule}
+    C --> D[Получение Effective Mode]
+    D --> E{Тип запроса}
+    E -->|CONNECT| F[handleConnect]
+    E -->|HTTP| G[handleHTTP]
+    F --> H{Effective Mode}
+    H -->|mitm| I[handleMITM - Man-in-the-Middle]
+    H -->|tls-rf| J[handleTLSFragment - Фрагментация TLS]
+    H -->|quic| K[handleQUICMITM - QUIC туннель]
+    H -->|migration| L[handleMigration - API миграции сессий]
+    H -->|transparent/direct| M[handleTransparent - Сквозной туннель]
+    G --> N{Режим}
+    N -->|direct| O[transport.RoundTrip прямой прокси]
+    N -->|mitm/quic| P[HTTP to HTTPS редирект]
+    N -->|другие| Q[Upstream кандидат + RoundTrip]
+    I --> R[Целевой сервер]
+    J --> R
+    K --> R
+    L --> R
+    M --> R
+    O --> R
+    Q --> R
+```
+
+## Поток TUN виртуального сетевого адаптера
+
+```mermaid
+flowchart LR
+    A[Системный трафик] --> B[TUN виртуальный адаптер]
+    B --> C[PlanTUNFlow]
+    C --> D{Протокол}
+    D -->|UDP| E[UDP стратегия]
+    D -->|TCP| F[TCP обработка]
+    E --> G{Effective Mode}
+    G -->|quic| H[native-quic]
+    G -->|warp| I[warp]
+    G -->|другие| J[passthrough]
+    F --> K{Режим}
+    K -->|mitm/tls-rf| L[TCP туннель]
+    K -->|transparent| M[Прозрачная пересылка]
+    K -->|direct| N[Прямое соединение]
+    L --> O[Выход через физический сетевой адаптер]
+    M --> O
+    N --> O
+    H --> O
+    I --> O
+    J --> O
+```
 
 ---
 
 ## Возможности
 
-- **Многорежимное прокси**: MITM, Transparent, TLS-RF (фрагментация TLS), QUIC, Migration (перенос сессий), Direct — для различных сценариев.
+- **Многорежимное прокси**: MITM, Transparent, TLS-RF (фрагментация TLS), QUIC, Migration (перенос сессий), Direct -- для различных сценариев.
 - **TUN виртуальный сетевой адаптер**: нативная поддержка TUN для прозрачного глобального перехвата трафика, авто-маршрутизации и перехвата DNS.
 - **Инъекция ECH**: автоматическое получение и внедрение ECH Config с DoH-обнаружением и горячей заменой.
 - **Интеллектуальная маршрутизация**: автоматическое определение заблокированных доменов на основе GFWList без ручной настройки.
@@ -31,17 +87,21 @@
 ### 1. Запуск
 Скачайте [последнюю версию](https://github.com/SniShaper/SniShaper/releases) и запустите `snishaper.exe`. Приложение автоматически запрашивает права администратора (требуются для TUN). Если повышение прав не удалось, TUN недоступен, но остальные функции работают.
 
+<a href="https://apps.microsoft.com/detail/9n11mrrsfs8n" target="_self">
+<img src="https://get.microsoft.com/images/ru-ru%20dark.svg" width="200"/>
+</a>
+
 ### 2. Переустановка сертификата
-В главном интерфейсе нажмите «Управление сертификатами» -> «**Нажмите для сброса корневого сертификата**».
+В главном интерфейсе нажмите **Управление сертификатами -> Сбросить корневой сертификат**.
 
 ### 3. Настройка и запуск
-Программное обеспечение поставляется с богатым набором официальных правил. Вы также можете настроить собственные правила на панели правил и нажать кнопку «**Запустить прокси**».
+Программа поставляется с богатым набором встроенных правил. Вы также можете настроить собственные правила на панели правил и нажать **Запустить прокси**.
 
 ---
 
 ## Документация
 
-Для получения подробных технических принципов, руководств по развертыванию и настройке, пожалуйста, обратитесь к [**GitHub Wiki**](https://github.com/SniShaper/SniShaper/wiki):
+Для получения подробных технических принципов, руководств по развертыванию и настройке, обратитесь к [**GitHub Wiki**](https://github.com/SniShaper/SniShaper/wiki):
 
 - **[Основные режимы прокси](https://github.com/SniShaper/SniShaper/wiki/Core-Proxy-Modes)**: понимание принципов работы TLS-RF, QUIC и серверного режима.
 - **[Руководство по правилам](https://github.com/SniShaper/SniShaper/wiki/Custom-Rules-Guide)**: как разрабатывать целевые правила.
@@ -81,14 +141,14 @@ go build -tags with_gvisor -ldflags="-s -w" -o "build/bin/snishaper.exe"
 
 `build_windows.ps1` поддерживает следующие параметры для пропуска интерактивных запросов:
 
-| Параметр     | Значения                         | Описание                                                         |
-| ------------ | -------------------------------- | ---------------------------------------------------------------- |
-| `-Build`     | `frontend` / `backend` / `all`   | Цель сборки                                                      |
-| `-Lang`      | `en` / `cn` / `ru`               | Язык интерфейса                                                  |
-| `-InstallDeps` | без значений (флаг)              | Установить npm зависимости                                       |
-| `-BuildMsix` | без значений (флаг)              | Собрать MSIX-пакет                                               |
-| `-SkipSign`  | без значений (флаг)              | Пропустить подпись MSIX, выходной файл будет иметь префикс `unsigned_` (требуется `-BuildMsix`) |
-| `-Silent`    | без значений (флаг)              | Тихий режим, пропуск всех интерактивных запросов                 |
+| Параметр | Значения | Описание |
+| ------------ | -------------------------------- | ------------------------------------------------------------------ |
+| `-Build` | `frontend` / `backend` / `all` | Цель сборки |
+| `-Lang` | `en` / `cn` / `ru` | Язык интерфейса |
+| `-InstallDeps` | без значений (флаг) | Установить npm зависимости |
+| `-BuildMsix` | без значений (флаг) | Собрать MSIX-пакет |
+| `-SkipSign` | без значений (флаг) | Пропустить подпись MSIX, выходной файл будет иметь префикс `unsigned_` (требуется `-BuildMsix`) |
+| `-Silent` | без значений (флаг) | Тихий режим, пропуск всех интерактивных запросов |
 
 **Примеры использования:**
 
@@ -123,7 +183,7 @@ go build -tags with_gvisor -ldflags="-s -w" -o "build/bin/snishaper.exe"
 - `Go 1.25+`
 - `Node.js 24+`
 - `npm 11+`
-- `gVisor` (требуется для TUN режима)
+- `gVisor` (требуется для TUN режима, Linux: установить пакет `gvisor`)
 
 Результаты сборки:
 
@@ -131,7 +191,9 @@ go build -tags with_gvisor -ldflags="-s -w" -o "build/bin/snishaper.exe"
 - Исполняемый файл находится в `build/bin/snishaper.exe`
 
 ---
+
 ## Кроссплатформенность
+
 Программа поддерживает платформы Windows и Linux. Для версии Linux обратитесь к [Linux версия](https://github.com/dongzheyu/SniShaper-Linux/).
 
 ## Благодарности
@@ -147,19 +209,46 @@ go build -tags with_gvisor -ldflags="-s -w" -o "build/bin/snishaper.exe"
 
 | <a href="https://github.com/mechrevo"><img src="https://avatars.githubusercontent.com/mechrevo" width="40" height="40" style="border-radius: 50%;" alt="mechrevo" /></a> | <a href="https://github.com/dongzheyu"><img src="https://avatars.githubusercontent.com/dongzheyu" width="40" height="40" style="border-radius: 50%;" alt="dongzheyu" /></a> | <a href="https://github.com/JetCPP-dongle"><img src="https://avatars.githubusercontent.com/JetCPP-dongle" width="40" height="40" style="border-radius: 50%;" alt="JetCPP-dongle" /></a> |
 | :----------------------------------------------------------: | :----------------------------------------------------------: | :----------------------------------------------------------: |
-|           [mechrevo](https://github.com/mechrevo)            |          [dongzheyu](https://github.com/dongzheyu)           |      [JetCPP-dongle](https://github.com/JetCPP-dongle)       |
+| [mechrevo](https://github.com/mechrevo) | [dongzheyu](https://github.com/dongzheyu) | [JetCPP-dongle](https://github.com/JetCPP-dongle) |
 
 ## История звёзд
 
 <a href="https://www.star-history.com/?repos=snishaper/snishaper&type=date&legend=top-left">
-<picture>
-<source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/chart?repos=snishaper/snishaper&type=date&theme=dark&legend=top-left" />
-<source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/chart?repos=snishaper/snishaper&type=date&legend=top-left" />
-<img alt="Диаграмма истории звёзд" src="https://api.star-history.com/chart?repos=snishaper/snishaper&type=date&legend=top-left" />
-</picture>
+ <picture>
+   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/chart?repos=snishaper/snishaper&type=date&theme=dark&legend=top-left" />
+   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/chart?repos=snishaper/snishaper&type=date&legend=top-left" />
+   <img alt="Диаграмма истории звёзд" src="https://api.star-history.com/chart?repos=snishaper/snishaper&type=date&legend=top-left" />
+ </picture>
 </a>
 
 ---
+
+## Активность проекта и участники
+
+### Значки активности
+
+[![GitHub contributors](https://img.shields.io/github/contributors/SniShaper/SniShaper?style=flat-square&label=Всего участников)](https://github.com/SniShaper/SniShaper/graphs/contributors)
+[![GitHub commit activity](https://img.shields.io/github/commit-activity/m/SniShaper/SniShaper?style=flat-square&label=Коммитов в месяц)](https://github.com/SniShaper/SniShaper/graphs/contributors)
+[![GitHub last commit](https://img.shields.io/github/last-commit/SniShaper/SniShaper?style=flat-square&label=Последний коммит)](https://github.com/SniShaper/SniShaper/commits/main)
+
+### Тренд активности
+
+<div align="center">
+<a href="https://repobeats.axiom.co/" target="_blank">
+<img src="https://repobeats.axiom.co/api/embed/f62c98a5231da45588ee71f26e3c1cc3f64edb6b.svg" alt="Repobeats analytics" />
+</a>
+</div>
+
+### Основные участники
+
+<div align="center">
+<a href="https://github.com/SniShaper/SniShaper/graphs/contributors" target="_blank">
+<img src="https://contrib.rocks/image?repo=SniShaper/SniShaper" alt="Contributors" />
+</a>
+</div>
+
+---
+
 ## Лицензия
 
 [MIT License](LICENSE)

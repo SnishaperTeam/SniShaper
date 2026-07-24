@@ -10,7 +10,63 @@
 [![GitHub last commit](https://img.shields.io/github/last-commit/SniShaper/SniShaper?style=flat-square&logo=git)](https://github.com/SniShaper/SniShaper/commits/main)
 [![GitHub Actions Workflow Status](https://img.shields.io/github/actions/workflow/status/SniShaper/SniShaper/build.yml?style=flat-square&logo=githubactions&label=CI)](https://github.com/SniShaper/SniShaper/actions)
 
-**SniShaper** 是一款专为复杂网络环境设计的本地代理软件，通过 **ECH 注入**、**TLS 分片**、**QUIC 转换**、**会话迁移** 等多种功能，，在复杂网络环境下提升体验。
+**SniShaper** 是一款专为复杂网络环境设计的本地代理软件，通过 **ECH 注入**、**TLS 分片**、**QUIC 转换**、**会话迁移** 等多种功能，在复杂网络环境下提升体验。
+
+---
+
+## 核心请求处理流程
+
+```mermaid
+flowchart TD
+    A[浏览器/应用请求] --> B[ProxyServer.handleRequest]
+    B --> C{规则匹配 matchRule}
+    C --> D[获取 Effective Mode]
+    D --> E{请求类型}
+    E -->|CONNECT| F[handleConnect]
+    E -->|HTTP| G[handleHTTP]
+    F --> H{有效模式}
+    H -->|mitm| I[handleMITM - 中间人解密]
+    H -->|tls-rf| J[handleTLSFragment - TLS 分片]
+    H -->|quic| K[handleQUICMITM - QUIC 转换]
+    H -->|migration| L[handleMigration - 会话迁移 API]
+    H -->|transparent/direct| M[handleTransparent - 透传隧道]
+    G --> N{模式}
+    N -->|direct| O[transport.RoundTrip 直接代理]
+    N -->|mitm/quic| P[HTTP→HTTPS 重定向]
+    N -->|其他| Q[Upstream 候选拨号+RoundTrip]
+    I --> R[目标服务器]
+    J --> R
+    K --> R
+    L --> R
+    M --> R
+    O --> R
+    Q --> R
+```
+
+## TUN 虚拟网卡工作流程
+
+```mermaid
+flowchart LR
+    A[系统流量] --> B[TUN 虚拟网卡]
+    B --> C[PlanTUNFlow]
+    C --> D{协议判断}
+    D -->|UDP| E[UDPStrategy 处理]
+    D -->|TCP| F[TCP 处理]
+    E --> G{有效模式}
+    G -->|quic| H[native-quic]
+    G -->|warp| I[warp]
+    G -->|其他| J[passthrough]
+    F --> K{模式}
+    K -->|mitm/tls-rf| L[TCP 隧道]
+    K -->|transparent| M[透传转发]
+    K -->|direct| N[直连]
+    L --> O[物理网卡出站]
+    M --> O
+    N --> O
+    H --> O
+    I --> O
+    J --> O
+```
 
 ---
 
@@ -23,6 +79,7 @@
 - **加密 DNS**：内置抗污染 DNS 解析器，支持多节点故障转移。
 - **Cloudflare IP 优选池**：自动测速、健康检查与刷新。
 - **NAT64 支持**：更灵活的 IP 出口和服务访问。
+
 ---
 
 ## 快速开始
@@ -42,14 +99,14 @@
 
 ---
 
-## 文档 
+## 文档
 
 想要了解更详细的技术原理、部署教程和自定义指南，请参阅 [**GitHub Wiki**](https://github.com/SniShaper/SniShaper/wiki)：
 
--  **[核心模式介绍](https://github.com/SniShaper/SniShaper/wiki/Core-Proxy-Modes)**：了解 TLS-RF、QUIC 与 Server 模式的运行原理。
--  **[规则自定义指南](https://github.com/SniShaper/SniShaper/wiki/Custom-Rules-Guide)**：了解如何开发针对性的规则。
--  **[界面配置实操](https://github.com/SniShaper/SniShaper/wiki/GUI-Configuration)**：了解在GUI快速配置规则。
--  **[常见问题排除](https://github.com/SniShaper/SniShaper/wiki/FAQ)**：解决证书警告、规则不生效等常见问题。
+- **[核心模式介绍](https://github.com/SniShaper/SniShaper/wiki/Core-Proxy-Modes)**：了解 TLS-RF、QUIC 与 Server 模式的运行原理。
+- **[规则自定义指南](https://github.com/SniShaper/SniShaper/wiki/Custom-Rules-Guide)**：了解如何开发针对性的规则。
+- **[界面配置实操](https://github.com/SniShaper/SniShaper/wiki/GUI-Configuration)**：了解在 GUI 快速配置规则。
+- **[常见问题排除](https://github.com/SniShaper/SniShaper/wiki/FAQ)**：解决证书警告、规则不生效等常见问题。
 
 ---
 
@@ -76,7 +133,7 @@ powershell -ExecutionPolicy Bypass -File .\build_windows.ps1
 # 或使用 PowerShell 7
 pwsh -ExecutionPolicy Bypass -File .\build_windows.ps1
 
-# Go主程序编译（脚本会自动执行 go mod download）
+# Go 主程序编译（脚本会自动执行 go mod download）
 go build -tags with_gvisor -ldflags="-s -w" -o "build/bin/snishaper.exe"
 ```
 
@@ -84,14 +141,14 @@ go build -tags with_gvisor -ldflags="-s -w" -o "build/bin/snishaper.exe"
 
 `build_windows.ps1` 支持以下参数，可跳过交互式选择：
 
-| 参数           | 可选值                         | 说明                                                         |
+| 参数 | 可选值 | 说明 |
 | -------------- | ------------------------------ | ------------------------------------------------------------ |
-| `-Build`       | `frontend` / `backend` / `all` | 指定构建目标                                                 |
-| `-Lang`        | `en` / `cn` / `ru`             | 指定界面语言                                                 |
-| `-InstallDeps` | 无值（开关）                   | 安装前端 npm 依赖                                            |
-| `-BuildMsix`   | 无值（开关）                   | 构建 MSIX 安装包                                             |
-| `-SkipSign`    | 无值（开关）                   | 跳过 MSIX 签名，生成的文件添加 `unsigned_` 前缀（需配合 `-BuildMsix`） |
-| `-Silent`      | 无值（开关）                   | 静默模式，跳过所有交互提示                                   |
+| `-Build` | `frontend` / `backend` / `all` | 指定构建目标 |
+| `-Lang` | `en` / `cn` / `ru` | 指定界面语言 |
+| `-InstallDeps` | 无值（开关） | 安装前端 npm 依赖 |
+| `-BuildMsix` | 无值（开关） | 构建 MSIX 安装包 |
+| `-SkipSign` | 无值（开关） | 跳过 MSIX 签名，生成的文件添加 `unsigned_` 前缀（需配合 `-BuildMsix`） |
+| `-Silent` | 无值（开关） | 静默模式，跳过所有交互提示 |
 
 **用法示例：**
 
@@ -134,8 +191,11 @@ go build -tags with_gvisor -ldflags="-s -w" -o "build/bin/snishaper.exe"
 - 可执行文件位于 `build/bin/snishaper.exe`
 
 ---
+
 ## 跨平台
-本程序支持 Windows和Linux 平台，Linux版请参见[Linux版](https://github.com/dongzheyu/SniShaper-Linux/)
+
+本程序支持 Windows 和 Linux 平台，Linux 版请参见 [Linux版](https://github.com/dongzheyu/SniShaper-Linux/)。
+
 ## 致谢
 
 本项目受益于以下优秀开源项目的启发：
@@ -143,11 +203,14 @@ go build -tags with_gvisor -ldflags="-s -w" -o "build/bin/snishaper.exe"
 - [DoH-ECH-Demo](https://github.com/0xCaner/DoH-ECH-Demo)
 - [lumine](https://github.com/moi-si/lumine)
 
+## 贡献者
+
 感谢以下贡献者对本仓库的贡献：
 
 | <a href="https://github.com/mechrevo"><img src="https://avatars.githubusercontent.com/mechrevo" width="40" height="40" style="border-radius: 50%;" alt="mechrevo" /></a> | <a href="https://github.com/dongzheyu"><img src="https://avatars.githubusercontent.com/dongzheyu" width="40" height="40" style="border-radius: 50%;" alt="dongzheyu" /></a> | <a href="https://github.com/JetCPP-dongle"><img src="https://avatars.githubusercontent.com/JetCPP-dongle" width="40" height="40" style="border-radius: 50%;" alt="JetCPP-dongle" /></a> |
 | :----------------------------------------------------------: | :----------------------------------------------------------: | :----------------------------------------------------------: |
-|           [mechrevo](https://github.com/mechrevo)            |          [dongzheyu](https://github.com/dongzheyu)           |      [JetCPP-dongle](https://github.com/JetCPP-dongle)       |
+| [mechrevo](https://github.com/mechrevo) | [dongzheyu](https://github.com/dongzheyu) | [JetCPP-dongle](https://github.com/JetCPP-dongle) |
+
 ## 星标历史
 
 <a href="https://www.star-history.com/?repos=snishaper%2Fsnishaper&type=date&legend=top-left">
@@ -159,6 +222,33 @@ go build -tags with_gvisor -ldflags="-s -w" -o "build/bin/snishaper.exe"
 </a>
 
 ---
+
+## 项目活跃度与贡献者
+
+### 活跃度徽章
+
+[![GitHub contributors](https://img.shields.io/github/contributors/SniShaper/SniShaper?style=flat-square&label=总贡献者)](https://github.com/SniShaper/SniShaper/graphs/contributors)
+[![GitHub commit activity](https://img.shields.io/github/commit-activity/m/SniShaper/SniShaper?style=flat-square&label=月均提交)](https://github.com/SniShaper/SniShaper/graphs/contributors)
+[![GitHub last commit](https://img.shields.io/github/last-commit/SniShaper/SniShaper?style=flat-square&label=最近提交)](https://github.com/SniShaper/SniShaper/commits/main)
+
+### 综合活跃度趋势
+
+<div align="center">
+<a href="https://repobeats.axiom.co/" target="_blank">
+<img src="https://repobeats.axiom.co/api/embed/f62c98a5231da45588ee71f26e3c1cc3f64edb6b.svg" alt="Repobeats analytics" />
+</a>
+</div>
+
+### 核心贡献者
+
+<div align="center">
+<a href="https://github.com/SniShaper/SniShaper/graphs/contributors" target="_blank">
+<img src="https://contrib.rocks/image?repo=SniShaper/SniShaper" alt="Contributors" />
+</a>
+</div>
+
+---
+
 ## 许可
 
 [MIT License](LICENSE)
