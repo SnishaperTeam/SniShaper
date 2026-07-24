@@ -181,9 +181,11 @@ func (p *ProxyServer) handleMigration(clientConn net.Conn, host, port string, ru
 
 	// 2. Self-healing loop (max 2 attempts)
 	// Use persistent cache across requests, create if nil
-	if p.migrationCache == nil {
-		p.migrationCache = newMigrationSessionCache()
-	}
+	p.migrationCacheInitOnce.Do(func() {
+		if p.migrationCache == nil {
+			p.migrationCache = newMigrationSessionCache()
+		}
+	})
 	cache := p.migrationCache
 	var upstreamConn net.Conn
 
