@@ -199,7 +199,7 @@ func (p *ProxyServer) handleMigration(clientConn net.Conn, host, port string, ru
 			p.tracef("[Migration] Using cached ticket for %s", host)
 		} else {
 			// Fetch ticket from remote API
-			_, fetchedIP, apiErr := p.fetchMigrationTicket(cache, host, port, migrationServer, resolvedIP)
+			fetchedIP, apiErr := p.fetchMigrationTicket(cache, host, port, migrationServer, resolvedIP)
 			if apiErr != nil {
 				p.tracef("[Migration] Ticket fetch failed: %v", apiErr)
 				cache.setActiveHost("")
@@ -342,7 +342,7 @@ func (p *ProxyServer) resolveMigrationIP(host string, rule Rule) string {
 }
 
 // fetchMigrationTicket retrieves session credentials from the remote API.
-func (p *ProxyServer) fetchMigrationTicket(cache *migrationSessionCache, host, port, server, resolvedIP string) (*tls.ClientSessionState, string, error) {
+func (p *ProxyServer) fetchMigrationTicket(cache *migrationSessionCache, host, port, server, resolvedIP string) (string, error) {
 	target := net.JoinHostPort(host, port)
 	apiURL := fmt.Sprintf("%s?target=%s&ip=%s", server, target, resolvedIP)
 	p.tracef("[Migration] GET %s", apiURL)
@@ -350,29 +350,29 @@ func (p *ProxyServer) fetchMigrationTicket(cache *migrationSessionCache, host, p
 	httpClient := &http.Client{Timeout: 15 * time.Second}
 	req, err := http.NewRequest(http.MethodGet, apiURL, nil)
 	if err != nil {
-		return nil, "", err
+		return "", err
 	}
 	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36")
 
 	resp, err := httpClient.Do(req)
 	if err != nil {
-		return nil, "", err
+		return "", err
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
-		return nil, "", fmt.Errorf("API %d: %s", resp.StatusCode, string(body))
+		return "", fmt.Errorf("API %d: %s", resp.StatusCode, string(body))
 	}
 
 	var sessionResp migrationSessionResponse
 	if err := json.NewDecoder(resp.Body).Decode(&sessionResp); err != nil {
-		return nil, "", err
+		return "", err
 	}
 
 	cs, err := buildMigrationSessionState(sessionResp)
 	if err != nil {
-		return nil, "", err
+		return "", err
 	}
 	cache.setSession(host, cs)
-	return cs, sessionResp.TargetIP, nil
+	return sessionResp.TargetIP, nil
 }
