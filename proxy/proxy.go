@@ -213,6 +213,7 @@ type ProxyServer struct {
 	// migrationCache holds persistent session tickets for migration mode,
 	// keyed by host name. Tickets are reused across requests until they fail.
 	migrationCache *migrationSessionCache
+	migrationCacheInitOnce sync.Once
 
 	// tunMode indicates TUN is active, outbound connections should bind physical NIC
 	tunMode bool

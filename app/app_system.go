@@ -16,7 +16,7 @@ func (a *App) isManagedSystemProxy(status SystemProxyStatus) bool {
 	if !status.Enabled {
 		return false
 	}
-	expected := fmt.Sprintf("127.0.0.1:%s", a.GetListenPort())
+	expected := fmt.Sprintf("127.0.0.1:%d", a.GetListenPort())
 	if strings.EqualFold(strings.TrimSpace(status.Server), expected) {
 		return true
 	}
