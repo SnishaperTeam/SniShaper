@@ -83,24 +83,9 @@ type migrationSessionResponse struct {
 	TargetIP    string `json:"target_ip"`
 }
 
-func setUnexportedField(obj interface{}, fieldName string, value interface{}) {
-	v := reflect.ValueOf(obj).Elem()
-	f := v.FieldByName(fieldName)
-	if !f.IsValid() {
-		return
-	}
-	ptr := unsafe.Pointer(f.UnsafeAddr())
-	switch val := value.(type) {
-	case []byte:
-		*(*[]byte)(ptr) = val
-	case uint16:
-		*(*uint16)(ptr) = val
-	case bool:
-		*(*bool)(ptr) = val
-	case uint64:
-		*(*uint64)(ptr) = val
-	case []*x509.Certificate:
-		*(*[]*x509.Certificate)(ptr) = val
+func setUnexportedField[T any](obj any, fieldName string, value T) {
+	if f := reflect.ValueOf(obj).Elem().FieldByName(fieldName); f.IsValid() {
+		*(*T)(unsafe.Pointer(f.UnsafeAddr())) = value
 	}
 }
 
