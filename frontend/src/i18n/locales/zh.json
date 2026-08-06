@@ -258,6 +258,17 @@
       "updated_desc": "当前已加载 {count} 条自动分流规则。"
     }
   },
+  "network": {
+    "ipv6_title": "IPv6 检测",
+    "ipv6_refresh": "重新检测",
+    "ipv6_checking": "检测中...",
+    "ipv6_ok": "已检测到 IPv6",
+    "ipv6_ok_desc": "当前网络存在全局 IPv6 地址，IPv6 相关功能（NAT64 映射、IPv6 DNS 策略、演进测试 IPv6 选项）可用。",
+    "ipv6_disabled_title": "当前网络为纯 IPv4",
+    "ipv6_disabled_desc": "未检测到可用的全局 IPv6 地址。NAT64 配置、IPv6 优先/仅 IPv6 DNS 规则以及演进测试的 IPv6 选项已禁用且不可点击，检测到 IPv6 后将自动恢复。每 10 分钟自动检测一次，也可点击右侧按钮立即刷新。",
+    "ipv6_disabled": "纯 IPv4 网络：IPv6 相关功能（NAT64、IPv6 规则）已禁用",
+    "ipv6_restored": "已检测到 IPv6：NAT64、IPv6 规则等功能已恢复"
+  },
   "settings": {
     "title": "系统设置",
     "tabs": {

@@ -29,8 +29,10 @@ func main() {
 	if app.HasLaunchArg("--elevated") {
 		// Already elevated, continue
 	} else if !core.IsProcessElevated() {
-		// ponytail: auto-elevate with runas, no re-arguing
-		if err := core.ElevateSelf(); err != nil {
+		// Already running? Don't trigger a UAC prompt for a second instance.
+		if app.IsSingleInstanceRunning("com.snishaper.desktop") {
+			log.Printf("[main] Instance already running, skipping auto-elevate")
+		} else if err := core.ElevateSelf(); err != nil {
 			log.Printf("[main] Auto-elevate failed: %v, continuing without admin", err)
 		} else {
 			return // elevated instance will start
@@ -38,6 +40,17 @@ func main() {
 	}
 
 	app.RecoverBrokenSingleInstance("com.snishaper.desktop")
+
+	// Wake the running instance; if the wake fails (e.g. stale instance without
+	// the cross-integrity message filter), kill it and take over.
+	if app.IsSingleInstanceRunning("com.snishaper.desktop") {
+		if err := app.WakeSingleInstance("com.snishaper.desktop"); err == nil {
+			log.Printf("[main] Woke running instance, exiting second instance")
+			return
+		}
+		log.Printf("[main] Failed to wake running instance, killing stale instance and taking over")
+		app.KillSingleInstance("com.snishaper.desktop")
+	}
 
 	a := app.NewApp()
 
@@ -70,6 +83,9 @@ func main() {
 	})
 
 	a.SetWailsApp(wailsApp)
+
+	// Allow WM_COPYDATA from lower-integrity (non-elevated) second instances
+	app.AllowSingleInstanceCrossIntegrity("com.snishaper.desktop")
 
 	// Create Tray
 	tray := wailsApp.SystemTray.New()

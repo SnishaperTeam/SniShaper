@@ -15,7 +15,8 @@ import {
   Trash2,
   AlertCircle,
   Sun,
-  Moon
+  Moon,
+  Wifi
 } from '../lib/icons';
 import {
   GetListenPort, SetListenPort, GetCloseToTray, SetCloseToTray,
@@ -26,7 +27,8 @@ import {
   UninstallCert, ExportConfig, ImportConfigWithSummary,
   GetCloudflareConfig, UpdateCloudflareConfig, GetCloudflareIPStats,
   ForceFetchCloudflareIPs, TriggerCFHealthCheck, RemoveInvalidCFIPs,
-  GetLanguage, SetLanguage
+  GetLanguage, SetLanguage,
+  GetIPv6Available, RefreshIPv6Check
 } from '../api/bindings';
 import { SettingRow, StackedSettingRow } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
@@ -60,6 +62,8 @@ const Settings: React.FC<SettingsProps> = ({ cache, onCacheUpdate, theme, toggle
   const caStatus = cache.caStatus;
   const installedCerts = cache.installedCerts || [];
   const [ipStats, setIpStats] = useState<any[]>(cache.ipStats || []);
+  const [isIpv6Checking, setIsIpv6Checking] = useState(false);
+  const ipv6Available = cache.ipv6Available !== false;
 
   const reloadCriticalData = useCallback(async () => {
     try {
@@ -153,6 +157,16 @@ const Settings: React.FC<SettingsProps> = ({ cache, onCacheUpdate, theme, toggle
       toast.success(t('settings.cf_pool.fetch_now'));
     } catch (err: any) { toast.error(t('common.failed'), String(err?.message || err));
     } finally { setIsRefreshing(false); }
+  };
+
+  const handleRefreshIPv6 = async () => {
+    setIsIpv6Checking(true);
+    try {
+      const available = await RefreshIPv6Check();
+      onCacheUpdate({ ipv6Available: available === true });
+      toast[available ? 'success' : 'error'](available ? t('network.ipv6_ok') : t('network.ipv6_disabled_title'), t('network.ipv6_ok_desc'));
+    } catch (err: any) { toast.error(t('common.failed'), String(err));
+    } finally { setIsIpv6Checking(false); }
   };
 
   const handleHealthCheck = async () => {
@@ -337,6 +351,40 @@ const Settings: React.FC<SettingsProps> = ({ cache, onCacheUpdate, theme, toggle
               )}
             </div>
           </StackedSettingRow>
+        </section>
+
+        <section className="lg:col-span-2 space-y-4">
+          <div className="flex items-center justify-between px-1 text-text-secondary">
+            <div className="flex items-center gap-2">
+              <Wifi size={18} aria-hidden />
+              <h2 className="text-sm font-bold uppercase tracking-wider">{t('network.ipv6_title')}</h2>
+            </div>
+            <Button onClick={handleRefreshIPv6} loading={isIpv6Checking} variant="ghost" size="xs" disabled={isIpv6Checking}>
+              {isIpv6Checking ? t('network.ipv6_checking') : t('network.ipv6_refresh')}
+            </Button>
+          </div>
+
+          {ipv6Available ? (
+            <div className="bg-background-card border border-border rounded-2xl p-5 flex items-start gap-4">
+              <div className="w-9 h-9 rounded-2xl bg-success/10 text-success flex items-center justify-center shrink-0">
+                <Wifi size={16} aria-hidden />
+              </div>
+              <div className="space-y-1">
+                <div className="text-sm font-bold text-success">{t('network.ipv6_ok')}</div>
+                <div className="text-[11px] text-text-muted leading-relaxed">{t('network.ipv6_ok_desc')}</div>
+              </div>
+            </div>
+          ) : (
+            <div className="bg-danger/5 border border-danger/30 rounded-2xl p-5 flex items-start gap-4">
+              <div className="w-9 h-9 rounded-2xl bg-danger/10 text-danger flex items-center justify-center shrink-0">
+                <AlertCircle size={16} aria-hidden />
+              </div>
+              <div className="space-y-1">
+                <div className="text-sm font-bold text-danger">{t('network.ipv6_disabled_title')}</div>
+                <div className="text-[11px] text-text-muted leading-relaxed">{t('network.ipv6_disabled_desc')}</div>
+              </div>
+            </div>
+          )}
         </section>
 
         <section className="lg:col-span-2 space-y-4">

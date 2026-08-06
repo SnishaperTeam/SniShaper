@@ -2,7 +2,7 @@
 
 package app
 
-func buildAutoStartCommand(execPath string) string {
+func buildAutoStartCommand(execPath string, showMainWindow, autoProxy bool) string {
 	return execPath
 }
 

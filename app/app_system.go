@@ -205,7 +205,7 @@ func (a *App) SetAutoStart(enabled bool) error {
 	if enabled {
 		execPath, err := os.Executable()
 		if err == nil {
-			command = buildAutoStartCommand(execPath)
+			command = buildAutoStartCommand(execPath, a.GetShowMainWindowOnAutoStart(), a.GetAutoEnableProxyOnAutoStart())
 		}
 	}
 	if err := setAutoStartEnabled(enabled, command); err != nil {
@@ -224,7 +224,7 @@ func (a *App) syncAutoStartRegistration() error {
 	if err != nil {
 		return fmt.Errorf("failed to resolve executable path")
 	}
-	command := buildAutoStartCommand(execPath)
+	command := buildAutoStartCommand(execPath, a.GetShowMainWindowOnAutoStart(), a.GetAutoEnableProxyOnAutoStart())
 	return setAutoStartEnabled(true, command)
 }
 
@@ -234,7 +234,11 @@ func (a *App) GetShowMainWindowOnAutoStart() bool {
 
 func (a *App) SetShowMainWindowOnAutoStart(enabled bool) error {
 	a.appendLog(fmt.Sprintf("[action] SetShowMainWindowOnAutoStart called: %v", enabled))
-	return a.ruleManager.SetShowMainWindowOnAutoStart(enabled)
+	if err := a.ruleManager.SetShowMainWindowOnAutoStart(enabled); err != nil {
+		return err
+	}
+	// Keep the registry auto-start command in sync with this toggle
+	return a.syncAutoStartRegistration()
 }
 
 func (a *App) GetAutoEnableProxyOnAutoStart() bool {
@@ -243,7 +247,11 @@ func (a *App) GetAutoEnableProxyOnAutoStart() bool {
 
 func (a *App) SetAutoEnableProxyOnAutoStart(enabled bool) error {
 	a.appendLog(fmt.Sprintf("[action] SetAutoEnableProxyOnAutoStart called: %v", enabled))
-	return a.ruleManager.SetAutoEnableProxyOnAutoStart(enabled)
+	if err := a.ruleManager.SetAutoEnableProxyOnAutoStart(enabled); err != nil {
+		return err
+	}
+	// Keep the registry auto-start command in sync with this toggle
+	return a.syncAutoStartRegistration()
 }
 
 // ForceCleanup is a last-resort synchronous cleanup for crash/force-exit paths.
@@ -265,13 +273,6 @@ func (a *App) ForceCleanup() {
 	}
 	if err := sysproxy.DisableSystemProxy(); err != nil {
 		log.Printf("[ForceCleanup] sysproxy disable: %v", err)
-	}
-}
-
-func (a *App) RevealMainWindow() {
-	if a.mainWindow != nil {
-		a.mainWindow.Show()
-		a.mainWindow.Focus()
 	}
 }
 

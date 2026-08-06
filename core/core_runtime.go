@@ -13,6 +13,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/miekg/dns"
+
 	"snishaper/common"
 	"snishaper/pkg/certmanager"
 	"snishaper/pkg/singtun"
@@ -328,7 +330,63 @@ func (r *coreRuntime) startTUN() (err error) {
 	r.appendLog("[core] native sing-tun started, status=" + fmt.Sprintf("%v", r.nativeTUN.Status().Running))
 	// 通知 ProxyServer 启用 TUN 模式，出站连接绑物理网卡
 	r.proxyServer.SetTUNMode(true)
+	// TUN 数据面自检：通过 TUN 发送 DNS 查询，验证 gvisor 栈正常工作。
+	// 解决 gvisor 数据面静默失效时（网卡存在但流量不通）无任何错误日志的问题。
+	if err := verifyTUNDataPlane("198.18.0.1", 5*time.Second); err != nil {
+		r.appendLog("[error] TUN data plane check failed: " + err.Error())
+		writeCoreMarker(r.execDir, "start_tun", markerDetail("data plane check failed: %v", err))
+	} else {
+		r.appendLog("[core] TUN data plane check passed")
+		writeCoreMarker(r.execDir, "start_tun", "data plane check passed")
+	}
 	return nil
+}
+
+// verifyTUNDataPlane 通过 TUN 接口发送 DNS 查询（绑定 TUN 自身地址作为源），
+// 验证 gvisor 数据面是否正常。查询会被 gvisor 劫持并由 Handler 返回 fake-ip 响应。
+func verifyTUNDataPlane(tunIP string, timeout time.Duration) error {
+	msg := new(dns.Msg)
+	msg.Id = dns.Id()
+	msg.RecursionDesired = true
+	msg.Question = []dns.Question{{Name: "example.com.", Qtype: dns.TypeA, Qclass: dns.ClassINET}}
+	query, err := msg.Pack()
+	if err != nil {
+		return err
+	}
+
+	laddr, err := net.ResolveUDPAddr("udp4", net.JoinHostPort(tunIP, "0"))
+	if err != nil {
+		return err
+	}
+	conn, err := net.DialUDP("udp4", laddr, &net.UDPAddr{IP: net.ParseIP("1.1.1.1"), Port: 53})
+	if err != nil {
+		return err
+	}
+	defer conn.Close()
+
+	if _, err := conn.Write(query); err != nil {
+		return err
+	}
+
+	deadline := time.Now().Add(timeout)
+	buf := make([]byte, 512)
+	for time.Now().Before(deadline) {
+		conn.SetReadDeadline(deadline)
+		n, err := conn.Read(buf)
+		if err != nil {
+			var netErr net.Error
+			if errors.As(err, &netErr) && netErr.Timeout() {
+				break
+			}
+			return err
+		}
+		resp := new(dns.Msg)
+		if err := resp.Unpack(buf[:n]); err != nil || resp.Id != msg.Id {
+			continue
+		}
+		return nil
+	}
+	return fmt.Errorf("no DNS response through TUN within %v (data plane may be down)", timeout)
 }
 
 func (r *coreRuntime) stopTUN() error {

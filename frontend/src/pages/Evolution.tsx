@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useContext } from 'react';
 import {
   Play,
   Square,
@@ -27,6 +27,7 @@ import {
 import Modal from '../components/Modal';
 import { toast } from '../lib/toast';
 import { useTranslation } from '../i18n/I18nContext';
+import { SettingsCtx } from '../App';
 
 interface TestResult {
   domain: string;
@@ -99,6 +100,8 @@ const getMethodBgColor = (method?: string) => {
 
 const Evolution: React.FC = () => {
   const { t } = useTranslation();
+  const { cache } = useContext(SettingsCtx);
+  const ipv6Available = cache.ipv6Available !== false;
   const [activeTab, setActiveTab] = useState<TabType>('test');
   const [domains, setDomains] = useState<string>('');
   const [enableIPv6, setEnableIPv6] = useState(false);
@@ -338,7 +341,7 @@ const Evolution: React.FC = () => {
                 />
 
                 <div className="flex items-center justify-between mt-4">
-                  <label className="flex items-center gap-2.5 cursor-pointer group">
+                  <label className={`flex items-center gap-2.5 ${ipv6Available ? 'cursor-pointer group' : 'opacity-50 cursor-not-allowed'}`}>
                     <div className={`relative w-10 h-5 rounded-full transition-all duration-200 ${enableIPv6 ? 'bg-accent' : 'bg-slate-200 dark:bg-zinc-800'} border ${enableIPv6 ? 'border-accent/20' : 'border-slate-300 dark:border-zinc-700'}`}>
                       <div className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white shadow-sm border border-slate-300/40 dark:border-zinc-600/40 transition-transform duration-200 ${enableIPv6 ? 'translate-x-5' : ''}`} />
                     </div>
@@ -347,9 +350,12 @@ const Evolution: React.FC = () => {
                       checked={enableIPv6}
                       onChange={(e) => setEnableIPv6(e.target.checked)}
                       className="sr-only"
-                      disabled={isRunning}
+                      disabled={isRunning || !ipv6Available}
                     />
-                    <span className="text-sm text-text-secondary group-hover:text-text-primary transition-colors">{t('evolution.enable_ipv6')}</span>
+                    <span className="text-sm text-text-secondary group-hover:text-text-primary transition-colors">
+                      {t('evolution.enable_ipv6')}
+                      {!ipv6Available && <span className="ml-2 text-[10px] text-danger font-bold">({t('network.ipv6_disabled_title')})</span>}
+                    </span>
                   </label>
 
                   <div className="flex items-center gap-2">

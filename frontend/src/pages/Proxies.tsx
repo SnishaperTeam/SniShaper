@@ -1,6 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useContext } from 'react';
 import {
-  Trash2, Shield, Zap, Lock, History, PlusCircle, Globe, Layers
+  Trash2, Shield, Zap, Lock, History, PlusCircle, Globe, Layers, AlertCircle
 } from '../lib/icons';
 import {
   GetECHProfiles, DeleteECHProfile, GetNAT64Profiles, DeleteNAT64Profile, TestNAT64Profile,
@@ -14,9 +14,12 @@ import NAT64ProfileForm from '../components/NAT64ProfileForm';
 import { useTranslation } from '../i18n/I18nContext';
 import { cn } from '../lib/utils';
 import { toast } from '../lib/toast';
+import { SettingsCtx } from '../App';
 
 const Proxies: React.FC = () => {
   const { t } = useTranslation();
+  const { cache } = useContext(SettingsCtx);
+  const ipv6Available = cache.ipv6Available !== false;
   const [echProfiles, setEchProfiles] = useState<any[]>([]);
   const [nat64Profiles, setNat64Profiles] = useState<any[]>([]);
   
@@ -215,10 +218,16 @@ const Proxies: React.FC = () => {
             <Globe size={18} aria-hidden />
             <h2 className="text-sm font-bold uppercase tracking-wider">{t('proxies.nat64_management') || 'NAT64 配置管理'}</h2>
           </div>
-          <Button onClick={handleAddNAT64} variant="ghost" size="sm" icon={<PlusCircle size={14} />}>
+          <Button onClick={handleAddNAT64} disabled={!ipv6Available} variant="ghost" size="sm" icon={<PlusCircle size={14} />}>
             {t('proxies.add_nat64') || '添加 NAT64 配置'}
           </Button>
         </div>
+
+        {!ipv6Available && (
+          <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-danger/5 border border-danger/30 text-[11px] text-danger font-bold">
+            <AlertCircle size={14} aria-hidden /> {t('network.ipv6_disabled_title')}：{t('network.ipv6_disabled_desc')}
+          </div>
+        )}
 
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
           {nat64Profiles.length === 0 ? (
@@ -231,8 +240,8 @@ const Proxies: React.FC = () => {
             nat64Profiles.map((p) => (
               <div
                 key={p.id}
-                onClick={() => handleEditNAT64(p)}
-                className="group p-5 bg-background-card border border-border rounded-2xl shadow-sm hover:shadow-md hover:border-accent/40 transition-all flex justify-between items-center cursor-pointer"
+                onClick={() => ipv6Available && handleEditNAT64(p)}
+                className={`group p-5 bg-background-card border border-border rounded-2xl shadow-sm flex justify-between items-center ${ipv6Available ? 'cursor-pointer hover:shadow-md hover:border-accent/40 transition-all' : 'opacity-60'}`}
               >
                 <div className="flex items-center gap-3 overflow-hidden">
                   <div className="w-10 h-10 rounded-2xl bg-accent/10 text-accent flex items-center justify-center shrink-0">
@@ -258,11 +267,11 @@ const Proxies: React.FC = () => {
                     </span>
                   )}
                   <button
-                    disabled={testingMap[p.id]}
+                    disabled={testingMap[p.id] || !ipv6Available}
                     onClick={(e) => handleTestNAT64(p, e)}
                     className={cn(
                       "text-[10px] font-bold px-2.5 py-1 rounded-xl transition-all border shrink-0",
-                      testingMap[p.id]
+                      (testingMap[p.id] || !ipv6Available)
                         ? "bg-background-soft border-border text-text-muted cursor-not-allowed"
                         : "bg-accent/5 hover:bg-accent/15 border-accent/20 text-accent hover:border-accent/40"
                     )}
@@ -271,7 +280,7 @@ const Proxies: React.FC = () => {
                   </button>
                   <button
                     className="p-2 text-text-muted hover:text-danger opacity-0 group-hover:opacity-100 transition-all shrink-0"
-                    onClick={(e) => handleDeleteNAT64(p.id, e)}
+                    onClick={(e) => ipv6Available && handleDeleteNAT64(p.id, e)}
                     aria-label={`删除 ${p.name}`}
                   >
                     <Trash2 size={16} />

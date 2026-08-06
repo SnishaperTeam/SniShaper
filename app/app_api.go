@@ -5,6 +5,7 @@ import (
 
 	"encoding/base64"
 	"encoding/json"
+	"encoding/xml"
 	"fmt"
 	"io"
 	"log"
@@ -57,6 +58,7 @@ func NewApp() *App {
 		certPath:          filepath.Join(execDir, "cert"),
 		proxyMarkerPath:   filepath.Join(execDir, "config", "system_proxy_owner.json"),
 		launchedAtStartup: HasLaunchArg("--startup"),
+		autoProxyAtStartup: HasLaunchArg("--autoproxy"),
 		core:              core.NewCoreClient(),
 	}
 	a.proxyServer.SetSocks5Addr("127.0.0.1:" + socks5Port)
@@ -316,6 +318,15 @@ func (a *App) SetListenPort(port int) error {
 	}
 
 	return nil
+}
+
+func (a *App) RevealMainWindow() {
+	if a.mainWindow != nil {
+		a.mainWindow.Show()
+		a.mainWindow.Focus()
+		return
+	}
+	a.pendingShow = true
 }
 
 func (a *App) GetSocks5Enabled() bool {
@@ -683,6 +694,11 @@ func (a *App) GetSiteGroups() []proxy.SiteGroup {
 }
 
 func (a *App) AddSiteGroup(sg proxy.SiteGroup) error {
+	if sg.NAT64Enabled || sg.DNSMode == "prefer_ipv6" || sg.DNSMode == "ipv6_only" {
+		if err := a.ensureIPv6(); err != nil {
+			return err
+		}
+	}
 	err := a.ruleManager.AddSiteGroup(sg)
 	if err == nil && a.core != nil {
 		a.core.ReloadIfRunning()
@@ -691,6 +707,11 @@ func (a *App) AddSiteGroup(sg proxy.SiteGroup) error {
 }
 
 func (a *App) UpdateSiteGroup(sg proxy.SiteGroup) error {
+	if sg.NAT64Enabled || sg.DNSMode == "prefer_ipv6" || sg.DNSMode == "ipv6_only" {
+		if err := a.ensureIPv6(); err != nil {
+			return err
+		}
+	}
 	err := a.ruleManager.UpdateSiteGroup(sg)
 	if err == nil && a.core != nil {
 		a.core.ReloadIfRunning()
@@ -988,7 +1009,45 @@ func (a *App) RefreshGFWList() error {
 }
 
 func (a *App) GetAppVersion() string {
+	if v, err := manifestVersion(); err == nil {
+		return v
+	}
 	return "1.29"
+}
+
+// manifestVersion reads the version from Package.appxmanifest (dev) or
+// AppxManifest.xml (installed MSIX), searching up from the exe directory.
+func manifestVersion() (string, error) {
+	dir := filepath.Dir(os.Args[0])
+	for {
+		for _, name := range []string{"Package.appxmanifest", "AppxManifest.xml"} {
+			data, err := os.ReadFile(filepath.Join(dir, name))
+			if err == nil {
+				return parseManifestVersion(data)
+			}
+		}
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			return "", fmt.Errorf("manifest not found")
+		}
+		dir = parent
+	}
+}
+
+func parseManifestVersion(data []byte) (string, error) {
+	var pkg struct {
+		Identity struct {
+			Version string `xml:"Version,attr"`
+		} `xml:"Identity"`
+	}
+	if err := xml.Unmarshal(data, &pkg); err != nil {
+		return "", err
+	}
+	parts := strings.Split(pkg.Identity.Version, ".")
+	for len(parts) > 1 && parts[len(parts)-1] == "0" {
+		parts = parts[:len(parts)-1]
+	}
+	return strings.Join(parts, "."), nil
 }
 
 func (a *App) CheckUpdate() CheckUpdateResult {
@@ -1170,6 +1229,9 @@ func (a *App) GetNAT64Profiles() []proxy.NAT64Profile {
 }
 
 func (a *App) AddNAT64Profile(p proxy.NAT64Profile) error {
+	if err := a.ensureIPv6(); err != nil {
+		return err
+	}
 	err := a.ruleManager.AddNAT64Profile(p)
 	if err == nil {
 		a.syncCFPoolNAT64Prefix()
@@ -1181,6 +1243,9 @@ func (a *App) AddNAT64Profile(p proxy.NAT64Profile) error {
 }
 
 func (a *App) UpdateNAT64Profile(p proxy.NAT64Profile) error {
+	if err := a.ensureIPv6(); err != nil {
+		return err
+	}
 	err := a.ruleManager.UpdateNAT64Profile(p)
 	if err == nil {
 		a.syncCFPoolNAT64Prefix()
@@ -1203,6 +1268,9 @@ func (a *App) DeleteNAT64Profile(id string) error {
 }
 
 func (a *App) TestNAT64Profile(prefix string) (int64, error) {
+	if err := a.ensureIPv6(); err != nil {
+		return 0, err
+	}
 	ips, err := net.LookupIP("www.cloudflare.com")
 	if err != nil || len(ips) == 0 {
 		return 0, fmt.Errorf("DNS lookup failed: %w", err)

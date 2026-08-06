@@ -258,6 +258,17 @@
       "updated_desc": "Currently loaded {count} auto routing rules."
     }
   },
+  "network": {
+    "ipv6_title": "IPv6 Detection",
+    "ipv6_refresh": "Re-check",
+    "ipv6_checking": "Checking...",
+    "ipv6_ok": "IPv6 detected",
+    "ipv6_ok_desc": "A global IPv6 address exists on this network. IPv6 features (NAT64 mapping, IPv6 DNS policy, evolution test IPv6 option) are available.",
+    "ipv6_disabled_title": "Current network is IPv4-only",
+    "ipv6_disabled_desc": "No usable global IPv6 address was detected. NAT64 profiles, IPv6-prefer / IPv6-only DNS rules and the evolution test IPv6 option are disabled and cannot be clicked; they unlock automatically once IPv6 is detected. A check runs every 10 minutes, or use the button to re-check now.",
+    "ipv6_disabled": "IPv4-only network: IPv6 features (NAT64, IPv6 rules) are disabled",
+    "ipv6_restored": "IPv6 detected: NAT64, IPv6 rules and other features are back"
+  },
   "settings": {
     "title": "Settings",
     "tabs": {

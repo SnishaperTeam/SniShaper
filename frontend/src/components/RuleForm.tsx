@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useContext } from 'react';
 import { 
   Zap, 
   Globe, 
@@ -16,6 +16,7 @@ import {
 } from '../lib/icons';
 import { AddSiteGroup, UpdateSiteGroup, GetECHProfiles, GetNAT64Profiles } from '../api/bindings';
 import { useTranslation } from '../i18n/I18nContext';
+import { SettingsCtx } from '../App';
 
 interface RuleFormProps {
   initialData?: any;
@@ -57,6 +58,9 @@ const normalizeCertVerify = (value: any) => {
 
 const RuleForm: React.FC<RuleFormProps> = ({ initialData, onSuccess, onCancel }) => {
   const { t } = useTranslation();
+  const { cache } = useContext(SettingsCtx);
+  const ipv6Available = cache.ipv6Available !== false;
+  const ipv6Option = (id: string) => id === 'prefer_ipv6' || id === 'ipv6_only';
   
   const MODES = [
     { id: 'mitm', label: 'MITM', icon: <Zap size={14} />, desc: t('rules.modes.mitm') },
@@ -318,19 +322,23 @@ const RuleForm: React.FC<RuleFormProps> = ({ initialData, onSuccess, onCancel })
                     <div className="grid grid-cols-2 gap-2">
                       {DNS_OPTIONS.map((option) => {
                         const active = String(formData.dns_mode || '') === option.id;
+                        const disabled = !ipv6Available && ipv6Option(option.id);
                         return (
                           <button
                             key={option.id || 'default'}
                             type="button"
-                            onClick={() => setFormData({ ...formData, dns_mode: option.id })}
+                            disabled={disabled}
+                            onClick={() => !disabled && setFormData({ ...formData, dns_mode: option.id })}
                             className={`rounded-xl border px-3 py-3 text-left transition-all ${
-                              active
-                                ? 'border-accent/40 bg-accent/10 text-accent shadow-[inset_0_0_0_1px_rgba(47,129,247,0.14)]'
-                                : 'border-border/40 bg-background-card text-text-secondary hover:border-accent/30 hover:text-text-primary'
+                              disabled
+                                ? 'border-border/30 bg-background-soft text-text-muted opacity-50 cursor-not-allowed'
+                                : active
+                                  ? 'border-accent/40 bg-accent/10 text-accent shadow-[inset_0_0_0_1px_rgba(47,129,247,0.14)]'
+                                  : 'border-border/40 bg-background-card text-text-secondary hover:border-accent/30 hover:text-text-primary'
                             }`}
                           >
                             <div className="text-[11px] font-black tracking-wide">{option.label}</div>
-                            <div className="mt-1 text-[10px] leading-relaxed opacity-80">{option.desc}</div>
+                            <div className="mt-1 text-[10px] leading-relaxed opacity-80">{disabled ? t('network.ipv6_disabled_title') : option.desc}</div>
                           </button>
                         );
                       })}
@@ -410,11 +418,14 @@ const RuleForm: React.FC<RuleFormProps> = ({ initialData, onSuccess, onCancel })
                               <button
                                 key={p.id}
                                 type="button"
-                                onClick={() => setFormData({ ...formData, nat64_profile_id: p.id })}
+                                disabled={!ipv6Available}
+                                onClick={() => ipv6Available && setFormData({ ...formData, nat64_profile_id: p.id })}
                                 className={`rounded-xl border px-4 py-3 text-left transition-all ${
-                                  active
-                                    ? 'border-accent/40 bg-accent/10 text-accent shadow-[inset_0_0_0_1px_rgba(47,129,247,0.14)]'
-                                    : 'border-border/40 bg-background-card text-text-secondary hover:border-accent/30 hover:text-text-primary'
+                                  !ipv6Available
+                                    ? 'border-border/30 bg-background-soft text-text-muted opacity-50 cursor-not-allowed'
+                                    : active
+                                      ? 'border-accent/40 bg-accent/10 text-accent shadow-[inset_0_0_0_1px_rgba(47,129,247,0.14)]'
+                                      : 'border-border/40 bg-background-card text-text-secondary hover:border-accent/30 hover:text-text-primary'
                                 }`}
                               >
                                 <div className="text-[11px] font-black tracking-wide">{p.name}</div>
@@ -471,18 +482,21 @@ const RuleForm: React.FC<RuleFormProps> = ({ initialData, onSuccess, onCancel })
                   {showNat64Config && (
                     <button
                       type="button"
-                      onClick={() => toggleBooleanField('nat64_enabled')}
+                      disabled={!ipv6Available}
+                      onClick={() => ipv6Available && toggleBooleanField('nat64_enabled')}
                       className={`flex items-center justify-between rounded-2xl border px-4 py-3 text-left transition-all ${
-                        formData.nat64_enabled
-                          ? 'border-accent/40 bg-accent/10'
-                          : 'border-border/40 bg-background-hover/60 hover:border-accent/25'
+                        !ipv6Available
+                          ? 'border-border/30 bg-background-soft opacity-50 cursor-not-allowed'
+                          : formData.nat64_enabled
+                            ? 'border-accent/40 bg-accent/10'
+                            : 'border-border/40 bg-background-hover/60 hover:border-accent/25'
                       }`}
                     >
                       <div className="space-y-0.5">
                         <div className="text-[11px] font-bold text-text-primary flex items-center gap-1">
                           <Globe size={12} className="text-purple-500" /> {t('rules.form.nat64_enable') || '启用 NAT64 映射'}
                         </div>
-                        <div className="text-[10px] text-text-muted">{t('rules.form.nat64_hint') || '开启此功能以执行 NAT64 映射转换'}</div>
+                        <div className="text-[10px] text-text-muted">{!ipv6Available ? t('network.ipv6_disabled_title') : (t('rules.form.nat64_hint') || '开启此功能以执行 NAT64 映射转换')}</div>
                       </div>
                       <div className={`relative h-5 w-9 rounded-full transition-all ${formData.nat64_enabled ? 'bg-accent' : 'bg-background-hover border border-border/50'}`}>
                         <div className={`absolute top-0.5 h-4 w-4 rounded-full bg-white shadow-sm transition-transform duration-200 ${formData.nat64_enabled ? 'left-0 translate-x-[18px]' : 'left-0.5'}`} />

@@ -31,7 +31,7 @@ require (
 	github.com/mdlayher/socket v0.5.1 // indirect
 	github.com/quic-go/qpack v0.6.0 // indirect
 	github.com/sagernet/fswatch v0.1.1 // indirect
-	github.com/sagernet/gvisor v0.0.0-20250811.0-sing-box-mod.1 // indirect
+	github.com/sagernet/gvisor v0.0.0-20260727.0-sing-box-mod.1 // indirect
 	github.com/sagernet/netlink v0.0.0-20240612041022-b9a21c07ac6a // indirect
 	github.com/sagernet/nftables v0.3.0-mod.2 // indirect
 	github.com/vishvananda/netns v0.0.4 // indirect
@@ -43,7 +43,7 @@ require (
 	golang.org/x/net v0.56.0 // indirect
 	golang.org/x/sync v0.21.0 // indirect
 	golang.org/x/text v0.38.0 // indirect
-	golang.org/x/time v0.7.0 // indirect
+	golang.org/x/time v0.15.0 // indirect
 	golang.org/x/tools v0.45.0 // indirect
 )
 

@@ -43,15 +43,28 @@ type App struct {
 	ctx               context.Context
 	cancel            context.CancelFunc
 	launchedAtStartup bool
+	autoProxyAtStartup bool
 	core              *core.CoreClient
 	tunRestoreSysProxy bool
+	pendingShow       bool
 }
 
 // SetWailsApp sets the wails application instance.
 func (a *App) SetWailsApp(w *application.App) { a.wailsApp = w }
 
 // SetMainWindow sets the main window reference.
-func (a *App) SetMainWindow(w *application.WebviewWindow) { a.mainWindow = w }
+func (a *App) SetMainWindow(w *application.WebviewWindow) {
+	if w != nil {
+		a.mainWindow = w
+		if a.pendingShow {
+			a.mainWindow.Show()
+			a.mainWindow.Focus()
+			a.pendingShow = false
+		}
+	} else {
+		a.mainWindow = w
+	}
+}
 
 // SetSystemTray sets the system tray reference.
 func (a *App) SetSystemTray(t *application.SystemTray) { a.systemTray = t }
@@ -184,6 +197,9 @@ func (a *App) startupV3() {
 			}
 		})
 	}
+
+	a.startIPv6Monitor()
+	a.RefreshIPv6Check()
 }
 
 func (a *App) shutdown() {
@@ -301,6 +317,7 @@ func (a *App) emitFrontendState() {
 			"proxyMode":         a.GetProxyMode(),
 			"tunRunning":        tunStatus.Running,
 			"tunMessage":        tunStatus.Message,
+			"ipv6Available":     a.checkIPv6Available(),
 		})
 	})
 }
@@ -350,5 +367,5 @@ func (a *App) ShouldStartHidden() bool {
 }
 
 func (a *App) ShouldAutoEnableProxyOnAutoStart() bool {
-	return a.launchedAtStartup && a.GetAutoEnableProxyOnAutoStart()
+	return (a.launchedAtStartup || a.autoProxyAtStartup) && a.GetAutoEnableProxyOnAutoStart()
 }

@@ -1,4 +1,4 @@
-import React, { Suspense, lazy, useState, useEffect, useCallback, createContext, useContext } from 'react';
+import React, { Suspense, lazy, useState, useEffect, useCallback, useRef, createContext, useContext } from 'react';
 import { HashRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import Sidebar from './components/Sidebar';
 import WindowControls from './components/WindowControls';
@@ -8,9 +8,10 @@ import {
   GetShowMainWindowOnAutoStart, GetAutoEnableProxyOnAutoStart, GetSocks5Enabled, GetSocks5Port,
   GetTUNConfig, GetTUNStatus, GetCloudflareConfig,
   GetCAInstallStatus, GetInstalledCerts, GetCloudflareIPStats,
-  GetLanguage, GetTheme, SetTheme, EventsOn
+  GetLanguage, GetTheme, SetTheme, GetIPv6Available, EventsOn
 } from './api/bindings';
 import { I18nProvider, useTranslation } from './i18n/I18nContext';
+import { toast } from './lib/toast';
 
 const Welcome = lazy(() => import('./pages/Welcome'));
 
@@ -41,6 +42,7 @@ interface SettingsCache {
   ipStats: any[];
   language: string;
   theme: string;
+  ipv6Available: boolean;
 }
 
 const defaultCache: SettingsCache = {
@@ -54,13 +56,16 @@ const defaultCache: SettingsCache = {
   caStatus: { Installed: false, CertPath: '', Platform: 'windows' },
   installedCerts: [], ipStats: [],
   language: '',
-  theme: 'dark'
+  theme: 'dark',
+  ipv6Available: true
 };
 
 const SettingsCtx = createContext<{ cache: SettingsCache; updateCache: (patch: Partial<SettingsCache>) => void }>({
   cache: defaultCache,
   updateCache: () => {}
 });
+
+export { SettingsCtx };
 
 const App: React.FC = () => {
   const [theme, setTheme] = useState<'light' | 'dark'>((localStorage.getItem('theme') as any) || 'dark');
@@ -77,9 +82,9 @@ const App: React.FC = () => {
     const fastLoad = async () => {
       try {
         const [language, savedTheme, port, closeToTray, autoStart,
-          showMainOnAutoStart, autoEnableProxyOnAutoStart, socks5Enabled, socks5Port, cfConfig] = await Promise.all([
+          showMainOnAutoStart, autoEnableProxyOnAutoStart, socks5Enabled, socks5Port, cfConfig, ipv6Available] = await Promise.all([
           GetLanguage(), GetTheme(), GetListenPort(), GetCloseToTray(), GetAutoStart(),
-          GetShowMainWindowOnAutoStart(), GetAutoEnableProxyOnAutoStart(), GetSocks5Enabled(), GetSocks5Port(), GetCloudflareConfig()
+          GetShowMainWindowOnAutoStart(), GetAutoEnableProxyOnAutoStart(), GetSocks5Enabled(), GetSocks5Port(), GetCloudflareConfig(), GetIPv6Available()
         ]);
         const resolvedTheme = (savedTheme as any) || 'dark';
         setTheme(resolvedTheme);
@@ -99,6 +104,7 @@ const App: React.FC = () => {
           socks5Enabled: socks5Enabled ?? prev.socks5Enabled,
           socks5Port: (socks5Port as string) || '8081',
           cfConfig: cfConfig || prev.cfConfig,
+          ipv6Available: typeof ipv6Available === 'boolean' ? ipv6Available : prev.ipv6Available,
         }));
       } catch { /* ignore */ }
       setInitialized(true);
@@ -141,8 +147,15 @@ const App: React.FC = () => {
       }
     });
 
+    const unlisten2 = EventsOn("app:state_changed", (state: any) => {
+      if (state && typeof state.ipv6Available === 'boolean') {
+        setSettingsCache(prev => ({ ...prev, ipv6Available: state.ipv6Available }));
+      }
+    });
+
     return () => {
       if (unlisten) unlisten();
+      if (unlisten2) unlisten2();
     };
   }, []);
 
@@ -195,6 +208,18 @@ const App: React.FC = () => {
 
 const AppContent: React.FC<{ settingsCache: SettingsCache, updateSettingsCache: any, theme: any, toggleTheme: any }> = ({ settingsCache, updateSettingsCache, theme, toggleTheme }) => {
   const { t } = useTranslation();
+
+  const prevIpv6Ref = useRef<boolean | null>(null);
+  useEffect(() => {
+    const prev = prevIpv6Ref.current;
+    prevIpv6Ref.current = settingsCache.ipv6Available;
+    if (prev === null || prev === settingsCache.ipv6Available) return;
+    if (settingsCache.ipv6Available) {
+      toast.success(t('network.ipv6_restored'));
+    } else {
+      toast.error(t('network.ipv6_disabled'));
+    }
+  }, [settingsCache.ipv6Available, t]);
 
   const routeFallback = <div className="h-full" />;
 
