@@ -3748,6 +3748,72 @@
       "enabled": true,
       "upstream": "150.171.28.10",
       "nat64_enabled": false
+    },
+    {
+      "id": "1784449000000000001",
+      "name": "ms-office",
+      "mode": "mitm",
+      "domains": [
+        "office.com",
+        "www.office.com",
+        "substrate.office.com",
+        "outlook.com",
+        "www.outlook.com",
+        "sharepoint.com"
+      ],
+      "ech_enabled": false,
+      "use_cf_pool": false,
+      "cert_verify": {
+        "mode": "strict_real"
+      },
+      "website": "microsoft",
+      "enabled": true,
+      "upstream": "13.107.6.150,13.107.6.152,13.107.6.156,13.107.6.160,13.107.6.169,13.107.6.180,23.103.239.69,23.103.239.73,23.103.239.96,40.99.8.146,40.99.8.194,40.99.9.98,40.99.9.178,52.98.40.34,52.96.111.82,52.96.172.98,52.96.222.194,52.96.228.130,52.96.229.194,40.99.9.114,52.98.189.242,52.98.50.18,13.107.136.10,13.107.136.11,13.107.138.10,13.107.138.12",
+      "nat64_enabled": false
+    },
+    {
+      "id": "1784449000000000002",
+      "name": "ms-identity",
+      "mode": "mitm",
+      "domains": [
+        "live.com",
+        "www.live.com",
+        "login.live.com",
+        "microsoftonline.com",
+        "login.microsoftonline.com",
+        "msn.com",
+        "www.msn.com"
+      ],
+      "ech_enabled": false,
+      "use_cf_pool": false,
+      "cert_verify": {
+        "mode": "strict_real"
+      },
+      "website": "microsoft",
+      "enabled": true,
+      "upstream": "20.190.144.136,20.190.144.137,20.190.144.138,20.190.144.164,20.190.148.165,40.126.16.161,40.126.16.164,40.126.16.165,40.126.16.166,204.79.197.212,204.79.197.219,184.28.32.71",
+      "nat64_enabled": false
+    },
+    {
+      "id": "1784449000000000003",
+      "name": "ms-microsoft",
+      "mode": "mitm",
+      "domains": [
+        "microsoft.com",
+        "www.microsoft.com",
+        "go.microsoft.com",
+        "support.microsoft.com",
+        "visualstudio.com"
+      ],
+      "ech_enabled": false,
+      "use_cf_pool": false,
+      "cert_verify": {
+        "mode": "strict_real"
+      },
+      "website": "microsoft",
+      "enabled": true,
+      "upstream": "150.171.110.100,150.171.110.103,150.171.110.131,150.171.110.135,150.171.110.145,150.171.110.177,150.171.110.209,150.171.110.211,23.215.58.91,23.217.78.9,150.171.73.10,150.171.73.16,150.171.74.10,150.171.74.16",
+      "nat64_enabled": false
     }
   ],
   "upstreams": [],
