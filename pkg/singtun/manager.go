@@ -63,13 +63,15 @@ func (m *Manager) Start(cfg proxy.TUNConfig, proxyAddr string) error {
 		AutoRoute:    cfg.AutoRoute,
 		StrictRoute:  cfg.StrictRoute,
 		DNSServers: []netip.Addr{
-			// 必须用非本地地址！DNS 查询会被路由进 TUN，由 gvisor 劫持（UDP:53）。
-			// 不能用 127.0.0.1（被 Inet4RouteExcludeAddress 排除，走 loopback），
-			// 也不能用 198.18.0.1（TUN 自身地址，OS 本地投递，不经过 TUN）。
-			// 用公共 DNS 地址：查询进 TUN → gvisor 劫持 → Handler 生成 fake-ip → 响应原路返回。
-			// 查询永远不会真正到达 1.1.1.1，gvisor 在到达前就拦截了。
-			netip.MustParseAddr("1.1.1.1"),
-			netip.MustParseAddr("2606:4700:4700::1111"),
+			// 用 TUN 网段内的非自身地址（198.18.0.2），原因：
+			// 1. 查询路由进 TUN → gvisor 劫持（UDP:53）→ Handler 生成 fake-ip；
+			// 2. 不能用 127.0.0.1（被 Inet4RouteExcludeAddress 排除，走 loopback），
+			//    也不能用 198.18.0.1（TUN 自身地址，OS 本地投递，不经过 TUN）；
+			// 3. 不能用公共 DNS（如 1.1.1.1）：Chrome 检测到系统 DNS 是公共 DNS 会
+			//    自动启用 Secure DNS (DoH)，查询走 443 绕过 fake-ip 劫持，且 DoH
+			//    域名被 MITM 规则处理后上游超时。私有地址不触发 DoH。
+			netip.MustParseAddr("198.18.0.2"),
+			netip.MustParseAddr("fd65:198:18::2"),
 		},
 		// 启用 DNS 劫持，使用 fake-ip 模式
 		EXP_DisableDNSHijack: false,

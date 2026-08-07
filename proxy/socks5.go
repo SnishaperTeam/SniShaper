@@ -118,17 +118,10 @@ func (p *ProxyServer) handleSocks5Connect(ctx context.Context, writer io.Writer,
 
 
 
+	// QUIC 规则命中的 TCP 连接：浏览器 TCP fallback 期望标准 HTTPS，
+	// 劫持成 H3 replay 会收到非 HTTP/2 preface。回退为普通 MITM。
 	if cr.effectiveMode == "quic" {
-		p.tracef("[SOCKS5] quic mode")
-		socks5.SendReply(writer, statute.RepSuccess, req.LocalAddr)
-		hijackConn := &socks5HijackConn{
-			Conn:   clientConn,
-			reader: req.Reader,
-			writer: writer,
-		}
-		_ = hijackConn.SetDeadline(time.Time{})
-		p.handleQUICMITM(hijackConn, cr.targetHost, cr.rule)
-		return nil
+		cr.effectiveMode = "mitm"
 	}
 
 	if err := p.dialUpstream(cr); err != nil {
