@@ -7,32 +7,33 @@ assignees: dongzheyu, SniShaper
 
 ---
 
-**Describe the bug**
-A clear and concise description of what the bug is.
+## Bug 详情
 
-**To Reproduce**
-Steps to reproduce the behavior:
-1. Go to '...'
-2. Click on '....'
-3. Scroll down to '....'
-4. See error
+请详细描述遇到的问题（现象、错误信息、预期行为 vs 实际行为）：
 
-**Expected behavior**
-A clear and concise description of what you expected to happen.
+<!-- 在此填写 -->
 
-**Screenshots**
-If applicable, add screenshots to help explain your problem.
+## 环境信息
 
-**Desktop (please complete the following information):**
- - OS: [e.g. iOS]
- - Browser [e.g. chrome, safari]
- - Version [e.g. 22]
+- **Windows 版本**：（例如：Windows 11 26H2 Build 26300.9032）
+- **其他相关信息**：（如软件版本、浏览器、显卡驱动等，可选）
 
-**Smartphone (please complete the following information):**
- - Device: [e.g. iPhone6]
- - OS: [e.g. iOS8.1]
- - Browser [e.g. stock browser, safari]
- - Version [e.g. 22]
+## 复现步骤
 
-**Additional context**
-Add any other context about the problem here.
+请按顺序列出可稳定复现的步骤：
+
+1. 
+2. 
+3. 
+
+## 附件
+
+- 截图 / 录屏
+- 日志文件
+- 其他相关文件
+
+（请直接拖拽上传，或粘贴图片）
+
+---
+
+感谢您的反馈！
