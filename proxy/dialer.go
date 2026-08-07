@@ -89,6 +89,13 @@ func (p *ProxyServer) resolveDomainCandidates(ctx context.Context, host, port, d
 }
 
 func (p *ProxyServer) buildDialCandidates(ctx context.Context, targetHost, targetAddr string, rule Rule, effectiveMode string) []string {
+	// 字面 IP 目标（如 TUN 下浏览器 DoH 解析的真实 IP）：保留原始端口，
+	// 避免后面 resolveDomainCandidates 用默认 443 改写端口（如 7680 -> 443）。
+	if isLiteralIP(targetHost) {
+		if _, port, err := net.SplitHostPort(targetAddr); err == nil && port != "" {
+			return []string{targetAddr}
+		}
+	}
 	resolvedUpstream := resolveRuleUpstream(targetHost, rule)
 	isWarpRoute := strings.EqualFold(strings.TrimSpace(rule.Upstream), "warp")
 	defaultPort := "443"

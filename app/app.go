@@ -200,6 +200,41 @@ func (a *App) startupV3() {
 
 	a.startIPv6Monitor()
 	a.RefreshIPv6Check()
+	a.startRouteEventsPoller()
+}
+
+// startRouteEventsPoller forwards route events from the core process to the
+// frontend (app:route), since the core RPC only buffers them for polling.
+func (a *App) startRouteEventsPoller() {
+	a.runSafeAsync("route events poller", func() {
+		ticker := time.NewTicker(500 * time.Millisecond)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-a.ctx.Done():
+				return
+			case <-ticker.C:
+			}
+			if a.core == nil || a.mainWindow == nil {
+				continue
+			}
+			events := a.core.GetRouteEvents()
+			if len(events) == 0 {
+				continue
+			}
+			for _, e := range events {
+				application.InvokeAsync(func() {
+					if a.mainWindow == nil || a.shouldQuit {
+						return
+					}
+					a.mainWindow.EmitEvent("app:route", map[string]interface{}{
+						"domain": e.Domain,
+						"mode":   e.Mode,
+					})
+				})
+			}
+		}
+	})
 }
 
 func (a *App) shutdown() {

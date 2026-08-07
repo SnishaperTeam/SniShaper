@@ -419,11 +419,9 @@ func (p *ProxyServer) NewQUICRoundTripper(host string, rule Rule) (*http3.Transp
 		dialCandidates = []string{targetAddr}
 	}
 
-	sniHost := chooseUpstreamSNI(host, rule)
-	if sniHost == "" {
-		sniHost = host
-	}
-
+	// H3 上游必须用真实域名作为 SNI：QUIC 服务器按 SNI 路由请求，
+	// sni_fake（如 g.cn）只用于 TCP MITM 链路，H3 上 SNI 与 Host 不一致会挂起。
+	sniHost := host
 	var echConfig []byte
 	if rule.ECHEnabled {
 		echConfig = p.resolveRuleECHConfig(host, rule)
@@ -507,7 +505,7 @@ func (p *ProxyServer) handleQUICMITM(clientConn net.Conn, host string, rule Rule
 
 	// TLS: offer h2 + http/1.1. Go's http.Server automatically switches
 	// to HTTP/2 when ALPN selects "h2" — no extra config needed.
-	tlsConfig := p.makeMITMTLSConfig(host, caCert, caKey, []string{"http/1.1"}, "[QUICMode]")
+	tlsConfig := p.makeMITMTLSConfig(host, caCert, caKey, []string{"h2", "http/1.1"}, "[QUICMode]")
 	clientTLS := tls.Server(clientConn, tlsConfig)
 	if err := clientTLS.Handshake(); err != nil {
 		log.Printf("[QUICMode] Client TLS handshake failed: %v", err)
