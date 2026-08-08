@@ -1,155 +1,20 @@
-@import "tailwindcss";
-
-@theme {
-  --color-background: var(--bg-dark);
-  --color-background-card: var(--bg-card);
-  --color-background-soft: var(--bg-soft);
-  --color-background-hover: var(--bg-hover);
-
-  --color-text-primary: var(--text-primary);
-  --color-text-secondary: var(--text-secondary);
-  --color-text-muted: var(--text-muted);
-
-  --color-accent: var(--accent);
-  --color-accent-dim: var(--accent-dim);
-  --color-accent-soft: var(--accent-soft);
-
-  --color-border: var(--border);
-  --color-border-strong: var(--border-strong);
-  --color-border-soft: var(--border-soft);
-  --color-border-divider: var(--border-divider);
-
-  --color-success: var(--success);
-  --color-danger: var(--danger);
-  --color-warning: var(--warning);
-
-  --radius-2xl: 1rem;
-  --radius-3xl: 1.5rem;
-
-  --shadow-card: var(--shadow-card);
-  --shadow-soft: var(--shadow-soft);
+body {
+  font-family: "SF Pro Text", "Segoe UI", -apple-system, BlinkMacSystemFont, sans-serif;
 }
 
-:root {
-  --bg-dark: #ffffff;
-  --bg-card: #f6f8fa;
-  --bg-hover: #eaeef2;
-  --bg-soft: #fdfefe;
-  --border: #d0d7de;
-  --border-strong: rgba(208, 215, 222, 0.9);
-  --border-soft: rgba(208, 215, 222, 0.62);
-  --border-divider: rgba(208, 215, 222, 0.48);
-  --text-primary: #1f2328;
-  --text-secondary: #656d76;
-  --text-muted: #8c959f;
-  --accent: #0969da;
-  --accent-dim: #0550ae;
-  --accent-soft: rgba(9, 105, 218, 0.12);
-  --success: #1a7f37;
-  --danger: #cf222e;
-  --warning: #9a6700;
-  --shadow-soft: 0 16px 40px rgba(15, 23, 42, 0.08);
-  --shadow-card: 0 10px 28px rgba(15, 23, 42, 0.08);
-  --duration-fast: 150ms;
-  --duration-normal: 200ms;
-  --duration-slow: 300ms;
+body * {
+  transition: background-color 0.3s ease, color 0.3s ease, border-color 0.3s ease;
 }
 
-[data-theme="dark"] {
-  --bg-dark: #06090f;
-  --bg-card: rgba(17, 24, 39, 0.88);
-  --bg-hover: rgba(31, 41, 55, 0.5);
-  --bg-soft: #030712;
-  --border: rgba(41, 52, 70, 0.88);
-  --border-strong: rgba(54, 68, 91, 0.72);
-  --border-soft: rgba(45, 58, 79, 0.56);
-  --border-divider: rgba(117, 133, 159, 0.18);
-  --text-primary: #f0f6fc;
-  --text-secondary: #94a3b8;
-  --text-muted: #6e7681;
-  --accent: #2f81f7;
-  --accent-dim: #1d4ed8;
-  --accent-soft: rgba(56, 139, 253, 0.2);
-  --success: #3fb950;
-  --danger: #f85149;
-  --warning: #d29922;
-  --shadow-soft: 0 20px 50px rgba(0, 0, 0, 0.6);
-  --shadow-card: 0 10px 30px rgba(0, 0, 0, 0.4);
+input[type="number"]::-webkit-outer-spin-button,
+input[type="number"]::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
 }
 
-[data-theme="dark"] .border-border {
-  border-color: var(--border-soft);
-}
-
-[data-theme="dark"] :is(input, textarea, select).border-border,
-[data-theme="dark"] button.border-border,
-[data-theme="dark"] .border.border-border.bg-background-soft,
-[data-theme="dark"] .border.border-border.bg-background-hover,
-[data-theme="dark"] .border.border-border.bg-background-card {
-  border-color: transparent;
-  box-shadow: inset 0 0 0 1px var(--border-soft);
-}
-
-[data-theme="dark"] [class*="border-border"] {
-  border-color: var(--border-soft) !important;
-}
-
-[data-theme="dark"] [class*="border-border/"] {
-  border-color: var(--border-divider) !important;
-}
-
-[data-theme="dark"] [class*="divide-border/"] > :not([hidden]) ~ :not([hidden]) {
-  border-color: var(--border-divider) !important;
-}
-
-[data-theme="dark"] [class*="bg-background"][class*="border-border"]:not(.bg-background-card):not(.bg-background-soft):not(.bg-background-hover) {
-  border-color: var(--border-soft);
-}
-
-[data-theme="dark"] [class*="border-r"][class*="border-border"],
-[data-theme="dark"] [class*="border-l"][class*="border-border"],
-[data-theme="dark"] [class*="border-t"][class*="border-border"],
-[data-theme="dark"] [class*="border-b"][class*="border-border"] {
-  border-color: var(--border-divider);
-}
-
-@layer base {
-  body {
-    @apply bg-background text-text-primary transition-colors duration-200;
-    font-family: "SF Pro Text", "Segoe UI", -apple-system, BlinkMacSystemFont, sans-serif;
-  }
-
-  input[type="number"]::-webkit-outer-spin-button,
-  input[type="number"]::-webkit-inner-spin-button {
-    -webkit-appearance: none;
-    margin: 0;
-  }
-
-  input[type="number"] {
-    -moz-appearance: textfield;
-    appearance: textfield;
-  }
-
-  *:focus-visible {
-    outline: 2px solid color-mix(in srgb, var(--accent) 50%, transparent);
-    outline-offset: 2px;
-  }
-
-  button:focus-visible,
-  a:focus-visible,
-  input:focus-visible,
-  select:focus-visible,
-  textarea:focus-visible {
-    outline: 2px solid color-mix(in srgb, var(--accent) 50%, transparent);
-    outline-offset: 2px;
-  }
-
-  [role="tab"]:focus-visible,
-  [role="switch"]:focus-visible,
-  [role="button"]:focus-visible {
-    outline: 2px solid color-mix(in srgb, var(--accent) 50%, transparent);
-    outline-offset: 2px;
-  }
+input[type="number"] {
+  -moz-appearance: textfield;
+  appearance: textfield;
 }
 
 ::-webkit-scrollbar {
@@ -162,86 +27,10 @@
 }
 
 ::-webkit-scrollbar-thumb {
-  @apply bg-gray-400/20 rounded-full hover:bg-gray-400/40 transition-colors;
+  background: color-mix(in srgb, currentColor 20%, transparent);
+  border-radius: 9999px;
 }
 
-@layer utilities {
-  .animate-in {
-    animation-duration: var(--animation-duration, 500ms);
-    animation-fill-mode: forwards;
-    animation-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
-  }
-
-  .fade-in {
-    --tw-enter-opacity: 0;
-    animation-name: enter;
-  }
-
-  .zoom-in {
-    --tw-enter-scale: 0.95;
-    animation-name: enter;
-  }
-
-  .slide-in-from-bottom-4 {
-    --tw-enter-translate-y: 1rem;
-    animation-name: enter;
-  }
-
-  .slide-in-from-top-2 {
-    --tw-enter-translate-y: -0.5rem;
-    animation-name: enter;
-  }
-
-  @keyframes enter {
-    from {
-      opacity: var(--tw-enter-opacity, 1);
-      transform: translate3d(var(--tw-enter-translate-x, 0), var(--tw-enter-translate-y, 0), 0) scale3d(var(--tw-enter-scale, 1), var(--tw-enter-scale, 1), var(--tw-enter-scale, 1));
-    }
-  }
-
-  .border-accent\/20 { border-color: color-mix(in srgb, var(--accent) 20%, transparent) !important; }
-  .border-accent\/25 { border-color: color-mix(in srgb, var(--accent) 25%, transparent) !important; }
-  .border-accent\/30 { border-color: color-mix(in srgb, var(--accent) 30%, transparent) !important; }
-  .border-accent\/40 { border-color: color-mix(in srgb, var(--accent) 40%, transparent) !important; }
-  .bg-accent\/5  { background-color: color-mix(in srgb, var(--accent) 5%,  transparent) !important; }
-  .bg-accent\/10 { background-color: color-mix(in srgb, var(--accent) 10%, transparent) !important; }
-  .hover\:border-accent\/30:hover { border-color: color-mix(in srgb, var(--accent) 30%, transparent) !important; }
-  .hover\:border-accent\/40:hover { border-color: color-mix(in srgb, var(--accent) 40%, transparent) !important; }
-
-  .border-warning\/20 { border-color: color-mix(in srgb, var(--warning) 20%, transparent) !important; }
-  .border-warning\/25 { border-color: color-mix(in srgb, var(--warning) 25%, transparent) !important; }
-  .border-warning\/30 { border-color: color-mix(in srgb, var(--warning) 30%, transparent) !important; }
-  .border-warning\/40 { border-color: color-mix(in srgb, var(--warning) 40%, transparent) !important; }
-  .border-warning\/50 { border-color: color-mix(in srgb, var(--warning) 50%, transparent) !important; }
-  .bg-warning\/10 { background-color: color-mix(in srgb, var(--warning) 10%, transparent) !important; }
-  .bg-warning\/15 { background-color: color-mix(in srgb, var(--warning) 15%, transparent) !important; }
-
-  .border-danger\/20 { border-color: color-mix(in srgb, var(--danger) 20%, transparent) !important; }
-  .border-danger\/25 { border-color: color-mix(in srgb, var(--danger) 25%, transparent) !important; }
-  .border-danger\/30 { border-color: color-mix(in srgb, var(--danger) 30%, transparent) !important; }
-  .border-danger\/40 { border-color: color-mix(in srgb, var(--danger) 40%, transparent) !important; }
-  .bg-danger\/10 { background-color: color-mix(in srgb, var(--danger) 10%, transparent) !important; }
-  .bg-danger\/12 { background-color: color-mix(in srgb, var(--danger) 12%, transparent) !important; }
-  .bg-danger\/18 { background-color: color-mix(in srgb, var(--danger) 18%, transparent) !important; }
-
-  .border-success\/20 { border-color: color-mix(in srgb, var(--success) 20%, transparent) !important; }
-  .border-success\/30 { border-color: color-mix(in srgb, var(--success) 30%, transparent) !important; }
-  .bg-success\/10 { background-color: color-mix(in srgb, var(--success) 10%, transparent) !important; }
-}
-
-@keyframes shimmer-flow {
-  0% {
-    background-position: 0% 50%;
-  }
-  50% {
-    background-position: 100% 50%;
-  }
-  100% {
-    background-position: 0% 50%;
-  }
-}
-
-.animate-shimmer {
-  background-size: 200% auto !important;
-  animation: shimmer-flow 2.5s ease infinite !important;
+::-webkit-scrollbar-thumb:hover {
+  background: color-mix(in srgb, currentColor 40%, transparent);
 }

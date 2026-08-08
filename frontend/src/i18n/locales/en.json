@@ -29,7 +29,9 @@
     "dns": "DNS Settings",
     "logs": "Real-time Logs",
     "settings": "Settings",
-    "about": "About"
+    "about": "About",
+    "light_mode": "Light mode",
+    "dark_mode": "Dark mode"
   },
   "welcome": {
     "title": "Welcome to SniShaper",
@@ -344,6 +346,16 @@
       "empty": "No log files",
       "no_content": "(empty)",
       "clean_done": "Cleaned {count} old log file(s)"
+    },
+    "theme": {
+      "label": "Color Scheme",
+      "desc": "Choose the interface color scheme (both support dark/light mode).",
+      "default": "Default MUI",
+      "sniShaper": "Classic SniShaper Blue",
+      "forest": "Forest Green",
+      "sunset": "Sunset Orange",
+      "ocean": "Ocean Teal",
+      "graphite": "Graphite"
     }
   },
   "evolution": {

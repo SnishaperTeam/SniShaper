@@ -25,21 +25,26 @@ import {
   StopTUN,
   EnableSystemProxy,
   DisableSystemProxy,
-  GetStats,
   GetCAInstallStatus,
   OpenCAFile,
   InstallCA,
   EventsOn
 } from '../api/bindings';
-import { Card } from '../components/ui/Card';
-import { Button } from '../components/ui/Button';
 import Modal from '../components/Modal';
 import { toast } from '../lib/toast';
-import { cn, formatSpeed, extractErrorMessage } from '../lib/utils';
+import { formatSpeed, extractErrorMessage } from '../lib/utils';
 import { useTranslation } from '../i18n/I18nContext';
+import {
+  Box,
+  Typography,
+  Button,
+  Grid,
+  useColorScheme,
+} from '@mui/material';
 
 const Dashboard: React.FC = () => {
   const { t } = useTranslation();
+  const { mode } = useColorScheme();
   const [proxyRunning, setProxyRunning] = useState(false);
   const [sysProxyEnabled, setSysProxyEnabled] = useState(false);
   const [proxyMode, setProxyMode] = useState('MITM');
@@ -58,9 +63,11 @@ const Dashboard: React.FC = () => {
   const [showCertModal, setShowCertModal] = useState(false);
   const [isInstallingCert, setIsInstallingCert] = useState(false);
 
+  const hoverBg = mode === 'light' ? 'rgba(0,0,0,0.04)' : 'rgba(255,255,255,0.08)';
+
   const refresh = async () => {
     try {
-      const [running, sysStatus, mode, p, ca, tunCfg, tunState] = await Promise.all([
+      const [running, sysStatus, m, p, ca, tunCfg, tunState] = await Promise.all([
         IsProxyRunning(),
         GetSystemProxyStatus(),
         GetProxyMode(),
@@ -71,7 +78,7 @@ const Dashboard: React.FC = () => {
       ]);
       setProxyRunning(running);
       setSysProxyEnabled(sysStatus.Enabled);
-      setProxyMode(mode.toUpperCase());
+      setProxyMode(m.toUpperCase());
       setPort(p);
       setCaStatus(ca || { Installed: false });
       const normalizedTunConfig = {
@@ -93,10 +100,8 @@ const Dashboard: React.FC = () => {
         setShowCertModal(true);
         sessionStorage.setItem('ca_modal_shown', 'true');
       }
-      return { running, sysStatus, mode, port: p, ca, tunCfg: normalizedTunConfig, tunState: normalizedTunStatus };
     } catch (e) {
       console.error("Dashboard refresh error:", e);
-      return null;
     }
   };
 
@@ -141,13 +146,11 @@ const Dashboard: React.FC = () => {
       }
       if (typeof state.tunMessage === 'string') {
         setTunStatus((prev: any) => ({ ...prev, message: state.tunMessage }));
-        // Clear TUN busy state on error (non-startup, non-off messages)
         if (!state.tunRunning && state.tunMessage && state.tunMessage !== 'TUN is not running') {
           setIsTUNBusy(false);
           toast.error(t('dashboard.notifications.tun_failed'), state.tunMessage);
         }
       }
-      // Force full refresh immediately to catch any missed states
       setTimeout(refresh, 50);
     });
 
@@ -220,32 +223,36 @@ const Dashboard: React.FC = () => {
       const ca = await GetCAInstallStatus();
       setCaStatus(ca || { Installed: false });
       if (ca?.Installed) setShowCertModal(false);
-    } catch (err) { console.error("Failed to install CA:", err);
-    } finally { setIsInstallingCert(false); }
+    } catch (err) {
+      console.error("Failed to install CA:", err);
+    } finally {
+      setIsInstallingCert(false);
+    }
   };
 
   return (
-    <div className="px-6 pt-10 pb-6 max-w-5xl mx-auto space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-700">
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-end gap-4 mb-6">
-        <div>
-          <h1 className="text-3xl font-black tracking-tighter">{t('dashboard.title')}</h1>
-        </div>
-        <div className="flex flex-wrap gap-2">
+    <Box sx={{ px: 6, pt: 5, pb: 6, maxWidth: '5xl', mx: 'auto' }}>
+      <Box sx={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: { xs: 'flex-start', sm: 'flex-end' }, gap: 2, mb: 6 }}>
+        <Typography variant="h4" sx={{ fontWeight: 900, letterSpacing: '-0.02em' }}>
+          {t('dashboard.title')}
+        </Typography>
+        <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
           <Button
             onClick={handleToggleProxy}
             loading={isOperating}
-            variant={proxyRunning ? 'danger' : 'primary'}
-            size="sm"
-            icon={isOperating ? undefined : (proxyRunning ? <Square size={16} fill="white" /> : <Play size={16} fill="white" />)}
+            color={proxyRunning ? 'error' : 'primary'}
+            size="small"
+            startIcon={!isOperating && (proxyRunning ? <Square size={14} /> : <Play size={14} />)}
           >
-            {proxyRunning ? t('dashboard.proxy_stop') : t('dashboard.proxy_start')}
+            {!isOperating && (proxyRunning ? t('dashboard.proxy_stop') : t('dashboard.proxy_start'))}
           </Button>
           <Button
             onClick={handleToggleSysProxy}
             loading={isOperating}
-            variant={sysProxyEnabled ? 'success' : 'outline'}
-            size="sm"
-            icon={isOperating ? undefined : <Globe size={16} />}
+            variant={sysProxyEnabled ? 'contained' : 'outlined'}
+            color={sysProxyEnabled ? 'success' : undefined}
+            size="small"
+            startIcon={!isOperating && <Globe size={14} />}
           >
             {t('dashboard.sys_proxy')}: {sysProxyEnabled ? t('common.on') : t('common.off')}
           </Button>
@@ -253,116 +260,156 @@ const Dashboard: React.FC = () => {
             onClick={handleToggleTUN}
             loading={isTUNBusy}
             disabled={isTUNBusy || !tunStatus.supported}
-            variant={tunStatus.running ? 'warning' : 'outline'}
-            size="sm"
-            icon={isTUNBusy ? undefined : <Globe size={16} />}
+            variant={tunStatus.running ? 'contained' : 'outlined'}
+            color={tunStatus.running ? 'warning' : undefined}
+            size="small"
+            startIcon={!isTUNBusy && <Globe size={14} />}
           >
             {t('dashboard.tun_status')}: {tunStatus.running ? t('common.on') : t('common.off')}
           </Button>
-        </div>
-      </div>
+        </Box>
+      </Box>
 
-      <section className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        <Card title={t('dashboard.core_status')} icon={<Cpu size={20} />}>
-          <div className="space-y-4">
-            <div className="flex items-center justify-between">
-              <span className="text-text-secondary text-sm">{t('dashboard.run_status')}</span>
-              <span className={cn(
-                "px-2 py-0.5 rounded-lg text-[11px] font-black uppercase",
-                proxyRunning ? "bg-success/10 text-success" : "bg-danger/10 text-danger"
-              )}>
-                {proxyRunning ? t('common.running') : t('common.stopped')}
-              </span>
-            </div>
-            <div className="flex items-center justify-between">
-              <span className="text-text-secondary text-sm">{t('dashboard.work_mode')}</span>
-              <span className="font-bold text-accent">{proxyMode}</span>
-            </div>
-            <div className="flex items-center justify-between">
-              <span className="text-text-secondary text-sm">{t('dashboard.listen_port')}</span>
-              <span className="font-bold">{port}</span>
-            </div>
-            <div className="flex items-center justify-between">
-              <span className="text-text-secondary text-sm">{t('dashboard.tun_status')}</span>
-              <span className={cn(
-                "px-2 py-0.5 rounded-lg text-[11px] font-black uppercase",
-                tunStatus.running ? "bg-warning/15 text-warning" : "bg-background-hover text-text-secondary"
-              )}>
-                {tunStatus.running ? t('common.running') : t('common.off')}
-              </span>
-            </div>
-          </div>
-        </Card>
+      <Grid container spacing={3}>
+        <Grid size={12}>
+          <Box sx={{ p: 3, bgcolor: 'background.paper', border: 1, borderColor: 'divider', borderRadius: 2, boxShadow: 1, transition: 'box-shadow 0.25s ease', '&:hover': { boxShadow: (theme) => `0 6px 24px ${theme.palette.primary.main}33` } }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 2 }}>
+              <Box sx={{ color: 'primary.main' }}><Cpu size={20} /></Box>
+              <Typography variant="body2" sx={{ fontWeight: 'bold', color: 'text.secondary', letterSpacing: '-0.01em', textTransform: 'uppercase' }}>
+                {t('dashboard.core_status')}
+              </Typography>
+            </Box>
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+              <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <Typography variant="body2" color="text.secondary">{t('dashboard.run_status')}</Typography>
+                <Box sx={{ px: 1, py: 0.25, borderRadius: 1, fontSize: '0.75rem', fontWeight: 'bold', textTransform: 'uppercase', bgcolor: proxyRunning ? 'success.main' : 'error.main', color: proxyRunning ? 'success.contrastText' : 'error.contrastText' }}>
+                  {proxyRunning ? t('common.running') : t('common.stopped')}
+                </Box>
+              </Box>
+              <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <Typography variant="body2" color="text.secondary">{t('dashboard.work_mode')}</Typography>
+                <Typography variant="body2" sx={{ fontWeight: 'bold', color: 'primary.main' }}>
+                  {proxyMode}
+                </Typography>
+              </Box>
+              <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <Typography variant="body2" color="text.secondary">{t('dashboard.listen_port')}</Typography>
+                <Typography variant="body2" sx={{ fontWeight: 'bold' }}>
+                  {port}
+                </Typography>
+              </Box>
+              <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <Typography variant="body2" color="text.secondary">{t('dashboard.tun_status')}</Typography>
+                <Box sx={{ px: 1, py: 0.25, borderRadius: 1, fontSize: '0.75rem', fontWeight: 'bold', textTransform: 'uppercase', bgcolor: tunStatus.running ? 'warning.main' : hoverBg, color: tunStatus.running ? 'warning.contrastText' : 'text.secondary' }}>
+                  {tunStatus.running ? t('common.running') : t('common.off')}
+                </Box>
+              </Box>
+            </Box>
+          </Box>
+        </Grid>
 
-        <Card title={t('dashboard.cert_status')} icon={<ShieldCheck size={20} />}>
-          <div className="space-y-3">
-            <div className={cn(
-              "flex items-center gap-2 p-2.5 rounded-2xl border",
-              caStatus.Installed
-                ? "bg-success/10 text-success border-success/30"
-                : "bg-danger/10 text-danger border-danger/30"
-            )}>
-              {caStatus.Installed ? <ShieldCheck size={14} /> : <ShieldAlert size={14} />}
-              <span className="text-xs font-bold truncate">
-                {caStatus.Installed ? t('dashboard.cert_installed') : t('dashboard.cert_not_installed')}
-              </span>
-            </div>
-            <div className="text-[10px] text-text-muted font-medium px-1 flex justify-between items-center">
-              <span className="truncate max-w-[140px] opacity-60 text-[9px]" title={caStatus.CertPath}>
-                {caStatus.CertPath || t('dashboard.path_pending')}
-              </span>
-              <button onClick={() => OpenCAFile()} className="flex items-center gap-1 text-accent hover:underline font-bold shrink-0" aria-label="查看证书">
-                <Search size={10} aria-hidden /> {t('common.view')}
-              </button>
-            </div>
-          </div>
-        </Card>
+        <Grid size={12}>
+          <Box sx={{ p: 3, bgcolor: 'background.paper', border: 1, borderColor: 'divider', borderRadius: 2, boxShadow: 1, transition: 'box-shadow 0.25s ease', '&:hover': { boxShadow: (theme) => `0 6px 24px ${theme.palette.primary.main}33` } }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 2 }}>
+              <Box sx={{ color: 'primary.main' }}><ShieldCheck size={20} /></Box>
+              <Typography variant="body2" sx={{ fontWeight: 'bold', color: 'text.secondary', letterSpacing: '-0.01em', textTransform: 'uppercase' }}>
+                {t('dashboard.cert_status')}
+              </Typography>
+            </Box>
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, p: 1.25, borderRadius: 2, border: 1, bgcolor: caStatus.Installed ? 'success.main' : 'error.main', color: caStatus.Installed ? 'success.contrastText' : 'error.contrastText', borderColor: caStatus.Installed ? 'success.light' : 'error.light' }}>
+                {caStatus.Installed ? <ShieldCheck size={18} /> : <ShieldAlert size={18} />}
+                <Typography variant="caption" sx={{ fontWeight: 'bold', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {caStatus.Installed ? t('dashboard.cert_installed') : t('dashboard.cert_not_installed')}
+                </Typography>
+              </Box>
+              <Box sx={{ display: 'flex', fontSize: '0.75rem', color: 'text.secondary', fontWeight: 'medium', px: 1, justifyContent: 'space-between', alignItems: 'center' }}>
+                <Typography noWrap sx={{ maxWidth: 140, opacity: 0.6, fontSize: '0.625rem' }} title={caStatus.CertPath}>
+                  {caStatus.CertPath || t('dashboard.path_pending')}
+                </Typography>
+                <Button
+                  variant="text"
+                  size="small"
+                  onClick={() => OpenCAFile()}
+                  sx={{ gap: 0.5, color: 'primary.main', fontWeight: 'bold', '&:hover': { textDecoration: 'underline' } }}
+                  startIcon={<Search size={14} />}
+                >
+                  {t('common.view')}
+                </Button>
+              </Box>
+            </Box>
+          </Box>
+        </Grid>
 
-        <Card title={t('dashboard.conn_info')} icon={<ShieldCheck size={20} />} className="lg:col-span-1">
-          <div className="space-y-3">
-            <div className="flex items-center gap-2 p-2.5 bg-accent/10 border border-accent/20 rounded-2xl">
-              <Zap size={14} className="text-accent" aria-hidden />
-              <span className="text-sm font-bold text-accent truncate">127.0.0.1:{port}</span>
-            </div>
-            <div className="text-[11px] text-text-muted font-medium px-1 flex items-center justify-end">
-              <span className="text-[9px] bg-background-hover px-1.5 py-0.5 rounded text-text-secondary uppercase">{t('common.ready')}</span>
-            </div>
-          </div>
-        </Card>
-      </section>
+        <Grid size={12}>
+          <Box sx={{ p: 3, bgcolor: 'background.paper', border: 1, borderColor: 'divider', borderRadius: 2, boxShadow: 1, transition: 'box-shadow 0.25s ease', '&:hover': { boxShadow: (theme) => `0 6px 24px ${theme.palette.primary.main}33` } }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 2 }}>
+              <Box sx={{ color: 'primary.main' }}><ShieldCheck size={20} /></Box>
+              <Typography variant="body2" sx={{ fontWeight: 'bold', color: 'text.secondary', letterSpacing: '-0.01em', textTransform: 'uppercase' }}>
+                {t('dashboard.conn_info')}
+              </Typography>
+            </Box>
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, p: 1.25, bgcolor: 'primary.main', border: 1, borderColor: 'primary.main', borderRadius: 2 }}>
+                <Zap size={18} color="primary.contrastText" aria-hidden />
+                <Typography variant="body2" sx={{ fontWeight: 'bold', color: 'primary.contrastText', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  127.0.0.1:{port}
+                </Typography>
+              </Box>
+              <Box sx={{ display: 'flex', fontSize: '0.75rem', color: 'text.secondary', fontWeight: 'medium', px: 1, justifyContent: 'flex-end', alignItems: 'center' }}>
+                <Typography sx={{ fontSize: '0.625rem', bgcolor: hoverBg, px: 1.5, py: 0.25, borderRadius: 1, textTransform: 'uppercase', color: 'text.secondary' }}>
+                  {t('common.ready')}
+                </Typography>
+              </Box>
+            </Box>
+          </Box>
+        </Grid>
+      </Grid>
 
-      <Modal isOpen={showCertModal} onClose={() => setShowCertModal(false)} title={t('dashboard.install_cert.title')} maxWidth="max-w-md">
-        <div className="space-y-6 py-2">
-          <div className="flex justify-center">
-            <div className="w-20 h-20 bg-accent/10 rounded-full flex items-center justify-center text-accent animate-pulse">
-              <Lock size={40} />
-            </div>
-          </div>
-          <div className="text-center space-y-2">
-            <h4 className="text-lg font-bold">{t('dashboard.install_cert.subtitle')}</h4>
-          </div>
-          <div className="bg-background-soft/50 border border-border rounded-2xl p-4 space-y-3">
-            <div className="flex items-start gap-3">
-              <div className="mt-0.5 text-warning group-hover:scale-110 transition-transform">
-                <ShieldAlert size={16} />
-              </div>
-              <div className="space-y-1">
-                <p className="text-[11px] font-bold">{t('dashboard.install_cert.security_alert')}</p>
-                <p className="text-[10px] text-text-muted leading-normal">{t('dashboard.install_cert.security_desc')}</p>
-              </div>
-            </div>
-          </div>
-          <div className="flex flex-col gap-3 pt-2">
-            <Button onClick={handleInstallCA} loading={isInstallingCert} icon={isInstallingCert ? undefined : <Download size={18} />} className="w-full">
+      <Modal isOpen={showCertModal} onClose={() => setShowCertModal(false)} title={t('dashboard.install_cert.title')} maxWidth="md">
+        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3, py: 1 }}>
+          <Box sx={{ display: 'flex', justifyContent: 'center' }}>
+            <Box sx={{ width: 56, height: 56, borderRadius: '50%', bgcolor: 'primary.main', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <Lock size={24} color="primary.contrastText" />
+            </Box>
+          </Box>
+          <Box sx={{ textAlign: 'center' }}>
+            <Typography variant="h5" sx={{ fontWeight: 'bold' }}>
+              {t('dashboard.install_cert.subtitle')}
+            </Typography>
+          </Box>
+          <Box sx={{ bgcolor: 'background.default', border: 1, borderColor: 'divider', borderRadius: 2, p: 2 }}>
+            <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1.5 }}>
+              <Box sx={{ mt: 0.5, color: 'warning.main' }}>
+                <ShieldAlert size={20} />
+              </Box>
+              <Box>
+                <Typography variant="body2" sx={{ fontWeight: 'bold' }}>
+                  {t('dashboard.install_cert.security_alert')}
+                </Typography>
+                <Typography variant="caption" color="text.secondary" sx={{ lineHeight: 1.5, display: 'block' }}>
+                  {t('dashboard.install_cert.security_desc')}
+                </Typography>
+              </Box>
+            </Box>
+          </Box>
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5, pt: 1 }}>
+            <Button
+              onClick={handleInstallCA}
+              loading={isInstallingCert}
+              variant="contained"
+              fullWidth
+              startIcon={!isInstallingCert && <Download size={16} />}
+            >
               {isInstallingCert ? t('dashboard.install_cert.installing') : t('dashboard.install_cert.install_now')}
             </Button>
-            <Button onClick={() => setShowCertModal(false)} variant="ghost" className="w-full">
+            <Button onClick={() => setShowCertModal(false)} variant="text" fullWidth>
               {t('dashboard.install_cert.remind_later')}
             </Button>
-          </div>
-        </div>
+          </Box>
+        </Box>
       </Modal>
-    </div>
+    </Box>
   );
 };
 

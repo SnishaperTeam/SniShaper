@@ -1,4 +1,6 @@
 import React, { useState } from 'react';
+import { Box, Button, Typography } from '@mui/material';
+import { alpha } from '@mui/material/styles';
 import logoUrl from '../assets/logo.svg';
 import { SetLanguage } from '../api/bindings';
 import { useTranslation } from '../i18n/I18nContext';
@@ -7,6 +9,12 @@ import { Languages } from '../lib/icons';
 interface WelcomeProps {
   onComplete: (lang: string) => void;
 }
+
+const languages = [
+  { id: 'zh' as const, label: '简体中文', sub: 'Chinese' },
+  { id: 'en' as const, label: 'English', sub: '英语' },
+  { id: 'ru' as const, label: 'Русский', sub: '俄语' },
+];
 
 const Welcome: React.FC<WelcomeProps> = ({ onComplete }) => {
   const { setLanguage, t } = useTranslation();
@@ -20,69 +28,104 @@ const Welcome: React.FC<WelcomeProps> = ({ onComplete }) => {
   };
 
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-background p-6">
-      <div className="w-full max-w-md space-y-8 text-center animate-in fade-in zoom-in duration-500">
-        <div className="space-y-3">
-          <div className="flex justify-center mb-6">
-            <img src={logoUrl} className="h-20 w-20 drop-shadow-2xl animate-pulse" alt="logo" />
-          </div>
-          <h1 className="text-3xl font-bold text-text-primary tracking-tight">{t('welcome.title')}</h1>
-          <p className="text-text-secondary">{t('welcome.subtitle')}</p>
-        </div>
+    <Box sx={{
+      position: 'fixed',
+      inset: 0,
+      zIndex: 100,
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      bgcolor: 'background.default',
+      p: 3,
+    }}>
+      <Box sx={{
+        width: '100%',
+        maxWidth: '28rem',
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        textAlign: 'center',
+        gap: 4,
+        '@keyframes welcomeFadeZoom': {
+          '0%': { opacity: 0, transform: 'scale(0.95)' },
+          '100%': { opacity: 1, transform: 'scale(1)' },
+        },
+        animation: 'welcomeFadeZoom 0.5s ease',
+      }}>
+        <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 1.5 }}>
+          <Box component="img" src={logoUrl} alt="logo" sx={{
+            width: 80,
+            height: 80,
+            mb: 3,
+            filter: 'drop-shadow(0 25px 50px rgba(0, 0, 0, 0.25))',
+            '@keyframes welcomePulse': {
+              '0%, 100%': { opacity: 1 },
+              '50%': { opacity: 0.5 },
+            },
+            animation: 'welcomePulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite',
+          }} />
+          <Typography variant="h1" sx={{ fontSize: '1.875rem', fontWeight: 700, color: 'text.primary', letterSpacing: '-0.025em' }}>
+            {t('welcome.title')}
+          </Typography>
+          <Typography color="text.secondary">{t('welcome.subtitle')}</Typography>
+        </Box>
 
-        <div className="grid grid-cols-3 gap-3">
-          <button
-            onClick={() => { setSelected('zh'); setLanguage('zh'); }}
-            className={`flex flex-col items-center justify-center p-4 rounded-xl border-2 transition-all duration-200 ${
-              selected === 'zh' 
-                ? 'border-accent bg-accent/5 text-accent shadow-sm' 
-                : 'border-border bg-background-soft/50 text-text-secondary hover:border-border-hover'
-            }`}
-          >
-            <span className="text-lg font-medium mb-1 flex items-center gap-2">
-              <Languages size={18} />
-              简体中文
-            </span>
-            <span className="text-xs opacity-60">Chinese</span>
-          </button>
-          <button
-            onClick={() => { setSelected('en'); setLanguage('en'); }}
-            className={`flex flex-col items-center justify-center p-4 rounded-xl border-2 transition-all duration-200 ${
-              selected === 'en' 
-                ? 'border-accent bg-accent/5 text-accent shadow-sm' 
-                : 'border-border bg-background-soft/50 text-text-secondary hover:border-border-hover'
-            }`}
-          >
-            <span className="text-lg font-medium mb-1 flex items-center gap-2">
-              <Languages size={18} />
-              English
-            </span>
-            <span className="text-xs opacity-60">英语</span>
-          </button>
-          <button
-            onClick={() => { setSelected('ru'); setLanguage('ru'); }}
-            className={`flex flex-col items-center justify-center p-4 rounded-xl border-2 transition-all duration-200 ${
-              selected === 'ru' 
-                ? 'border-accent bg-accent/5 text-accent shadow-sm' 
-                : 'border-border bg-background-soft/50 text-text-secondary hover:border-border-hover'
-            }`}
-          >
-            <span className="text-lg font-medium mb-1 flex items-center gap-2">
-              <Languages size={18} />
-              Русский
-            </span>
-            <span className="text-xs opacity-60">俄语</span>
-          </button>
-        </div>
+        <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 1.5, width: '100%' }}>
+          {languages.map((lang) => {
+            const active = selected === lang.id;
+            return (
+              <Button
+                key={lang.id}
+                onClick={() => { setSelected(lang.id); setLanguage(lang.id); }}
+                sx={{
+                  flexDirection: 'column',
+                  py: 2,
+                  borderRadius: 2,
+                  border: 2,
+                  transition: 'all 0.2s',
+                  ...(active
+                    ? {
+                        borderColor: 'primary.main',
+                        bgcolor: (theme) => alpha(theme.palette.primary.main, 0.05),
+                        color: 'primary.main',
+                        boxShadow: 1,
+                        '&:hover': { bgcolor: (theme) => alpha(theme.palette.primary.main, 0.05) },
+                      }
+                    : {
+                        borderColor: 'divider',
+                        bgcolor: (theme) => alpha(theme.palette.background.paper, 0.5),
+                        color: 'text.secondary',
+                        '&:hover': { borderColor: (theme) => alpha(theme.palette.primary.main, 0.4) },
+                      }),
+                }}
+              >
+                <Box component="span" sx={{ display: 'flex', alignItems: 'center', gap: 1, fontSize: '1.125rem', fontWeight: 500, mb: 0.5 }}>
+                  <Languages size={18} />
+                  {lang.label}
+                </Box>
+                <Box component="span" sx={{ fontSize: '0.75rem', opacity: 0.6 }}>{lang.sub}</Box>
+              </Button>
+            );
+          })}
+        </Box>
 
-        <button
+        <Button
+          fullWidth
           onClick={handleStart}
-          className="w-full py-3.5 bg-accent hover:bg-accent/90 text-white rounded-xl font-semibold shadow-lg shadow-accent/20 transition-all transform active:scale-[0.98]"
+          sx={{
+            py: 1.75,
+            borderRadius: 2,
+            fontWeight: 600,
+            boxShadow: (theme) => `0 10px 15px -3px ${alpha(theme.palette.primary.main, 0.2)}`,
+            transition: 'all 0.2s',
+            '&:hover': { bgcolor: (theme) => alpha(theme.palette.primary.main, 0.9) },
+            '&:active': { transform: 'scale(0.98)' },
+          }}
         >
           {t('welcome.start')}
-        </button>
-      </div>
-    </div>
+        </Button>
+      </Box>
+    </Box>
   );
 };
 

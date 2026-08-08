@@ -6,10 +6,9 @@ import {
   ClearLogs, GetRecentLogs, IsLogCaptureEnabled,
   StartLogCapture, StopLogCapture
 } from '../api/bindings';
-import { Button } from '../components/ui/Button';
-import { EmptyState } from '../components/ui/EmptyState';
-import { cn } from '../lib/utils';
 import { useTranslation } from '../i18n/I18nContext';
+import { Box, Typography, Button, TextField, InputAdornment } from '@mui/material';
+import { keyframes } from '@emotion/react';
 
 const RE_ERROR = /error|failed|panic/i;
 const RE_WARN = /warn/i;
@@ -25,27 +24,33 @@ const parseLine = (text: string): Parsed => {
   return { date: match[1], time: match[2], msg, level };
 };
 
+const pulse = keyframes`0%,100%{opacity:1}50%{opacity:0.4}`;
+const bounce = keyframes`0%,100%{transform:translateY(0)}50%{transform:translateY(-2px)}`;
+
 const LogLine: React.FC<{ line: string }> = React.memo(({ line }) => {
   const { time, msg, level } = parseLine(line);
 
+  const levelColor = level === 'error' ? 'error.main' : level === 'warn' ? 'warning.main' : 'text.primary';
+  const borderColor = level === 'error' ? 'rgba(239,68,68,0.7)' : level === 'warn' ? 'rgba(245,158,11,0.7)' : 'transparent';
+  const bgColor = level === 'error' ? 'rgba(239,68,68,0.03)' : level === 'warn' ? 'rgba(245,158,11,0.03)' : 'transparent';
+  const badgeBg = level === 'error' ? 'rgba(239,68,68,0.2)' : level === 'warn' ? 'rgba(245,158,11,0.2)' : 'rgba(11,123,255,0.1)';
+  const badgeColor = level === 'error' ? 'error.main' : level === 'warn' ? 'warning.main' : 'primary.main';
+
   return (
-    <div className={cn(
-      'flex gap-2.5 px-4 py-1.5 font-mono text-[11px] leading-relaxed group hover:bg-background-hover transition-colors border-l-2',
-      level === 'error' && 'border-l-red-500/70 bg-red-500/[0.03] text-red-500',
-      level === 'warn' && 'border-l-amber-500/70 bg-amber-500/[0.03] text-amber-500',
-      level === 'info' && 'border-l-transparent hover:border-l-border text-text-primary'
-    )}>
-      <span className="shrink-0 text-text-muted w-[60px] text-right tabular-nums flex-shrink-0">{time}</span>
-      <span className={cn(
-        'shrink-0 px-1.5 rounded text-[9px] font-black uppercase leading-[16px] h-[16px] text-center min-w-[34px] flex-shrink-0',
-        level === 'error' && 'bg-red-500/20 text-red-500',
-        level === 'warn' && 'bg-amber-500/20 text-amber-500',
-        level === 'info' && 'bg-accent/10 text-accent'
-      )}>
+    <Box sx={{
+      display: 'flex', gap: 1.25, px: 2, py: 0.75, fontFamily: 'mono', fontSize: '0.6875rem', lineHeight: 1.6,
+      borderLeft: 2, borderLeftColor: borderColor, bgcolor: bgColor, color: levelColor,
+      transition: 'background-color 0.15s', '&:hover': { bgcolor: 'action.hover' },
+    }}>
+      <Box component="span" sx={{ flexShrink: 0, color: 'text.secondary', width: 60, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{time}</Box>
+      <Box component="span" sx={{
+        flexShrink: 0, px: 0.75, borderRadius: 0.5, fontSize: '0.5625rem', fontWeight: 900, textTransform: 'uppercase',
+        lineHeight: '16px', height: 16, textAlign: 'center', minWidth: 34, bgcolor: badgeBg, color: badgeColor,
+      }}>
         {level === 'error' ? 'ERR' : level === 'warn' ? 'WRN' : 'INF'}
-      </span>
-      <span className="truncate group-hover:whitespace-normal group-hover:break-all flex-1 min-w-0">{msg}</span>
-    </div>
+      </Box>
+      <Box component="span" sx={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', '&:hover': { whiteSpace: 'normal', wordBreak: 'break-all' } }}>{msg}</Box>
+    </Box>
   );
 });
 
@@ -67,11 +72,6 @@ const Logs: React.FC = () => {
     if (!el) return;
     const isAtBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 60;
     setAtBottom(isAtBottom);
-    if (isAtBottom) {
-      setNewSinceAway(0);
-    } else if (newSinceAway > 0) {
-      // counter incremented elsewhere
-    }
   }, []);
 
   const scrollToBottom = useCallback(() => {
@@ -155,9 +155,13 @@ const Logs: React.FC = () => {
       if (date && date !== lastDate) {
         lastDate = date;
         elements.push(
-          <div key={`d-${date}`} className="sticky top-0 z-10 px-4 py-1 bg-background-card/90 backdrop-blur border-b border-border/60 text-[10px] font-black uppercase tracking-widest text-text-muted">
+          <Box key={`d-${date}`} sx={{
+            position: 'sticky', top: 0, zIndex: 10, px: 2, py: 0.5, bgcolor: 'background.paper', opacity: 0.9,
+            backdropFilter: 'blur(4px)', borderBottom: 1, borderColor: 'divider',
+            fontSize: '0.625rem', fontWeight: 900, textTransform: 'uppercase', letterSpacing: '0.1em', color: 'text.secondary',
+          }}>
             {date}
-          </div>
+          </Box>
         );
       }
       elements.push(<LogLine key={`l-${i}`} line={line} />);
@@ -166,76 +170,109 @@ const Logs: React.FC = () => {
   }, [filteredLines, captureEnabled]);
 
   return (
-    <div className="h-full flex flex-col p-6 animate-in fade-in duration-500 overflow-hidden">
-      <header className="flex justify-between items-end mb-6 shrink-0">
-        <h1 className="text-3xl font-black tracking-tighter">{t('logs.title')}</h1>
-        <div className="flex gap-2">
+    <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column', p: 3, overflow: 'hidden' }}>
+      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', mb: 3, flexShrink: 0 }}>
+        <Typography variant="h4" sx={{ fontWeight: 900, letterSpacing: '-0.03em' }}>{t('logs.title')}</Typography>
+        <Box sx={{ display: 'flex', gap: 1 }}>
           <Button onClick={handleToggleCapture} loading={isTogglingCapture}
-            variant={captureEnabled ? 'danger' : 'primary'} size="sm" icon={<Radio size={14} />}>
+            color={captureEnabled ? 'error' : 'primary'} variant="contained" size="small" startIcon={<Radio size={14} />}>
             {captureEnabled ? t('logs.stop_capture') : t('logs.capture')}
           </Button>
           <Button onClick={() => setIsPaused(!isPaused)} disabled={!captureEnabled}
-            variant={isPaused ? 'primary' : 'ghost'} size="sm" icon={isPaused ? <Play size={14} /> : <Pause size={14} />}>
+            variant={isPaused ? 'contained' : 'outlined'} size="small" startIcon={isPaused ? <Play size={14} /> : <Pause size={14} />}>
             {isPaused ? t('logs.resume') : t('logs.pause')}
           </Button>
-          <Button onClick={handleScrollTop} variant="ghost" size="sm" icon={<ChevronsUp size={14} />}>
+          <Button onClick={handleScrollTop} variant="outlined" size="small" startIcon={<ChevronsUp size={14} />}>
             {t('logs.scroll_top')}
           </Button>
-          <Button onClick={handleClear} variant="ghost" size="sm"
-            className="hover:bg-danger/10 hover:text-danger" icon={<Trash2 size={14} />}>
+          <Button onClick={handleClear} variant="outlined" size="small"
+            sx={{ '&:hover': { bgcolor: 'rgba(239,68,68,0.1)', color: 'error.main' } }} startIcon={<Trash2 size={14} />}>
             {t('logs.clear')}
           </Button>
           <Button onClick={handleExport} disabled={!captureEnabled || filteredLines.length === 0}
-            variant="ghost" size="sm" icon={<Download size={14} />}>
+            variant="outlined" size="small" startIcon={<Download size={14} />}>
             {t('logs.export')}
           </Button>
-        </div>
-      </header>
+        </Box>
+      </Box>
 
-      <div className="mb-4 relative group shrink-0">
-        <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-text-muted group-focus-within:text-accent transition-colors" size={16} aria-hidden />
-        <input type="text" value={search} onChange={(e) => setSearch(e.target.value)} placeholder={t('logs.search_placeholder')}
+      <Box sx={{ mb: 2, flexShrink: 0 }}>
+        <TextField
+          type="text"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder={t('logs.search_placeholder')}
           aria-label={t('logs.search_placeholder')}
-          className="w-full bg-background-card border border-border focus:border-accent/30 pl-11 pr-4 py-2.5 rounded-2xl text-xs outline-none transition-all font-medium" />
-      </div>
+          fullWidth
+          size="small"
+          slotProps={{
+            input: {
+              startAdornment: (
+                <InputAdornment position="start">
+                  <Search size={16} aria-hidden />
+                </InputAdornment>
+              ),
+            },
+          }}
+          sx={{ '& .MuiOutlinedInput-root': { borderRadius: 2, bgcolor: 'background.paper' } }}
+        />
+      </Box>
 
-      <div ref={scrollRef} onScroll={handleScroll} className="flex-1 bg-background-card border border-border rounded-2xl overflow-hidden shadow-inner flex flex-col relative">
-        <div className="flex-1 overflow-y-auto overflow-x-hidden">
+      <Box ref={scrollRef} onScroll={handleScroll} sx={{
+        flex: 1, bgcolor: 'background.paper', border: 1, borderColor: 'divider', borderRadius: 2,
+        overflow: 'hidden', display: 'flex', flexDirection: 'column', position: 'relative',
+        boxShadow: 'inset 0 2px 4px 0 rgba(0,0,0,0.05)',
+      }}>
+        <Box sx={{ flex: 1, overflowY: 'auto', overflowX: 'hidden' }}>
           {!captureEnabled ? (
-            <div className="h-full flex flex-col items-center justify-center text-text-muted opacity-60 px-8 text-center">
+            <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: 'text.secondary', opacity: 0.6, px: 4, textAlign: 'center' }}>
               <Radio size={42} strokeWidth={1.5} aria-hidden />
-              <span className="text-xs mt-4 font-black uppercase tracking-[0.2em]">Capture Disabled</span>
-              <p className="mt-3 text-xs leading-relaxed max-w-md">{t('logs.capture_hint')}</p>
-            </div>
+              <Typography variant="caption" sx={{ mt: 2, fontWeight: 900, textTransform: 'uppercase', letterSpacing: '0.2em', fontSize: '0.75rem' }}>Capture Disabled</Typography>
+              <Typography variant="caption" sx={{ mt: 1.5, lineHeight: 1.6, maxWidth: 448, display: 'block' }}>{t('logs.capture_hint')}</Typography>
+            </Box>
           ) : filteredLines.length === 0 ? (
-            <EmptyState icon={<FileText size={48} strokeWidth={1} />} title={t('logs.no_logs')} />
+            <Box sx={{ py: 12, display: 'flex', flexDirection: 'column', alignItems: 'center', color: 'text.secondary', opacity: 0.5 }}>
+              <FileText size={48} strokeWidth={1} />
+              <Typography variant="body2" sx={{ mt: 1.5 }}>{t('logs.no_logs')}</Typography>
+            </Box>
           ) : (
             renderedContent
           )}
-        </div>
+        </Box>
         {captureEnabled && !atBottom && (
-          <button onClick={scrollToBottom}
-            className="absolute bottom-3 left-1/2 -translate-x-1/2 z-20 flex items-center gap-2 px-4 py-2 rounded-full bg-accent text-white text-[11px] font-black uppercase tracking-wider shadow-lg hover:bg-accent/90 active:scale-95 transition-all animate-in slide-in-from-bottom-2 fade-in duration-200">
-            <ArrowDown size={14} />
-            {newSinceAway > 0 && <span className="bg-white/20 px-1.5 rounded text-[10px]">+{newSinceAway}</span>}
+          <Button
+            onClick={scrollToBottom}
+            variant="contained"
+            color="primary"
+            size="small"
+            sx={{
+              position: 'absolute', bottom: 12, left: '50%', transform: 'translateX(-50%)', zIndex: 20,
+              borderRadius: '999px', fontSize: '0.6875rem', fontWeight: 900, textTransform: 'uppercase',
+              letterSpacing: '0.05em', boxShadow: 8, '&:active': { transform: 'translateX(-50%) scale(0.95)' },
+            }}
+            startIcon={<ArrowDown size={14} />}
+          >
+            {newSinceAway > 0 && (
+              <Box component="span" sx={{ bgcolor: 'rgba(255,255,255,0.2)', px: 0.75, borderRadius: 0.5, fontSize: '0.625rem' }}>+{newSinceAway}</Box>
+            )}
             最新
-          </button>
+          </Button>
         )}
 
-        <div className="px-6 py-2 bg-background-hover/50 border-t border-border flex justify-between items-center shrink-0">
-          <div className="flex gap-4 text-[9px] font-black uppercase tracking-widest text-text-muted">
-            <div className="flex items-center gap-1">
-              <div className={cn('w-1.5 h-1.5 rounded-full', captureEnabled ? 'bg-success animate-pulse' : 'bg-text-muted/40')} aria-hidden />
-              {captureEnabled ? "CAPTURE ON" : "CAPTURE OFF"}
-            </div>
-            <div>BUFFER: {lines.length} LINES</div>
-          </div>
+        <Box sx={{ px: 3, py: 1, bgcolor: 'action.hover', borderTop: 1, borderColor: 'divider', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0 }}>
+          <Box sx={{ display: 'flex', gap: 2, fontSize: '0.5625rem', fontWeight: 900, textTransform: 'uppercase', letterSpacing: '0.1em', color: 'text.secondary' }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+              <Box sx={{ width: 6, height: 6, borderRadius: '50%', bgcolor: captureEnabled ? 'success.main' : 'text.disabled', ...(captureEnabled ? { animation: `${pulse} 1.5s ease-in-out infinite` } : {}) }} aria-hidden />
+              {captureEnabled ? 'CAPTURE ON' : 'CAPTURE OFF'}
+            </Box>
+            <Box>BUFFER: {lines.length} LINES</Box>
+          </Box>
           {captureEnabled && isPaused && (
-            <div className="text-[9px] font-black text-accent bg-accent/10 px-2 py-0.5 rounded-full animate-bounce">REFRESH PAUSED</div>
+            <Typography variant="caption" sx={{ fontWeight: 900, color: 'primary.main', bgcolor: 'rgba(11,123,255,0.1)', px: 1, py: 0.25, borderRadius: '999px', fontSize: '0.5625rem', animation: `${bounce} 1s ease-in-out infinite` }}>REFRESH PAUSED</Typography>
           )}
-        </div>
-      </div>
-    </div>
+        </Box>
+      </Box>
+    </Box>
   );
 };
 

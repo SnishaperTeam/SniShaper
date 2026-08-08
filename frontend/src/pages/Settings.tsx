@@ -1,23 +1,8 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
-  ShieldAlert,
-  Download,
-  FolderOpen,
-  RefreshCcw,
-  Monitor,
-  Anchor,
-  Cpu,
-  Globe,
-  BellRing,
-  Activity,
-  CloudLightning,
-  Zap,
-  Trash2,
-  AlertCircle,
-  Sun,
-  Moon,
-  Wifi,
-  FileText
+  ShieldAlert, Download, FolderOpen, RefreshCcw, Monitor, Anchor,
+  Cpu, Globe, BellRing, Activity, CloudLightning, Zap, Trash2,
+  AlertCircle, Sun, Moon, Wifi, FileText
 } from '../lib/icons';
 import {
   GetListenPort, SetListenPort, GetCloseToTray, SetCloseToTray,
@@ -32,23 +17,26 @@ import {
   GetIPv6Available, RefreshIPv6Check,
   GetLogFiles, OpenLogFile, CleanOldLogs
 } from '../api/bindings';
-import { SettingRow, StackedSettingRow } from '../components/ui/Card';
-import { Button } from '../components/ui/Button';
-import { Toggle } from '../components/ui/Toggle';
-import { EmptyState } from '../components/ui/EmptyState';
+import {
+  Box, Button, TextField, Select, MenuItem, FormControl, InputLabel, Switch,
+  FormControlLabel, Tooltip, Typography, Stack, Grid, Badge, Divider, CircularProgress,
+} from '@mui/material';
 import { toast } from '../lib/toast';
 import { parseLatencyMs } from '../lib/utils';
 import { useTranslation } from '../i18n/I18nContext';
+import { useColorScheme } from '@mui/material';
+import { availableThemes } from '../theme';
 
 interface SettingsProps {
   cache: any;
   onCacheUpdate: (patch: any) => void;
-  theme: 'light' | 'dark';
-  toggleTheme: () => void;
+  currentThemeId: string;
+  onThemeChange: (id: string) => void;
 }
 
-const Settings: React.FC<SettingsProps> = ({ cache, onCacheUpdate, theme, toggleTheme }) => {
+const Settings: React.FC<SettingsProps> = ({ cache, onCacheUpdate, currentThemeId, onThemeChange }) => {
   const { t, language, setLanguage: setI18nLanguage } = useTranslation();
+  const { mode, setMode } = useColorScheme();
   const [port, setPort] = useState(cache.port);
   const [socks5Port, setSocks5Port] = useState(cache.socks5Port ?? '8081');
   const [closeToTray, setCloseToTray] = useState(cache.closeToTray);
@@ -80,7 +68,9 @@ const Settings: React.FC<SettingsProps> = ({ cache, onCacheUpdate, theme, toggle
         cfConfig: cf || cache.cfConfig, caStatus: ca || cache.caStatus,
         installedCerts: certs || cache.installedCerts
       });
-    } catch { /* ignore */ }
+    } catch {
+      /* ignore */
+    }
   }, [cache, onCacheUpdate]);
 
   useEffect(() => {
@@ -215,9 +205,7 @@ const Settings: React.FC<SettingsProps> = ({ cache, onCacheUpdate, theme, toggle
 
   useEffect(() => { void loadLogFiles(); }, [loadLogFiles]);
 
-  const handleViewLog = (name: string) => {
-    OpenLogFile(name);
-  };
+  const handleViewLog = (name: string) => { OpenLogFile(name); };
 
   const handleCleanLogs = async () => {
     setIsCleaningLogs(true);
@@ -235,277 +223,454 @@ const Settings: React.FC<SettingsProps> = ({ cache, onCacheUpdate, theme, toggle
       : bytes >= 1024 ? `${(bytes / 1024).toFixed(0)} KB`
         : `${bytes} B`;
 
+  const SectionHeader = ({ icon, label, action }: { icon: React.ReactNode; label: string; action?: React.ReactNode }) => (
+    <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', px: 1 }}>
+      <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
+        {icon}
+        <Typography variant="body2" sx={{ fontWeight: 'bold', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+          {label}
+        </Typography>
+      </Stack>
+      {action}
+    </Box>
+  );
+
+  const SettingRowInline = ({ icon, title, desc, children }: { icon: React.ReactNode; title: string; desc?: string; children: React.ReactNode }) => (
+    <Box sx={{ p: 2.5, bgcolor: 'background.paper', border: 1, borderColor: 'divider', borderRadius: 2, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 2, transition: 'box-shadow 0.25s ease, border-color 0.25s ease', '&:hover': { borderColor: 'divider', boxShadow: (theme) => `0 4px 18px ${theme.palette.primary.main}2e` } }}>
+      <Stack direction="row" spacing={1.5} sx={{ flex: 1, minWidth: 0 }}>
+        <Box sx={{ width: 40, height: 40, borderRadius: 1, bgcolor: 'primary.main', color: 'primary.contrastText', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+          {icon}
+        </Box>
+        <Box sx={{ minWidth: 0 }}>
+          <Typography variant="body2" sx={{ fontWeight: 'bold' }}>{title}</Typography>
+          {desc && <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>{desc}</Typography>}
+        </Box>
+      </Stack>
+      {children}
+    </Box>
+  );
+
+  const StackedRow = ({ icon, title, desc, children }: { icon: React.ReactNode; title: string; desc?: string; children: React.ReactNode }) => (
+    <Box sx={{ p: 2.5, bgcolor: 'background.paper', border: 1, borderColor: 'divider', borderRadius: 2, transition: 'box-shadow 0.25s ease, border-color 0.25s ease', '&:hover': { borderColor: 'divider', boxShadow: (theme) => `0 4px 18px ${theme.palette.primary.main}2e` } }}>
+      <Stack direction="row" spacing={1.5} sx={{ mb: desc ? 1.5 : 0, alignItems: 'center' }}>
+        <Box sx={{ width: 40, height: 40, borderRadius: 1, bgcolor: 'primary.main', color: 'primary.contrastText', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+          {icon}
+        </Box>
+        <Box>
+          <Typography variant="body2" sx={{ fontWeight: 'bold' }}>{title}</Typography>
+          {desc && <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>{desc}</Typography>}
+        </Box>
+      </Stack>
+      {children}
+    </Box>
+  );
+
+  const bgColor = mode === 'light' ? 'rgba(0,0,0,0.04)' : 'rgba(255,255,255,0.08)';
+
   return (
-    <div className="p-6 max-w-5xl mx-auto space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
-      <header>
-        <h1 className="text-3xl font-black tracking-tighter">{t('settings.title')}</h1>
-      </header>
+    <Box sx={{ p: 6, maxWidth: '5xl', mx: 'auto', gap: 4, display: 'flex', flexDirection: 'column' }}>
+      <Typography variant="h4" sx={{ fontWeight: 900, letterSpacing: '-0.02em' }}>
+        {t('settings.title')}
+      </Typography>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-        <div className="space-y-8">
-          <section className="space-y-4">
-            <div className="flex items-center gap-2 px-1 text-text-secondary">
-              <Anchor size={18} aria-hidden />
-              <h2 className="text-sm font-bold uppercase tracking-wider">{t('settings.tabs.general')}</h2>
-            </div>
+      <Grid container spacing={3}>
+        <Grid size={{ xs: 12, lg: 6 }}>
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+            <SectionHeader icon={<Anchor size={18} />} label={t('settings.tabs.general')} />
 
-            <div className="space-y-4">
-              <SettingRow icon={<Monitor size={20} />} title={t('settings.port_title')}>
-                <div className="flex flex-col gap-3">
-                  <div className="flex items-center gap-2">
-                    <label htmlFor="http-port" className="text-[10px] text-text-secondary font-bold w-12">{t('settings.http_port')}</label>
-                    <input
-                      id="http-port"
-                      type="number"
-                      value={port}
-                      onChange={(e) => setPort(parseInt(e.target.value))}
-                      className="w-20 bg-background-soft border border-border px-3 py-1.5 rounded-xl text-sm font-bold focus:ring-2 focus:ring-accent outline-none"
-                    />
-                    <Button onClick={handleSavePort} size="xs">{t('common.apply')}</Button>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <label htmlFor="socks5-port" className="text-[10px] text-text-secondary font-bold w-12">{t('settings.socks_port')}</label>
-                    <input
-                      id="socks5-port"
-                      type="text"
-                      value={socks5Port}
-                      onChange={(e) => setSocks5Port(e.target.value)}
-                      onBlur={(e) => handleSaveSocks5Port(e.target.value)}
-                      onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }}
-                      className="w-20 bg-background-soft border border-border px-3 py-1.5 rounded-xl text-sm font-bold focus:ring-2 focus:ring-accent outline-none"
-                      placeholder="8081"
-                    />
-                  </div>
-                </div>
-              </SettingRow>
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+              <SettingRowInline icon={<Monitor size={18} />} title={t('settings.port_title')}>
+                <Stack direction="row" spacing={1} sx={{ alignItems: 'flex-start' }}>
+                  <TextField
+                    label={t('settings.http_port')}
+                    type="number"
+                    size="small"
+                    value={port}
+                    onChange={(e) => setPort(parseInt(e.target.value))}
+                    slotProps={{ htmlInput: { style: { textAlign: 'right' } } }}
+                  />
+                  <Button size="small" variant="contained" color="primary" onClick={handleSavePort}>
+                    {t('common.apply')}
+                  </Button>
+                </Stack>
+                <Stack direction="row" spacing={1} sx={{ alignItems: 'flex-start', mt: 1 }}>
+                  <TextField
+                    label={t('settings.socks_port')}
+                    type="text"
+                    size="small"
+                    value={socks5Port}
+                    onChange={(e) => setSocks5Port(e.target.value)}
+                    onBlur={(e) => handleSaveSocks5Port(e.target.value)}
+                    onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }}
+                    slotProps={{ htmlInput: { style: { textAlign: 'right' } } }}
+                  />
+                </Stack>
+              </SettingRowInline>
 
-              <SettingRow title={t('settings.min_to_tray.title')} desc={t('settings.min_to_tray.desc')} icon={<BellRing size={20} />}>
-                <Toggle checked={closeToTray} onChange={handleToggleTray} />
-              </SettingRow>
+              <SettingRowInline title={t('settings.min_to_tray.title')} desc={t('settings.min_to_tray.desc')} icon={<BellRing size={18} />}>
+                <FormControlLabel
+                  control={
+                    <Switch checked={closeToTray} onChange={(e) => handleToggleTray(e.target.checked)} />
+                  }
+                  label={t('settings.min_to_tray.title')}
+                />
+              </SettingRowInline>
 
-              <SettingRow title={t('settings.language.title')} desc={t('settings.language.desc')} icon={<Globe size={20} />}>
-                <div className="flex p-1 bg-background-soft rounded-xl border border-border" role="radiogroup" aria-label="选择语言">
+              <SettingRowInline title={t('settings.language.title')} desc={t('settings.language.desc')} icon={<Globe size={18} />}>
+                <Stack direction="row" spacing={0.5} sx={{ alignItems: 'center', bgcolor: bgColor, border: 1, borderColor: 'divider', borderRadius: 2, p: 0.5 }} role="radiogroup" aria-label="选择语言">
                   {(['zh', 'en', 'ru'] as const).map((lang) => (
-                    <button
+                    <Box
                       key={lang}
+                      component="button"
+                      type="button"
+                      sx={{
+                        px: 1.5,
+                        py: 0.5,
+                        fontSize: '0.75rem',
+                        fontWeight: 'bold',
+                        borderRadius: 1,
+                        border: 'none',
+                        cursor: 'pointer',
+                        color: language === lang ? '#fff' : 'text.secondary',
+                        bgcolor: language === lang ? 'primary.main' : 'transparent',
+                        '&:hover': { color: 'text.primary' },
+                      }}
                       onClick={() => handleLanguageChange(lang)}
                       role="radio"
                       aria-checked={language === lang}
-                      className={`px-3 py-1 text-[11px] font-bold rounded-lg transition-all ${language === lang ? 'bg-accent text-white shadow-sm' : 'text-text-secondary hover:text-text-primary'}`}
                     >
                       {lang === 'zh' ? '中文' : lang === 'en' ? 'English' : 'Русский'}
-                    </button>
+                    </Box>
                   ))}
-                </div>
-              </SettingRow>
+                </Stack>
+              </SettingRowInline>
 
-              <SettingRow title={t('settings.appearance.title')} desc={t('settings.appearance.desc')} icon={theme === 'light' ? <Sun size={20} /> : <Moon size={20} />}>
-                <div className="flex p-1 bg-background-soft rounded-xl border border-border" role="radiogroup" aria-label="选择主题">
-                  <button
-                    onClick={() => theme === 'dark' && toggleTheme()}
+              <SettingRowInline title={t('settings.appearance.title')} desc={t('settings.appearance.desc')} icon={mode === 'light' ? <Sun size={18} /> : <Moon size={18} />}>
+                <Stack direction="row" spacing={0.5} sx={{ alignItems: 'center', bgcolor: bgColor, border: 1, borderColor: 'divider', borderRadius: 2, p: 0.5 }} role="radiogroup" aria-label="选择主题">
+                  <Box
+                    component="button"
+                    type="button"
+                    sx={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 0.25,
+                      px: 1.5,
+                      py: 0.75,
+                      fontSize: '0.75rem',
+                      fontWeight: 'bold',
+                      borderRadius: 1,
+                      border: 'none',
+                      cursor: 'pointer',
+                      color: mode === 'light' ? '#fff' : 'text.secondary',
+                      bgcolor: mode === 'light' ? 'primary.main' : 'transparent',
+                      '&:hover': { color: 'text.primary' },
+                    }}
+                    onClick={() => mode === 'dark' && setMode('light')}
                     role="radio"
-                    aria-checked={theme === 'light'}
-                    className={`flex items-center gap-2 px-3 py-1.5 text-[11px] font-bold rounded-lg transition-all ${theme === 'light' ? 'bg-white text-accent shadow-sm' : 'text-text-secondary hover:text-text-primary'}`}
+                    aria-checked={mode === 'light'}
                   >
-                    <Sun size={14} aria-hidden />
+                    <Sun size={14} />
                     {t('settings.appearance.light')}
-                  </button>
-                  <button
-                    onClick={() => theme === 'light' && toggleTheme()}
+                  </Box>
+                  <Box
+                    component="button"
+                    type="button"
+                    sx={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 0.25,
+                      px: 1.5,
+                      py: 0.75,
+                      fontSize: '0.75rem',
+                      fontWeight: 'bold',
+                      borderRadius: 1,
+                      border: 'none',
+                      cursor: 'pointer',
+                      color: mode === 'dark' ? '#fff' : 'text.secondary',
+                      bgcolor: mode === 'dark' ? 'primary.main' : 'transparent',
+                      '&:hover': { color: 'text.primary' },
+                    }}
+                    onClick={() => mode === 'light' && setMode('dark')}
                     role="radio"
-                    aria-checked={theme === 'dark'}
-                    className={`flex items-center gap-2 px-3 py-1.5 text-[11px] font-bold rounded-lg transition-all ${theme === 'dark' ? 'bg-accent text-white shadow-sm' : 'text-text-secondary hover:text-text-primary'}`}
+                    aria-checked={mode === 'dark'}
                   >
-                    <Moon size={14} aria-hidden />
+                    <Moon size={14} />
                     {t('settings.appearance.dark')}
-                  </button>
-                </div>
-              </SettingRow>
-            </div>
-          </section>
+                  </Box>
+                </Stack>
+              </SettingRowInline>
 
-          <section className="space-y-4">
-            <div className="flex items-center gap-2 px-1 text-text-secondary">
-              <Cpu size={18} aria-hidden />
-              <h2 className="text-sm font-bold uppercase tracking-wider">{t('settings.tabs.startup')}</h2>
-            </div>
-            <div className="space-y-4">
-              <SettingRow title={t('settings.auto_start.title')} desc={t('settings.auto_start.desc')} icon={<Cpu size={20} />}>
-                <Toggle checked={autoStart} onChange={handleToggleAutoStart} />
-              </SettingRow>
-              <SettingRow title={t('settings.auto_proxy.title')} desc={t('settings.auto_proxy.desc')} icon={<Activity size={20} />}>
-                <Toggle checked={autoEnableProxyOnAutoStart} onChange={handleToggleAutoEnableProxyOnAutoStart} />
-              </SettingRow>
-              <SettingRow title={t('settings.show_main.title')} desc={t('settings.show_main.desc')} icon={<Monitor size={20} />}>
-                <Toggle checked={showMainOnAutoStart} onChange={handleToggleShowMainWindowOnAutoStart} />
-              </SettingRow>
-            </div>
-          </section>
-        </div>
+              <SettingRowInline title={t('settings.theme.label')} desc={t('settings.theme.desc')} icon={<Monitor size={18} />}>
+                <Box sx={{ width: 220, flexShrink: 0 }}>
+                  <FormControl fullWidth size="small">
+                    <InputLabel id="theme-select-label">{t('settings.theme.label')}</InputLabel>
+                    <Select
+                      labelId="theme-select-label"
+                      id="theme-select"
+                      value={currentThemeId}
+                      label={t('settings.theme.label')}
+                      onChange={(e) => onThemeChange(e.target.value)}
+                    >
+                      {availableThemes.map((th) => (
+                        <MenuItem key={th.id} value={th.id}>
+                          {t(th.nameKey)}
+                        </MenuItem>
+                      ))}
+                    </Select>
+                  </FormControl>
+                </Box>
+              </SettingRowInline>
+            </Box>
+          </Box>
 
-        <section className="space-y-4">
-          <div className="flex items-center gap-2 px-1 text-text-secondary">
-            <ShieldAlert size={18} aria-hidden />
-            <h2 className="text-sm font-bold uppercase tracking-wider">{t('settings.tabs.security')}</h2>
-          </div>
-          <div className="grid grid-cols-1 gap-4">
-            <SettingRow title={t('settings.ca_management.reset')} desc={t('settings.ca_management.reset_hint')} icon={<RefreshCcw size={20} />}>
-              <Button onClick={handleRegenerateCert} loading={isCertBusy} variant="outline" size="sm">
-                {isCertBusy ? t('ech_form.probing') : t('common.apply')}
-              </Button>
-            </SettingRow>
-            <SettingRow title={t('settings.ca_management.export')} desc={caStatus?.CertPath || undefined} icon={<FolderOpen size={20} />}>
-              <Button onClick={() => OpenCertDir()} variant="ghost" size="sm" icon={<FolderOpen size={14} />}>
-                {t('common.view')}
-              </Button>
-            </SettingRow>
-          </div>
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5, mt: 1.5 }}>
+            <SectionHeader icon={<Cpu size={18} />} label={t('settings.tabs.startup')} />
 
-          <StackedSettingRow title={t('settings.ca_management.title')} desc={caStatus?.Installed ? t('dashboard.cert_installed') : t('dashboard.cert_not_installed')} icon={<ShieldAlert size={20} />}>
-            <div className="space-y-3">
-              <div className={`text-[11px] font-bold ${caStatus?.Installed ? 'text-success' : 'text-text-muted'}`}>
-                {caStatus?.Installed ? `${installedCerts.length} CERTS` : t('common.off')}
-              </div>
-              {installedCerts.length === 0 ? (
-                <EmptyState icon={<ShieldAlert size={32} />} title={t('proxies.no_ech')} />
-              ) : (
-                <div className="space-y-2 max-h-64 overflow-y-auto pr-1">
-                  {installedCerts.map((cert: any) => (
-                    <div key={cert.token} className="flex items-center justify-between gap-4 rounded-2xl border border-border/40 bg-background-card px-5 py-4">
-                      <div className="min-w-0 flex-1 space-y-1">
-                        <div className="text-xs font-bold break-all">{cert.subject}</div>
-                        <div className="text-[10px] text-text-muted break-all">{cert.storeLocation} / {cert.storeName} / {cert.thumbprint}</div>
-                      </div>
-                      <Button onClick={() => handleUninstallCert(cert.token)} disabled={isCertBusy} variant="danger" size="sm" icon={<Trash2 size={12} />}>
-                        {t('common.delete')}
-                      </Button>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          </StackedSettingRow>
-        </section>
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+              <SettingRowInline title={t('settings.auto_start.title')} desc={t('settings.auto_start.desc')} icon={<Cpu size={18} />}>
+                <FormControlLabel
+                  control={<Switch checked={autoStart} onChange={(e) => handleToggleAutoStart(e.target.checked)} />}
+                  label={t('settings.auto_start.title')}
+                />
+              </SettingRowInline>
+              <SettingRowInline title={t('settings.auto_proxy.title')} desc={t('settings.auto_proxy.desc')} icon={<Activity size={18} />}>
+                <FormControlLabel
+                  control={<Switch checked={autoEnableProxyOnAutoStart} onChange={(e) => handleToggleAutoEnableProxyOnAutoStart(e.target.checked)} />}
+                  label={t('settings.auto_proxy.title')}
+                />
+              </SettingRowInline>
+              <SettingRowInline title={t('settings.show_main.title')} desc={t('settings.show_main.desc')} icon={<Monitor size={18} />}>
+                <FormControlLabel
+                  control={<Switch checked={showMainOnAutoStart} onChange={(e) => handleToggleShowMainWindowOnAutoStart(e.target.checked)} />}
+                  label={t('settings.show_main.title')}
+                />
+              </SettingRowInline>
+            </Box>
+          </Box>
+        </Grid>
 
-        <section className="lg:col-span-2 space-y-4">
-          <div className="flex items-center justify-between px-1 text-text-secondary">
-            <div className="flex items-center gap-2">
-              <Wifi size={18} aria-hidden />
-              <h2 className="text-sm font-bold uppercase tracking-wider">{t('network.ipv6_title')}</h2>
-            </div>
-            <Button onClick={handleRefreshIPv6} loading={isIpv6Checking} variant="ghost" size="xs" disabled={isIpv6Checking}>
-              {isIpv6Checking ? t('network.ipv6_checking') : t('network.ipv6_refresh')}
-            </Button>
-          </div>
+        <Grid size={{ xs: 12, lg: 6 }}>
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+            <SectionHeader icon={<ShieldAlert size={18} />} label={t('settings.tabs.security')} />
 
-          {ipv6Available ? (
-            <div className="bg-background-card border border-border rounded-2xl p-5 flex items-start gap-4">
-              <div className="w-9 h-9 rounded-2xl bg-success/10 text-success flex items-center justify-center shrink-0">
-                <Wifi size={16} aria-hidden />
-              </div>
-              <div className="space-y-1">
-                <div className="text-sm font-bold text-success">{t('network.ipv6_ok')}</div>
-                <div className="text-[11px] text-text-muted leading-relaxed">{t('network.ipv6_ok_desc')}</div>
-              </div>
-            </div>
-          ) : (
-            <div className="bg-danger/5 border border-danger/30 rounded-2xl p-5 flex items-start gap-4">
-              <div className="w-9 h-9 rounded-2xl bg-danger/10 text-danger flex items-center justify-center shrink-0">
-                <AlertCircle size={16} aria-hidden />
-              </div>
-              <div className="space-y-1">
-                <div className="text-sm font-bold text-danger">{t('network.ipv6_disabled_title')}</div>
-                <div className="text-[11px] text-text-muted leading-relaxed">{t('network.ipv6_disabled_desc')}</div>
-              </div>
-            </div>
-          )}
-        </section>
-
-        <section className="lg:col-span-2 space-y-4">
-          <div className="flex items-center justify-between px-1 text-text-secondary">
-            <div className="flex items-center gap-2">
-              <CloudLightning size={18} aria-hidden />
-              <h2 className="text-sm font-bold uppercase tracking-wider">{t('rules.form.cf_pool')}</h2>
-            </div>
-            <Button onClick={handleHealthCheck} loading={isCheckingHealth} variant="ghost" size="xs" disabled={isCheckingHealth}>
-              {isCheckingHealth ? t('ech_form.probing') : t('dns.test')}
-            </Button>
-          </div>
-
-          <div className="bg-background-card border border-border rounded-2xl overflow-hidden">
-            <div className="grid grid-cols-1 md:grid-cols-5">
-              <div className="md:col-span-1 p-6 border-r border-border flex flex-col justify-center items-center">
-                <Button onClick={handleFetchIPs} loading={isRefreshing} icon={isRefreshing ? undefined : <Download size={14} />} className="w-full">
-                  {t('settings.cf_pool.fetch_now')}
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+              <SettingRowInline title={t('settings.ca_management.reset')} desc={t('settings.ca_management.reset_hint')} icon={<RefreshCcw size={18} />}>
+                <Button
+                  size="small"
+                  variant="outlined"
+                  startIcon={isCertBusy ? <CircularProgress size={20} /> : null}
+                  onClick={handleRegenerateCert}
+                >
+                  {isCertBusy ? t('ech_form.probing') : t('common.apply')}
                 </Button>
-              </div>
-              <div className="md:col-span-4 p-6 bg-background-soft/30">
-                <div className="flex items-center justify-between mb-4 px-2">
-                  <h3 className="text-[10px] font-black uppercase text-text-muted tracking-widest">IP POOL ({ipStats.length})</h3>
-                  <Zap size={14} className="text-warning animate-pulse" aria-hidden />
-                </div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 max-h-[320px] overflow-y-auto px-2 pb-4 scrollbar-thin">
-                  {ipStats.length === 0 ? (
-                    <EmptyState icon={<AlertCircle size={32} />} title={t('rules.form.no_domains')} className="col-span-full" />
-                  ) : (
-                    ipStats.map((ip: any, i: number) => (
-                      <div key={i} className="flex items-center justify-between p-3 bg-background-card border border-border/60 rounded-2xl shadow-sm hover:border-accent/30 transition-all group">
-                        <div className="flex items-center gap-3">
-                          <div className={`w-2 h-2 rounded-full ${parseLatencyMs(ip.latency) > 0 ? "bg-success shadow-[0_0_8px_rgba(34,197,94,0.5)]" : "bg-danger"}`} />
-                          <span className="text-xs font-mono font-bold">{ip.ip}</span>
-                        </div>
-                        <span className={`text-[10px] font-black ${parseLatencyMs(ip.latency) > 0 && parseLatencyMs(ip.latency) < 200 ? "text-success" : "text-warning"}`}>
-                          {ip.latency ? `${Math.round(parseLatencyMs(ip.latency))}ms` : "---"}
-                        </span>
-                      </div>
-                    ))
-                  )}
-                </div>
-              </div>
-            </div>
-          </div>
-        </section>
+              </SettingRowInline>
+              <SettingRowInline title={t('settings.ca_management.export')} desc={caStatus?.CertPath || undefined} icon={<FolderOpen size={18} />}>
+                <Button
+                  size="small"
+                  variant="text"
+                  startIcon={<FolderOpen size={16} />}
+                  onClick={() => OpenCertDir()}
+                >
+                  {t('common.view')}
+                </Button>
+              </SettingRowInline>
+            </Box>
 
-        <section className="lg:col-span-2 space-y-4">
-          <div className="flex items-center justify-between px-1 text-text-secondary">
-            <div className="flex items-center gap-2">
-              <FileText size={18} aria-hidden />
-              <h2 className="text-sm font-bold uppercase tracking-wider">{t('settings.tabs.logs')}</h2>
-            </div>
-            <Button onClick={handleCleanLogs} loading={isCleaningLogs} variant="outline" size="xs" icon={<Trash2 size={13} />}>
-              {t('settings.logs.clean')}
-            </Button>
-          </div>
+            <StackedRow title={t('settings.ca_management.title')} desc={caStatus?.Installed ? t('dashboard.cert_installed') : t('dashboard.cert_not_installed')} icon={<ShieldAlert size={18} />}>
+              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+                <Typography variant="body2" sx={{ fontWeight: 'bold', color: caStatus?.Installed ? 'success.main' : 'text.secondary' }}>
+                  {caStatus?.Installed ? `${installedCerts.length} CERTS` : t('common.off')}
+                </Typography>
+                {installedCerts.length === 0 ? (
+                  <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', py: 2, color: 'text.secondary', opacity: 0.5 }}>
+                    <ShieldAlert size={32} />
+                    <Typography variant="caption" sx={{ mt: 0.5 }}>{t('proxies.no_ech')}</Typography>
+                  </Box>
+                ) : (
+                  <Box sx={{ mt: 1, maxHeight: 320, overflowY: 'auto' }}>
+                    {installedCerts.map((cert: any) => (
+                      <Box key={cert.token} sx={{ p: 1, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1.5, border: 1, borderColor: 'divider', borderRadius: 1, bgcolor: 'background.default', mb: 0.5 }}>
+                        <Box sx={{ minWidth: 0, flex: 1 }}>
+                          <Typography variant="caption" sx={{ fontWeight: 'bold', display: 'block', wordBreak: 'break-all' }}>
+                            {cert.subject}
+                          </Typography>
+                          <Typography variant="caption" sx={{ fontSize: '0.75rem', color: 'text.secondary', display: 'block', wordBreak: 'break-all' }}>
+                            {cert.storeLocation} / {cert.storeName} / {cert.thumbprint}
+                          </Typography>
+                        </Box>
+                        <Button
+                          size="small"
+                          variant="outlined"
+                          color="error"
+                          disabled={isCertBusy}
+                          onClick={() => handleUninstallCert(cert.token)}
+                        >
+                          <Trash2 size={16} />
+                          {t('common.delete')}
+                        </Button>
+                      </Box>
+                    ))}
+                  </Box>
+                )}
+              </Box>
+            </StackedRow>
+          </Box>
+        </Grid>
 
-          <StackedSettingRow title={t('settings.logs.title')} desc={t('settings.logs.desc')} icon={<FileText size={20} />}>
-            {logFiles.length === 0 ? (
-              <EmptyState icon={<FileText size={32} />} title={t('settings.logs.empty')} />
+        <Grid size={12}>
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+            <SectionHeader icon={<Wifi size={18} />} label={t('network.ipv6_title')}
+              action={<Button size="small" variant="text" disabled={isIpv6Checking} onClick={handleRefreshIPv6}>
+                {isIpv6Checking ? t('network.ipv6_checking') : t('network.ipv6_refresh')}
+              </Button>}
+            />
+
+            {ipv6Available ? (
+              <Box sx={{ p: 2, bgcolor: mode === 'light' ? 'rgba(34,197,94,0.1)' : 'rgba(34,197,94,0.15)', border: 1, borderColor: mode === 'light' ? 'rgba(34,197,94,0.3)' : 'rgba(34,197,94,0.4)', borderRadius: 2, display: 'flex', alignItems: 'flex-start', gap: 2 }}>
+                <Box sx={{ width: 40, height: 40, borderRadius: 1, bgcolor: 'success.main', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                  <Wifi size={16} />
+                </Box>
+                <Box>
+                  <Typography variant="body2" sx={{ fontWeight: 'bold', color: 'success.main' }}>
+                    {t('network.ipv6_ok')}
+                  </Typography>
+                  <Typography variant="caption" color="text.secondary" sx={{ lineHeight: 1.5, display: 'block' }}>
+                    {t('network.ipv6_ok_desc')}
+                  </Typography>
+                </Box>
+              </Box>
             ) : (
-              <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
-                {logFiles.map((f: any, i: number) => (
-                  <div key={f.name} className="flex items-center justify-between gap-4 rounded-2xl border border-border/40 bg-background-card px-5 py-3">
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-2 text-xs font-bold break-all">
+              <Box sx={{ p: 2, bgcolor: mode === 'light' ? 'rgba(239,68,68,0.1)' : 'rgba(239,68,68,0.15)', border: 1, borderColor: mode === 'light' ? 'rgba(239,68,68,0.3)' : 'rgba(239,68,68,0.4)', borderRadius: 2, display: 'flex', alignItems: 'flex-start', gap: 2 }}>
+                <Box sx={{ width: 40, height: 40, borderRadius: 1, bgcolor: 'error.main', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                  <AlertCircle size={16} />
+                </Box>
+                <Box>
+                  <Typography variant="body2" sx={{ fontWeight: 'bold', color: 'error.main' }}>
+                    {t('network.ipv6_disabled_title')}
+                  </Typography>
+                  <Typography variant="caption" color="text.secondary" sx={{ lineHeight: 1.5, display: 'block' }}>
+                    {t('network.ipv6_disabled_desc')}
+                  </Typography>
+                </Box>
+              </Box>
+            )}
+          </Box>
+        </Grid>
+
+        <Grid size={12}>
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+            <SectionHeader icon={<CloudLightning size={18} />} label={t('rules.form.cf_pool')}
+              action={<Button size="small" variant="text" disabled={isCheckingHealth} onClick={handleHealthCheck}>
+                {isCheckingHealth ? t('ech_form.probing') : t('dns.test')}
+              </Button>}
+            />
+
+            <Box sx={{ bgcolor: 'background.paper', border: 1, borderColor: 'divider', borderRadius: 2, overflow: 'hidden' }}>
+              <Grid container columns={12} spacing={1}>
+                <Grid size={{ xs: 12, md: 2 }}>
+                  <Box sx={{ p: 2, borderRight: { md: 1 }, borderColor: 'divider', display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', height: '100%' }}>
+                    <Button
+                      color="primary"
+                      size="small"
+                      startIcon={isRefreshing ? <CircularProgress size={20} /> : <Download size={16} />}
+                      onClick={handleFetchIPs}
+                    >
+                      {isRefreshing ? undefined : t('settings.cf_pool.fetch_now')}
+                    </Button>
+                  </Box>
+                </Grid>
+                <Grid size={{ xs: 12, md: 10 }}>
+                  <Box sx={{ p: 2 }}>
+                    <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1, px: 1 }}>
+                      <Typography variant="caption" sx={{ fontWeight: 'bold', textTransform: 'uppercase', color: 'text.secondary', letterSpacing: '0.05em' }}>
+                        IP POOL ({ipStats.length})
+                      </Typography>
+                      <Zap size={16} color="warning.main" />
+                    </Box>
+                    <Grid container columns={{ xs: 1, sm: 2 }} spacing={1} sx={{ maxHeight: 400, overflowY: 'auto', px: 1, pb: 2 }}>
+                      {ipStats.length === 0 ? (
+                        <Grid size={12}>
+                          <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', py: 2, color: 'text.secondary', opacity: 0.5 }}>
+                            <AlertCircle size={32} />
+                            <Typography variant="caption" sx={{ mt: 0.5 }}>{t('rules.form.no_domains')}</Typography>
+                          </Box>
+                        </Grid>
+                      ) : (
+                        ipStats.map((ip: any, i: number) => {
+                          const latency = parseLatencyMs(ip.latency);
+                          const ok = latency > 0;
+                          return (
+                            <Grid key={i} size={{ xs: 12, sm: 6 }}>
+                              <Box sx={{ p: 1, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1.5, border: 1, borderColor: 'divider', borderRadius: 1, bgcolor: 'background.default', '&:hover': { borderColor: 'primary.main' }, transition: 'all 0.15s' }}>
+                                <Box sx={{ display: 'flex', gap: 1, alignItems: 'center', minWidth: 0 }}>
+                                  <Box sx={{ width: 8, height: 8, borderRadius: '50%', flexShrink: 0, bgcolor: ok ? 'success.main' : 'error.main', boxShadow: ok ? '0 0 8px rgba(34,197,94,0.5)' : undefined }} />
+                                  <Typography variant="caption" sx={{ fontFamily: 'mono', fontWeight: 'bold', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                    {ip.ip}
+                                  </Typography>
+                                </Box>
+                                <Typography variant="caption" sx={{ fontWeight: 'bold', color: ok && latency < 200 ? 'success.main' : 'warning.main' }}>
+                                  {ip.latency ? `${Math.round(latency)}ms` : '---'}
+                                </Typography>
+                              </Box>
+                            </Grid>
+                          );
+                        })
+                      )}
+                    </Grid>
+                  </Box>
+                </Grid>
+              </Grid>
+            </Box>
+          </Box>
+        </Grid>
+
+        <Grid size={12}>
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+            <SectionHeader icon={<FileText size={18} />} label={t('settings.tabs.logs')}
+              action={<Button size="small" variant="outlined" disabled={isCleaningLogs} onClick={handleCleanLogs}>
+                <Box sx={{ display: 'flex', gap: 0.5, alignItems: 'center' }}>
+                  <Trash2 size={16} />
+                  {t('settings.logs.clean')}
+                </Box>
+              </Button>}
+            />
+
+            <StackedRow title={t('settings.logs.title')} desc={t('settings.logs.desc')} icon={<FileText size={18} />}>
+              {logFiles.length === 0 ? (
+                <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', py: 2, color: 'text.secondary', opacity: 0.5 }}>
+                  <FileText size={32} />
+                  <Typography variant="caption" sx={{ mt: 0.5 }}>{t('settings.logs.empty')}</Typography>
+                </Box>
+              ) : (
+                <Box sx={{ mt: 1, maxHeight: 360, overflowY: 'auto' }}>
+                  {logFiles.map((f: any, i: number) => (
+                    <Box key={f.name} sx={{ p: 1, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1.5, border: 1, borderColor: 'divider', borderRadius: 1, bgcolor: 'background.default', mb: 0.5 }}>
+                      <Box sx={{ display: 'flex', gap: 1, alignItems: 'center', fontSize: '0.75rem', fontWeight: 'bold', wordBreak: 'break-all', minWidth: 0, flex: 1 }}>
                         {fmtLogDate(f.name)}
                         {i === 0 && (
-                          <span className="shrink-0 px-1.5 py-0.5 rounded-full bg-accent/15 text-accent text-[9px] font-black">
+                          <Badge color="primary" sx={{ borderRadius: '50%' }}>
                             {t('settings.logs.current')}
-                          </span>
+                          </Badge>
                         )}
-                      </div>
-                      <div className="text-[10px] text-text-muted">{fmtLogSize(f.size || 0)}</div>
-                    </div>
-                    <Button onClick={() => handleViewLog(f.name)} variant="ghost" size="sm" icon={<FolderOpen size={13} />}>
-                      {t('settings.logs.view')}
-                    </Button>
-                  </div>
-                ))}
-              </div>
-            )}
-          </StackedSettingRow>
-        </section>
-      </div>
-    </div>
+                      </Box>
+                      <Typography variant="caption" sx={{ fontSize: '0.75rem', color: 'text.secondary', flexShrink: 0 }}>
+                        {fmtLogSize(f.size || 0)}
+                      </Typography>
+                      <Button size="small" variant="text" onClick={() => handleViewLog(f.name)} sx={{ flexShrink: 0 }}>
+                        <Box sx={{ display: 'flex', gap: 0.5, alignItems: 'center' }}>
+                          <FolderOpen size={16} />
+                          {t('settings.logs.view')}
+                        </Box>
+                      </Button>
+                    </Box>
+                  ))}
+                </Box>
+              )}
+            </StackedRow>
+          </Box>
+        </Grid>
+      </Grid>
+    </Box>
   );
 };
 

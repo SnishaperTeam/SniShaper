@@ -1,7 +1,6 @@
-import React, { useEffect } from 'react';
-import { createPortal } from 'react-dom';
+import React from 'react';
+import { Modal as MuiModal, Box, Typography, IconButton } from '@mui/material';
 import { X } from '../lib/icons';
-import { cn } from '../lib/utils';
 
 interface ModalProps {
   isOpen: boolean;
@@ -13,75 +12,66 @@ interface ModalProps {
   maxWidth?: string;
 }
 
-const Modal: React.FC<ModalProps> = ({ 
-  isOpen, 
-  onClose, 
-  title, 
-  subtitle, 
-  children, 
+const Modal: React.FC<ModalProps> = ({
+  isOpen,
+  onClose,
+  title,
+  subtitle,
+  children,
   footer,
-  maxWidth = "max-w-2xl"
+  maxWidth = '42rem'
 }) => {
-  useEffect(() => {
-    const handleEsc = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
-    };
-    if (isOpen) window.addEventListener('keydown', handleEsc);
-    return () => window.removeEventListener('keydown', handleEsc);
-  }, [isOpen, onClose]);
-
-  useEffect(() => {
-    if (!isOpen) return;
-
-    const previousOverflow = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
-
-    return () => {
-      document.body.style.overflow = previousOverflow;
-    };
-  }, [isOpen]);
-
-  if (!isOpen) return null;
-
-  return createPortal(
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-      {/* Backdrop */}
-      <div 
-        className="absolute inset-0 z-0 bg-background/80 backdrop-blur-sm animate-in fade-in duration-300"
-        onClick={onClose}
-      />
-      
-      {/* Modal Content */}
-      <div className={cn(
-        "relative z-10 w-full max-h-[85vh] bg-background-card border border-border rounded-2xl shadow-2xl backdrop-blur-xl flex flex-col overflow-hidden animate-in fade-in duration-300",
-        maxWidth
-      )}>
-        <div className="px-6 py-4 border-b border-border flex justify-between items-start shrink-0 bg-background-card">
-          <div>
-            <h3 className="text-xl font-black tracking-tight">{title}</h3>
-            {subtitle && <p className="text-xs text-text-muted mt-1 font-medium">{subtitle}</p>}
-          </div>
-          <button
-            onClick={onClose}
-            aria-label="关闭对话框"
-            className="p-2 hover:bg-background-hover rounded-xl text-text-muted transition-colors"
-          >
-            <X size={20} />
-          </button>
-        </div>
-
-        <div className="p-6 overflow-y-auto custom-scrollbar flex-1">
-          {children}
-        </div>
-
-        {footer && (
-          <div className="px-6 py-4 border-t border-border bg-background-card flex justify-end gap-3 shrink-0">
-            {footer}
-          </div>
+  return (
+    <MuiModal open={isOpen} onClose={onClose}>
+      <Box
+        sx={{
+          position: 'absolute',
+          top: '50%',
+          left: '50%',
+          transform: 'translate(-50%, -50%)',
+          width: '100%',
+          maxWidth,
+          maxHeight: '85vh',
+          display: 'flex',
+          flexDirection: 'column',
+          bgcolor: 'background.paper',
+          border: 1,
+          borderColor: 'divider',
+          borderRadius: 2,
+          boxShadow: 24,
+          p: 3,
+        }}
+      >
+        {title && (
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5, pr: 4 }}>
+            <Typography variant="h5" sx={{ fontWeight: 'bold', letterSpacing: '-0.02em' }}>
+              {title}
+            </Typography>
+            {subtitle && (
+              <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5, fontWeight: 'medium' }}>
+                {subtitle}
+              </Typography>
+            )}
+          </Box>
         )}
-      </div>
-    </div>,
-    document.body
+        <Box sx={{ flexGrow: 1, py: 2, overflowY: 'auto' }}>
+          {children}
+        </Box>
+        {footer && (
+          <Box sx={{ pt: 2, borderTop: 1, borderColor: 'divider', display: 'flex', gap: 1, justifyContent: 'flex-end' }}>
+            {footer}
+          </Box>
+        )}
+        <IconButton
+          aria-label="关闭对话框"
+          size="small"
+          onClick={onClose}
+          sx={{ position: 'absolute', top: 8, right: 8 }}
+        >
+          <X size={16} />
+        </IconButton>
+      </Box>
+    </MuiModal>
   );
 };
 

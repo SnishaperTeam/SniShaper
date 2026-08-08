@@ -29,6 +29,8 @@ cert/*.crt
 cert/*.key
 cert/*.pem
 *.log
+snishaper-logs-*.txt
+frontend/build_errors.txt
 /config.json
 diag_report_*.json
 

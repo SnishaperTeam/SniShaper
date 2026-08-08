@@ -1,4 +1,6 @@
 import React, { useEffect, useState } from 'react';
+import { Box, Button, Grid, Typography } from '@mui/material';
+import { alpha } from '@mui/material/styles';
 import { useTranslation } from '../i18n/I18nContext';
 import {
   Globe, Link as LinkIcon, Users, Shield, Heart, RefreshCw,
@@ -6,8 +8,6 @@ import {
 } from '../lib/icons';
 import logoUrl from '../assets/logo.svg';
 import { GetAppVersion, CheckUpdate, OpenURL } from '../api/bindings';
-import { Button } from '../components/ui/Button';
-import { FeatureCard } from '../components/ui/Card';
 import Modal from '../components/Modal';
 import { toast } from '../lib/toast';
 
@@ -18,6 +18,9 @@ interface UpdateResult {
   message: string;
   error_detail?: string;
 }
+
+const softBg = (token: string, opacity: number) => (theme: any) =>
+  alpha(theme.palette[token.split('.')[0]][token.split('.')[1]], opacity);
 
 const About: React.FC = () => {
   const { t } = useTranslation();
@@ -67,174 +70,190 @@ const About: React.FC = () => {
     } finally { setCheckingUpdate(false); }
   };
 
+  const features = [
+    { icon: <Lock size={20} />, title: t('about.feature_ech'), desc: t('about.feature_ech_desc'), color: 'primary.main' },
+    { icon: <Zap size={20} />, title: t('about.feature_fast'), desc: t('about.feature_fast_desc'), color: 'success.main' },
+    { icon: <Code2 size={20} />, title: t('about.feature_open'), desc: t('about.feature_open_desc'), color: 'warning.main' },
+  ];
+
+  const communityCards = [
+    { onClick: handleOpenAdaptation, icon: <Megaphone size={24} />, title: t('about.site_adaptation'), desc: t('about.site_adaptation_desc'), action: t('about.participate_now'), color: 'primary.main' },
+    { onClick: handleOpenDevPlan, icon: <Map size={24} />, title: t('about.development_plan'), desc: t('about.development_plan_desc'), action: t('about.view_plan'), color: 'success.main' },
+  ];
+
+  const infoCards = [
+    { icon: <Heart size={22} />, title: t('about.contributors'), value: 'mechrevo, dongzheyu, JetCPP-dongle', color: 'success.main', valueColor: 'text.primary' },
+    { icon: <Users size={22} />, title: t('about.maintainers'), value: 'JetCPP Team, SniShaper Team', color: 'warning.main', valueColor: 'text.primary' },
+    { icon: <Globe size={22} />, title: t('about.website'), value: 'github.com/SniShaper/SniShaper', color: 'primary.main', valueColor: 'primary.main', onClick: handleOpenWebsite },
+    { icon: <GitBranch size={22} />, title: 'GitHub', value: 'SniShaper/SniShaper', color: 'text.primary', valueColor: 'text.primary', onClick: handleOpenGitHub },
+    { icon: <Download size={22} />, title: '最新beta版', value: 'Actions 构建产物', color: 'warning.main', valueColor: 'warning.main', onClick: handleOpenBeta },
+  ];
+
   return (
-    <div className="h-full flex flex-col overflow-y-auto">
-      <div className="flex-1 p-8 max-w-5xl mx-auto w-full">
-        <section className="relative mb-12 p-8 rounded-3xl bg-gradient-to-br from-accent/5 via-background-card to-accent/5 border border-border overflow-hidden">
-          <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,_var(--accent-soft)_0%,_transparent_50%)] opacity-50" />
-          <div className="relative flex flex-col items-center text-center">
-            <div className="relative mb-6">
-              <div className="absolute inset-0 bg-accent/20 blur-2xl rounded-full" />
-              <img src={logoUrl} alt="SniShaper logo" className="relative w-28 h-28 object-contain drop-shadow-[0_10px_30px_rgba(33,150,243,0.3)]" />
-            </div>
-            <h1 className="text-4xl font-black text-text-primary mb-2 tracking-tight">SniShaper</h1>
-            <p className="text-lg text-text-secondary font-medium mb-4">{t('about.title')}</p>
-            <div className="inline-flex items-center gap-2 px-5 py-2.5 rounded-full bg-accent/10 border border-accent/20 backdrop-blur-sm">
-              <Shield size={16} className="text-accent" aria-hidden />
-              <span className="text-sm font-bold text-accent">{t('about.version')}: {version}</span>
-            </div>
-          </div>
-        </section>
+    <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column', overflowY: 'auto' }}>
+      <Box sx={{ flex: 1, p: 4, maxWidth: '64rem', mx: 'auto', width: '100%' }}>
+        <Box sx={{ position: 'relative', mb: 6, p: 4, borderRadius: 3, border: 1, borderColor: 'divider', overflow: 'hidden', background: (theme) => `linear-gradient(135deg, ${alpha(theme.palette.primary.main, 0.05)}, ${theme.palette.background.paper}, ${alpha(theme.palette.primary.main, 0.05)})` }}>
+          <Box sx={{ position: 'absolute', inset: 0, opacity: 0.5, background: (theme) => `radial-gradient(ellipse at top right, ${alpha(theme.palette.primary.main, 0.08)}, transparent 50%)` }} />
+          <Box sx={{ position: 'relative', display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center' }}>
+            <Box sx={{ position: 'relative', mb: 3 }}>
+              <Box sx={{ position: 'absolute', inset: 0, borderRadius: '50%', bgcolor: (theme) => alpha(theme.palette.primary.main, 0.2), filter: 'blur(24px)' }} />
+              <Box component="img" src={logoUrl} alt="SniShaper logo" sx={{ position: 'relative', width: 112, height: 112, objectFit: 'contain', filter: 'drop-shadow(0 10px 30px rgba(33, 150, 243, 0.3))' }} />
+            </Box>
+            <Typography variant="h1" sx={{ fontSize: '2.25rem', fontWeight: 900, color: 'text.primary', mb: 0.5, letterSpacing: '-0.025em' }}>SniShaper</Typography>
+            <Typography sx={{ fontSize: '1.125rem', fontWeight: 500, color: 'text.secondary', mb: 2 }}>{t('about.title')}</Typography>
+            <Box sx={{ display: 'inline-flex', alignItems: 'center', gap: 1, px: 2.5, py: 1.25, borderRadius: '999px', bgcolor: (theme) => alpha(theme.palette.primary.main, 0.1), border: 1, borderColor: (theme) => alpha(theme.palette.primary.main, 0.2), backdropFilter: 'blur(4px)' }}>
+              <Shield size={16} aria-hidden />
+              <Typography variant="body2" sx={{ fontWeight: 700, color: 'primary.main' }}>{t('about.version')}: {version}</Typography>
+            </Box>
+          </Box>
+        </Box>
 
-        <section className="mb-10 p-6 rounded-2xl bg-background-card border border-border">
-          <p className="text-text-secondary text-center leading-relaxed text-[15px]">{t('about.description')}</p>
-        </section>
+        <Box sx={{ mb: 5, p: 3, borderRadius: 2, bgcolor: 'background.paper', border: 1, borderColor: 'divider' }}>
+          <Typography sx={{ color: 'text.secondary', textAlign: 'center', lineHeight: 1.625, fontSize: '0.9375rem' }}>{t('about.description')}</Typography>
+        </Box>
 
-        <section className="mb-10">
-          <h2 className="text-lg font-bold text-text-primary mb-5 flex items-center gap-2">
-            <Sparkles size={20} className="text-accent" aria-hidden />
-            <span>{t('about.features')}</span>
-          </h2>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <FeatureCard icon={<Lock size={20} />} title={t('about.feature_ech')} description={t('about.feature_ech_desc')} color="accent" />
-            <FeatureCard icon={<Zap size={20} />} title={t('about.feature_fast')} description={t('about.feature_fast_desc')} color="success" />
-            <FeatureCard icon={<Code2 size={20} />} title={t('about.feature_open')} description={t('about.feature_open_desc')} color="warning" />
-          </div>
-        </section>
+        <Box sx={{ mb: 5 }}>
+          <Typography variant="h2" sx={{ fontSize: '1.125rem', fontWeight: 700, color: 'text.primary', mb: 2.5, display: 'flex', alignItems: 'center', gap: 1 }}>
+            <Box component="span" sx={{ display: 'inline-flex', color: 'primary.main' }}><Sparkles size={20} aria-hidden /></Box>
+            {t('about.features')}
+          </Typography>
+          <Grid container spacing={2}>
+            {features.map((f, i) => (
+              <Grid key={i} size={{ xs: 12, md: 4 }}>
+                <Box sx={{ height: '100%', p: 3, borderRadius: 2, bgcolor: 'background.paper', border: 1, borderColor: 'divider' }}>
+                  <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 44, height: 44, borderRadius: 2, bgcolor: softBg(f.color, 0.1), color: f.color }}>{f.icon}</Box>
+                  <Typography sx={{ mt: 2, fontWeight: 700, color: 'text.primary' }}>{f.title}</Typography>
+                  <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5, lineHeight: 1.625 }}>{f.desc}</Typography>
+                </Box>
+              </Grid>
+            ))}
+          </Grid>
+        </Box>
 
-        <section className="mb-10">
-          <h2 className="text-lg font-bold text-text-primary mb-5 flex items-center gap-2">
-            <Heart size={20} className="text-danger" aria-hidden />
-            <span>{t('about.community')}</span>
-          </h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-            <div onClick={handleOpenAdaptation}
-              className="p-6 rounded-2xl bg-gradient-to-br from-accent/5 to-background-card border border-border hover:border-accent/30 transition-all duration-300 group hover:shadow-lg hover:-translate-y-0.5 cursor-pointer"
-              role="button" tabIndex={0} onKeyDown={(e) => e.key === 'Enter' && handleOpenAdaptation()} aria-label={t('about.site_adaptation')}>
-              <div className="flex items-start gap-4">
-                <div className="p-3 rounded-xl bg-accent/10 text-accent group-hover:bg-accent/15 transition-colors"><Megaphone size={24} /></div>
-                <div className="flex-1">
-                  <h3 className="text-base font-bold text-text-primary mb-1.5 flex items-center gap-2">
-                    {t('about.site_adaptation')}
-                    <ExternalLink size={14} className="text-text-muted opacity-0 group-hover:opacity-100 transition-opacity" />
-                  </h3>
-                  <p className="text-sm text-text-secondary mb-3 leading-relaxed">{t('about.site_adaptation_desc')}</p>
-                  <span className="inline-flex items-center gap-1.5 text-sm font-bold text-accent group-hover:underline">
-                    {t('about.participate_now')} <ExternalLink size={14} />
-                  </span>
-                </div>
-              </div>
-            </div>
-            <div onClick={handleOpenDevPlan}
-              className="p-6 rounded-2xl bg-gradient-to-br from-success/5 to-background-card border border-border hover:border-success/30 transition-all duration-300 group hover:shadow-lg hover:-translate-y-0.5 cursor-pointer"
-              role="button" tabIndex={0} onKeyDown={(e) => e.key === 'Enter' && handleOpenDevPlan()} aria-label={t('about.development_plan')}>
-              <div className="flex items-start gap-4">
-                <div className="p-3 rounded-xl bg-success/10 text-success group-hover:bg-success/15 transition-colors"><Map size={24} /></div>
-                <div className="flex-1">
-                  <h3 className="text-base font-bold text-text-primary mb-1.5 flex items-center gap-2">
-                    {t('about.development_plan')}
-                    <ExternalLink size={14} className="text-text-muted opacity-0 group-hover:opacity-100 transition-opacity" />
-                  </h3>
-                  <p className="text-sm text-text-secondary mb-3 leading-relaxed">{t('about.development_plan_desc')}</p>
-                  <span className="inline-flex items-center gap-1.5 text-sm font-bold text-success group-hover:underline">
-                    {t('about.view_plan')} <ExternalLink size={14} />
-                  </span>
-                </div>
-              </div>
-            </div>
-          </div>
-        </section>
+        <Box sx={{ mb: 5 }}>
+          <Typography variant="h2" sx={{ fontSize: '1.125rem', fontWeight: 700, color: 'text.primary', mb: 2.5, display: 'flex', alignItems: 'center', gap: 1 }}>
+            <Box component="span" sx={{ display: 'inline-flex', color: 'error.main' }}><Heart size={20} aria-hidden /></Box>
+            {t('about.community')}
+          </Typography>
+          <Grid container spacing={2.5}>
+            {communityCards.map((c, i) => (
+              <Grid key={i} size={{ xs: 12, md: 6 }}>
+                <Box
+                  role="button"
+                  tabIndex={0}
+                  onClick={c.onClick}
+                  onKeyDown={(e) => e.key === 'Enter' && c.onClick()}
+                  aria-label={c.title}
+                  sx={{
+                    p: 3,
+                    borderRadius: 2,
+                    cursor: 'pointer',
+                    border: 1,
+                    borderColor: 'divider',
+                    transition: 'all 0.3s',
+                    background: (theme: any) => `linear-gradient(135deg, ${alpha(theme.palette[c.color.split('.')[0]][c.color.split('.')[1]], 0.05)}, ${theme.palette.background.paper})`,
+                    '--reveal': 0,
+                    '--chip-bg': softBg(c.color, 0.1),
+                    '&:hover': {
+                      borderColor: softBg(c.color, 0.3),
+                      boxShadow: 8,
+                      transform: 'translateY(-2px)',
+                      '--reveal': 1,
+                      '--chip-bg': softBg(c.color, 0.15),
+                    },
+                  }}
+                >
+                  <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 2 }}>
+                    <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', p: 1.5, borderRadius: 2, bgcolor: 'var(--chip-bg)', color: c.color, transition: 'background-color 0.3s' }}>{c.icon}</Box>
+                    <Box sx={{ flex: 1 }}>
+                      <Typography sx={{ fontSize: '1rem', fontWeight: 700, color: 'text.primary', mb: 0.75, display: 'flex', alignItems: 'center', gap: 1 }}>
+                        {c.title}
+                        <Box component="span" sx={{ display: 'inline-flex', color: 'text.secondary', opacity: 'var(--reveal, 0)', transition: 'opacity 0.3s' }}><ExternalLink size={14} /></Box>
+                      </Typography>
+                      <Typography sx={{ fontSize: '0.875rem', color: 'text.secondary', mb: 1.5, lineHeight: 1.625 }}>{c.desc}</Typography>
+                      <Box component="span" sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.75, fontSize: '0.875rem', fontWeight: 700, color: c.color }}>
+                        {c.action}
+                        <ExternalLink size={14} />
+                      </Box>
+                    </Box>
+                  </Box>
+                </Box>
+              </Grid>
+            ))}
+          </Grid>
+        </Box>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-5 mb-10">
-          <div className="p-5 rounded-2xl bg-background-card border border-border hover:border-success/30 transition-all duration-300 group hover:shadow-lg">
-            <div className="flex items-start gap-4">
-              <div className="p-3 rounded-xl bg-success/10 text-success group-hover:bg-success/15 transition-colors"><Heart size={22} /></div>
-              <div className="flex-1">
-                <h3 className="text-xs font-bold text-text-muted uppercase tracking-wider mb-1.5">{t('about.contributors')}</h3>
-                <p className="text-text-primary font-semibold text-[15px] leading-snug">mechrevo, dongzheyu, JetCPP-dongle</p>
-              </div>
-            </div>
-          </div>
-          <div className="p-5 rounded-2xl bg-background-card border border-border hover:border-warning/30 transition-all duration-300 group hover:shadow-lg">
-            <div className="flex items-start gap-4">
-              <div className="p-3 rounded-xl bg-warning/10 text-warning group-hover:bg-warning/15 transition-colors"><Users size={22} /></div>
-              <div className="flex-1">
-                <h3 className="text-xs font-bold text-text-muted uppercase tracking-wider mb-1.5">{t('about.maintainers')}</h3>
-                <p className="text-text-primary font-semibold text-[15px] leading-snug">JetCPP Team, SniShaper Team</p>
-              </div>
-            </div>
-          </div>
-          <div onClick={handleOpenWebsite}
-            className="p-5 rounded-2xl bg-background-card border border-border hover:border-accent/30 transition-all duration-300 group hover:shadow-lg cursor-pointer"
-            role="button" tabIndex={0} onKeyDown={(e) => e.key === 'Enter' && handleOpenWebsite()}>
-            <div className="flex items-start gap-4">
-              <div className="p-3 rounded-xl bg-accent/10 text-accent group-hover:bg-accent/15 transition-colors"><Globe size={22} /></div>
-              <div className="flex-1">
-                <h3 className="text-xs font-bold text-text-muted uppercase tracking-wider mb-1.5">{t('about.website')}</h3>
-                <p className="text-accent font-semibold text-[15px] group-hover:underline">github.com/SniShaper/SniShaper</p>
-              </div>
-            </div>
-          </div>
-          <div onClick={handleOpenGitHub}
-            className="p-5 rounded-2xl bg-background-card border border-border hover:border-text-primary/30 transition-all duration-300 group hover:shadow-lg cursor-pointer"
-            role="button" tabIndex={0} onKeyDown={(e) => e.key === 'Enter' && handleOpenGitHub()}>
-            <div className="flex items-start gap-4">
-              <div className="p-3 rounded-xl bg-text-primary/10 text-text-primary group-hover:bg-text-primary/15 transition-colors"><GitBranch size={22} /></div>
-              <div className="flex-1">
-                <h3 className="text-xs font-bold text-text-muted uppercase tracking-wider mb-1.5">GitHub</h3>
-                <p className="text-text-primary font-semibold text-[15px] group-hover:underline">SniShaper/SniShaper</p>
-              </div>
-            </div>
-          </div>
-          <div onClick={handleOpenBeta}
-            className="p-5 rounded-2xl bg-background-card border border-border hover:border-warning/30 transition-all duration-300 group hover:shadow-lg cursor-pointer"
-            role="button" tabIndex={0} onKeyDown={(e) => e.key === 'Enter' && handleOpenBeta()}>
-            <div className="flex items-start gap-4">
-              <div className="p-3 rounded-xl bg-warning/10 text-warning group-hover:bg-warning/15 transition-colors"><Download size={22} /></div>
-              <div className="flex-1">
-                <h3 className="text-xs font-bold text-text-muted uppercase tracking-wider mb-1.5">最新beta版</h3>
-                <p className="text-warning font-semibold text-[15px] group-hover:underline">Actions 构建产物</p>
-              </div>
-            </div>
-          </div>
-        </div>
+        <Grid container spacing={2.5} sx={{ mb: 5 }}>
+          {infoCards.map((c, i) => (
+            <Grid key={i} size={{ xs: 12, md: 6 }}>
+              <Box
+                {...(c.onClick ? { role: 'button', tabIndex: 0, onClick: c.onClick, onKeyDown: (e: React.KeyboardEvent) => e.key === 'Enter' && c.onClick() } : {})}
+                sx={{
+                  p: 2.5,
+                  borderRadius: 2,
+                  bgcolor: 'background.paper',
+                  border: 1,
+                  borderColor: 'divider',
+                  transition: 'all 0.3s',
+                  ...(c.onClick ? { cursor: 'pointer' } : {}),
+                  '--chip-bg': softBg(c.color, 0.1),
+                  '&:hover': {
+                    borderColor: softBg(c.color, 0.3),
+                    boxShadow: 8,
+                    '--chip-bg': softBg(c.color, 0.15),
+                  },
+                }}
+              >
+                <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 2 }}>
+                  <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', p: 1.5, borderRadius: 2, bgcolor: 'var(--chip-bg)', color: c.color, transition: 'background-color 0.3s' }}>{c.icon}</Box>
+                  <Box sx={{ flex: 1 }}>
+                    <Typography sx={{ fontSize: '0.75rem', fontWeight: 700, color: 'text.secondary', textTransform: 'uppercase', letterSpacing: '0.05em', mb: 0.75 }}>{c.title}</Typography>
+                    <Typography sx={{ fontSize: '0.9375rem', fontWeight: 600, color: c.valueColor, lineHeight: 1.375 }}>{c.value}</Typography>
+                  </Box>
+                </Box>
+              </Box>
+            </Grid>
+          ))}
+        </Grid>
 
-        <div className="flex flex-wrap justify-center gap-4 mb-12">
-          <Button onClick={handleCheckUpdate} loading={checkingUpdate} icon={checkingUpdate ? undefined : <RefreshCw size={18} />} size="lg">
+        <Box sx={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'center', gap: 2, mb: 6 }}>
+          <Button onClick={handleCheckUpdate} variant="contained" size="large" loading={checkingUpdate} loadingPosition="start" startIcon={checkingUpdate ? undefined : <RefreshCw size={18} />}>
             {checkingUpdate ? t('about.checking') : t('about.check_update')}
           </Button>
-          <Button onClick={handleOpenWebsite} variant="outline" size="lg" icon={<Globe size={18} />}>{t('about.website')}</Button>
-          <Button onClick={handleOpenGitHub} variant="outline" size="lg" icon={<LinkIcon size={18} />}>GitHub</Button>
-        </div>
+          <Button onClick={handleOpenWebsite} variant="outlined" size="large" startIcon={<Globe size={18} />}>{t('about.website')}</Button>
+          <Button onClick={handleOpenGitHub} variant="outlined" size="large" startIcon={<LinkIcon size={18} />}>GitHub</Button>
+        </Box>
 
-        <footer className="text-center pb-4">
-          <p className="text-text-muted text-xs">© 2025-2026 SniShaper. {t('about.rights_reserved')}</p>
-          <p className="text-text-muted/60 text-[11px] mt-2">{t('about.made_with')} ❤️ {t('about.by_community')}</p>
-        </footer>
-      </div>
+        <Box component="footer" sx={{ textAlign: 'center', pb: 2 }}>
+          <Typography variant="caption" sx={{ display: 'block', fontSize: '0.75rem', color: 'text.secondary' }}>© 2025-2026 SniShaper. {t('about.rights_reserved')}</Typography>
+          <Typography variant="caption" sx={{ display: 'block', fontSize: '0.6875rem', color: 'text.secondary', opacity: 0.6, mt: 1 }}>{t('about.made_with')} ❤️ {t('about.by_community')}</Typography>
+        </Box>
+      </Box>
 
       <Modal isOpen={showUpdateModal} onClose={() => setShowUpdateModal(false)} title={updateInfo ? t('about.update_available') : t('common.status')}>
-        <div className="space-y-4">
+        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
           {updateInfo ? (
             <>
-              <div className="flex items-start gap-3 p-4 bg-accent/10 border border-accent/20 rounded-xl">
-                <Download className="text-accent shrink-0 mt-0.5" size={20} aria-hidden />
-                <div>
-                  <p className="text-sm font-bold text-text-primary mb-1">{t('about.update_available')}</p>
-                  <p className="text-xs text-text-secondary">{t('about.update_available_desc').replace('{version}', updateInfo.latestVersion)}</p>
-                </div>
-              </div>
-              <div className="flex gap-3">
-                <Button onClick={handleDownloadUpdate} icon={<Download size={16} />} className="flex-1">{t('common.confirm')}</Button>
-                <Button onClick={() => setShowUpdateModal(false)} variant="outline" className="flex-1">{t('common.cancel')}</Button>
-              </div>
+              <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1.5, p: 2, bgcolor: (theme) => alpha(theme.palette.primary.main, 0.1), border: 1, borderColor: (theme) => alpha(theme.palette.primary.main, 0.2), borderRadius: 2 }}>
+                <Box component="span" sx={{ display: 'inline-flex', color: 'primary.main', flexShrink: 0, mt: 0.25 }}><Download size={20} aria-hidden /></Box>
+                <Box>
+                  <Typography sx={{ fontSize: '0.875rem', fontWeight: 700, color: 'text.primary', mb: 0.5 }}>{t('about.update_available')}</Typography>
+                  <Typography sx={{ fontSize: '0.75rem', color: 'text.secondary' }}>{t('about.update_available_desc').replace('{version}', updateInfo.latestVersion)}</Typography>
+                </Box>
+              </Box>
+              <Box sx={{ display: 'flex', gap: 1.5 }}>
+                <Button onClick={handleDownloadUpdate} startIcon={<Download size={16} />} sx={{ flex: 1 }}>{t('common.confirm')}</Button>
+                <Button onClick={() => setShowUpdateModal(false)} variant="outlined" sx={{ flex: 1 }}>{t('common.cancel')}</Button>
+              </Box>
             </>
           ) : (
-            <div className="text-center py-4"><p className="text-sm text-text-secondary">{t('about.up_to_date_desc').replace('{version}', version)}</p></div>
+            <Box sx={{ textAlign: 'center', py: 2 }}>
+              <Typography sx={{ fontSize: '0.875rem', color: 'text.secondary' }}>{t('about.up_to_date_desc').replace('{version}', version)}</Typography>
+            </Box>
           )}
-        </div>
+        </Box>
       </Modal>
-    </div>
+    </Box>
   );
 };
 

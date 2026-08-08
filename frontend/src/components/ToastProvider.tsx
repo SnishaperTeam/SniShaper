@@ -1,18 +1,19 @@
 import React, { useEffect, useState } from 'react';
-import { CheckCircle2, AlertCircle, Info, X } from '../lib/icons';
+import { Box, Stack, IconButton, Typography, Paper } from '@mui/material';
+import { keyframes } from '@emotion/react';
+import { CheckCircle, Error, Info as InfoIcon, Close } from '@mui/icons-material';
 import { TOAST_EVENT, type ToastPayload } from '../lib/toast';
 
 const ICONS = {
-  success: CheckCircle2,
-  error: AlertCircle,
-  info: Info
+  success: CheckCircle,
+  error: Error,
+  info: InfoIcon
 } as const;
 
-const STYLES = {
-  success: 'border-success/30 bg-success/10 text-success',
-  error: 'border-danger/30 bg-danger/10 text-danger',
-  info: 'border-accent/30 bg-accent/10 text-accent'
-} as const;
+const slideIn = keyframes`
+  from { opacity: 0; transform: translateX(24px) scale(0.96); }
+  to { opacity: 1; transform: translateX(0) scale(1); }
+`;
 
 const ToastProvider: React.FC = () => {
   const [toasts, setToasts] = useState<ToastPayload[]>([]);
@@ -35,35 +36,85 @@ const ToastProvider: React.FC = () => {
   if (toasts.length === 0) return null;
 
   return (
-    <div className="pointer-events-none fixed right-4 top-4 z-[80] flex w-[min(360px,calc(100vw-2rem))] flex-col gap-3">
-      {toasts.map((toast) => {
-        const Icon = ICONS[toast.type];
-        return (
-          <div
-            key={toast.id}
-            className="pointer-events-auto overflow-hidden rounded-2xl border border-border bg-background-card/95 shadow-2xl backdrop-blur-md animate-in fade-in slide-in-from-top-2 duration-300"
-          >
-            <div className="flex items-start gap-3 p-4">
-              <div className={`mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border ${STYLES[toast.type]}`}>
-                <Icon size={18} />
-              </div>
-              <div className="min-w-0 flex-1">
-                <div className="text-sm font-bold text-text-primary">{toast.title}</div>
-                {toast.message && <div className="mt-1 text-xs leading-relaxed text-text-secondary">{toast.message}</div>}
-              </div>
-              <button
-                type="button"
-                onClick={() => setToasts((prev) => prev.filter((item) => item.id !== toast.id))}
-                className="rounded-lg p-1.5 text-text-muted transition-colors hover:bg-background-hover hover:text-text-primary"
-                aria-label="关闭提示"
+    <Box
+      sx={{
+        position: 'fixed',
+        right: 12,
+        top: 60,
+        zIndex: 9999,
+        width: 'min(360px, calc(100vw - 2rem))',
+        pointerEvents: 'none',
+      }}
+    >
+      <Stack direction="column" spacing={1.5}>
+        {toasts.map((toast) => {
+          const Icon = ICONS[toast.type];
+          const color = toast.type;
+          return (
+            <Paper
+              key={toast.id}
+              elevation={12}
+              sx={{
+                pointerEvents: 'auto',
+                overflow: 'hidden',
+                borderRadius: 2,
+                border: 1,
+                borderColor: 'divider',
+                p: 1.5,
+                display: 'flex',
+                alignItems: 'flex-start',
+                gap: 1.5,
+                bgcolor: (theme) =>
+                  `color-mix(in srgb, ${theme.palette.background.paper} 88%, transparent)`,
+                backdropFilter: 'blur(10px)',
+                animation: `${slideIn} 0.25s cubic-bezier(0.16, 1, 0.3, 1)`,
+              }}
+            >
+              <Box
+                sx={{
+                  mt: 0.25,
+                  width: 36,
+                  height: 36,
+                  flexShrink: 0,
+                  borderRadius: 1.5,
+                  border: 1,
+                  borderColor: `${color}.light`,
+                  bgcolor: (theme) => `color-mix(in srgb, ${theme.palette[color].main} 14%, transparent)`,
+                  color: `${color}.main`,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                }}
               >
-                <X size={14} />
-              </button>
-            </div>
-          </div>
-        );
-      })}
-    </div>
+                <Icon fontSize="medium" />
+              </Box>
+              <Box sx={{ minWidth: 0, flexGrow: 1 }}>
+                <Typography
+                  variant="body2"
+                  sx={{
+                    fontWeight: 600,
+                    color: "text.primary"
+                  }}>
+                  {toast.title}
+                </Typography>
+                {toast.message && (
+                  <Typography variant="caption" sx={{ mt: 0.5, lineHeight: 1.6, color: 'text.secondary', display: 'block' }}>
+                    {toast.message}
+                  </Typography>
+                )}
+              </Box>
+              <IconButton
+                aria-label="关闭提示"
+                size="small"
+                onClick={() => setToasts((prev) => prev.filter((item) => item.id !== toast.id))}
+              >
+                <Close fontSize="small" />
+              </IconButton>
+            </Paper>
+          );
+        })}
+      </Stack>
+    </Box>
   );
 };
 

@@ -1,8 +1,9 @@
 import React, { useCallback } from 'react';
-import { Minus, Square, X } from '../lib/icons';
-import { 
+import { Box, IconButton, Tooltip } from '@mui/material';
+import { HorizontalRule, CropSquare, Close } from '@mui/icons-material';
+import {
   HandleWindowClose,
-  WindowMinimise, 
+  WindowMinimise,
   WindowToggleMaximise
 } from "../api/bindings";
 
@@ -32,32 +33,38 @@ const WindowControls: React.FC = React.memo(() => {
   }, []);
 
   return (
-    <div className="flex items-center gap-1" style={{ "--wails-draggable": "no-drag" } as React.CSSProperties}>
-      <button 
-        onClick={handleMinimise}
-        className="h-8 w-8 hover:bg-black/5 dark:hover:bg-white/10 rounded-md text-text-primary transition-colors flex items-center justify-center active:scale-95"
-        title="最小化"
-        type="button"
-      >
-        <Minus size={14} strokeWidth={2.5} />
-      </button>
-      <button 
-        onClick={handleToggleMaximise}
-        className="h-8 w-8 hover:bg-black/5 dark:hover:bg-white/10 rounded-md text-text-primary transition-colors flex items-center justify-center active:scale-95"
-        title="最大化/还原"
-        type="button"
-      >
-        <Square size={12} strokeWidth={3} />
-      </button>
-      <button 
-        onClick={handleClose}
-        className="h-8 w-8 hover:bg-danger/10 hover:text-danger rounded-md text-text-primary transition-colors flex items-center justify-center active:scale-95"
-        title="关闭"
-        type="button"
-      >
-        <X size={14} strokeWidth={2.5} />
-      </button>
-    </div>
+    <Box sx={{ display: 'flex', gap: 1, alignItems: 'center', '--wails-draggable': 'no-drag' }}>
+      <Tooltip title="最小化">
+        <IconButton
+          size="small"
+          aria-label="最小化"
+          onClick={handleMinimise}
+          sx={{ color: 'text.primary' }}
+        >
+          <HorizontalRule fontSize="small" />
+        </IconButton>
+      </Tooltip>
+      <Tooltip title="最大化/还原">
+        <IconButton
+          size="small"
+          aria-label="最大化/还原"
+          onClick={handleToggleMaximise}
+          sx={{ color: 'text.primary' }}
+        >
+          <CropSquare fontSize="small" />
+        </IconButton>
+      </Tooltip>
+      <Tooltip title="关闭">
+        <IconButton
+          size="small"
+          aria-label="关闭"
+          color="error"
+          onClick={handleClose}
+        >
+          <Close fontSize="small" />
+        </IconButton>
+      </Tooltip>
+    </Box>
   );
 });
 

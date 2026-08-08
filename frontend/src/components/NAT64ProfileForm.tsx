@@ -1,8 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { Layers, Save } from '../lib/icons';
 import { AddNAT64Profile, UpdateNAT64Profile } from '../api/bindings';
-import { Button } from '../components/ui/Button';
 import { useTranslation } from '../i18n/I18nContext';
+import {
+  Box, Button, TextField, Stack, Typography, FormControlLabel, Switch,
+} from '@mui/material';
 
 interface NAT64ProfileFormProps {
   initialData?: any;
@@ -49,60 +51,71 @@ const NAT64ProfileForm: React.FC<NAT64ProfileFormProps> = ({ initialData, onSucc
   };
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-6 text-text-primary">
-      <div className="space-y-4 p-4 bg-accent/5 border border-accent/20 rounded-2xl">
-        <div className="flex gap-3 items-center">
-          <Layers className="text-accent" size={20} />
-          <div>
-            <h4 className="text-xs font-black uppercase tracking-widest text-accent">
-              {formData.id ? t('proxies.edit_nat64') || '编辑 NAT64 配置' : t('proxies.add_nat64') || '添加 NAT64 配置'}
-            </h4>
-            <p className="text-[10px] text-accent/70 font-medium">
-              {t('proxies.nat64_form_subtitle') || '配置独立映射规则前缀'}
-            </p>
-          </div>
-        </div>
-      </div>
+    <form onSubmit={handleSubmit}>
+      <Stack direction="column" spacing={3} sx={{ alignItems: 'stretch', color: 'text.primary' }}>
+        <Box sx={{ p: 1.5, bgcolor: 'rgba(25, 118, 210, 0.05)', border: 1, borderColor: 'rgba(25, 118, 210, 0.2)', borderRadius: 2 }}>
+          <Stack direction="row" spacing={1.5} sx={{ alignItems: 'center' }}>
+            <Layers size={24} color="primary.main" />
+            <Stack direction="column" spacing={0.25}>
+              <Typography variant="body2" sx={{ fontWeight: 'bold', textTransform: 'uppercase', letterSpacing: '0.05em', color: 'primary.main' }}>
+                {formData.id ? t('proxies.edit_nat64') || '编辑 NAT64 配置' : t('proxies.add_nat64') || '添加 NAT64 配置'}
+              </Typography>
+              <Typography variant="caption" color="primary.main" sx={{ opacity: 0.7, fontWeight: 'medium' }}>
+                {t('proxies.nat64_form_subtitle') || '配置独立映射规则前缀'}
+              </Typography>
+            </Stack>
+          </Stack>
+        </Box>
 
-      <div className="space-y-4">
-        <div className="space-y-1.5">
-          <label className="text-[10px] font-black text-text-secondary uppercase tracking-widest px-1">
-            {t('proxies.nat64_form_name') || '配置名称'}
-          </label>
-          <input
-            type="text"
-            required
-            value={formData.name}
-            onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-            placeholder="例如：特定黑名单绕过"
-            className="w-full bg-background-hover border border-border px-4 py-3 rounded-xl text-sm focus:ring-2 focus:ring-accent outline-none font-medium transition-all"
-          />
-        </div>
+        <Stack direction="column" spacing={2} sx={{ alignItems: 'stretch' }}>
+          <Box>
+            <TextField
+              label={t('proxies.nat64_form_name') || '配置名称'}
+              size="small"
+              required
+              fullWidth
+              value={formData.name}
+              onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+              placeholder="例如：特定黑名单绕过"
+              slotProps={{ input: { style: { borderRadius: 1 } }, inputLabel: { shrink: true } }}
+            />
+          </Box>
 
-        <div className="space-y-1.5">
-          <label className="text-[10px] font-black text-text-secondary uppercase tracking-widest px-1">
-            {t('proxies.nat64_form_prefix') || 'NAT64 前缀'}
-          </label>
-          <input
-            type="text"
-            required
-            value={formData.prefix}
-            onChange={(e) => setFormData({ ...formData, prefix: e.target.value })}
-            placeholder="例如：64:ff9b::"
-            className="w-full bg-background-hover border border-border px-4 py-3 rounded-xl text-sm focus:ring-2 focus:ring-accent outline-none font-medium transition-all"
-          />
-        </div>
-      </div>
+          <Box>
+            <TextField
+              label={t('proxies.nat64_form_prefix') || 'NAT64 前缀'}
+              size="small"
+              required
+              fullWidth
+              value={formData.prefix}
+              onChange={(e) => setFormData({ ...formData, prefix: e.target.value })}
+              placeholder="例如：64:ff9b::"
+              slotProps={{ input: { style: { borderRadius: 1, fontFamily: 'mono' } }, inputLabel: { shrink: true } }}
+            />
+          </Box>
+        </Stack>
 
-      <div className="flex justify-end gap-3 pt-4 border-t border-border/40">
-        <Button type="button" variant="secondary" onClick={onCancel} disabled={isSubmitting}>
-          {t('common.cancel')}
-        </Button>
-        <Button type="submit" variant="primary" disabled={isSubmitting} className="flex items-center gap-1.5">
-          <Save size={14} />
-          {t('common.save')}
-        </Button>
-      </div>
+        <Stack direction="row" spacing={1.5} sx={{ justifyContent: 'flex-end', pt: 2, borderTop: 1, borderColor: 'divider' }}>
+          <Button
+            variant="text"
+            size="small"
+            onClick={onCancel}
+            sx={{ borderWidth: 1, borderColor: 'divider', borderRadius: 1, '&:hover': { bgcolor: 'action.hover' } }}
+          >
+            {t('common.cancel')}
+          </Button>
+          <Button
+            type="submit"
+            variant="contained"
+            color="primary"
+            size="small"
+            startIcon={<Save size={14} />}
+            disabled={isSubmitting}
+          >
+            {isSubmitting ? t('ech_form.probing') : t('common.save')}
+          </Button>
+        </Stack>
+      </Stack>
     </form>
   );
 };

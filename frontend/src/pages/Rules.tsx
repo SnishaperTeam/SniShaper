@@ -1,16 +1,16 @@
 import React, { useState, useEffect } from 'react';
 import {
-  Plus, Search, Filter, ExternalLink, Edit3, Trash2, Zap, Activity
+  Plus, Search, Filter, Edit, OpenInNew, Trash2, Activity, Zap
 } from '../lib/icons';
 import {
   GetSiteGroups, DeleteSiteGroup, ExportConfig
 } from '../api/bindings';
-import { Button } from '../components/ui/Button';
-import { EmptyState } from '../components/ui/EmptyState';
+import {
+  Box, Typography, Button, IconButton, TextField, InputAdornment, useColorScheme,
+} from '@mui/material';
 import Modal from '../components/Modal';
 import RuleForm from '../components/RuleForm';
 import { toast } from '../lib/toast';
-import { cn } from '../lib/utils';
 import { useTranslation } from '../i18n/I18nContext';
 
 const FILTER_MODES = ['ALL', 'MITM', 'TLS-RF', 'QUIC', 'TRANSPARENT', 'MIGRATION'] as const;
@@ -30,6 +30,8 @@ const getEffectiveMode = (group: any) => {
 
 const RuleItem: React.FC<{ group: any; onEdit: (group: any) => void; onDelete: (id: string) => void }> = ({ group, onEdit, onDelete }) => {
   const { t } = useTranslation();
+  const { mode } = useColorScheme();
+  const hoverBg = mode === 'light' ? 'rgba(0,0,0,0.04)' : 'rgba(255,255,255,0.08)';
   const getModeDisplay = (mode: string) => {
     switch (mode) {
       case 'TRANSPARENT': return t('rules.display.transparent');
@@ -40,11 +42,11 @@ const RuleItem: React.FC<{ group: any; onEdit: (group: any) => void; onDelete: (
     }
   };
   const modeColors: Record<string, string> = {
-    'mitm': 'text-amber-600 dark:text-amber-400',
-    'transparent': 'text-danger',
-    'quic': 'text-success',
-    'tls-rf': 'text-blue-600 dark:text-blue-400',
-    'migration': 'text-purple-600 dark:text-purple-400'
+    'mitm': 'warning.main',
+    'transparent': 'error.main',
+    'quic': 'success.main',
+    'tls-rf': 'primary.main',
+    'migration': 'secondary.main'
   };
   const getEffectiveUpstream = (group: any) => {
     const upstream = String(group.upstream || '').trim();
@@ -56,44 +58,49 @@ const RuleItem: React.FC<{ group: any; onEdit: (group: any) => void; onDelete: (
   const modeKey = normalizeMode(group?.mode) || normalizeMode(effectiveMode);
 
   return (
-    <div className="group flex items-center gap-4 py-3 px-6 bg-background-card hover:bg-background-hover border-b border-border/60 transition-colors">
-      <div className="flex-1 min-w-0 flex items-center gap-6">
-        <div className="w-1/3 min-w-0">
-          <h3 className="text-sm font-bold text-text-primary truncate">{group.name || t('common.unknown')}</h3>
-          <p className="text-[10px] text-text-muted font-medium truncate uppercase tracking-wider">{group.website || 'Default'}</p>
-        </div>
-        <div className="flex-1 min-w-0 hidden md:block">
-          <div className="flex gap-2 overflow-hidden items-center">
-            {(group.domains || []).slice(0, 4).map((d: string, i: number) => (
-              <span key={i} className="text-[9px] bg-background-soft px-2 py-0.5 rounded border border-border/40 text-text-secondary whitespace-nowrap font-mono">{d}</span>
-            ))}
-            {(group.domains || []).length > 4 && (
-              <span className="text-[10px] text-text-muted font-bold px-1 opacity-50">+{(group.domains || []).length - 4}</span>
-            )}
-          </div>
-        </div>
-      </div>
+    <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, py: 1.5, px: 3, bgcolor: 'background.paper', borderBottom: 1, borderColor: 'divider', transition: 'background-color 0.2s', '&:hover': { bgcolor: hoverBg } }}>
+      <Box sx={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', gap: 3 }}>
+        <Box sx={{ width: '33%', minWidth: 0 }}>
+          <Typography variant="body2" sx={{ fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{group.name || t('common.unknown')}</Typography>
+          <Typography variant="caption" sx={{ fontSize: 10, color: 'text.secondary', fontWeight: 500, textTransform: 'uppercase', letterSpacing: '0.05em', display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{group.website || 'Default'}</Typography>
+        </Box>
+        <Box sx={{ flex: 1, minWidth: 0, display: { xs: 'none', md: 'flex' }, alignItems: 'center', gap: 1, overflow: 'hidden' }}>
+          {(group.domains || []).slice(0, 4).map((d: string, i: number) => (
+            <Typography key={i} variant="caption" sx={{ fontSize: 9, bgcolor: hoverBg, px: 1, py: 0.25, borderRadius: 1, border: 1, borderColor: 'divider', color: 'text.secondary', whiteSpace: 'nowrap', fontFamily: 'mono' }}>{d}</Typography>
+          ))}
+          {(group.domains || []).length > 4 && (
+            <Typography variant="caption" sx={{ fontSize: 10, color: 'text.secondary', fontWeight: 700, px: 0.5, opacity: 0.5 }}>+{(group.domains || []).length - 4}</Typography>
+          )}
+        </Box>
+      </Box>
 
-      <div className="w-32 shrink-0 flex flex-col items-end px-3 border-r border-border/30 mr-2">
-        <span className={cn('text-[10px] font-black uppercase tracking-widest', modeColors[modeKey] || 'text-text-muted')}>
+      <Box sx={{ width: 128, flexShrink: 0, display: 'flex', flexDirection: 'column', alignItems: 'flex-end', px: 1.5, borderRight: 1, borderColor: 'divider', mr: 1 }}>
+        <Typography variant="caption" sx={{ fontSize: 10, fontWeight: 900, textTransform: 'uppercase', letterSpacing: '0.1em', color: modeColors[modeKey] || 'text.secondary' }}>
           {getModeDisplay(effectiveMode)}
-        </span>
-        <div className="flex items-center gap-1.5 text-[10px] text-text-muted font-bold truncate max-w-full">
-          <Activity size={10} className="text-success" aria-hidden />
-          <span className="truncate uppercase">{getEffectiveUpstream(group)}</span>
-        </div>
-      </div>
+        </Typography>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, mt: 0.25, color: 'text.secondary', maxWidth: '100%', minWidth: 0 }}>
+          <Box component="span" sx={{ color: 'success.main', display: 'inline-flex', flexShrink: 0 }}>
+            <Activity size={10} aria-hidden />
+          </Box>
+          <Typography variant="caption" sx={{ fontSize: 10, fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', textTransform: 'uppercase' }}>{getEffectiveUpstream(group)}</Typography>
+        </Box>
+      </Box>
 
-      <div className="flex gap-1.5 opacity-0 group-hover:opacity-100 transition-all">
-        <button onClick={() => onEdit(group)} className="p-1.5 hover:bg-background-hover rounded text-text-secondary hover:text-accent" aria-label="编辑规则"><Edit3 size={15} /></button>
-        <button onClick={() => onDelete(group.id)} className="p-1.5 hover:bg-danger/10 rounded text-danger" aria-label="删除规则"><Trash2 size={15} /></button>
-      </div>
-    </div>
+      <Box sx={{ display: 'flex', gap: 0.75, flexShrink: 0 }}>
+        <IconButton size="small" aria-label="编辑规则" onClick={() => onEdit(group)} sx={{ color: 'text.secondary', '&:hover': { bgcolor: hoverBg, color: 'primary.main' } }}>
+          <Edit size={15} />
+        </IconButton>
+        <IconButton size="small" aria-label="删除规则" color="error" onClick={() => onDelete(group.id)}>
+          <Trash2 size={15} />
+        </IconButton>
+      </Box>
+    </Box>
   );
 };
 
 const Rules: React.FC = () => {
   const { t } = useTranslation();
+  const { mode } = useColorScheme();
   const [groups, setGroups] = useState<any[]>([]);
   const [search, setSearch] = useState('');
   const [filterMode, setFilterMode] = useState('ALL');
@@ -113,6 +120,22 @@ const Rules: React.FC = () => {
   const handleDelete = async (id: string) => {
     const target = groups.find((group) => group.id === id);
     setPendingDeleteGroup(target || { id });
+  };
+
+  const handleExport = async () => {
+    const cfg = await ExportConfig();
+    if (cfg) {
+      await navigator.clipboard.writeText(cfg);
+      toast.success(t('rules.copy_success'), t('rules.copy_hint'));
+    }
+  };
+
+  const handleDeleteConfirm = async () => {
+    if (!pendingDeleteGroup?.id) return;
+    await DeleteSiteGroup(pendingDeleteGroup.id);
+    setPendingDeleteGroup(null);
+    await loadData();
+    toast.success(t('rules.notifications.deleted'));
   };
 
   const groupedResults = React.useMemo(() => {
@@ -136,79 +159,100 @@ const Rules: React.FC = () => {
   }, [groups, search, filterMode]);
 
   return (
-    <div className="p-5 max-w-5xl mx-auto space-y-4 animate-in fade-in duration-500">
-      <header className="flex justify-between items-center bg-background border border-border p-5 rounded-2xl shadow-sm">
-        <h1 className="text-xl font-black tracking-tight">{t('rules.title')}</h1>
-        <div className="flex gap-2">
-          <Button onClick={async () => { const cfg = await ExportConfig(); if (cfg) { await navigator.clipboard.writeText(cfg); toast.success(t('rules.copy_success'), t('rules.copy_hint')); } }}
-            variant="outline" size="sm" icon={<ExternalLink size={16} />} aria-label={t('common.view')} />
-          <Button onClick={handleAdd} variant="primary" size="md" icon={<Plus size={16} strokeWidth={3} />}>
+    <Box sx={{ px: 6, pt: 4, pb: 6, maxWidth: '5xl', mx: 'auto' }}>
+      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', bgcolor: 'background.paper', border: 1, borderColor: 'divider', p: 2.5, borderRadius: 2, boxShadow: 1 }}>
+        <Typography variant="h4" sx={{ fontWeight: 900, letterSpacing: '-0.02em' }}>{t('rules.title')}</Typography>
+        <Box sx={{ display: 'flex', gap: 1 }}>
+          <Button onClick={handleExport} variant="outlined" size="small" aria-label={t('common.view')} sx={{ minWidth: 0, px: 1 }}>
+            <OpenInNew size={16} />
+          </Button>
+          <Button onClick={handleAdd} variant="contained" color="primary" size="small" startIcon={<Plus size={16} strokeWidth={3} />}>
             {t('rules.add_rule')}
           </Button>
-        </div>
-      </header>
+        </Box>
+      </Box>
 
-      <div className="sticky top-0 z-10 space-y-3 pt-2 bg-background/50 backdrop-blur-md pb-2">
-        <div className="flex items-center gap-1.5 p-1 bg-background-card border border-border rounded-xl w-fit shadow-sm" role="tablist" aria-label="筛选模式">
-          {FILTER_MODES.map((m) => (
-            <button key={m} onClick={() => setFilterMode(m)} role="tab" aria-selected={filterMode === m}
-              className={cn('px-4 py-1.5 rounded-lg text-[10px] font-black tracking-widest uppercase transition-all', filterMode === m ? 'bg-accent text-white shadow-md shadow-accent/20' : 'text-text-secondary hover:bg-background-hover')}>
-              {m === 'TLS-RF' ? t('rules.display.fragment') : m === 'TRANSPARENT' ? t('rules.display.transparent') : m === 'MIGRATION' ? (t('rules.display.migration') || '迁移') : m}
-            </button>
-          ))}
-        </div>
+      <Box sx={{ position: 'sticky', top: 0, zIndex: 10, py: 1, display: 'flex', flexDirection: 'column', gap: 1.5, backdropFilter: 'blur(12px)', bgcolor: mode === 'light' ? 'rgba(255,255,255,0.5)' : 'rgba(13,17,23,0.5)' }}>
+        <Box sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.75, p: 0.5, bgcolor: 'background.paper', border: 1, borderColor: 'divider', borderRadius: 2, boxShadow: 1, width: 'fit-content' }} role="tablist" aria-label="筛选模式">
+          {FILTER_MODES.map((m) => {
+            const active = filterMode === m;
+            return (
+              <Button
+                key={m}
+                onClick={() => setFilterMode(m)}
+                role="tab"
+                aria-selected={active}
+                size="small"
+                sx={{
+                  px: 2, py: 0.5, borderRadius: 1.5, fontSize: 10, fontWeight: 900, letterSpacing: '0.05em',
+                  textTransform: 'uppercase', minWidth: 0, color: active ? 'primary.main' : 'text.secondary',
+                  bgcolor: active ? 'rgba(11,123,255,0.12)' : 'transparent',
+                  boxShadow: active ? '0 4px 12px rgba(11,123,255,0.15)' : 'none',
+                  '&:hover': { bgcolor: active ? 'rgba(11,123,255,0.12)' : 'action.hover' },
+                }}
+              >
+                {m === 'TLS-RF' ? t('rules.display.fragment') : m === 'TRANSPARENT' ? t('rules.display.transparent') : m === 'MIGRATION' ? (t('rules.display.migration') || '迁移') : m}
+              </Button>
+            );
+          })}
+        </Box>
 
-        <div className="relative group">
-          <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-text-muted transition-colors group-focus-within:text-accent" size={16} aria-hidden />
-          <input type="text" value={search} onChange={(e) => setSearch(e.target.value)} placeholder={t('rules.search_placeholder')}
-            className="w-full bg-background-card border border-border focus:border-accent/40 pl-11 pr-4 py-3 rounded-xl text-sm outline-none transition-all shadow-sm"
-            aria-label={t('rules.search_placeholder')} />
-        </div>
-      </div>
+        <TextField
+          fullWidth
+          size="small"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder={t('rules.search_placeholder')}
+          aria-label={t('rules.search_placeholder')}
+          slotProps={{ input: { startAdornment: <InputAdornment position="start"><Search size={16} /></InputAdornment> } }}
+        />
+      </Box>
 
-      <div className="space-y-8 pb-10">
+      <Box sx={{ mt: 2, display: 'flex', flexDirection: 'column', gap: 4, pb: 10 }}>
         {groupedResults.length === 0 ? (
-          <EmptyState icon={<Filter size={48} strokeWidth={1} />} title={t('rules.no_results')} className="border border-border rounded-2xl bg-background-card shadow-sm py-24 grayscale" />
+          <Box sx={{ py: 24, display: 'flex', flexDirection: 'column', alignItems: 'center', color: 'text.secondary', bgcolor: 'background.paper', border: 1, borderColor: 'divider', borderRadius: 2, boxShadow: 1, filter: 'grayscale(1)' }}>
+            <Filter size={48} strokeWidth={1} />
+            <Typography variant="body2" sx={{ mt: 1.5 }}>{t('rules.no_results')}</Typography>
+          </Box>
         ) : (
           groupedResults.map((group) => (
-            <section key={group.title} className="space-y-2">
-              <div className="flex items-center gap-2 px-2">
-                <div className="w-1.5 h-4 bg-accent rounded-full" aria-hidden />
-                <h2 className="text-[11px] font-black uppercase tracking-[0.2em] text-text-secondary flex items-center gap-2">
+            <Box key={group.title} sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, px: 1 }}>
+                <Box sx={{ width: 6, height: 16, bgcolor: 'primary.main', borderRadius: '999px' }} aria-hidden />
+                <Typography variant="caption" sx={{ fontSize: 11, fontWeight: 900, textTransform: 'uppercase', letterSpacing: '0.2em', color: 'text.secondary', display: 'flex', alignItems: 'center', gap: 1 }}>
                   {group.title}
-                  <span className="text-[9px] bg-background-card border border-border px-1.5 py-0.5 rounded text-text-muted font-bold">{group.items.length}</span>
-                </h2>
-                <div className="flex-1 h-[1px] bg-gradient-to-r from-border/60 to-transparent" aria-hidden />
-              </div>
-              <div className="border border-border rounded-2xl overflow-hidden bg-background-card shadow-sm divide-y divide-border/40">
+                  <Box component="span" sx={{ fontSize: 9, bgcolor: 'background.paper', border: 1, borderColor: 'divider', px: 0.75, py: 0.25, borderRadius: 1, color: 'text.secondary', fontWeight: 700 }}>{group.items.length}</Box>
+                </Typography>
+                <Box sx={{ flex: 1, height: 1, bgcolor: 'divider' }} aria-hidden />
+              </Box>
+              <Box sx={{ border: 1, borderColor: 'divider', borderRadius: 2, overflow: 'hidden', bgcolor: 'background.paper', boxShadow: 1 }}>
                 {group.items.map((item: any) => (
                   <RuleItem key={item.id} group={item} onEdit={handleEdit} onDelete={handleDelete} />
                 ))}
-              </div>
-            </section>
+              </Box>
+            </Box>
           ))
         )}
-      </div>
+      </Box>
 
-      <Modal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} title={editingGroup ? t('rules.edit_rule') : t('rules.create_rule')} maxWidth="max-w-2xl"
+      <Modal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} title={editingGroup ? t('rules.edit_rule') : t('rules.create_rule')} maxWidth="42rem"
         footer={<>
-          <Button type="button" onClick={() => setIsModalOpen(false)} variant="outline" size="md">{t('common.cancel')}</Button>
-          <Button type="submit" form="rule-form" variant="primary" size="md" icon={<Zap size={16} />}>{editingGroup ? t('common.save') : t('common.save')}</Button>
+          <Button type="button" onClick={() => setIsModalOpen(false)} variant="outlined" size="small">{t('common.cancel')}</Button>
+          <Button type="submit" form="rule-form" variant="contained" color="primary" size="small" startIcon={<Zap size={16} />}>{editingGroup ? t('common.save') : t('common.save')}</Button>
         </>}>
         <RuleForm initialData={editingGroup} onSuccess={() => { setIsModalOpen(false); loadData(); }} onCancel={() => setIsModalOpen(false)} />
       </Modal>
 
-      <Modal isOpen={Boolean(pendingDeleteGroup)} onClose={() => setPendingDeleteGroup(null)} title={t('rules.delete_rule')} subtitle={t('rules.delete_hint')} maxWidth="max-w-md"
+      <Modal isOpen={Boolean(pendingDeleteGroup)} onClose={() => setPendingDeleteGroup(null)} title={t('rules.delete_rule')} subtitle={t('rules.delete_hint')} maxWidth="28rem"
         footer={<>
-          <Button type="button" onClick={() => setPendingDeleteGroup(null)} variant="outline" size="md">{t('common.cancel')}</Button>
-          <Button type="button" onClick={async () => { if (!pendingDeleteGroup?.id) return; await DeleteSiteGroup(pendingDeleteGroup.id); setPendingDeleteGroup(null); await loadData(); toast.success(t('rules.notifications.deleted')); }}
-            variant="danger" size="md">{t('common.confirm')}</Button>
+          <Button type="button" onClick={() => setPendingDeleteGroup(null)} variant="outlined" size="small">{t('common.cancel')}</Button>
+          <Button type="button" onClick={handleDeleteConfirm} variant="contained" color="error" size="small">{t('common.confirm')}</Button>
         </>}>
-        <div className="text-sm text-text-secondary leading-relaxed">
-          {t('common.delete')}<span className="mx-1 font-bold text-text-primary">{pendingDeleteGroup?.name || t('common.unknown')}</span>{t('rules.delete_warning')}
-        </div>
+        <Typography variant="body2" color="text.secondary">
+          {t('common.delete')}<Box component="span" sx={{ mx: 0.5, fontWeight: 'bold', color: 'text.primary' }}>{pendingDeleteGroup?.name || t('common.unknown')}</Box>{t('rules.delete_warning')}
+        </Typography>
       </Modal>
-    </div>
+    </Box>
   );
 };
 

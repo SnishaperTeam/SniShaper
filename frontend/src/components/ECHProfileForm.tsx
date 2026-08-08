@@ -1,11 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import {
-  Shield, Search, Loader2, CheckCircle2, AlertCircle, Save
+  Shield, Search, CheckCircle2, AlertCircle, Save
 } from '../lib/icons';
 import { UpsertECHProfile, FetchECHConfig, GetDNSNodes } from '../api/bindings';
-import { Button } from '../components/ui/Button';
-import { Toggle } from '../components/ui/Toggle';
 import { useTranslation } from '../i18n/I18nContext';
+import {
+  Box, Button, TextField, Stack, Typography, LinearProgress,
+  Alert, FormControlLabel, Switch,
+} from '@mui/material';
 
 interface ECHProfileFormProps {
   initialData?: any;
@@ -30,8 +32,7 @@ const ECHProfileForm: React.FC<ECHProfileFormProps> = ({ initialData, onSuccess,
   useEffect(() => {
     const init = async () => {
       let currentData = initialData || {};
-      
-      // If it's a new profile and doh_upstream is empty, try to get from DNS settings
+
       if (!currentData.id && !currentData.doh_upstream) {
         try {
           const dnsNodes = await GetDNSNodes();
@@ -44,8 +45,7 @@ const ECHProfileForm: React.FC<ECHProfileFormProps> = ({ initialData, onSuccess,
         } catch (e) {
           console.error("Failed to fetch DNS nodes for ECH default", e);
         }
-        
-        // Fallback if still empty
+
         if (!currentData.doh_upstream) {
           currentData.doh_upstream = 'https://cloudflare-dns.com/dns-query';
         }
@@ -53,7 +53,7 @@ const ECHProfileForm: React.FC<ECHProfileFormProps> = ({ initialData, onSuccess,
 
       setFormData((prev: any) => ({ ...prev, ...currentData }));
     };
-    
+
     init();
   }, [initialData]);
 
@@ -88,116 +88,130 @@ const ECHProfileForm: React.FC<ECHProfileFormProps> = ({ initialData, onSuccess,
   };
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-6 text-text-primary">
-      <div className="space-y-4 p-4 bg-accent/5 border border-accent/20 rounded-2xl">
-          <div className="flex gap-3 items-center">
-            <Shield className="text-accent" size={20} />
-            <div>
-                <h4 className="text-xs font-black uppercase tracking-widest text-accent">{t('ech_form.title')}</h4>
-                <p className="text-[10px] text-accent/70 font-medium">{t('ech_form.subtitle')}</p>
-            </div>
-          </div>
-          
-          <div className="flex gap-3">
-              <div className="flex-1 space-y-1">
-                  <input 
-                    type="text" 
-                    value={formData.discovery_domain}
-                    onChange={(e) => setFormData({...formData, discovery_domain: e.target.value})}
-                    placeholder={t('ech_form.domain_placeholder')}
-                    className="w-full bg-background-card border border-border px-4 py-2 rounded-xl text-xs focus:ring-1 focus:ring-accent outline-none font-medium text-text-primary"
-                  />
-              </div>
-              <button 
-                type="button"
-                onClick={handleFetch}
-                disabled={isFetching}
-                className="px-4 py-2 bg-accent text-white rounded-xl text-xs font-black shadow-lg shadow-accent/20 flex items-center gap-2 disabled:opacity-50 transition-all hover:scale-105"
-              >
-                {isFetching ? <Loader2 size={14} className="animate-spin" /> : <Search size={14} />}
-                {isFetching ? t('ech_form.probing') : t('ech_form.probe_and_resolve')}
-              </button>
-          </div>
+    <form onSubmit={handleSubmit}>
+      <Stack direction="column" spacing={3} sx={{ alignItems: 'stretch', color: 'text.primary' }}>
+        <Box sx={{ p: 1.5, bgcolor: 'rgba(25, 118, 210, 0.05)', border: 1, borderColor: 'rgba(25, 118, 210, 0.2)', borderRadius: 2 }}>
+          <Stack direction="row" spacing={1.5} sx={{ alignItems: 'center', mb: 1.5 }}>
+            <Shield size={24} color="primary.main" />
+            <Stack direction="column" spacing={0.25}>
+              <Typography variant="body2" sx={{ fontWeight: 'bold', textTransform: 'uppercase', letterSpacing: '0.05em', color: 'primary.main' }}>
+                {t('ech_form.title')}
+              </Typography>
+              <Typography variant="caption" color="primary.main" sx={{ opacity: 0.7, fontWeight: 'medium' }}>
+                {t('ech_form.subtitle')}
+              </Typography>
+            </Stack>
+          </Stack>
+
+          <Stack direction="row" spacing={1.5} sx={{ alignItems: 'center' }}>
+            <TextField
+              label={t('ech_form.domain_placeholder')}
+              size="small"
+              value={formData.discovery_domain}
+              onChange={(e) => setFormData({ ...formData, discovery_domain: e.target.value })}
+              placeholder={t('ech_form.domain_placeholder')}
+              slotProps={{ input: { style: { borderRadius: 1 } }, inputLabel: { shrink: true } }}
+            />
+            <Button
+              variant="contained"
+              color="primary"
+              size="small"
+              startIcon={isFetching ? <LinearProgress sx={{ width: 24 }} /> : <Search size={14} />}
+              onClick={handleFetch}
+              disabled={isFetching}
+            >
+              {isFetching ? t('ech_form.probing') : t('ech_form.probe_and_resolve')}
+            </Button>
+          </Stack>
 
           {fetchError && (
-              <div className="flex items-center gap-2 text-danger text-[10px] font-bold px-1">
-                  <AlertCircle size={12} />
-                  {fetchError}
-              </div>
+            <Alert severity="error" sx={{ mb: 1, p: 1 }}>
+              <AlertCircle size={20} />
+              {fetchError}
+            </Alert>
           )}
           {fetchSuccess && (
-              <div className="flex items-center gap-2 text-success text-[10px] font-bold px-1 animate-in slide-in-from-left-2">
-                  <CheckCircle2 size={12} />
-                  {t('ech_form.probe_success')}
-              </div>
+            <Alert severity="success" sx={{ mb: 1, p: 1 }}>
+              <CheckCircle2 size={20} />
+              {t('ech_form.probe_success')}
+            </Alert>
           )}
-      </div>
+        </Box>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-2">
-        <div className="space-y-1.5">
-          <label className="text-[10px] font-black text-text-secondary uppercase tracking-widest px-1">{t('ech_form.config_name')}</label>
-          <input 
-            type="text" 
-            required
-            value={formData.name}
-            onChange={(e) => setFormData({...formData, name: e.target.value})}
-            placeholder={t('ech_form.name_placeholder')}
-            className="w-full bg-background-hover border border-border px-4 py-3 rounded-xl text-sm focus:ring-2 focus:ring-accent outline-none font-medium transition-all"
-          />
-        </div>
-        <div className="space-y-1.5">
-          <label className="text-[10px] font-black text-text-secondary uppercase tracking-widest px-1">{t('ech_form.doh_source')}</label>
-          <input 
-            type="text" 
-            value={formData.doh_upstream}
-            onChange={(e) => setFormData({...formData, doh_upstream: e.target.value})}
-            className="w-full bg-background-hover border border-border px-4 py-3 rounded-xl text-sm focus:ring-2 focus:ring-accent outline-none font-medium transition-all"
-          />
-        </div>
-      </div>
+        <Stack direction={{ xs: 'column', md: 'row' }} spacing={3} sx={{ pt: 1 }}>
+          <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 0.75 }}>
+            <TextField
+              label={t('ech_form.config_name')}
+              size="small"
+              required
+              value={formData.name}
+              onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+              placeholder={t('ech_form.name_placeholder')}
+              slotProps={{ input: { style: { borderRadius: 1 } }, inputLabel: { shrink: true } }}
+            />
+          </Box>
+          <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 0.75 }}>
+            <TextField
+              label={t('ech_form.doh_source')}
+              size="small"
+              value={formData.doh_upstream}
+              onChange={(e) => setFormData({ ...formData, doh_upstream: e.target.value })}
+              slotProps={{ input: { style: { borderRadius: 1 } }, inputLabel: { shrink: true } }}
+            />
+          </Box>
+        </Stack>
 
-      <div className="space-y-1.5">
-          <label className="text-[10px] font-black text-text-secondary uppercase tracking-widest px-1">{t('ech_form.raw_content')}</label>
-          <textarea 
+        <Box sx={{ pt: 0.75, display: 'flex', flexDirection: 'column', gap: 0.75 }}>
+          <TextField
+            label={t('ech_form.raw_content')}
+            size="small"
+            multiline
             rows={4}
             required
             value={formData.config}
-            onChange={(e) => setFormData({...formData, config: e.target.value})}
+            onChange={(e) => setFormData({ ...formData, config: e.target.value })}
             placeholder={t('ech_form.raw_placeholder')}
-            className="w-full bg-background-hover border border-border px-4 py-3 rounded-xl text-xs focus:ring-2 focus:ring-accent outline-none font-mono leading-relaxed transition-all"
+            slotProps={{ input: { style: { borderRadius: 1, fontSize: '0.75rem', fontFamily: 'mono' } }, inputLabel: { shrink: true } }}
           />
-      </div>
+        </Box>
 
-      <div className="flex items-center gap-3 p-1">
-          <button
-            type="button"
-            onClick={() => setFormData({...formData, auto_update: !formData.auto_update})}
-            className={`w-10 h-5 rounded-full transition-all relative ${formData.auto_update ? "bg-accent" : "bg-gray-400/20"}`}
-          >
-            <div className={`absolute top-0.5 w-4 h-4 bg-white rounded-full shadow-sm transition-transform duration-200 ${formData.auto_update ? "translate-x-[18px] left-0.5" : "left-0.5"}`} />
-          </button>
-          <div>
-            <div className="text-xs font-bold">{t('ech_form.auto_sync')}</div>
-            <p className="text-[10px] text-text-muted">{t('ech_form.auto_sync_hint')}</p>
-          </div>
-      </div>
+        <Box sx={{ pt: 0.5, display: 'flex', alignItems: 'center', gap: 1.5 }}>
+          <FormControlLabel
+            control={
+              <Switch
+                checked={formData.auto_update}
+                onChange={(e) => setFormData({ ...formData, auto_update: e.target.checked })}
+                color="primary"
+                size="small"
+              />
+            }
+            label={t('ech_form.auto_sync')}
+          />
+          <Typography variant="caption" color="text.secondary">
+            {t('ech_form.auto_sync_hint')}
+          </Typography>
+        </Box>
 
-      <div className="flex justify-end gap-3 pt-4 border-t border-border/50">
-          <button 
-            type="button"
+        <Box sx={{ pt: 1.5, display: 'flex', justifyContent: 'flex-end', gap: 1.5, borderTop: 1, borderColor: 'divider' }}>
+          <Button
+            variant="text"
+            size="small"
             onClick={onCancel}
-            className="px-6 py-2.5 rounded-xl border border-border text-text-secondary font-bold hover:bg-background-hover transition-all"
+            sx={{ borderWidth: 1, borderColor: 'divider', borderRadius: 1, '&:hover': { bgcolor: 'action.hover' } }}
           >
             {t('common.cancel')}
-          </button>
-          <button 
+          </Button>
+          <Button
             type="submit"
-            className="px-8 py-2.5 rounded-xl bg-accent text-white font-black shadow-lg shadow-accent/20 hover:scale-[1.02] active:scale-[0.98] transition-all flex items-center gap-2"
+            variant="contained"
+            color="primary"
+            size="small"
+            startIcon={<Save size={14} />}
           >
-            <Save size={18} />
-            {formData.id ? t('common.save') : t('common.save')}
-          </button>
-      </div>
+            {t('common.save')}
+          </Button>
+        </Box>
+      </Stack>
     </form>
   );
 };

@@ -1,23 +1,26 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { 
-  Workflow, 
-  ShieldCheck, 
+import React, { useState, useEffect } from 'react';
+import {
+  Workflow,
+  ShieldCheck,
   Activity,
   Share2,
   RefreshCw,
   Power,
   Zap
 } from '../lib/icons';
-import { 
-  GetAutoRoutingConfig, 
-  UpdateAutoRoutingConfig, 
-  GetAutoRoutingStatus, 
+import {
+  GetAutoRoutingConfig,
+  UpdateAutoRoutingConfig,
+  GetAutoRoutingStatus,
   RefreshGFWList,
   EventsOn
 } from '../api/bindings';
 import { toast } from '../lib/toast';
 import { extractErrorMessage } from '../lib/utils';
 import { useTranslation } from '../i18n/I18nContext';
+import { Box, Typography, Button } from '@mui/material';
+import { alpha } from '@mui/material/styles';
+import { keyframes } from '@emotion/react';
 
 interface FlowEntry {
   id: string;
@@ -26,6 +29,9 @@ interface FlowEntry {
   modeClass: string;
   modeDisplay: string;
 }
+
+const pulse = keyframes`0%,100%{opacity:1}50%{opacity:0.4}`;
+const spin = keyframes`from{transform:rotate(0deg)}to{transform:rotate(360deg)}`;
 
 const Routing: React.FC = () => {
   const { t } = useTranslation();
@@ -45,17 +51,17 @@ const Routing: React.FC = () => {
         if (!data) return;
         const { domain, mode } = data;
         if (!domain || !mode) return;
-        
-        let modeClass = 'bg-success/80'; 
+
+        let modeClass = 'success.main';
         let modeDisplay = mode.toUpperCase();
         const lowerMode = mode.toLowerCase();
-        
-        if (lowerMode.includes('direct') || lowerMode.includes('tcp')) { 
-            modeClass = 'bg-gray-500'; modeDisplay = 'DIRECT'; 
+
+        if (lowerMode.includes('direct') || lowerMode.includes('tcp')) {
+            modeClass = 'rgba(107,114,128,0.9)'; modeDisplay = 'DIRECT';
         }
-        else if (lowerMode.includes('transparent')) modeClass = 'bg-red-500';
-        else if (lowerMode.includes('mitm') || lowerMode.includes('proxy')) modeClass = 'bg-yellow-600';
-        
+        else if (lowerMode.includes('transparent')) modeClass = 'error.main';
+        else if (lowerMode.includes('mitm') || lowerMode.includes('proxy')) modeClass = 'warning.main';
+
         setFlows(prev => {
             const newFlow: FlowEntry = {
                 id: crypto.randomUUID(),
@@ -93,121 +99,138 @@ const Routing: React.FC = () => {
   };
 
   return (
-    <div className="p-6 max-w-5xl mx-auto space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
+    <Box sx={{ p: 3, maxWidth: '5xl', mx: 'auto', display: 'flex', flexDirection: 'column', gap: 4 }}>
 
-      {/* Real-time Flow Canvas (Clash Verge connection-like) */}
-      <div className="bg-background-card border border-border rounded-2xl overflow-hidden shadow-sm flex flex-col h-[340px]">
-        <div className="px-6 py-4 border-b border-border bg-background-soft/30 flex justify-between items-center">
-            <div className="flex items-center gap-2 text-text-secondary font-bold text-xs uppercase tracking-widest">
-                <Activity size={14} className="text-success animate-pulse" />
+      <Box sx={{ bgcolor: 'background.paper', border: 1, borderColor: 'divider', borderRadius: 2, overflow: 'hidden', display: 'flex', flexDirection: 'column', height: 340 }}>
+        <Box sx={{ px: 3, py: 2, borderBottom: 1, borderColor: 'divider', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, color: 'text.secondary', fontWeight: 700, fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.1em' }}>
+                <Box sx={{ display: 'inline-flex', color: 'success.main', animation: `${pulse} 1.5s ease-in-out infinite` }}><Activity size={14} /></Box>
                 {t('routing.traffic_flow')}
-            </div>
-        </div>
-        <div className="flex-1 overflow-y-auto p-4 flex flex-wrap content-start gap-3 relative">
+            </Box>
+        </Box>
+        <Box sx={{ flex: 1, overflowY: 'auto', p: 2, display: 'flex', flexWrap: 'wrap', alignContent: 'flex-start', gap: 1.5, position: 'relative' }}>
             {flows.length === 0 && (
-                <div className="absolute inset-0 flex flex-col items-center justify-center text-text-muted opacity-40">
+                <Box sx={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: 'text.secondary', opacity: 0.4 }}>
                     <Share2 size={40} strokeWidth={1} />
-                    <span className="text-xs mt-3 font-bold uppercase tracking-widest">{t('routing.waiting_traffic')}</span>
-                </div>
+                    <Typography variant="caption" sx={{ mt: 1.5, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em' }}>{t('routing.waiting_traffic')}</Typography>
+                </Box>
             )}
             {flows.map((flow) => (
-                <div 
-                    key={flow.id} 
-                    className="flex items-center gap-2 px-3 py-1.5 bg-background-hover border border-border rounded-full animate-in zoom-in slide-in-from-top-2 duration-300 shadow-sm"
+                <Box
+                    key={flow.id}
+                    sx={{ display: 'flex', alignItems: 'center', gap: 1, px: 1.5, py: 0.75, bgcolor: 'action.hover', border: 1, borderColor: 'divider', borderRadius: '999px', boxShadow: 1 }}
                 >
-                    <span className="text-xs font-bold max-w-[150px] truncate" title={flow.domain}>
+                    <Typography variant="caption" sx={{ fontWeight: 700, maxWidth: 150, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={flow.domain}>
                         {flow.domain}
-                    </span>
-                    <span className="text-text-muted text-[10px]">➔</span>
-                    <span className={`px-2 py-0.5 rounded-full text-[9px] font-black text-white uppercase shadow-sm ${flow.modeClass}`}>
+                    </Typography>
+                    <Typography variant="caption" sx={{ color: 'text.secondary', fontSize: '0.625rem' }}>➔</Typography>
+                    <Typography variant="caption" sx={{ px: 1, py: 0.25, borderRadius: '999px', fontSize: '0.5625rem', fontWeight: 900, textTransform: 'uppercase', color: 'common.white', bgcolor: flow.modeClass, boxShadow: 1 }}>
                         {flow.modeDisplay}
-                    </span>
-                </div>
+                    </Typography>
+                </Box>
             ))}
-        </div>
-      </div>
+        </Box>
+      </Box>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-        <section className="space-y-4">
-             <div className="flex items-center gap-2 px-1">
-                <Workflow size={18} className="text-accent" />
-                <h3 className="text-sm font-bold uppercase tracking-wider text-text-secondary">{t('routing.strategy')}</h3>
-             </div>
-             <div className="bg-background-card border border-border rounded-2xl p-4 space-y-6">
-                <div className="space-y-3">
-                    <label className="text-[10px] font-black text-text-muted uppercase tracking-[0.2em] px-1">{t('routing.mode_switch')}</label>
-                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+      <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', lg: '1fr 1fr' }, gap: 4 }}>
+        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, px: 0.5 }}>
+                <Box sx={{ display: 'inline-flex', color: 'primary.main' }}><Workflow size={18} /></Box>
+                <Typography variant="body2" sx={{ fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'text.secondary' }}>{t('routing.strategy')}</Typography>
+             </Box>
+             <Box sx={{ bgcolor: 'background.paper', border: 1, borderColor: 'divider', borderRadius: 2, p: 2, display: 'flex', flexDirection: 'column', gap: 3 }}>
+                <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+                    <Typography variant="caption" sx={{ fontSize: '0.625rem', fontWeight: 900, color: 'text.secondary', textTransform: 'uppercase', letterSpacing: '0.2em', px: 0.5 }}>{t('routing.mode_switch')}</Typography>
+                    <Box sx={{ display: 'grid', gridTemplateColumns: { xs: 'repeat(2, 1fr)', sm: 'repeat(4, 1fr)' }, gap: 1.5 }}>
                         {[
-                            { id: '', label: t('routing.modes.off'), icon: Power, color: 'text-text-muted' },
-                            { id: 'default', label: t('routing.modes.smart'), icon: Zap, color: 'text-success' }
-                        ].map((opt) => (
-                            <button
-                                key={opt.id}
-                                onClick={() => setConfig({...config, mode: opt.id})}
-                                className={`flex flex-col items-center gap-2 p-3 rounded-2xl border transition-all ${
-                                    config.mode === opt.id 
-                                        ? "bg-accent/5 border-accent text-accent shadow-sm" 
-                                        : "bg-background-soft border-border/60 text-text-secondary hover:border-accent/30"
-                                }`}
-                            >
-                                <div className={`w-7 h-7 rounded-lg bg-background-hover flex items-center justify-center ${config.mode === opt.id ? 'text-accent' : opt.color}`}>
-                                    <opt.icon size={16} />
-                                </div>
-                                <span className="text-[10px] font-black uppercase tracking-widest">{opt.label}</span>
-                            </button>
-                        ))}
-                    </div>
-                </div>
+                            { id: '', label: t('routing.modes.off'), icon: Power, color: 'text.secondary' },
+                            { id: 'default', label: t('routing.modes.smart'), icon: Zap, color: 'success.main' }
+                        ].map((opt) => {
+                            const active = config.mode === opt.id;
+                            return (
+                                <Button
+                                    key={opt.id}
+                                    onClick={() => setConfig({ ...config, mode: opt.id })}
+                                    variant="outlined"
+                                    sx={{
+                                        display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 1, p: 1.5, borderRadius: 2,
+                                        borderColor: active ? 'primary.main' : 'divider',
+                                        bgcolor: active ? (theme) => alpha(theme.palette.primary.main, 0.05) : 'background.paper',
+                                        color: active ? 'primary.main' : 'text.secondary',
+                                        boxShadow: active ? 1 : 'none',
+                                        '&:hover': { borderColor: active ? 'primary.main' : 'rgba(11,123,255,0.3)' },
+                                    }}
+                                >
+                                    <Box sx={{ width: 28, height: 28, borderRadius: 1, bgcolor: 'action.hover', display: 'flex', alignItems: 'center', justifyContent: 'center', color: active ? 'primary.main' : opt.color }}>
+                                        <opt.icon size={16} />
+                                    </Box>
+                                    <Typography variant="caption" sx={{ fontSize: '0.625rem', fontWeight: 900, textTransform: 'uppercase', letterSpacing: '0.1em' }}>{opt.label}</Typography>
+                                </Button>
+                            );
+                        })}
+                    </Box>
+                </Box>
 
-                <div className="flex items-center justify-between border-t border-border/50 pt-4">
-                    <div>
-                        <div className="text-sm font-bold">{t('routing.gfwlist_check')}</div>
-                        <div className="text-[11px] text-text-muted mt-0.5">
+                <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderTop: 1, borderColor: 'divider', pt: 2 }}>
+                    <Box>
+                        <Typography variant="body2" sx={{ fontWeight: 700 }}>{t('routing.gfwlist_check')}</Typography>
+                        <Typography variant="caption" sx={{ fontSize: '0.6875rem', color: 'text.secondary', display: 'block', mt: 0.25 }}>
                             {status.enabled ? t('routing.preloaded', { count: status.domain_count }) : t('routing.inactive')}
-                        </div>
-                    </div>
-                    <button 
+                        </Typography>
+                    </Box>
+                    <Button
                         onClick={handleRefreshGFW}
                         disabled={refreshing}
-                        className="flex items-center gap-2 px-5 py-2.5 rounded-2xl text-[10px] font-black uppercase tracking-widest bg-background-hover hover:bg-accent hover:text-white transition-all shadow-sm disabled:opacity-50"
+                        variant="outlined"
+                        size="small"
+                        sx={{
+                            borderRadius: 2, fontSize: '0.625rem', fontWeight: 900, textTransform: 'uppercase',
+                            letterSpacing: '0.1em', bgcolor: 'action.hover', borderColor: 'divider', color: 'text.secondary',
+                            '&:hover': { bgcolor: 'primary.main', color: 'common.white', borderColor: 'primary.main' },
+                        }}
+                        startIcon={
+                            <Box sx={{ display: 'inline-flex', animation: refreshing ? `${spin} 1s linear infinite` : 'none' }}><RefreshCw size={12} /></Box>
+                        }
                     >
-                        <RefreshCw size={12} className={refreshing ? 'animate-spin' : ''} />
                         {refreshing ? t('ech_form.probing') : t('routing.update_list')}
-                    </button>
-                </div>
-                <button 
+                    </Button>
+                </Box>
+                <Button
                     onClick={handleSave}
-                    className="w-full py-3 bg-accent text-white rounded-2xl font-black shadow-lg shadow-accent/20 hover:scale-[1.01] active:scale-[0.99] transition-all"
+                    variant="contained"
+                    color="primary"
+                    fullWidth
+                    sx={{ py: 1.5, borderRadius: 2, fontWeight: 900, boxShadow: (theme) => `0 8px 16px ${alpha(theme.palette.primary.main, 0.2)}`, transition: 'transform 0.15s', '&:hover': { transform: 'scale(1.01)' }, '&:active': { transform: 'scale(0.99)' } }}
                 >
                     {t('routing.save_apply')}
-                </button>
-             </div>
-        </section>
+                </Button>
+             </Box>
+        </Box>
 
-        <section className="space-y-4">
-             <div className="flex items-center gap-2 px-1">
-                <ShieldCheck size={18} className="text-success" />
-                <h3 className="text-sm font-bold uppercase tracking-wider text-text-secondary">{t('routing.features')}</h3>
-             </div>
-             <div className="grid grid-cols-1 gap-4">
+        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, px: 0.5 }}>
+                <Box sx={{ display: 'inline-flex', color: 'success.main' }}><ShieldCheck size={18} /></Box>
+                <Typography variant="body2" sx={{ fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'text.secondary' }}>{t('routing.features')}</Typography>
+             </Box>
+             <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
                 {[
-                    { icon: Zap, title: t('routing.feature_smart'), color: "text-success", desc: t('routing.feature_smart_desc') },
-                    { icon: Activity, title: t('routing.feature_priority'), color: "text-purple-500", desc: t('routing.feature_priority_desc') }
+                    { icon: Zap, title: t('routing.feature_smart'), color: 'success.main', desc: t('routing.feature_smart_desc') },
+                    { icon: Activity, title: t('routing.feature_priority'), color: 'secondary.main', desc: t('routing.feature_priority_desc') }
                 ].map((item, i) => (
-                    <div key={i} className="p-4 bg-background-card border border-border rounded-xl flex gap-4 hover:border-accent/40 transition-colors">
-                        <div className={`shrink-0 w-10 h-10 rounded-2xl flex items-center justify-center bg-background-hover ${item.color}`}>
+                    <Box key={i} sx={{ p: 2, bgcolor: 'background.paper', border: 1, borderColor: 'divider', borderRadius: 2, display: 'flex', gap: 2, transition: 'border-color 0.15s', '&:hover': { borderColor: 'rgba(11,123,255,0.4)' } }}>
+                        <Box sx={{ flexShrink: 0, width: 40, height: 40, borderRadius: 2, display: 'flex', alignItems: 'center', justifyContent: 'center', bgcolor: 'action.hover', color: item.color }}>
                             <item.icon size={20} />
-                        </div>
-                        <div>
-                            <h4 className="text-sm font-bold">{item.title}</h4>
-                            <p className="text-[11px] text-text-muted mt-1 leading-relaxed font-medium">{item.desc}</p>
-                        </div>
-                    </div>
+                        </Box>
+                        <Box>
+                            <Typography variant="body2" sx={{ fontWeight: 700 }}>{item.title}</Typography>
+                            <Typography variant="caption" sx={{ fontSize: '0.6875rem', color: 'text.secondary', display: 'block', mt: 0.5, lineHeight: 1.6, fontWeight: 500 }}>{item.desc}</Typography>
+                        </Box>
+                    </Box>
                 ))}
-             </div>
-        </section>
-      </div>
-    </div>
+             </Box>
+        </Box>
+      </Box>
+    </Box>
   );
 };
 

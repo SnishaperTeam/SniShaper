@@ -1,8 +1,12 @@
 import React, { Suspense, lazy, useState, useEffect, useCallback, useRef, createContext, useContext } from 'react';
-import { HashRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import { HashRouter as Router, Routes, Route, Navigate, useLocation } from 'react-router-dom';
+import { Box, CssBaseline, ThemeProvider, AppBar, Toolbar, Typography, CircularProgress } from '@mui/material';
+import { alpha } from '@mui/material/styles';
+import { keyframes } from '@emotion/react';
 import Sidebar from './components/Sidebar';
 import WindowControls from './components/WindowControls';
 import ToastProvider from './components/ToastProvider';
+import { appTheme, defaultTheme, availableThemes } from './theme';
 import {
   GetListenPort, GetCloseToTray, GetAutoStart,
   GetShowMainWindowOnAutoStart, GetAutoEnableProxyOnAutoStart, GetSocks5Enabled, GetSocks5Port,
@@ -14,6 +18,11 @@ import { I18nProvider, useTranslation } from './i18n/I18nContext';
 import { toast } from './lib/toast';
 
 const Welcome = lazy(() => import('./pages/Welcome'));
+
+const fadeIn = keyframes`
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+`;
 
 const Dashboard = lazy(() => import('./pages/Dashboard'));
 const Proxies = lazy(() => import('./pages/Proxies'));
@@ -41,7 +50,7 @@ interface SettingsCache {
   installedCerts: any[];
   ipStats: any[];
   language: string;
-  theme: string;
+  themeMode: string; // 変更: 'theme' から 'themeMode' に変更
   ipv6Available: boolean;
 }
 
@@ -56,7 +65,7 @@ const defaultCache: SettingsCache = {
   caStatus: { Installed: false, CertPath: '', Platform: 'windows' },
   installedCerts: [], ipStats: [],
   language: '',
-  theme: 'dark',
+  themeMode: 'dark', // 変更: 'theme' から 'themeMode' に変更、デフォルトを'dark'に
   ipv6Available: true
 };
 
@@ -68,34 +77,45 @@ const SettingsCtx = createContext<{ cache: SettingsCache; updateCache: (patch: P
 export { SettingsCtx };
 
 const App: React.FC = () => {
-  const [theme, setTheme] = useState<'light' | 'dark'>((localStorage.getItem('theme') as any) || 'dark');
   const [settingsCache, setSettingsCache] = useState<SettingsCache>({
     ...defaultCache,
     language: localStorage.getItem('language') || '',
-    theme: (localStorage.getItem('theme') as any) || 'dark'
+    // 从localStorage获取主题模式，默认为'dark'
+    themeMode: (localStorage.getItem('mui-mode') as any) || 'dark'
   });
   const [initialized, setInitialized] = useState(false);
+  const [themeId, setThemeId] = useState<string>(() => localStorage.getItem('theme-id') || 'default');
+  const activeTheme = availableThemes.find((th) => th.id === themeId)?.theme || defaultTheme;
+
+  useEffect(() => {
+    void import('./pages/Dashboard');
+    void import('./pages/Proxies');
+    void import('./pages/Rules');
+    void import('./pages/Routing');
+    void import('./pages/DNS');
+    void import('./pages/Evolution');
+    void import('./pages/Logs');
+    void import('./pages/Settings');
+    void import('./pages/About');
+  }, []);
 
   useEffect(() => {
     // Phase 1: Load fast settings (language, theme, port) — pure file reads, < 5ms
     // Render immediately so there's zero loading screen.
     const fastLoad = async () => {
       try {
-        const [language, savedTheme, port, closeToTray, autoStart,
+        const [language, port, closeToTray, autoStart,
           showMainOnAutoStart, autoEnableProxyOnAutoStart, socks5Enabled, socks5Port, cfConfig, ipv6Available] = await Promise.all([
-          GetLanguage(), GetTheme(), GetListenPort(), GetCloseToTray(), GetAutoStart(),
-          GetShowMainWindowOnAutoStart(), GetAutoEnableProxyOnAutoStart(), GetSocks5Enabled(), GetSocks5Port(), GetCloudflareConfig(), GetIPv6Available()
-        ]);
-        const resolvedTheme = (savedTheme as any) || 'dark';
-        setTheme(resolvedTheme);
-        localStorage.setItem('theme', resolvedTheme);
+            GetLanguage(), GetListenPort(), GetCloseToTray(), GetAutoStart(),
+            GetShowMainWindowOnAutoStart(), GetAutoEnableProxyOnAutoStart(), GetSocks5Enabled(), GetSocks5Port(), GetCloudflareConfig(), GetIPv6Available()
+          ]);
+        
         if (language) {
           localStorage.setItem('language', language as string);
         }
         setSettingsCache(prev => ({
           ...prev,
           language: (language as string) || '',
-          theme: resolvedTheme,
           port: port ?? prev.port,
           closeToTray: closeToTray ?? prev.closeToTray,
           autoStart: autoStart ?? prev.autoStart,
@@ -164,15 +184,6 @@ const App: React.FC = () => {
   }, []);
 
   useEffect(() => {
-    document.documentElement.setAttribute('data-theme', theme);
-    if (theme === 'dark') {
-      document.documentElement.classList.add('dark');
-    } else {
-      document.documentElement.classList.remove('dark');
-    }
-  }, [theme]);
-
-  useEffect(() => {
     const shouldAllowNativeMenu = (target: EventTarget | null) => {
       if (!(target instanceof HTMLElement)) return false;
       return Boolean(target.closest('input, textarea, [contenteditable="true"], [data-native-contextmenu="true"]'));
@@ -187,26 +198,52 @@ const App: React.FC = () => {
     return () => window.removeEventListener('contextmenu', handleContextMenu);
   }, []);
 
-  const toggleTheme = useCallback(() => {
-    const next = theme === 'light' ? 'dark' : 'light';
-    setTheme(next);
-    SetTheme(next);
-    localStorage.setItem('theme', next);
-    updateSettingsCache({ theme: next });
-  }, [theme, updateSettingsCache]);
   return (
-    <I18nProvider initialLanguage={(settingsCache.language as any) || 'zh'}>
-      <AppContent 
-        settingsCache={settingsCache} 
-        updateSettingsCache={updateSettingsCache} 
-        theme={theme} 
-        toggleTheme={toggleTheme} 
-      />
-    </I18nProvider>
+    <ThemeProvider theme={activeTheme} defaultMode="system">
+      <CssBaseline enableColorScheme />
+      <I18nProvider initialLanguage={(settingsCache.language as any) || 'zh'}>
+        <AppContent
+          settingsCache={settingsCache}
+          updateSettingsCache={updateSettingsCache}
+          themeId={themeId}
+          onThemeChange={(id: string) => { setThemeId(id); localStorage.setItem('theme-id', id); }}
+        />
+      </I18nProvider>
+    </ThemeProvider>
   );
 };
 
-const AppContent: React.FC<{ settingsCache: SettingsCache, updateSettingsCache: any, theme: any, toggleTheme: any }> = ({ settingsCache, updateSettingsCache, theme, toggleTheme }) => {
+const routeFallback = (
+  <Box sx={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', animation: `${fadeIn} 0.25s ease` }}>
+    <CircularProgress size={28} />
+  </Box>
+);
+
+const AppRoutes: React.FC<{ settingsCache: SettingsCache, updateSettingsCache: any, themeId: string, onThemeChange: (id: string) => void }> = ({ settingsCache, updateSettingsCache, themeId, onThemeChange }) => {
+  const location = useLocation();
+  return (
+    <Box key={location.key} sx={{ animation: `${fadeIn} 0.3s cubic-bezier(0.16, 1, 0.3, 1)` }}>
+      <SettingsCtx.Provider value={{ cache: settingsCache, updateCache: updateSettingsCache }}>
+        <Suspense fallback={routeFallback}>
+          <Routes>
+            <Route path="/" element={<Navigate to="/dashboard" replace />} />
+            <Route path="/dashboard" element={<Dashboard />} />
+            <Route path="/proxies" element={<Proxies />} />
+            <Route path="/rules" element={<Rules />} />
+            <Route path="/routing" element={<Routing />} />
+            <Route path="/dns" element={<DNS />} />
+            <Route path="/evolution" element={<Evolution />} />
+            <Route path="/logs" element={<Logs />} />
+            <Route path="/settings" element={<Settings cache={settingsCache} onCacheUpdate={updateSettingsCache} currentThemeId={themeId} onThemeChange={onThemeChange} />} />
+            <Route path="/about" element={<About />} />
+          </Routes>
+        </Suspense>
+      </SettingsCtx.Provider>
+    </Box>
+  );
+};
+
+const AppContent: React.FC<{ settingsCache: SettingsCache, updateSettingsCache: any, themeId: string, onThemeChange: (id: string) => void }> = ({ settingsCache, updateSettingsCache, themeId, onThemeChange }) => {
   const { t } = useTranslation();
 
   const prevIpv6Ref = useRef<boolean | null>(null);
@@ -221,8 +258,6 @@ const AppContent: React.FC<{ settingsCache: SettingsCache, updateSettingsCache: 
     }
   }, [settingsCache.ipv6Available, t]);
 
-  const routeFallback = <div className="h-full" />;
-
   if (!settingsCache.language) {
     return (
       <Suspense fallback={routeFallback}>
@@ -235,39 +270,34 @@ const AppContent: React.FC<{ settingsCache: SettingsCache, updateSettingsCache: 
 
   return (
     <Router>
-      <div className="flex h-screen w-screen overflow-hidden bg-background select-none relative">
+      <Box sx={{ display: 'flex', height: '100vh', width: '100vw', overflow: 'hidden', position: 'relative', userSelect: 'none' }}>
         <ToastProvider />
-        <Sidebar theme={theme} toggleTheme={toggleTheme} />
-        
-        <main className="flex-1 min-w-0 bg-background-soft/30 backdrop-blur-sm relative flex flex-col">
-          <header className="h-10 shrink-0 border-b border-border/60 bg-background/70 backdrop-blur-md flex items-center justify-between pl-4 pr-3">
-            <div
-              className="flex-1 h-full"
-              style={{ "--wails-draggable": "drag" } as React.CSSProperties}
-            />
-            <WindowControls />
-          </header>
+        <Sidebar />
 
-          <div className="flex-1 overflow-y-auto overflow-x-hidden">
-            <SettingsCtx.Provider value={{ cache: settingsCache, updateCache: updateSettingsCache }}>
-              <Suspense fallback={routeFallback}>
-                <Routes>
-                  <Route path="/" element={<Navigate to="/dashboard" replace />} />
-                  <Route path="/dashboard" element={<Dashboard />} />
-                  <Route path="/proxies" element={<Proxies />} />
-                  <Route path="/rules" element={<Rules />} />
-                  <Route path="/routing" element={<Routing />} />
-                  <Route path="/dns" element={<DNS />} />
-                  <Route path="/evolution" element={<Evolution />} />
-                  <Route path="/logs" element={<Logs />} />
-                  <Route path="/settings" element={<Settings cache={settingsCache} onCacheUpdate={updateSettingsCache} theme={theme} toggleTheme={toggleTheme} />} />
-                  <Route path="/about" element={<About />} />
-                </Routes>
-              </Suspense>
-            </SettingsCtx.Provider>
-          </div>
-        </main>
-      </div>
+        <Box sx={{ flexGrow: 1, display: 'flex', flexDirection: 'column', position: 'relative', bgcolor: 'background.default', minWidth: 0 }}>
+          <AppBar position="fixed" sx={{
+            zIndex: (theme) => theme.zIndex.drawer + 1,
+            bgcolor: (theme) => alpha(theme.palette.background.paper, 0.72),
+            backdropFilter: 'blur(14px)',
+            boxShadow: '0 1px 0 rgba(127,127,127,0.18)',
+          }}>
+            <Toolbar variant="dense" sx={{ '--wails-draggable': 'drag' }}>
+              <Typography variant="h6" noWrap sx={{ flexGrow: 1, color: 'text.primary' }}>SniShaper</Typography>
+              <WindowControls />
+            </Toolbar>
+          </AppBar>
+
+          <Box component="main" sx={{ flexGrow: 1, p: 3, overflowY: 'auto' }}>
+            <Toolbar sx={{ visibility: 'hidden' }} />
+            <AppRoutes
+              settingsCache={settingsCache}
+              updateSettingsCache={updateSettingsCache}
+              themeId={themeId}
+              onThemeChange={onThemeChange}
+            />
+          </Box>
+        </Box>
+      </Box>
     </Router>
   );
 };
