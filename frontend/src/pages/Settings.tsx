@@ -16,7 +16,8 @@ import {
   AlertCircle,
   Sun,
   Moon,
-  Wifi
+  Wifi,
+  FileText
 } from '../lib/icons';
 import {
   GetListenPort, SetListenPort, GetCloseToTray, SetCloseToTray,
@@ -28,7 +29,8 @@ import {
   GetCloudflareConfig, UpdateCloudflareConfig, GetCloudflareIPStats,
   ForceFetchCloudflareIPs, TriggerCFHealthCheck, RemoveInvalidCFIPs,
   GetLanguage, SetLanguage,
-  GetIPv6Available, RefreshIPv6Check
+  GetIPv6Available, RefreshIPv6Check,
+  GetLogFiles, OpenLogFile, CleanOldLogs
 } from '../api/bindings';
 import { SettingRow, StackedSettingRow } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
@@ -200,6 +202,38 @@ const Settings: React.FC<SettingsProps> = ({ cache, onCacheUpdate, theme, toggle
     } catch (err: any) { toast.error(t('common.failed'), String(err));
     } finally { setIsCertBusy(false); }
   };
+
+  const [logFiles, setLogFiles] = useState<any[]>([]);
+  const [isCleaningLogs, setIsCleaningLogs] = useState(false);
+
+  const loadLogFiles = useCallback(async () => {
+    try {
+      const files = await GetLogFiles();
+      setLogFiles(files || []);
+    } catch { /* ignore */ }
+  }, []);
+
+  useEffect(() => { void loadLogFiles(); }, [loadLogFiles]);
+
+  const handleViewLog = (name: string) => {
+    OpenLogFile(name);
+  };
+
+  const handleCleanLogs = async () => {
+    setIsCleaningLogs(true);
+    try {
+      const removed = await CleanOldLogs();
+      await loadLogFiles();
+      toast.success(t('settings.logs.clean_done', { count: removed ?? 0 }));
+    } catch (err: any) { toast.error(t('common.failed'), String(err));
+    } finally { setIsCleaningLogs(false); }
+  };
+
+  const fmtLogDate = (name: string) => name.replace(/\.log$/i, '').replace('_', ' ');
+  const fmtLogSize = (bytes: number) =>
+    bytes >= 1024 * 1024 ? `${(bytes / 1024 / 1024).toFixed(1)} MB`
+      : bytes >= 1024 ? `${(bytes / 1024).toFixed(0)} KB`
+        : `${bytes} B`;
 
   return (
     <div className="p-6 max-w-5xl mx-auto space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
@@ -430,6 +464,45 @@ const Settings: React.FC<SettingsProps> = ({ cache, onCacheUpdate, theme, toggle
               </div>
             </div>
           </div>
+        </section>
+
+        <section className="lg:col-span-2 space-y-4">
+          <div className="flex items-center justify-between px-1 text-text-secondary">
+            <div className="flex items-center gap-2">
+              <FileText size={18} aria-hidden />
+              <h2 className="text-sm font-bold uppercase tracking-wider">{t('settings.tabs.logs')}</h2>
+            </div>
+            <Button onClick={handleCleanLogs} loading={isCleaningLogs} variant="outline" size="xs" icon={<Trash2 size={13} />}>
+              {t('settings.logs.clean')}
+            </Button>
+          </div>
+
+          <StackedSettingRow title={t('settings.logs.title')} desc={t('settings.logs.desc')} icon={<FileText size={20} />}>
+            {logFiles.length === 0 ? (
+              <EmptyState icon={<FileText size={32} />} title={t('settings.logs.empty')} />
+            ) : (
+              <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
+                {logFiles.map((f: any, i: number) => (
+                  <div key={f.name} className="flex items-center justify-between gap-4 rounded-2xl border border-border/40 bg-background-card px-5 py-3">
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2 text-xs font-bold break-all">
+                        {fmtLogDate(f.name)}
+                        {i === 0 && (
+                          <span className="shrink-0 px-1.5 py-0.5 rounded-full bg-accent/15 text-accent text-[9px] font-black">
+                            {t('settings.logs.current')}
+                          </span>
+                        )}
+                      </div>
+                      <div className="text-[10px] text-text-muted">{fmtLogSize(f.size || 0)}</div>
+                    </div>
+                    <Button onClick={() => handleViewLog(f.name)} variant="ghost" size="sm" icon={<FolderOpen size={13} />}>
+                      {t('settings.logs.view')}
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </StackedSettingRow>
         </section>
       </div>
     </div>

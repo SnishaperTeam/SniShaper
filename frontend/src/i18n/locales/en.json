@@ -278,7 +278,8 @@
       "network": "Network",
       "security": "Security",
       "appearance": "UI & Theme",
-      "startup": "Startup"
+      "startup": "Startup",
+      "logs": "Logs"
     },
     "language": {
       "title": "Language",
@@ -333,6 +334,16 @@
     },
     "cf_pool": {
       "fetch_now": "Refresh IP Pool"
+    },
+    "logs": {
+      "title": "Log Files",
+      "desc": "Logs are saved to the log folder next to the app; each run creates a new timestamped file.",
+      "view": "View",
+      "clean": "Clean Up",
+      "current": "Current",
+      "empty": "No log files",
+      "no_content": "(empty)",
+      "clean_done": "Cleaned {count} old log file(s)"
     }
   },
   "evolution": {

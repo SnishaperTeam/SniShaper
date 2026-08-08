@@ -274,6 +274,7 @@ func (a *App) ForceCleanup() {
 	if err := sysproxy.DisableSystemProxy(); err != nil {
 		log.Printf("[ForceCleanup] sysproxy disable: %v", err)
 	}
+	a.closeLogFile()
 }
 
 func (a *App) GetCloseToTray() bool {

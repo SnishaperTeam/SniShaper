@@ -2,9 +2,11 @@ package app
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"log"
 	"os"
+	"path/filepath"
 	"regexp"
 	"runtime/debug"
 	"strings"
@@ -30,6 +32,10 @@ type App struct {
 	certPath          string
 	proxyMarkerPath   string
 	logBuffer         *common.RingLogWriter
+	logDir            string
+	logFilePath       string
+	logFile           *os.File
+	logFileMu         sync.Mutex
 	logCaptureMu      sync.RWMutex
 	logCaptureEnabled bool
 	shouldQuit        bool
@@ -101,6 +107,51 @@ func (a *App) setupFileLogger() {
 	}
 	log.SetFlags(log.LstdFlags | log.Lmicroseconds)
 	log.SetOutput(io.MultiWriter(&gatedLogWriter{app: a}, os.Stdout))
+	a.openLogFile()
+}
+
+// openLogFile creates a new timestamped log file for this run in
+// <execDir>/log/. One file per run: opened at startup, closed at shutdown.
+func (a *App) openLogFile() {
+	if a.logDir == "" {
+		if ep, err := os.Executable(); err == nil {
+			a.logDir = filepath.Join(filepath.Dir(ep), "log")
+		} else {
+			return
+		}
+	}
+	if err := os.MkdirAll(a.logDir, 0755); err != nil {
+		a.appendLog("[warn] Failed to create log dir: " + err.Error())
+		return
+	}
+	name := time.Now().Format("2006-01-02_15-04-05") + ".log"
+	f, err := os.OpenFile(filepath.Join(a.logDir, name), os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
+	if err != nil {
+		a.appendLog("[warn] Failed to open log file: " + err.Error())
+		return
+	}
+	a.logFileMu.Lock()
+	a.logFile = f
+	a.logFilePath = filepath.Join(a.logDir, name)
+	a.logFileMu.Unlock()
+	a.appendLog("[startup] Log file: " + a.logFilePath)
+}
+
+func (a *App) closeLogFile() {
+	a.logFileMu.Lock()
+	defer a.logFileMu.Unlock()
+	if a.logFile != nil {
+		_ = a.logFile.Close()
+		a.logFile = nil
+	}
+}
+
+func (a *App) writeLogFile(s string) {
+	a.logFileMu.Lock()
+	defer a.logFileMu.Unlock()
+	if a.logFile != nil {
+		_, _ = a.logFile.WriteString(s)
+	}
 }
 
 func (a *App) appendLog(message string) {
@@ -120,6 +171,50 @@ func (a *App) appendLog(message string) {
 		a.logBuffer = common.NewRingLogWriter(500)
 	}
 	a.logBuffer.Write([]byte(formatted + "\n"))
+	a.writeLogFile(formatted + "\n")
+}
+
+// startLogFileMirror continuously appends the core process's logs into the
+// current log file, so the persisted log captures both app and core activity.
+// ponytail: anchor-line dedup; safe while the core ring (5000 lines) still
+// holds the last mirrored line between 2s polls.
+func (a *App) startLogFileMirror() {
+	a.runSafeAsync("core log file mirror", func() {
+		anchor := ""
+		ticker := time.NewTicker(2 * time.Second)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-a.ctx.Done():
+				return
+			case <-ticker.C:
+			}
+			if a.core == nil || a.logFile == nil {
+				continue
+			}
+			logs := strings.TrimSpace(a.core.GetRecentLogs(200))
+			if logs == "" {
+				continue
+			}
+			lines := strings.Split(logs, "\n")
+			if anchor != "" {
+				idx := -1
+				for i, l := range lines {
+					if strings.TrimSpace(l) == anchor {
+						idx = i
+					}
+				}
+				if idx >= 0 {
+					lines = lines[idx+1:]
+				}
+			}
+			if len(lines) == 0 {
+				continue
+			}
+			anchor = strings.TrimSpace(lines[len(lines)-1])
+			a.writeLogFile(strings.Join(lines, "\n") + "\n")
+		}
+	})
 }
 
 func (a *App) IsLogCaptureEnabled() bool {
@@ -149,18 +244,29 @@ func (a *App) StopLogCapture() error {
 	return nil
 }
 
-func (a *App) ServiceStartup(ctx *application.Context) {
+func (a *App) ServiceStartup(ctx context.Context, options application.ServiceOptions) error {
 	a.startupV3()
+	return nil
 }
 
-func (a *App) ServiceShutdown() {
+func (a *App) ServiceShutdown() error {
 	a.shutdown()
+	return nil
 }
 
 func (a *App) startupV3() {
 	a.setupFileLogger()
 	log.Printf("[startup] SniShaper startup hook entered")
 	a.appendLog("[startup] in-memory log channel ready")
+
+	// Boot diagnostics: helps root-cause autostart failures (args missing,
+	// wrong CWD, not elevated) without attaching a debugger.
+	if execPath, err := os.Executable(); err == nil {
+		cwd, _ := os.Getwd()
+		a.appendLog(fmt.Sprintf("[startup] args=%v cwd=%q execDir=%q elevated=%v startupFlag=%v autoProxyFlag=%v autoEnableCfg=%v",
+			os.Args, cwd, filepath.Dir(execPath), core.IsProcessElevated(),
+			a.launchedAtStartup, a.autoProxyAtStartup, a.GetAutoEnableProxyOnAutoStart()))
+	}
 
 	var err error
 	a.certManager, err = certmanager.InitCertManager(a.certPath)
@@ -188,19 +294,46 @@ func (a *App) startupV3() {
 	if a.ShouldAutoEnableProxyOnAutoStart() {
 		a.appendLog("[startup] AutoStart: Auto-enabling proxy as configured")
 		a.runSafeAsync("startup proxy sync", func() {
-			if err := a.StartProxy(); err != nil {
-				a.appendLog("[startup] AutoStart StartProxy failed: " + err.Error())
-				return
-			}
-			if err := a.EnableSystemProxy(); err != nil {
-				a.appendLog("[startup] AutoStart EnableSystemProxy failed: " + err.Error())
-			}
+			a.autoEnableProxyAtStartup()
 		})
 	}
 
 	a.startIPv6Monitor()
 	a.RefreshIPv6Check()
 	a.startRouteEventsPoller()
+	a.startLogFileMirror()
+}
+
+// autoEnableProxyAtStartup starts the proxy (and system proxy) with backoff
+// retries so transient boot-time failures — network stack or Wintun driver not
+// ready, port still held by a previous instance, core RPC race — don't leave
+// autostart silently dead. Manual clicks work later because the system has settled.
+// ponytail: 4 attempts @ 0/2s/4s/8s; make counts configurable if users ask.
+func (a *App) autoEnableProxyAtStartup() {
+	delays := []time.Duration{2 * time.Second, 4 * time.Second, 8 * time.Second}
+	for attempt := 0; ; attempt++ {
+		err := a.StartProxy()
+		if err == nil {
+			if sysErr := a.EnableSystemProxy(); sysErr != nil {
+				a.appendLog("[startup] AutoStart EnableSystemProxy failed: " + sysErr.Error())
+			}
+			a.appendLog(fmt.Sprintf("[startup] AutoStart proxy enabled (attempt %d)", attempt+1))
+			return
+		}
+		a.appendLog(fmt.Sprintf("[startup] AutoStart StartProxy attempt %d failed: %v", attempt+1, err))
+		if attempt >= len(delays) {
+			a.appendLog("[startup] AutoStart proxy enable failed after all retries; proxy left off")
+			if a.systemTray != nil {
+				a.systemTray.SetTooltip("SniShaper: 开机自启代理启动失败，请手动开启代理")
+			}
+			return
+		}
+		select {
+		case <-time.After(delays[attempt]):
+		case <-a.ctx.Done():
+			return
+		}
+	}
 }
 
 // startRouteEventsPoller forwards route events from the core process to the
@@ -284,6 +417,7 @@ func (a *App) shutdown() {
 	}
 
 	a.wg.Wait()
+	a.closeLogFile()
 }
 
 func (a *App) runSafeAsync(taskName string, fn func()) {

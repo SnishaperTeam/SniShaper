@@ -15,6 +15,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -614,6 +615,103 @@ func (a *App) ClearLogs() error {
 	}
 	a.appendLog("[action] Logs cleared")
 	return nil
+}
+
+// LogFileInfo describes a persisted log file in <execDir>/log/.
+type LogFileInfo struct {
+	Name string `json:"name"`
+	Size int64  `json:"size"`
+}
+
+// GetLogFiles lists all persisted log files, newest first. The name is the
+// run timestamp (e.g. 2026-08-08_14-30-05.log).
+func (a *App) GetLogFiles() []LogFileInfo {
+	if a.logDir == "" {
+		return nil
+	}
+	entries, err := os.ReadDir(a.logDir)
+	if err != nil {
+		return nil
+	}
+	var files []LogFileInfo
+	for _, e := range entries {
+		if e.IsDir() || !strings.HasSuffix(strings.ToLower(e.Name()), ".log") {
+			continue
+		}
+		info, err := e.Info()
+		if err != nil {
+			continue
+		}
+		files = append(files, LogFileInfo{Name: e.Name(), Size: info.Size()})
+	}
+	sort.Slice(files, func(i, j int) bool { return files[i].Name > files[j].Name })
+	return files
+}
+
+// GetLogFileContent returns the tail (last 500 lines) of a log file.
+// The name is sanitized to the directory, so only existing log files are reachable.
+func (a *App) GetLogFileContent(name string) string {
+	if a.logDir == "" || filepath.Base(name) != name {
+		return ""
+	}
+	return tailFileLines(filepath.Join(a.logDir, name), 500)
+}
+
+// OpenLogFile opens a log file with the system default application (e.g. Notepad).
+// The name is sanitized to the directory, so only existing log files are reachable.
+func (a *App) OpenLogFile(name string) {
+	if a.logDir == "" || filepath.Base(name) != name {
+		return
+	}
+	path := filepath.Join(a.logDir, name)
+	if _, err := os.Stat(path); err != nil {
+		return
+	}
+	cmd := exec.Command("cmd", "/c", "start", "", path)
+	if err := cmd.Run(); err != nil {
+		a.appendLog(fmt.Sprintf("[logs] Failed to open log file %s: %v", name, err))
+	}
+}
+
+// CleanOldLogs deletes all persisted log files except the one being written by
+// the current run. Returns the number of files removed.
+func (a *App) CleanOldLogs() (int, error) {
+	if a.logDir == "" {
+		return 0, nil
+	}
+	entries, err := os.ReadDir(a.logDir)
+	if err != nil {
+		return 0, err
+	}
+	current := filepath.Base(a.logFilePath)
+	removed := 0
+	for _, e := range entries {
+		if e.IsDir() || !strings.HasSuffix(strings.ToLower(e.Name()), ".log") {
+			continue
+		}
+		if e.Name() == current {
+			continue
+		}
+		if err := os.Remove(filepath.Join(a.logDir, e.Name())); err == nil {
+			removed++
+		}
+	}
+	return removed, nil
+}
+
+func tailFileLines(path string, maxLines int) string {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return ""
+	}
+	if len(data) > 2*1024*1024 {
+		data = data[len(data)-2*1024*1024:]
+	}
+	lines := strings.Split(string(data), "\n")
+	if len(lines) > maxLines {
+		lines = lines[len(lines)-maxLines:]
+	}
+	return strings.Join(lines, "\n")
 }
 
 func (a *App) GetStats() core.StatsReply {

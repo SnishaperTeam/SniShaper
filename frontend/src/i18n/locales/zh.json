@@ -278,7 +278,8 @@
       "network": "网络",
       "security": "证书 & 安全",
       "appearance": "语言与主题",
-      "startup": "启动与后台"
+      "startup": "启动与后台",
+      "logs": "日志管理"
     },
     "language": {
       "title": "界面语言",
@@ -333,6 +334,16 @@
     },
     "cf_pool": {
       "fetch_now": "更新 IP 池"
+    },
+    "logs": {
+      "title": "日志文件",
+      "desc": "日志保存在安装目录的 log 文件夹，每次启动生成一个新的时间命名文件。",
+      "view": "查看",
+      "clean": "一键清理",
+      "current": "当前",
+      "empty": "暂无日志文件",
+      "no_content": "（暂无内容）",
+      "clean_done": "已清理 {count} 个旧日志文件"
     }
   },
   "evolution": {
