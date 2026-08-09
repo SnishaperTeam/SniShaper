@@ -321,21 +321,24 @@ jobs:
           $outDir = Join-Path $env:GITHUB_WORKSPACE 'release-notes'
           New-Item -ItemType Directory -Force -Path $outDir | Out-Null
           $notesPath = Join-Path $outDir 'RELEASE_NOTES.md'
-          $psArgs = @(
-            '-RepoRoot', $env:GITHUB_WORKSPACE,
-            '-Version', "${{ needs.check.outputs.version }}",
-            '-Channel', "${{ inputs.channel }}",
-            '-PrereleaseSuffix', "${{ needs.check.outputs.suffix }}",
-            '-PreviousTag', "${{ steps.prev-tag.outputs.prev_tag }}",
-            '-OutputPath', $notesPath
-          )
+          # Hashtable splatting (not array!) - array splatting passes
+          # elements positionally, so '-Name', value pairs would be
+          # mis-bound. Hashtable splatting binds by parameter name.
+          $psArgs = @{
+            RepoRoot         = $env:GITHUB_WORKSPACE
+            Version          = "${{ needs.check.outputs.version }}"
+            Channel          = "${{ inputs.channel }}"
+            PrereleaseSuffix = "${{ needs.check.outputs.suffix }}"
+            PreviousTag      = "${{ steps.prev-tag.outputs.prev_tag }}"
+            OutputPath       = $notesPath
+          }
           if ($env:OLLAMA_READY -eq 'true') {
-            $psArgs += '-OllamaUrl', 'http://127.0.0.1:11434'
-            $psArgs += '-OllamaModel', $env:OLLAMA_MODEL
+            $psArgs.OllamaUrl  = 'http://127.0.0.1:11434'
+            $psArgs.OllamaModel = $env:OLLAMA_MODEL
           } elseif ($env:LLM_API_KEY) {
-            $psArgs += '-LlmApiKey', $env:LLM_API_KEY
-            if ($env:LLM_MODEL) { $psArgs += '-LlmModel', $env:LLM_MODEL }
-            if ($env:LLM_BASE_URL) { $psArgs += '-LlmBaseUrl', $env:LLM_BASE_URL }
+            $psArgs.LlmApiKey  = $env:LLM_API_KEY
+            if ($env:LLM_MODEL) { $psArgs.LlmModel = $env:LLM_MODEL }
+            if ($env:LLM_BASE_URL) { $psArgs.LlmBaseUrl = $env:LLM_BASE_URL }
           }
           & $script @psArgs
           if ($LASTEXITCODE -ne 0) {
