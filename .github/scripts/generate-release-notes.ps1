@@ -136,14 +136,21 @@ if ($ollamaAvailable) {
             @{ role = 'user'; content = $userPrompt }
         )
         stream   = $false
+        # Qwen3+ models enable thinking mode by default; the reasoning
+        # goes into message.thinking while message.content stays empty.
+        # Disable it so the final answer is returned in message.content.
+        think    = $false
     } | ConvertTo-Json -Depth 6
     try {
         $resp = Invoke-RestMethod -Uri "$OllamaUrl/api/chat" -Method Post -ContentType 'application/json; charset=utf-8' -Body $ollamaBody -TimeoutSec 300
         if ($resp.message -and $resp.message.content) {
             $llmSummary = $resp.message.content.Trim()
             Write-Host "[release-notes] Ollama summary generated ($($llmSummary.Length) chars)"
+        } elseif ($resp.message -and $resp.message.thinking) {
+            # thinking present but no final content - treat as failure
+            Write-Host "::warning::Ollama returned thinking but empty content (model=$OllamaModel). Falling back."
         } else {
-            Write-Host "::warning::Ollama returned empty response"
+            Write-Host "::warning::Ollama returned empty response (model=$OllamaModel). Falling back."
         }
     } catch {
         Write-Host "::warning::Ollama inference failed: $($_.Exception.Message)"
