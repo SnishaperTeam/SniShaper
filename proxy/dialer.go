@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"net"
 	"strings"
 	"time"
@@ -265,6 +266,9 @@ func (p *ProxyServer) dialUpstream(cr *connectResult) error {
 }
 
 func (p *ProxyServer) dialWithRule(ctx context.Context, network, addr string, rule Rule) (net.Conn, error) {
+	if p.isSelfTarget(addr) {
+		return nil, fmt.Errorf("refusing to dial proxy's own listen address %s", addr)
+	}
 	if rule.NAT64Enabled && rule.NAT64ProfileID != "" {
 		prefix := p.rules.GetNAT64PrefixByID(rule.NAT64ProfileID)
 		if prefix != "" {

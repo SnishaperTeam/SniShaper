@@ -42,6 +42,12 @@ func (p *ProxyServer) handleConnect(w http.ResponseWriter, req *http.Request, ru
 	targetHost := normalizeHost(targetAuthority)
 	targetAddr := ensureAddrWithPort(targetAuthority, "443")
 
+	if p.isSelfTarget(targetAuthority) {
+		log.Printf("[Connect] Rejected loopback request targeting proxy itself: %s", targetAuthority)
+		http.Error(w, "Loop detected: request targets the proxy itself", http.StatusForbidden)
+		return
+	}
+
 	cr := p.prepareConnect(targetHost, targetAddr, rule)
 
 	// direct 模式不再特殊处理，统一走 dialUpstream + handleTransparent 路径
@@ -203,6 +209,73 @@ func (p *ProxyServer) directConnect(w http.ResponseWriter, req *http.Request) {
 	conn.Close()
 }
 
+// isSelfTarget 判断请求目标地址是否为代理自身监听端口，用于阻止自连死循环。
+// 例如代理监听 127.0.0.1:8080 时，任何发往 127.0.0.1:8080 / localhost:8080 的请求都应被拒绝。
+func (p *ProxyServer) isSelfTarget(host string) bool {
+	host = strings.TrimSpace(host)
+	if host == "" {
+		return false
+	}
+	if idx := strings.Index(host, "://"); idx >= 0 {
+		host = host[idx+3:]
+	}
+	if idx := strings.IndexAny(host, "/?#"); idx >= 0 {
+		host = host[:idx]
+	}
+
+	hostOnly, port := host, ""
+	if h, p_, err := net.SplitHostPort(host); err == nil {
+		hostOnly, port = h, p_
+	} else if strings.HasPrefix(host, "[") {
+		hostOnly = strings.TrimPrefix(strings.TrimSuffix(host, "]"), "[")
+	} else if i := strings.LastIndex(host, ":"); i >= 0 {
+		hostOnly, port = host[:i], host[i+1:]
+	}
+
+	selfHost, selfPort := "", ""
+	if h, p_, err := net.SplitHostPort(p.listenAddr); err == nil {
+		selfHost, selfPort = h, p_
+	}
+
+	if port == "" {
+		if selfPort != "" && selfPort != "80" && selfPort != "443" {
+			return false
+		}
+	} else if selfPort != "" && port != selfPort {
+		return false
+	}
+
+	hostOnly = strings.ToLower(strings.Trim(strings.TrimSuffix(strings.TrimSpace(hostOnly), "."), "[]"))
+	selfHost = strings.ToLower(strings.Trim(strings.TrimSuffix(strings.TrimSpace(selfHost), "."), "[]"))
+	if hostOnly == "localhost" {
+		hostOnly = "127.0.0.1"
+	}
+	if selfHost == "" || selfHost == "localhost" {
+		selfHost = "127.0.0.1"
+	}
+
+	if ip := net.ParseIP(hostOnly); ip != nil {
+		hostOnly = ip.String()
+	}
+	if ip := net.ParseIP(selfHost); ip != nil {
+		selfHost = ip.String()
+	}
+
+	if selfHost == "0.0.0.0" || selfHost == "::" {
+		switch hostOnly {
+		case "127.0.0.1", "::1", "0.0.0.0", "::":
+			return true
+		}
+		return false
+	}
+
+	if hostOnly == "0.0.0.0" || hostOnly == "::" {
+		return true
+	}
+
+	return hostOnly == selfHost
+}
+
 func (p *ProxyServer) handleHTTP(w http.ResponseWriter, req *http.Request, rule Rule) {
 	newReq := req.Clone(req.Context())
 	newReq.RequestURI = ""
@@ -223,6 +296,12 @@ func (p *ProxyServer) handleHTTP(w http.ResponseWriter, req *http.Request, rule 
 	}
 	if newReq.Host == "" {
 		newReq.Host = newReq.URL.Host
+	}
+
+	if p.isSelfTarget(newReq.URL.Host) {
+		log.Printf("[HTTP] Rejected loopback request targeting proxy itself: %s", newReq.URL.Host)
+		http.Error(w, "Loop detected: request targets the proxy itself", http.StatusForbidden)
+		return
 	}
 
 	if (rule.Mode == "mitm" || rule.Mode == "quic") && newReq.URL.Scheme == "http" {
@@ -263,6 +342,11 @@ func (p *ProxyServer) handleHTTP(w http.ResponseWriter, req *http.Request, rule 
 		candidates := p.buildDialCandidates(req.Context(), normalizeHost(newReq.Host), ensureAddrWithPort(newReq.URL.Host, defaultPort), rule, rule.Mode)
 		if len(candidates) > 0 {
 			newReq.URL.Host = candidates[0]
+		}
+		if p.isSelfTarget(newReq.URL.Host) {
+			log.Printf("[HTTP] Rejected upstream candidate targeting proxy itself: %s", newReq.URL.Host)
+			http.Error(w, "Loop detected: upstream targets the proxy itself", http.StatusForbidden)
+			return
 		}
 	} else {
 		defaultPort := "80"

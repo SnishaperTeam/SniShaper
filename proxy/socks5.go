@@ -103,6 +103,11 @@ func (p *ProxyServer) handleSocks5Connect(ctx context.Context, writer io.Writer,
 	cr := p.prepareConnect(matchHost, targetAddr, rule)
 
 	if cr.effectiveMode == "direct" {
+		if p.isSelfTarget(targetAddr) {
+			p.tracef("[SOCKS5] Rejected loopback request targeting proxy itself: %s", targetAddr)
+			socks5.SendReply(writer, statute.RepHostUnreachable, req.LocalAddr)
+			return fmt.Errorf("loop detected: %s targets the proxy itself", targetAddr)
+		}
 		p.tracef("[SOCKS5] direct mode, connecting directly")
 		conn, err := net.DialTimeout("tcp", targetAddr, 10*time.Second)
 		if err != nil {
