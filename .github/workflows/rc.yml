@@ -1,0 +1,23 @@
+name: Release (Release Candidate)
+
+on:
+  workflow_dispatch:
+    inputs:
+      version_suffix:
+        description: "预发布版本后缀（留空自动为 rc.1），例如 rc.2"
+        required: false
+        type: string
+        default: ""
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    name: RC Prerelease
+    uses: ./.github/workflows/_release_pipeline.yml
+    with:
+      channel: rc
+      prerelease: true
+      version_suffix: ${{ inputs.version_suffix || 'rc.1' }}
+    secrets: inherit

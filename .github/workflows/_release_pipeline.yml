@@ -1,0 +1,430 @@
+name: Reusable Release Pipeline
+
+on:
+  workflow_call:
+    inputs:
+      channel:
+        description: 发布渠道，release | beta | alpha | rc
+        required: true
+        type: string
+      prerelease:
+        description: 是否为预发布版本
+        required: true
+        type: boolean
+      version_suffix:
+        description: 预发布版本后缀，如 beta.1 / alpha.2 / rc.3；正式版留空
+        required: false
+        type: string
+        default: ""
+      tag_override:
+        description: 指定 Release 标签名（正式版通过推送标签触发时使用推送的标签名）；留空则根据 manifest 版本自动生成
+        required: false
+        type: string
+        default: ""
+    secrets:
+      MSIX_PFX_PASSWORD:
+        description: MSIX 签名证书密码（默认 password）
+        required: false
+      MSIX_PFX_BASE64:
+        description: MSIX 签名证书 devcert.pfx 的 Base64 内容（仓库中无证书时使用）
+        required: false
+      OLLAMA_MODEL:
+        description: Ollama 本地模型名，用于 release 描述摘要（默认 qwen2.5:0.5b）
+        required: false
+      LLM_API_KEY:
+        description: 备用 LLM API Key（OpenAI 兼容接口），Ollama 不可用时使用；不配置则回退为分类提交列表
+        required: false
+      LLM_MODEL:
+        description: 备用 LLM 模型名（默认 gpt-4o-mini）
+        required: false
+      LLM_BASE_URL:
+        description: 备用 LLM API 基础地址（默认 https://api.openai.com/v1）
+        required: false
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    name: Check and Resolve
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.resolve.outputs.version }}
+      tag: ${{ steps.resolve.outputs.tag }}
+      release_name: ${{ steps.resolve.outputs.release_name }}
+      display_version: ${{ steps.resolve.outputs.display_version }}
+      pkg_name: ${{ steps.resolve.outputs.pkg_name }}
+      pkg_version: ${{ steps.resolve.outputs.pkg_version }}
+      suffix: ${{ steps.resolve.outputs.suffix }}
+      skip: ${{ steps.release-check.outputs.skip }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Resolve version from Package.appxmanifest
+        id: resolve
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $manifestPath = Join-Path $env:GITHUB_WORKSPACE 'Package.appxmanifest'
+          if (-not (Test-Path $manifestPath)) {
+            Write-Host "::error::Package.appxmanifest not found at $manifestPath"
+            exit 1
+          }
+          [xml]$manifest = Get-Content -Raw $manifestPath
+          $pkgName = $manifest.Package.Identity.Name
+          $pkgVersion = $manifest.Package.Identity.Version
+          $parts = $pkgVersion.Split('.')
+          if ($parts.Count -eq 4 -and $parts[3] -eq '0') {
+            $version = ($parts[0..2] -join '.')
+          } else {
+            $version = $pkgVersion
+          }
+
+          $channel = "${{ inputs.channel }}"
+          $suffix = "${{ inputs.version_suffix }}".Trim()
+          $tagOverride = "${{ inputs.tag_override }}".Trim()
+
+          if ($tagOverride) {
+            $tag = $tagOverride
+            $displayVersion = $tag -replace '^v', ''
+          } elseif ($channel -ne 'release' -and [string]::IsNullOrEmpty($suffix)) {
+            $suffix = "$channel.1"
+            Write-Host "::warning::version_suffix 为空，自动使用 $suffix"
+            $tag = "v$version-$suffix"
+            $displayVersion = "$version-$suffix"
+          } elseif ($suffix) {
+            $tag = "v$version-$suffix"
+            $displayVersion = "$version-$suffix"
+          } else {
+            $tag = "v$version"
+            $displayVersion = $version
+          }
+
+          $channelLabel = switch ($channel) {
+            'release' { '' }
+            'beta'    { 'Beta' }
+            'alpha'   { 'Alpha' }
+            'rc'      { 'Release Candidate' }
+            default   { $channel }
+          }
+          $releaseName = "SniShaper v$displayVersion"
+          if ($channelLabel) { $releaseName += " ($channelLabel)" }
+
+          Write-Host "::notice::Package=$pkgName ManifestVersion=$pkgVersion Version=$version Tag=$tag Release=$releaseName"
+          "version=$version" >> $env:GITHUB_OUTPUT
+          "pkg_name=$pkgName" >> $env:GITHUB_OUTPUT
+          "pkg_version=$pkgVersion" >> $env:GITHUB_OUTPUT
+          "tag=$tag" >> $env:GITHUB_OUTPUT
+          "display_version=$displayVersion" >> $env:GITHUB_OUTPUT
+          "release_name=$releaseName" >> $env:GITHUB_OUTPUT
+          "suffix=$suffix" >> $env:GITHUB_OUTPUT
+
+      - name: Check if release already exists
+        id: release-check
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $tag = "${{ steps.resolve.outputs.tag }}"
+          $exists = gh release view $tag --json tagName --jq '.tagName' 2>$null
+          if ($LASTEXITCODE -eq 0 -and $exists) {
+            Write-Host "::notice::Release $tag 已存在，跳过本次发布（避免重复构建）"
+            "skip=true" >> $env:GITHUB_OUTPUT
+          } else {
+            "skip=false" >> $env:GITHUB_OUTPUT
+          }
+
+  build-and-publish:
+    name: Build and Publish (${{ inputs.channel }})
+    needs: check
+    if: needs.check.outputs.skip != 'true'
+    runs-on: windows-2025
+    permissions:
+      contents: write
+    env:
+      MSIX_PFX_PASSWORD: ${{ secrets.MSIX_PFX_PASSWORD }}
+      MSIX_PFX_BASE64: ${{ secrets.MSIX_PFX_BASE64 }}
+    steps:
+      - name: Checkout full history
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+
+      - name: Setup Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install WinApp CLI
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          if (Get-Command winapp -ErrorAction SilentlyContinue) {
+            Write-Host "winapp already available"
+          } else {
+            winget install --id Microsoft.WinAppCLI --accept-source-agreements --accept-package-agreements
+            if ($LASTEXITCODE -ne 0) {
+              Write-Host "winget failed, trying GitHub release..." -ForegroundColor Yellow
+              $url = "https://github.com/microsoft/WinAppCLI/releases/latest/download/Microsoft.WinAppCLI.msixbundle"
+              Invoke-WebRequest -Uri $url -OutFile "$env:TEMP\WinAppCLI.msixbundle" -ErrorAction Stop
+              Add-AppxPackage -Path "$env:TEMP\WinAppCLI.msixbundle" -ErrorAction Stop
+              $pkg = Get-AppxPackage -Name "Microsoft.WinAppCLI" | Select-Object -First 1
+              $installPath = $pkg.InstallLocation
+              Add-Content -Path $env:GITHUB_PATH -Value $installPath
+            }
+          }
+          winapp --version
+          if ($LASTEXITCODE -ne 0) {
+            Write-Host "::error::winapp is not available after install"
+            exit 1
+          }
+
+      - name: Install 7-Zip
+        run: choco install 7zip -y --no-progress
+
+      - name: Restore signing certificate
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $certPath = Join-Path $env:GITHUB_WORKSPACE 'devcert.pfx'
+          if ($env:MSIX_PFX_BASE64) {
+            [IO.File]::WriteAllBytes($certPath, [Convert]::FromBase64String($env:MSIX_PFX_BASE64))
+            Write-Host "::notice::devcert.pfx restored from secret MSIX_PFX_BASE64"
+          } elseif (Test-Path $certPath) {
+            Write-Host "::notice::using repo devcert.pfx"
+          } else {
+            Write-Host "::warning::devcert.pfx 不存在且未提供 MSIX_PFX_BASE64，将使用 build_windows.ps1 自动生成的证书"
+          }
+
+      - name: Determine previous release tag
+        id: prev-tag
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $currentTag = "${{ needs.check.outputs.tag }}"
+          $prev = $null
+          try {
+            $releases = gh release list --limit 50 --json tagName --jq '.[].tagName' 2>$null
+            if ($LASTEXITCODE -eq 0) {
+              foreach ($t in $releases) {
+                if ($t -ne $currentTag) { $prev = $t; break }
+              }
+            }
+          } catch {
+            Write-Host "::warning::gh release list 失败，回退到 git tag: $_"
+          }
+          if (-not $prev) {
+            $prev = git describe --tags --abbrev=0 HEAD~ 2>$null
+            if ($LASTEXITCODE -ne 0 -or -not $prev) { $prev = '' }
+          }
+          Write-Host "::notice::Previous release tag: '$prev'"
+          "prev_tag=$prev" >> $env:GITHUB_OUTPUT
+
+      - name: Setup Ollama (local LLM for release notes)
+        shell: pwsh
+        env:
+          OLLAMA_MODEL: ${{ secrets.OLLAMA_MODEL }}
+        run: |
+          $ErrorActionPreference = 'Continue'
+          $model = if ($env:OLLAMA_MODEL) { $env:OLLAMA_MODEL } else { 'qwen2.5:0.5b' }
+          Write-Host "::group::Install Ollama"
+          $ollamaExe = Get-Command ollama -ErrorAction SilentlyContinue
+          if (-not $ollamaExe) {
+            winget install --id Ollama.Ollama -e --accept-source-agreements --accept-package-agreements 2>&1 | Out-Host
+            if ($LASTEXITCODE -ne 0) {
+              Write-Host "::warning::winget install Ollama failed, trying portable zip"
+              $zip = Join-Path $env:RUNNER_TEMP 'ollama.zip'
+              Invoke-WebRequest -Uri 'https://ollama.com/download/ollama-windows-amd64.zip' -OutFile $zip -ErrorAction Stop
+              $dir = Join-Path $env:RUNNER_TEMP 'ollama'
+              Expand-Archive -Path $zip -DestinationPath $dir -Force
+              Add-Content -Path $env:GITHUB_PATH -Value $dir
+            }
+          }
+          $env:Path += ";$env:LOCALAPPDATA\Programs\Ollama"
+          Write-Host "::endgroup::"
+
+          Write-Host "::group::Start ollama serve"
+          $server = Start-Process -FilePath 'ollama' -ArgumentList 'serve' -WindowStyle Hidden -PassThru
+          Start-Sleep -Seconds 8
+          try {
+            Invoke-RestMethod -Uri 'http://127.0.0.1:11434/api/tags' -Method Get -TimeoutSec 10 | Out-Null
+            Write-Host "::notice::Ollama server is up (PID $($server.Id))"
+          } catch {
+            Write-Host "::warning::Ollama server did not respond: $($_.Exception.Message)"
+          }
+          Write-Host "::endgroup::"
+
+          Write-Host "::group::ollama pull $model"
+          ollama pull $model
+          if ($LASTEXITCODE -ne 0) {
+            Write-Host "::warning::ollama pull $model failed, release notes will fall back to categorized list"
+          } else {
+            Write-Host "::notice::Model $model ready"
+            "OLLAMA_MODEL=$model" >> $env:GITHUB_ENV
+            "OLLAMA_READY=true" >> $env:GITHUB_ENV
+          }
+          Write-Host "::endgroup::"
+
+      - name: Generate release notes
+        id: release-notes
+        shell: pwsh
+        env:
+          OLLAMA_READY: ${{ env.OLLAMA_READY }}
+          OLLAMA_MODEL: ${{ env.OLLAMA_MODEL }}
+          LLM_API_KEY: ${{ secrets.LLM_API_KEY }}
+          LLM_MODEL: ${{ secrets.LLM_MODEL }}
+          LLM_BASE_URL: ${{ secrets.LLM_BASE_URL }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $script = Join-Path $env:GITHUB_WORKSPACE '.github/scripts/generate-release-notes.ps1'
+          if (-not (Test-Path $script)) {
+            Write-Host "::error::release notes script missing: $script"
+            exit 1
+          }
+          $outDir = Join-Path $env:GITHUB_WORKSPACE 'release-notes'
+          New-Item -ItemType Directory -Force -Path $outDir | Out-Null
+          $notesPath = Join-Path $outDir 'RELEASE_NOTES.md'
+          $psArgs = @(
+            '-RepoRoot', $env:GITHUB_WORKSPACE,
+            '-Version', "${{ needs.check.outputs.version }}",
+            '-Channel', "${{ inputs.channel }}",
+            '-PrereleaseSuffix', "${{ needs.check.outputs.suffix }}",
+            '-PreviousTag', "${{ steps.prev-tag.outputs.prev_tag }}",
+            '-OutputPath', $notesPath
+          )
+          if ($env:OLLAMA_READY -eq 'true') {
+            $psArgs += '-OllamaUrl', 'http://127.0.0.1:11434'
+            $psArgs += '-OllamaModel', $env:OLLAMA_MODEL
+          } elseif ($env:LLM_API_KEY) {
+            $psArgs += '-LlmApiKey', $env:LLM_API_KEY
+            if ($env:LLM_MODEL) { $psArgs += '-LlmModel', $env:LLM_MODEL }
+            if ($env:LLM_BASE_URL) { $psArgs += '-LlmBaseUrl', $env:LLM_BASE_URL }
+          }
+          & $script @psArgs
+          if ($LASTEXITCODE -ne 0) {
+            Write-Host "::error::generate-release-notes.ps1 failed"
+            exit 1
+          }
+          Write-Host "::notice::Release notes written to $notesPath"
+
+      - name: Build, package & sign MSIX
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          Write-Host "::group::build_windows.ps1 -Build all -InstallDeps -BuildMsix -Silent"
+          ./build_windows.ps1 -Build all -InstallDeps -BuildMsix -Silent
+          if ($LASTEXITCODE -ne 0) {
+            Write-Host "::error::build_windows.ps1 failed"
+            exit 1
+          }
+          Write-Host "::endgroup::"
+          $msix = Get-ChildItem -Path Apppackage -Filter "*.msix" -ErrorAction Stop | Select-Object -First 1
+          if (-not $msix) {
+            Write-Host "::error::no .msix produced in Apppackage"
+            exit 1
+          }
+          Write-Host "::notice::MSIX ready: $($msix.FullName)"
+
+      - name: Create 7z archive
+        run: 7z a -mx=9 snishaper-windows-amd64.7z .\build\bin\*
+
+      - name: Create cert install batch
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $msix = Get-ChildItem -Path Apppackage -Filter "*.msix" | Select-Object -First 1
+          if (-not $msix) {
+            Write-Host "::error::no .msix found for install.bat"
+            exit 1
+          }
+          $password = if ($env:MSIX_PFX_PASSWORD) { $env:MSIX_PFX_PASSWORD } else { 'password' }
+          $bat = @(
+            '@echo off'
+            'chcp 65001 > nul'
+            'echo Installing certificate to Trusted Root Certification Authorities...'
+            "certutil -f -importpfx `"%~dp0devcert.pfx`" $password"
+            'echo Installing MSIX package...'
+            "powershell -Command `"Add-AppxPackage -Path '%~dp0$($msix.Name)'`""
+            'echo Done!'
+            'pause'
+          )
+          $bat -join "`r`n" | Set-Content -Path install.bat
+          Write-Host "::notice::install.bat created for $($msix.Name)"
+
+      - name: Stage artifacts
+        id: stage
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $root = $env:GITHUB_WORKSPACE
+          $assetsDir = Join-Path $root 'staging'
+          New-Item -ItemType Directory -Path $assetsDir -Force | Out-Null
+          Get-ChildItem $assetsDir -ErrorAction SilentlyContinue | Remove-Item -Recurse -Force
+
+          $msix = Get-ChildItem -Path (Join-Path $root 'Apppackage') -Filter '*.msix' | Select-Object -First 1
+          Copy-Item $msix.FullName $assetsDir\ -ErrorAction Stop
+          Copy-Item (Join-Path $root 'snishaper-windows-amd64.7z') $assetsDir\ -ErrorAction Stop
+          if (Test-Path (Join-Path $root 'devcert.pfx')) { Copy-Item (Join-Path $root 'devcert.pfx') $assetsDir\ }
+          if (Test-Path (Join-Path $root 'install.bat')) { Copy-Item (Join-Path $root 'install.bat') $assetsDir\ }
+
+          $password = if ($env:MSIX_PFX_PASSWORD) { $env:MSIX_PFX_PASSWORD } else { 'password' }
+          $passwordFile = Join-Path $assetsDir 'msix-signing-password.txt'
+          [IO.File]::WriteAllText($passwordFile, $password)
+
+          Copy-Item -Path (Join-Path $root 'release-notes\RELEASE_NOTES.md') -Destination (Join-Path $assetsDir 'RELEASE_NOTES.md') -Force
+
+          Write-Host "Staged files:" -ForegroundColor Green
+          Get-ChildItem $assetsDir | ForEach-Object { Write-Host "  $($_.Name) ($($_.Length) bytes)" }
+          "dir=$assetsDir" >> $env:GITHUB_OUTPUT
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v7
+        with:
+          name: snishaper-release-${{ needs.check.outputs.tag }}
+          path: staging/*
+          if-no-files-found: error
+
+      - name: Create GitHub Release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $tag = "${{ needs.check.outputs.tag }}"
+          $releaseName = "${{ needs.check.outputs.release_name }}"
+          $prerelease = "${{ inputs.prerelease }}".ToLowerInvariant()
+          $assetsDir = "${{ steps.stage.outputs.dir }}"
+          $notesFile = Join-Path $assetsDir 'RELEASE_NOTES.md'
+
+          Write-Host "::group::gh release create $tag"
+          $args = @(
+            'release', 'create', $tag,
+            (Join-Path $assetsDir '*.msix'),
+            (Join-Path $assetsDir '*.7z'),
+            (Join-Path $assetsDir 'devcert.pfx'),
+            (Join-Path $assetsDir 'install.bat'),
+            (Join-Path $assetsDir 'msix-signing-password.txt'),
+            '--title', $releaseName,
+            '--notes-file', $notesFile
+          )
+          if ($prerelease -eq 'true') { $args += '--prerelease' }
+          gh @args
+          if ($LASTEXITCODE -ne 0) {
+            Write-Host "::error::gh release create failed"
+            exit 1
+          }
+          Write-Host "::endgroup::"
+          Write-Host "::notice::Release $releaseName ($tag) published, prerelease=$prerelease"

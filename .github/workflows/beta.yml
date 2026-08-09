@@ -1,0 +1,23 @@
+name: Release (Beta)
+
+on:
+  workflow_dispatch:
+    inputs:
+      version_suffix:
+        description: "预发布版本后缀（留空自动为 beta.1），例如 beta.2"
+        required: false
+        type: string
+        default: ""
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    name: Beta Prerelease
+    uses: ./.github/workflows/_release_pipeline.yml
+    with:
+      channel: beta
+      prerelease: true
+      version_suffix: ${{ inputs.version_suffix || 'beta.1' }}
+    secrets: inherit

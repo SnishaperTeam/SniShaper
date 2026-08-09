@@ -1,0 +1,21 @@
+name: Release (Official)
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    name: Official Release
+    uses: ./.github/workflows/_release_pipeline.yml
+    with:
+      channel: release
+      prerelease: false
+      version_suffix: ""
+      tag_override: ${{ github.ref_type == 'tag' && github.ref_name || '' }}
+    secrets: inherit

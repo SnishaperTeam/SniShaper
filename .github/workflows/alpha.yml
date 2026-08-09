@@ -1,0 +1,23 @@
+name: Release (Alpha)
+
+on:
+  workflow_dispatch:
+    inputs:
+      version_suffix:
+        description: "预发布版本后缀（留空自动为 alpha.1），例如 alpha.2"
+        required: false
+        type: string
+        default: ""
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    name: Alpha Prerelease
+    uses: ./.github/workflows/_release_pipeline.yml
+    with:
+      channel: alpha
+      prerelease: true
+      version_suffix: ${{ inputs.version_suffix || 'alpha.1' }}
+    secrets: inherit
