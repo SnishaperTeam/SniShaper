@@ -128,13 +128,19 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          $ErrorActionPreference = 'Stop'
+          # NOTE: do NOT use $ErrorActionPreference='Stop' here. On GitHub
+          # runners, $PSNativeCommandUseErrorActionPreference makes a
+          # non-zero exit code (gh release view returns 1 when the release
+          # does NOT exist) throw a terminating error. We must treat that
+          # as the normal "no release yet" case.
+          $ErrorActionPreference = 'Continue'
           $tag = "${{ steps.resolve.outputs.tag }}"
           $exists = gh release view $tag --json tagName --jq '.tagName' 2>$null
           if ($LASTEXITCODE -eq 0 -and $exists) {
             Write-Host "::notice::Release $tag 已存在，跳过本次发布（避免重复构建）"
             "skip=true" >> $env:GITHUB_OUTPUT
           } else {
+            Write-Host "::notice::Release $tag 不存在，继续构建发布"
             "skip=false" >> $env:GITHUB_OUTPUT
           }
 
@@ -169,7 +175,10 @@ jobs:
       - name: Install WinApp CLI
         shell: pwsh
         run: |
-          $ErrorActionPreference = 'Stop'
+          # Continue mode: winget may exit non-zero (e.g. already installed
+          # via another source) and we must fall through to the GitHub
+          # release fallback instead of throwing on the native exit code.
+          $ErrorActionPreference = 'Continue'
           if (Get-Command winapp -ErrorAction SilentlyContinue) {
             Write-Host "winapp already available"
           } else {
@@ -213,7 +222,12 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          $ErrorActionPreference = 'Stop'
+          # Continue + manual exit-code checks: on GitHub runners
+          # $PSNativeCommandUseErrorActionPreference turns non-zero native
+          # exit codes into terminating errors. `gh release list` and
+          # `git describe` both return non-zero when nothing exists yet,
+          # which is a normal case here, so we handle it manually.
+          $ErrorActionPreference = 'Continue'
           $currentTag = "${{ needs.check.outputs.tag }}"
           $prev = $null
           try {
@@ -402,7 +416,9 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          $ErrorActionPreference = 'Stop'
+          # Continue + explicit exit-code handling so a failed gh call
+          # produces a clear ::error:: line instead of a bare throw.
+          $ErrorActionPreference = 'Continue'
           $tag = "${{ needs.check.outputs.tag }}"
           $releaseName = "${{ needs.check.outputs.release_name }}"
           $prerelease = "${{ inputs.prerelease }}".ToLowerInvariant()
@@ -423,7 +439,7 @@ jobs:
           if ($prerelease -eq 'true') { $args += '--prerelease' }
           gh @args
           if ($LASTEXITCODE -ne 0) {
-            Write-Host "::error::gh release create failed"
+            Write-Host "::error::gh release create failed (exit $LASTEXITCODE)"
             exit 1
           }
           Write-Host "::endgroup::"
