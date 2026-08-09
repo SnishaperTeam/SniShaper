@@ -128,11 +128,11 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          # NOTE: do NOT use $ErrorActionPreference='Stop' here. On GitHub
-          # runners, $PSNativeCommandUseErrorActionPreference makes a
-          # non-zero exit code (gh release view returns 1 when the release
-          # does NOT exist) throw a terminating error. We must treat that
-          # as the normal "no release yet" case.
+          # GitHub Actions PREPENDS $ErrorActionPreference='stop' and APPENDS
+          # `exit $LASTEXITCODE` to every pwsh step. So even with Continue,
+          # a stale non-zero $LASTEXITCODE (from `gh release view` returning 1
+          # when the release does not exist) fails the step at the end.
+          # We must end this step with an explicit `exit 0`.
           $ErrorActionPreference = 'Continue'
           $tag = "${{ steps.resolve.outputs.tag }}"
           $exists = gh release view $tag --json tagName --jq '.tagName' 2>$null
@@ -143,6 +143,7 @@ jobs:
             Write-Host "::notice::Release $tag 不存在，继续构建发布"
             "skip=false" >> $env:GITHUB_OUTPUT
           }
+          exit 0
 
   build-and-publish:
     name: Build and Publish (${{ inputs.channel }})
@@ -246,6 +247,11 @@ jobs:
           }
           Write-Host "::notice::Previous release tag: '$prev'"
           "prev_tag=$prev" >> $env:GITHUB_OUTPUT
+          # Explicitly clear the native exit code: GitHub appends
+          # `exit $LASTEXITCODE` to every pwsh step, and `git describe`
+          # may have left a non-zero value even though this is a normal
+          # "no previous tag" case.
+          exit 0
 
       - name: Setup Ollama (local LLM for release notes)
         shell: pwsh
@@ -291,6 +297,10 @@ jobs:
             "OLLAMA_READY=true" >> $env:GITHUB_ENV
           }
           Write-Host "::endgroup::"
+          # ollama pull may leave a non-zero $LASTEXITCODE (normal when the
+          # model cannot be fetched); GitHub appends `exit $LASTEXITCODE`,
+          # so clear it explicitly - failure here is only a fallback trigger.
+          exit 0
 
       - name: Generate release notes
         id: release-notes
