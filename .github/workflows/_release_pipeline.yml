@@ -228,11 +228,15 @@ jobs:
           # exit codes into terminating errors. `gh release list` and
           # `git describe` both return non-zero when nothing exists yet,
           # which is a normal case here, so we handle it manually.
+          #
+          # The change baseline is the previous STABLE (non-prerelease)
+          # release, not the most recent prerelease - so Beta/Alpha/RC
+          # summaries compare against the last official release.
           $ErrorActionPreference = 'Continue'
           $currentTag = "${{ needs.check.outputs.tag }}"
           $prev = $null
           try {
-            $releases = gh release list --limit 50 --json tagName --jq '.[].tagName' 2>$null
+            $releases = gh release list --limit 100 --json tagName,isPrerelease --jq '.[] | select(.isPrerelease == false) | .tagName' 2>$null
             if ($LASTEXITCODE -eq 0) {
               foreach ($t in $releases) {
                 if ($t -ne $currentTag) { $prev = $t; break }
@@ -242,10 +246,23 @@ jobs:
             Write-Host "::warning::gh release list 失败，回退到 git tag: $_"
           }
           if (-not $prev) {
-            $prev = git describe --tags --abbrev=0 HEAD~ 2>$null
-            if ($LASTEXITCODE -ne 0 -or -not $prev) { $prev = '' }
+            # Fallback: nearest git tag that is NOT a prerelease-style tag
+            # (contains -alpha/-beta/-rc suffix). Prefer stable tags.
+            $candidates = git tag --sort=-version:refname 2>$null
+            if ($LASTEXITCODE -eq 0) {
+              foreach ($t in $candidates) {
+                if ($t -ne $currentTag -and $t -notmatch '-(alpha|beta|rc)\.?\d*$') {
+                  $prev = $t
+                  break
+                }
+              }
+            }
+            if (-not $prev) {
+              $prev = git describe --tags --abbrev=0 HEAD~ 2>$null
+              if ($LASTEXITCODE -ne 0 -or -not $prev) { $prev = '' }
+            }
           }
-          Write-Host "::notice::Previous release tag: '$prev'"
+          Write-Host "::notice::Previous STABLE release tag: '$prev'"
           "prev_tag=$prev" >> $env:GITHUB_OUTPUT
           # Explicitly clear the native exit code: GitHub appends
           # `exit $LASTEXITCODE` to every pwsh step, and `git describe`

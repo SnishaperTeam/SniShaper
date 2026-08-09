@@ -39,7 +39,7 @@ if ($PrereleaseSuffix) {
 
 if ($PreviousTag) {
     $range = "$PreviousTag..HEAD"
-    $rangeDesc = "对比自上个版本标签 $PreviousTag"
+    $rangeDesc = "对比自上个正式版标签 $PreviousTag"
 } else {
     $range = "HEAD"
     $rangeDesc = "首次发布，汇总全部提交记录"
