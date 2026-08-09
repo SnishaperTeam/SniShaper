@@ -118,3 +118,34 @@ func EnsurePortAvailable(port int, selfNames []string) (int, error) {
 
 	return port, nil
 }
+
+// IsPortInExcludedRange 检查端口是否落在 Windows 系统排除端口范围
+// （Hyper-V/WSL/Docker/WinNAT 等保留段）。落在其中的端口 bind 会报
+// WSAEACCES（forbidden by its access permissions），且 netstat 查不到占用进程。
+func IsPortInExcludedRange(port int) bool {
+	if runtime.GOOS != "windows" {
+		return false
+	}
+	cmd := exec.Command("netsh", "interface", "ipv4", "show", "excludedportrange", "protocol=tcp")
+	cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
+	out, err := cmd.Output()
+	if err != nil {
+		return false
+	}
+	lines := strings.Split(string(out), "\n")
+	for _, line := range lines {
+		fields := strings.Fields(line)
+		if len(fields) < 2 {
+			continue
+		}
+		start, err1 := strconv.Atoi(fields[0])
+		end, err2 := strconv.Atoi(fields[1])
+		if err1 != nil || err2 != nil {
+			continue
+		}
+		if port >= start && port <= end {
+			return true
+		}
+	}
+	return false
+}

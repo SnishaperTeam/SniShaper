@@ -45,6 +45,8 @@ export const GetECHProfiles = () => appCall('GetECHProfiles');
 export const GetInstalledCerts = () => appCall('GetInstalledCerts');
 export const IsLogCaptureEnabled = () => appCall('IsLogCaptureEnabled');
 export const GetListenPort = () => appCall('GetListenPort');
+export const GetPortOccupant = (port: number) => appCall('GetPortOccupant', port);
+export const KillPortOccupant = (pid: number) => appCall('KillPortOccupant', pid);
 export const OpenLogFile = (name: string) => appCall('OpenLogFile', name);
 export const GetLogFiles = () => appCall('GetLogFiles');
 export const GetProxyDiagnostics = () => appCall('GetProxyDiagnostics');

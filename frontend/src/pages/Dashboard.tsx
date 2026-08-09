@@ -17,6 +17,8 @@ import {
   IsProxyRunning,
   GetSystemProxyStatus,
   GetListenPort,
+  GetPortOccupant,
+  KillPortOccupant,
   GetTUNConfig,
   GetTUNStatus,
   StartProxy,
@@ -62,6 +64,8 @@ const Dashboard: React.FC = () => {
   const [caStatus, setCaStatus] = useState<any>({ Installed: false, CertPath: '', Platform: 'windows' });
   const [showCertModal, setShowCertModal] = useState(false);
   const [isInstallingCert, setIsInstallingCert] = useState(false);
+  const [portOccupant, setPortOccupant] = useState<{ port: number; pid: number; name: string } | null>(null);
+  const [showKillDialog, setShowKillDialog] = useState(false);
 
   const hoverBg = mode === 'light' ? 'rgba(0,0,0,0.04)' : 'rgba(255,255,255,0.08)';
 
@@ -168,9 +172,41 @@ const Dashboard: React.FC = () => {
       if (proxyRunning) await StopProxy();
       else await StartProxy();
     } catch (err) {
+      const msg = extractErrorMessage(err);
       console.error("[UI] Failed to toggle proxy:", err);
-      toast.error('代理操作失败', extractErrorMessage(err));
+      if (!proxyRunning && /Only one usage|address already in use|occupied|forbidden by its access permissions|permission denied|access denied/i.test(msg)) {
+        try {
+          const occupant = await GetPortOccupant(port);
+          if (occupant) {
+            setPortOccupant(occupant);
+            setShowKillDialog(true);
+            refresh();
+            return;
+          }
+        } catch { /* ignore */ }
+      }
+      toast.error('代理操作失败', msg);
     } finally {
+      refresh();
+      operatingRef.current = false;
+      setIsOperating(false);
+    }
+  };
+
+  const handleKillAndRetry = async () => {
+    if (!portOccupant) return;
+    setShowKillDialog(false);
+    operatingRef.current = true;
+    setIsOperating(true);
+    try {
+      await KillPortOccupant(portOccupant.pid);
+      await new Promise(r => setTimeout(r, 400));
+      await StartProxy();
+    } catch (err) {
+      console.error("[UI] Failed to kill and restart proxy:", err);
+      toast.error('结束进程或重启失败', extractErrorMessage(err));
+    } finally {
+      setPortOccupant(null);
       refresh();
       operatingRef.current = false;
       setIsOperating(false);
@@ -406,6 +442,49 @@ const Dashboard: React.FC = () => {
             <Button onClick={() => setShowCertModal(false)} variant="text" fullWidth>
               {t('dashboard.install_cert.remind_later')}
             </Button>
+          </Box>
+        </Box>
+      </Modal>
+
+      <Modal isOpen={showKillDialog} onClose={() => setShowKillDialog(false)} title={portOccupant && portOccupant.pid <= 0 ? '端口不可用' : '端口被占用'} maxWidth="sm"
+        footer={portOccupant && portOccupant.pid <= 0 ? (
+          <Button type="button" onClick={() => setShowKillDialog(false)} variant="contained" size="small">
+            知道了
+          </Button>
+        ) : (
+          <>
+            <Button type="button" onClick={() => setShowKillDialog(false)} variant="outlined" size="small">
+              {t('common.cancel')}
+            </Button>
+            <Button type="button" onClick={handleKillAndRetry} variant="contained" color="error" size="small" startIcon={<ShieldAlert size={16} />}>
+              结束进程并重试
+            </Button>
+          </>
+        )}>
+        <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1.5 }}>
+          <Box sx={{ mt: 0.5, color: 'error.main', flexShrink: 0 }}>
+            <ShieldAlert size={22} />
+          </Box>
+          <Box>
+            {portOccupant && portOccupant.pid <= 0 ? (
+              <>
+                <Typography variant="body2" sx={{ fontWeight: 'bold', color: 'text.primary' }}>
+                  端口 {portOccupant?.port} 位于 Windows 系统排除端口范围（{portOccupant?.name}）
+                </Typography>
+                <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.5, lineHeight: 1.6 }}>
+                  该端口被系统保留（通常由 Hyper-V / WSL / Docker 等占用），没有可结束的进程。请在设置中更换监听端口，或关闭相关服务后重新启动代理。
+                </Typography>
+              </>
+            ) : (
+              <>
+                <Typography variant="body2" sx={{ fontWeight: 'bold', color: 'text.primary' }}>
+                  端口 {portOccupant?.port} 正被 {portOccupant?.name || '未知程序'}（PID {portOccupant?.pid}）占用
+                </Typography>
+                <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.5, lineHeight: 1.6 }}>
+                  代理无法监听该端口。结束该进程后会自动重试启动代理。请确认这不是重要程序。
+                </Typography>
+              </>
+            )}
           </Box>
         </Box>
       </Modal>
