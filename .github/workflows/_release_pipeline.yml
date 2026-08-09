@@ -400,6 +400,36 @@ jobs:
           }
           Write-Host "::notice::MSIX ready: $($msix.FullName)"
 
+      - name: Create unsigned MSIX (Partner Center)
+        shell: pwsh
+        run: |
+          # Partner Center re-signs submitted packages, so publish an
+          # unsigned MSIX alongside the signed one. `winapp pack` is
+          # pure packaging - no signing - same layout as
+          # build_windows.ps1 -SkipSign (unsigned_ prefix).
+          $ErrorActionPreference = 'Stop'
+          $root = $env:GITHUB_WORKSPACE
+          $binDir = Join-Path $root 'build/bin'
+          if (-not (Test-Path (Join-Path $binDir 'snishaper.exe'))) {
+            Write-Host "::error::build/bin/snishaper.exe not found"
+            exit 1
+          }
+          $msix = Get-ChildItem -Path (Join-Path $root 'Apppackage') -Filter '*.msix' | Select-Object -First 1
+          if (-not $msix) {
+            Write-Host "::error::no signed msix to derive name from"
+            exit 1
+          }
+          $unsignedName = 'unsigned_' + $msix.Name
+          $unsignedPath = Join-Path (Join-Path $root 'Apppackage') $unsignedName
+          Write-Host "::group::winapp pack (unsigned) -> $unsignedName"
+          winapp pack $binDir --manifest (Join-Path $root 'Package.appxmanifest') --output $unsignedPath
+          if ($LASTEXITCODE -ne 0) {
+            Write-Host "::error::winapp pack (unsigned) failed"
+            exit 1
+          }
+          Write-Host "::endgroup::"
+          Write-Host "::notice::Unsigned MSIX ready: $unsignedPath"
+
       - name: Create 7z archive
         run: 7z a -mx=9 snishaper-windows-amd64.7z .\build\bin\*
 
@@ -407,9 +437,9 @@ jobs:
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
-          $msix = Get-ChildItem -Path Apppackage -Filter "*.msix" | Select-Object -First 1
+          $msix = Get-ChildItem -Path Apppackage -Filter '*.msix' | Where-Object { $_.Name -notlike 'unsigned_*' } | Select-Object -First 1
           if (-not $msix) {
-            Write-Host "::error::no .msix found for install.bat"
+            Write-Host "::error::no signed .msix found for install.bat"
             exit 1
           }
           $password = if ($env:MSIX_PFX_PASSWORD) { $env:MSIX_PFX_PASSWORD } else { 'password' }
@@ -436,8 +466,10 @@ jobs:
           New-Item -ItemType Directory -Path $assetsDir -Force | Out-Null
           Get-ChildItem $assetsDir -ErrorAction SilentlyContinue | Remove-Item -Recurse -Force
 
-          $msix = Get-ChildItem -Path (Join-Path $root 'Apppackage') -Filter '*.msix' | Select-Object -First 1
+          $msix = Get-ChildItem -Path (Join-Path $root 'Apppackage') -Filter '*.msix' | Where-Object { $_.Name -notlike 'unsigned_*' } | Select-Object -First 1
           Copy-Item $msix.FullName $assetsDir\ -ErrorAction Stop
+          $unsigned = Get-ChildItem -Path (Join-Path $root 'Apppackage') -Filter 'unsigned_*.msix' | Select-Object -First 1
+          if ($unsigned) { Copy-Item $unsigned.FullName $assetsDir\ -ErrorAction Stop }
           Copy-Item (Join-Path $root 'snishaper-windows-amd64.7z') $assetsDir\ -ErrorAction Stop
           if (Test-Path (Join-Path $root 'devcert.pfx')) { Copy-Item (Join-Path $root 'devcert.pfx') $assetsDir\ }
           if (Test-Path (Join-Path $root 'install.bat')) { Copy-Item (Join-Path $root 'install.bat') $assetsDir\ }
