@@ -1,6 +1,7 @@
 import React from 'react';
 import { Modal as MuiModal, Box, Typography, IconButton } from '@mui/material';
 import { X } from '../lib/icons';
+import { useTranslation } from '../i18n/I18nContext';
 
 interface ModalProps {
   isOpen: boolean;
@@ -21,6 +22,7 @@ const Modal: React.FC<ModalProps> = ({
   footer,
   maxWidth = '42rem'
 }) => {
+  const { t } = useTranslation();
   return (
     <MuiModal open={isOpen} onClose={onClose}>
       <Box
@@ -63,7 +65,7 @@ const Modal: React.FC<ModalProps> = ({
           </Box>
         )}
         <IconButton
-          aria-label="关闭对话框"
+          aria-label={t('modal.close_dialog')}
           size="small"
           onClick={onClose}
           sx={{ position: 'absolute', top: 8, right: 8 }}

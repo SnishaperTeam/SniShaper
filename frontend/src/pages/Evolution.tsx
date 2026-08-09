@@ -127,12 +127,14 @@ const Evolution: React.FC = () => {
 
   const getMethodLabel = (method?: string): string => {
     const key = method || 'unreachable';
-    return t(`evolution.methods.${key}`);
+    const label = t(`evolution.methods.${key}`);
+    return label === `evolution.methods.${key}` ? key : label;
   };
 
   const getStepLabel = (stepName: string): string => {
     const key = stepName.replace(/-/g, '_');
-    return t(`evolution.steps.${key}`) || stepName.replace(/_/g, ' ');
+    const label = t(`evolution.steps.${key}`);
+    return label === `evolution.steps.${key}` ? stepName.replace(/_/g, ' ') : label;
   };
 
   const handleStartTest = async () => {

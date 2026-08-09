@@ -34,11 +34,53 @@ interface SettingsProps {
   onThemeChange: (id: string) => void;
 }
 
+const SectionHeader = ({ icon, label, action }: { icon: React.ReactNode; label: string; action?: React.ReactNode }) => (
+  <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', px: 1 }}>
+    <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
+      {icon}
+      <Typography variant="body2" sx={{ fontWeight: 'bold', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+        {label}
+      </Typography>
+    </Stack>
+    {action}
+  </Box>
+);
+
+const SettingRowInline = ({ icon, title, desc, children }: { icon: React.ReactNode; title: string; desc?: string; children: React.ReactNode }) => (
+  <Box sx={{ p: 2.5, bgcolor: 'background.paper', border: 1, borderColor: 'divider', borderRadius: 2, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 2, transition: 'box-shadow 0.25s ease, border-color 0.25s ease', '&:hover': { borderColor: 'divider', boxShadow: (theme) => `0 4px 18px ${theme.palette.primary.main}2e` } }}>
+    <Stack direction="row" spacing={1.5} sx={{ flex: 1, minWidth: 0 }}>
+      <Box sx={{ width: 40, height: 40, borderRadius: 1, bgcolor: 'primary.main', color: 'primary.contrastText', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+        {icon}
+      </Box>
+      <Box sx={{ minWidth: 0 }}>
+        <Typography variant="body2" sx={{ fontWeight: 'bold' }}>{title}</Typography>
+        {desc && <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>{desc}</Typography>}
+      </Box>
+    </Stack>
+    {children}
+  </Box>
+);
+
+const StackedRow = ({ icon, title, desc, children }: { icon: React.ReactNode; title: string; desc?: string; children: React.ReactNode }) => (
+  <Box sx={{ p: 2.5, bgcolor: 'background.paper', border: 1, borderColor: 'divider', borderRadius: 2, transition: 'box-shadow 0.25s ease, border-color 0.25s ease', '&:hover': { borderColor: 'divider', boxShadow: (theme) => `0 4px 18px ${theme.palette.primary.main}2e` } }}>
+    <Stack direction="row" spacing={1.5} sx={{ mb: desc ? 1.5 : 0, alignItems: 'center' }}>
+      <Box sx={{ width: 40, height: 40, borderRadius: 1, bgcolor: 'primary.main', color: 'primary.contrastText', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+        {icon}
+      </Box>
+      <Box>
+        <Typography variant="body2" sx={{ fontWeight: 'bold' }}>{title}</Typography>
+        {desc && <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>{desc}</Typography>}
+      </Box>
+    </Stack>
+    {children}
+  </Box>
+);
+
 const Settings: React.FC<SettingsProps> = ({ cache, onCacheUpdate, currentThemeId, onThemeChange }) => {
   const { t, language, setLanguage: setI18nLanguage } = useTranslation();
   const { mode, setMode } = useColorScheme();
-  const [port, setPort] = useState(cache.port);
-  const [socks5Port, setSocks5Port] = useState(cache.socks5Port ?? '8081');
+  const [port, setPort] = useState(String(cache.port ?? ''));
+  const [socks5Port, setSocks5Port] = useState(String(cache.socks5Port ?? '8081'));
   const [closeToTray, setCloseToTray] = useState(cache.closeToTray);
   const [autoStart, setAutoStart] = useState(cache.autoStart);
   const [showMainOnAutoStart, setShowMainOnAutoStart] = useState(cache.showMainOnAutoStart);
@@ -84,19 +126,30 @@ const Settings: React.FC<SettingsProps> = ({ cache, onCacheUpdate, currentThemeI
   }, []);
 
   const handleSavePort = async () => {
-    await SetListenPort(port);
-    onCacheUpdate({ port });
-    toast.success(t('proxies.notifications.updated'), `${t('settings.http_port')} ${port}`);
+    const parsed = parseInt(port, 10);
+    if (!port || Number.isNaN(parsed) || parsed < 1 || parsed > 65535) {
+      setPort(String(cache.port ?? ''));
+      toast.error(t('common.failed'), t('settings.notifications.port_invalid'));
+      return;
+    }
+    await SetListenPort(parsed);
+    onCacheUpdate({ port: parsed });
+    toast.success(t('settings.notifications.updated'), `${t('settings.http_port')} ${parsed}`);
   };
 
   const handleSaveSocks5Port = async (val: string) => {
     const normalized = val.trim();
-    if (!normalized) return;
+    const parsed = parseInt(normalized, 10);
+    if (!normalized || Number.isNaN(parsed) || parsed < 1 || parsed > 65535) {
+      setSocks5Port(String(cache.socks5Port ?? '8081'));
+      toast.error(t('common.failed'), t('settings.notifications.port_invalid'));
+      return;
+    }
     setSocks5Port(normalized);
     try {
       await SetSocks5Port(normalized);
       onCacheUpdate({ socks5Port: normalized });
-      toast.success(t('proxies.notifications.updated'));
+      toast.success(t('settings.notifications.updated'));
     } catch (err: any) { toast.error(t('common.failed'), String(err)); }
   };
 
@@ -104,7 +157,7 @@ const Settings: React.FC<SettingsProps> = ({ cache, onCacheUpdate, currentThemeI
     setCloseToTray(val);
     await SetCloseToTray(val);
     onCacheUpdate({ closeToTray: val });
-    toast.success(t('proxies.notifications.updated'));
+    toast.success(t('settings.notifications.updated'));
   };
 
   const handleToggleAutoStart = async (val: boolean) => {
@@ -112,7 +165,7 @@ const Settings: React.FC<SettingsProps> = ({ cache, onCacheUpdate, currentThemeI
     try {
       await SetAutoStart(val);
       onCacheUpdate({ autoStart: val });
-      toast.success(t('proxies.notifications.updated'));
+      toast.success(t('settings.notifications.updated'));
     } catch (err: any) { setAutoStart(!val); toast.error(t('common.failed'), String(err)); }
   };
 
@@ -121,7 +174,7 @@ const Settings: React.FC<SettingsProps> = ({ cache, onCacheUpdate, currentThemeI
     try {
       await SetAutoEnableProxyOnAutoStart(val);
       onCacheUpdate({ autoEnableProxyOnAutoStart: val });
-      toast.success(t('proxies.notifications.updated'));
+      toast.success(t('settings.notifications.updated'));
     } catch (err: any) { setAutoEnableProxyOnAutoStart(!val); toast.error(t('common.failed'), String(err)); }
   };
 
@@ -130,7 +183,7 @@ const Settings: React.FC<SettingsProps> = ({ cache, onCacheUpdate, currentThemeI
     try {
       await SetShowMainWindowOnAutoStart(val);
       onCacheUpdate({ showMainOnAutoStart: val });
-      toast.success(t('proxies.notifications.updated'));
+      toast.success(t('settings.notifications.updated'));
     } catch (err: any) { setShowMainOnAutoStart(!val); toast.error(t('common.failed'), String(err)); }
   };
 
@@ -223,48 +276,6 @@ const Settings: React.FC<SettingsProps> = ({ cache, onCacheUpdate, currentThemeI
       : bytes >= 1024 ? `${(bytes / 1024).toFixed(0)} KB`
         : `${bytes} B`;
 
-  const SectionHeader = ({ icon, label, action }: { icon: React.ReactNode; label: string; action?: React.ReactNode }) => (
-    <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', px: 1 }}>
-      <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
-        {icon}
-        <Typography variant="body2" sx={{ fontWeight: 'bold', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-          {label}
-        </Typography>
-      </Stack>
-      {action}
-    </Box>
-  );
-
-  const SettingRowInline = ({ icon, title, desc, children }: { icon: React.ReactNode; title: string; desc?: string; children: React.ReactNode }) => (
-    <Box sx={{ p: 2.5, bgcolor: 'background.paper', border: 1, borderColor: 'divider', borderRadius: 2, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 2, transition: 'box-shadow 0.25s ease, border-color 0.25s ease', '&:hover': { borderColor: 'divider', boxShadow: (theme) => `0 4px 18px ${theme.palette.primary.main}2e` } }}>
-      <Stack direction="row" spacing={1.5} sx={{ flex: 1, minWidth: 0 }}>
-        <Box sx={{ width: 40, height: 40, borderRadius: 1, bgcolor: 'primary.main', color: 'primary.contrastText', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-          {icon}
-        </Box>
-        <Box sx={{ minWidth: 0 }}>
-          <Typography variant="body2" sx={{ fontWeight: 'bold' }}>{title}</Typography>
-          {desc && <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>{desc}</Typography>}
-        </Box>
-      </Stack>
-      {children}
-    </Box>
-  );
-
-  const StackedRow = ({ icon, title, desc, children }: { icon: React.ReactNode; title: string; desc?: string; children: React.ReactNode }) => (
-    <Box sx={{ p: 2.5, bgcolor: 'background.paper', border: 1, borderColor: 'divider', borderRadius: 2, transition: 'box-shadow 0.25s ease, border-color 0.25s ease', '&:hover': { borderColor: 'divider', boxShadow: (theme) => `0 4px 18px ${theme.palette.primary.main}2e` } }}>
-      <Stack direction="row" spacing={1.5} sx={{ mb: desc ? 1.5 : 0, alignItems: 'center' }}>
-        <Box sx={{ width: 40, height: 40, borderRadius: 1, bgcolor: 'primary.main', color: 'primary.contrastText', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-          {icon}
-        </Box>
-        <Box>
-          <Typography variant="body2" sx={{ fontWeight: 'bold' }}>{title}</Typography>
-          {desc && <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>{desc}</Typography>}
-        </Box>
-      </Stack>
-      {children}
-    </Box>
-  );
-
   const bgColor = mode === 'light' ? 'rgba(0,0,0,0.04)' : 'rgba(255,255,255,0.08)';
 
   return (
@@ -283,11 +294,11 @@ const Settings: React.FC<SettingsProps> = ({ cache, onCacheUpdate, currentThemeI
                 <Stack direction="row" spacing={1} sx={{ alignItems: 'flex-start' }}>
                   <TextField
                     label={t('settings.http_port')}
-                    type="number"
+                    type="text"
                     size="small"
                     value={port}
-                    onChange={(e) => setPort(parseInt(e.target.value))}
-                    slotProps={{ htmlInput: { style: { textAlign: 'right' } } }}
+                    onChange={(e) => setPort(e.target.value.replace(/\D/g, '').slice(0, 5))}
+                    sx={{ width: 104, '& input': { textAlign: 'right' } }}
                   />
                   <Button size="small" variant="contained" color="primary" onClick={handleSavePort}>
                     {t('common.apply')}
@@ -299,11 +310,14 @@ const Settings: React.FC<SettingsProps> = ({ cache, onCacheUpdate, currentThemeI
                     type="text"
                     size="small"
                     value={socks5Port}
-                    onChange={(e) => setSocks5Port(e.target.value)}
+                    onChange={(e) => setSocks5Port(e.target.value.replace(/\D/g, '').slice(0, 5))}
                     onBlur={(e) => handleSaveSocks5Port(e.target.value)}
                     onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }}
-                    slotProps={{ htmlInput: { style: { textAlign: 'right' } } }}
+                    sx={{ width: 104, '& input': { textAlign: 'right' } }}
                   />
+                  <Button size="small" variant="contained" color="primary" onClick={() => handleSaveSocks5Port(socks5Port)}>
+                    {t('common.apply')}
+                  </Button>
                 </Stack>
               </SettingRowInline>
 
@@ -346,7 +360,7 @@ const Settings: React.FC<SettingsProps> = ({ cache, onCacheUpdate, currentThemeI
               </SettingRowInline>
 
               <SettingRowInline title={t('settings.appearance.title')} desc={t('settings.appearance.desc')} icon={mode === 'light' ? <Sun size={18} /> : <Moon size={18} />}>
-                <Stack direction="row" spacing={0.5} sx={{ alignItems: 'center', bgcolor: bgColor, border: 1, borderColor: 'divider', borderRadius: 2, p: 0.5 }} role="radiogroup" aria-label="选择主题">
+                <Stack direction="row" spacing={0.5} sx={{ alignItems: 'center', bgcolor: bgColor, border: 1, borderColor: 'divider', borderRadius: 2, p: 0.5 }} role="radiogroup" aria-label={t('settings.select_theme')}>
                   <Box
                     component="button"
                     type="button"
@@ -479,7 +493,7 @@ const Settings: React.FC<SettingsProps> = ({ cache, onCacheUpdate, currentThemeI
             <StackedRow title={t('settings.ca_management.title')} desc={caStatus?.Installed ? t('dashboard.cert_installed') : t('dashboard.cert_not_installed')} icon={<ShieldAlert size={18} />}>
               <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
                 <Typography variant="body2" sx={{ fontWeight: 'bold', color: caStatus?.Installed ? 'success.main' : 'text.secondary' }}>
-                  {caStatus?.Installed ? `${installedCerts.length} CERTS` : t('common.off')}
+                  {caStatus?.Installed ? t('settings.certs_count', { count: installedCerts.length }) : t('common.off')}
                 </Typography>
                 {installedCerts.length === 0 ? (
                   <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', py: 2, color: 'text.secondary', opacity: 0.5 }}>
@@ -583,7 +597,7 @@ const Settings: React.FC<SettingsProps> = ({ cache, onCacheUpdate, currentThemeI
                   <Box sx={{ p: 2 }}>
                     <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1, px: 1 }}>
                       <Typography variant="caption" sx={{ fontWeight: 'bold', textTransform: 'uppercase', color: 'text.secondary', letterSpacing: '0.05em' }}>
-                        IP POOL ({ipStats.length})
+                        {t('settings.ip_pool', { count: ipStats.length })}
                       </Typography>
                       <Zap size={16} color="warning.main" />
                     </Box>

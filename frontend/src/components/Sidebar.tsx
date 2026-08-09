@@ -51,7 +51,7 @@ const SidebarContent: React.FC = () => {
         </Typography>
       </Box>
 
-      <Box component="nav" aria-label="主导航" sx={{ flexGrow: 1, display: 'flex', flexDirection: 'column', gap: 0.5, px: 1, py: 1, overflowY: 'auto' }}>
+      <Box component="nav" aria-label={t('sidebar.nav_label')} sx={{ flexGrow: 1, display: 'flex', flexDirection: 'column', gap: 0.5, px: 1, py: 1, overflowY: 'auto' }}>
         {navItems.map((item) => (
           <NavLink key={item.path} to={item.path} style={{ textDecoration: 'none', color: 'inherit' }}>
             {({ isActive }) => (
@@ -109,7 +109,7 @@ const SidebarContent: React.FC = () => {
         <Tooltip title={mode === 'light' ? t('sidebar.dark_mode') : t('sidebar.light_mode')}>
           <IconButton
             size="small"
-            aria-label={mode === 'light' ? '切换到深色模式' : '切换到浅色模式'}
+            aria-label={mode === 'light' ? t('sidebar.dark_mode_aria') : t('sidebar.light_mode_aria')}
             onClick={() => setMode(mode === 'light' ? 'dark' : 'light')}
             color={mode === 'dark' ? 'primary' : 'default'}
           >

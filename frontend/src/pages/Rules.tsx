@@ -37,7 +37,7 @@ const RuleItem: React.FC<{ group: any; onEdit: (group: any) => void; onDelete: (
       case 'TRANSPARENT': return t('rules.display.transparent');
       case 'DIRECT': return t('rules.display.direct');
       case 'TLS-RF': return t('rules.display.fragment');
-      case 'MIGRATION': return t('rules.display.migration') || 'Migration';
+      case 'MIGRATION': return t('rules.display.migration');
       default: return mode;
     }
   };
@@ -51,8 +51,8 @@ const RuleItem: React.FC<{ group: any; onEdit: (group: any) => void; onDelete: (
   const getEffectiveUpstream = (group: any) => {
     const upstream = String(group.upstream || '').trim();
     if (upstream && upstream.toUpperCase() !== 'DIRECT') return upstream;
-    if (group.use_cf_pool) return 'CF IP POOL';
-    return 'DOH DYNAMIC';
+    if (group.use_cf_pool) return t('rules.display.cf_ip_pool');
+    return t('rules.display.doh_dynamic');
   };
   const effectiveMode = getEffectiveMode(group);
   const modeKey = normalizeMode(group?.mode) || normalizeMode(effectiveMode);
@@ -62,7 +62,7 @@ const RuleItem: React.FC<{ group: any; onEdit: (group: any) => void; onDelete: (
       <Box sx={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', gap: 3 }}>
         <Box sx={{ width: '33%', minWidth: 0 }}>
           <Typography variant="body2" sx={{ fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{group.name || t('common.unknown')}</Typography>
-          <Typography variant="caption" sx={{ fontSize: 10, color: 'text.secondary', fontWeight: 500, textTransform: 'uppercase', letterSpacing: '0.05em', display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{group.website || 'Default'}</Typography>
+          <Typography variant="caption" sx={{ fontSize: 10, color: 'text.secondary', fontWeight: 500, textTransform: 'uppercase', letterSpacing: '0.05em', display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{group.website || t('rules.display.default_group')}</Typography>
         </Box>
         <Box sx={{ flex: 1, minWidth: 0, display: { xs: 'none', md: 'flex' }, alignItems: 'center', gap: 1, overflow: 'hidden' }}>
           {(group.domains || []).slice(0, 4).map((d: string, i: number) => (
@@ -87,10 +87,10 @@ const RuleItem: React.FC<{ group: any; onEdit: (group: any) => void; onDelete: (
       </Box>
 
       <Box sx={{ display: 'flex', gap: 0.75, flexShrink: 0 }}>
-        <IconButton size="small" aria-label="编辑规则" onClick={() => onEdit(group)} sx={{ color: 'text.secondary', '&:hover': { bgcolor: hoverBg, color: 'primary.main' } }}>
+        <IconButton size="small" aria-label={t('rules.edit_rule_aria')} onClick={() => onEdit(group)} sx={{ color: 'text.secondary', '&:hover': { bgcolor: hoverBg, color: 'primary.main' } }}>
           <Edit size={15} />
         </IconButton>
-        <IconButton size="small" aria-label="删除规则" color="error" onClick={() => onDelete(group.id)}>
+        <IconButton size="small" aria-label={t('rules.delete_rule_aria')} color="error" onClick={() => onDelete(group.id)}>
           <Trash2 size={15} />
         </IconButton>
       </Box>
@@ -138,6 +138,8 @@ const Rules: React.FC = () => {
     toast.success(t('rules.notifications.deleted'));
   };
 
+  const OTHERS_KEY = 'Others';
+
   const groupedResults = React.useMemo(() => {
     const filtered = groups.filter(g => {
       const matchesSearch = ((g.name || '') + (g.website || '') + (g.domains || []).join(''))
@@ -147,15 +149,15 @@ const Rules: React.FC = () => {
     });
     const groups_map: Record<string, any[]> = {};
     filtered.forEach(item => {
-      const key = item.website || 'Others';
+      const key = item.website || OTHERS_KEY;
       if (!groups_map[key]) groups_map[key] = [];
       groups_map[key].push(item);
     });
     return Object.keys(groups_map).sort((a, b) => {
-      if (a === 'Others') return 1;
-      if (b === 'Others') return -1;
+      if (a === OTHERS_KEY) return 1;
+      if (b === OTHERS_KEY) return -1;
       return a.localeCompare(b);
-    }).map(key => ({ title: key, items: groups_map[key] }));
+    }).map(key => ({ title: key === OTHERS_KEY ? t('rules.display.others') : key, items: groups_map[key] }));
   }, [groups, search, filterMode]);
 
   return (
@@ -173,7 +175,7 @@ const Rules: React.FC = () => {
       </Box>
 
       <Box sx={{ position: 'sticky', top: 0, zIndex: 10, py: 1, display: 'flex', flexDirection: 'column', gap: 1.5, backdropFilter: 'blur(12px)', bgcolor: mode === 'light' ? 'rgba(255,255,255,0.5)' : 'rgba(13,17,23,0.5)' }}>
-        <Box sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.75, p: 0.5, bgcolor: 'background.paper', border: 1, borderColor: 'divider', borderRadius: 2, boxShadow: 1, width: 'fit-content' }} role="tablist" aria-label="筛选模式">
+        <Box sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.75, p: 0.5, bgcolor: 'background.paper', border: 1, borderColor: 'divider', borderRadius: 2, boxShadow: 1, width: 'fit-content' }} role="tablist" aria-label={t('rules.filter_mode_aria')}>
           {FILTER_MODES.map((m) => {
             const active = filterMode === m;
             return (

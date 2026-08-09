@@ -58,10 +58,10 @@ const NAT64ProfileForm: React.FC<NAT64ProfileFormProps> = ({ initialData, onSucc
             <Layers size={24} color="primary.main" />
             <Stack direction="column" spacing={0.25}>
               <Typography variant="body2" sx={{ fontWeight: 'bold', textTransform: 'uppercase', letterSpacing: '0.05em', color: 'primary.main' }}>
-                {formData.id ? t('proxies.edit_nat64') || '编辑 NAT64 配置' : t('proxies.add_nat64') || '添加 NAT64 配置'}
+                {formData.id ? t('proxies.edit_nat64') : t('proxies.add_nat64')}
               </Typography>
               <Typography variant="caption" color="primary.main" sx={{ opacity: 0.7, fontWeight: 'medium' }}>
-                {t('proxies.nat64_form_subtitle') || '配置独立映射规则前缀'}
+                {t('proxies.nat64_form_subtitle')}
               </Typography>
             </Stack>
           </Stack>
@@ -70,26 +70,26 @@ const NAT64ProfileForm: React.FC<NAT64ProfileFormProps> = ({ initialData, onSucc
         <Stack direction="column" spacing={2} sx={{ alignItems: 'stretch' }}>
           <Box>
             <TextField
-              label={t('proxies.nat64_form_name') || '配置名称'}
+              label={t('proxies.nat64_form_name')}
               size="small"
               required
               fullWidth
               value={formData.name}
               onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-              placeholder="例如：特定黑名单绕过"
+              placeholder={t('proxies.nat64_placeholder_name')}
               slotProps={{ input: { style: { borderRadius: 1 } }, inputLabel: { shrink: true } }}
             />
           </Box>
 
           <Box>
             <TextField
-              label={t('proxies.nat64_form_prefix') || 'NAT64 前缀'}
+              label={t('proxies.nat64_form_prefix')}
               size="small"
               required
               fullWidth
               value={formData.prefix}
               onChange={(e) => setFormData({ ...formData, prefix: e.target.value })}
-              placeholder="例如：64:ff9b::"
+              placeholder={t('proxies.nat64_placeholder_prefix')}
               slotProps={{ input: { style: { borderRadius: 1, fontFamily: 'mono' } }, inputLabel: { shrink: true } }}
             />
           </Box>

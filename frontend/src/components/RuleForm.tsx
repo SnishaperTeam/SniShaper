@@ -68,7 +68,7 @@ const RuleForm: React.FC<RuleFormProps> = ({ initialData, onSuccess, onCancel })
     { id: 'tls-rf', label: t('rules.display.fragment'), icon: <Monitor size={14} />, desc: t('rules.modes.tls-rf') },
     { id: 'quic', label: 'QUIC', icon: <Zap size={14} />, desc: t('rules.modes.quic') },
     { id: 'transparent', label: t('rules.display.transparent'), icon: <Monitor size={14} />, desc: t('rules.modes.transparent') },
-    { id: 'migration', label: t('rules.display.migration') || '迁移', icon: <Globe size={14} />, desc: t('rules.modes.migration') }
+    { id: 'migration', label: t('rules.display.migration'), icon: <Globe size={14} />, desc: t('rules.modes.migration') }
   ];
 
   const DNS_OPTIONS = [
@@ -312,7 +312,7 @@ const RuleForm: React.FC<RuleFormProps> = ({ initialData, onSuccess, onCancel })
             type="button"
             size="small"
             onClick={handleAddDomain}
-            aria-label="添加域名"
+            aria-label={t('rules.form.add_domain')}
             sx={{ position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)', bgcolor: 'primary.main', color: 'primary.contrastText', boxShadow: 3, p: 1, '&:hover': { bgcolor: 'primary.dark' } }}
           >
             <Plus size={20} />
@@ -325,7 +325,7 @@ const RuleForm: React.FC<RuleFormProps> = ({ initialData, onSuccess, onCancel })
             formData.domains.map((d: any, i: number) => (
               <Box key={i} sx={{ display: 'flex', alignItems: 'center', gap: 0.5, px: 1.25, py: 0.5, bgcolor: 'background.paper', border: 1, borderColor: 'divider', borderRadius: '999px', boxShadow: 1, transition: 'all 0.2s', '&:hover': { borderColor: 'error.main' } }}>
                 <Typography variant="caption" sx={{ fontSize: 11, fontWeight: 'bold' }}>{d}</Typography>
-                <IconButton type="button" size="small" onClick={() => handleRemoveDomain(i)} aria-label="移除域名" sx={{ p: 0.25, color: 'text.secondary', '&:hover': { color: 'error.main' } }}>
+                <IconButton type="button" size="small" onClick={() => handleRemoveDomain(i)} aria-label={t('rules.form.remove_domain')} sx={{ p: 0.25, color: 'text.secondary', '&:hover': { color: 'error.main' } }}>
                   <Trash2 size={12} />
                 </IconButton>
               </Box>
@@ -387,7 +387,7 @@ const RuleForm: React.FC<RuleFormProps> = ({ initialData, onSuccess, onCancel })
                   size="small"
                   value={formData.sni_fake}
                   onChange={(e) => setFormData({ ...formData, sni_fake: e.target.value })}
-                  placeholder="例如: github-com.mapped"
+                  placeholder={t('rules.form.placeholder_mapped')}
                   sx={inputSx}
                 />
               </Box>
@@ -407,7 +407,7 @@ const RuleForm: React.FC<RuleFormProps> = ({ initialData, onSuccess, onCancel })
                         return (
                           <Box key={p.id} onClick={() => setFormData({ ...formData, ech_profile_id: p.id })} sx={cardSx(active)}>
                             <Typography variant="caption" sx={{ fontWeight: 900, letterSpacing: '0.05em' }}>{p.name}</Typography>
-                            <Typography variant="caption" sx={{ fontSize: 10, opacity: 0.8 }}>{p.discovery_domain || '手动配置 ECH'}</Typography>
+                            <Typography variant="caption" sx={{ fontSize: 10, opacity: 0.8 }}>{p.discovery_domain || t('rules.form.manual_ech')}</Typography>
                           </Box>
                         );
                       })}
@@ -418,11 +418,11 @@ const RuleForm: React.FC<RuleFormProps> = ({ initialData, onSuccess, onCancel })
             )}
             {showNat64Config && formData.nat64_enabled && (
               <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.75, mt: 2 }}>
-                <Typography variant="caption" sx={sectionLabelSx}>{t('rules.form.nat64_profile') || 'NAT64 配置'}</Typography>
+                <Typography variant="caption" sx={sectionLabelSx}>{t('rules.form.nat64_profile')}</Typography>
                 <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
                   {nat64Profiles.length === 0 ? (
                     <Typography variant="caption" sx={{ fontSize: 10, color: 'text.secondary', fontWeight: 'bold', px: 1 }}>
-                      {t('proxies.no_nat64') || '暂无可用 NAT64 配置，请先至代理页面创建'}
+                      {t('proxies.no_nat64')}
                     </Typography>
                   ) : (
                     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1, maxHeight: 176, overflowY: 'auto', pr: 0.5 }}>
@@ -432,7 +432,7 @@ const RuleForm: React.FC<RuleFormProps> = ({ initialData, onSuccess, onCancel })
                         return (
                           <Box key={p.id} onClick={() => ipv6Available && setFormData({ ...formData, nat64_profile_id: p.id })} sx={cardSx(active, { disabled })}>
                             <Typography variant="caption" sx={{ fontWeight: 900, letterSpacing: '0.05em' }}>{p.name}</Typography>
-                            <Typography variant="caption" sx={{ fontSize: 10, opacity: 0.8 }}>前缀：{p.prefix}</Typography>
+                            <Typography variant="caption" sx={{ fontSize: 10, opacity: 0.8 }}>{t('rules.form.prefix_label', { prefix: p.prefix })}</Typography>
                           </Box>
                         );
                       })}
@@ -468,9 +468,9 @@ const RuleForm: React.FC<RuleFormProps> = ({ initialData, onSuccess, onCancel })
                 <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
                   <Typography variant="caption" sx={{ fontWeight: 'bold', color: 'text.primary', display: 'flex', alignItems: 'center', gap: 0.5 }}>
                     <Box component="span" sx={{ display: 'inline-flex', color: 'secondary.main' }}><Globe size={12} /></Box>
-                    {t('rules.form.nat64_enable') || '启用 NAT64 映射'}
+                    {t('rules.form.nat64_enable')}
                   </Typography>
-                  <Typography variant="caption" sx={{ fontSize: 10, color: 'text.secondary' }}>{!ipv6Available ? t('network.ipv6_disabled_title') : (t('rules.form.nat64_hint') || '开启此功能以执行 NAT64 映射转换')}</Typography>
+                  <Typography variant="caption" sx={{ fontSize: 10, color: 'text.secondary' }}>{!ipv6Available ? t('network.ipv6_disabled_title') : t('rules.form.nat64_hint')}</Typography>
                 </Box>
                 <Switch size="small" checked={Boolean(formData.nat64_enabled)} disabled={!ipv6Available} />
               </Box>
@@ -510,7 +510,7 @@ const RuleForm: React.FC<RuleFormProps> = ({ initialData, onSuccess, onCancel })
               <Box onClick={() => setCertVerify({ allow_unknown_authority: !formData.cert_verify.allow_unknown_authority })} sx={cardSx(Boolean(formData.cert_verify.allow_unknown_authority), { warn: true, row: true, inactiveBg: hoverBg })}>
                 <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
                   <Typography variant="caption" sx={{ fontWeight: 'bold', color: 'text.primary' }}>{t('dns.allow_unknown')}</Typography>
-                  <Typography variant="caption" sx={{ fontSize: 10, color: 'text.secondary' }}>仅在你明确知道目标证书来源时启用</Typography>
+                  <Typography variant="caption" sx={{ fontSize: 10, color: 'text.secondary' }}>{t('rules.form.cert_verify_warn')}</Typography>
                 </Box>
                 <Switch size="small" color="warning" checked={Boolean(formData.cert_verify.allow_unknown_authority)} />
               </Box>
@@ -524,7 +524,7 @@ const RuleForm: React.FC<RuleFormProps> = ({ initialData, onSuccess, onCancel })
                     size="small"
                     value={joinListInput(formData.cert_verify.names)}
                     onChange={(e) => setCertVerify({ names: splitListInput(e.target.value) })}
-                    placeholder="每行一个域名，例如&#10;*.github.com&#10;github.com"
+                    placeholder={t('rules.form.placeholder_domains')}
                     sx={{ ...inputSx, '& textarea': { fontSize: '0.75rem', lineHeight: 1.6, resize: 'none' } }}
                   />
                 </Box>
@@ -539,7 +539,7 @@ const RuleForm: React.FC<RuleFormProps> = ({ initialData, onSuccess, onCancel })
                     size="small"
                     value={joinListInput(formData.cert_verify.suffixes)}
                     onChange={(e) => setCertVerify({ suffixes: splitListInput(e.target.value) })}
-                    placeholder="每行一个后缀，例如&#10;.github.com&#10;.cloudfront.net"
+                    placeholder={t('rules.form.placeholder_suffixes')}
                     sx={{ ...inputSx, '& textarea': { fontSize: '0.75rem', lineHeight: 1.6, resize: 'none' } }}
                   />
                 </Box>
@@ -547,14 +547,14 @@ const RuleForm: React.FC<RuleFormProps> = ({ initialData, onSuccess, onCancel })
 
               {certVerifyMode === 'allow_spki' && (
                 <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.75 }}>
-                  <Typography variant="caption" sx={{ fontSize: 9, fontWeight: 'bold', color: 'text.secondary' }}>允许 SPKI SHA256 列表</Typography>
+                  <Typography variant="caption" sx={{ fontSize: 9, fontWeight: 'bold', color: 'text.secondary' }}>{t('rules.form.allow_spki_list')}</Typography>
                   <TextField
                     multiline
                     rows={4}
                     size="small"
                     value={joinListInput(formData.cert_verify.spki_sha256)}
                     onChange={(e) => setCertVerify({ spki_sha256: splitListInput(e.target.value) })}
-                    placeholder="每行一个 Base64 指纹"
+                    placeholder={t('rules.form.placeholder_spki')}
                     sx={{ ...inputSx, '& textarea': { fontSize: '0.75rem', lineHeight: 1.6, resize: 'none', fontFamily: 'mono' } }}
                   />
                 </Box>

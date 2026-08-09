@@ -57,11 +57,11 @@ const DNSNodeItem: React.FC<{
   return (
     <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, py: 1.5, px: 2, borderBottom: 1, borderColor: 'divider', transition: 'background-color 0.2s', '&:hover': { bgcolor: hoverBg } }}>
       <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 0.25, flexShrink: 0 }}>
-        <IconButton size="small" aria-label="上移" onClick={() => onMoveUp(node.id, index)} disabled={index === 0} sx={{ color: 'text.secondary', '&:hover': { color: 'primary.main' }, '&.Mui-disabled': { opacity: 0.2 } }}>
+        <IconButton size="small" aria-label={t('dns.move_up')} onClick={() => onMoveUp(node.id, index)} disabled={index === 0} sx={{ color: 'text.secondary', '&:hover': { color: 'primary.main' }, '&.Mui-disabled': { opacity: 0.2 } }}>
           <ChevronUp size={14} />
         </IconButton>
         <Typography variant="caption" sx={{ fontWeight: 900, color: 'text.secondary', width: 20, textAlign: 'center' }}>{index + 1}</Typography>
-        <IconButton size="small" aria-label="下移" onClick={() => onMoveDown(node.id, index)} disabled={index === total - 1} sx={{ color: 'text.secondary', '&:hover': { color: 'primary.main' }, '&.Mui-disabled': { opacity: 0.2 } }}>
+        <IconButton size="small" aria-label={t('dns.move_down')} onClick={() => onMoveDown(node.id, index)} disabled={index === total - 1} sx={{ color: 'text.secondary', '&:hover': { color: 'primary.main' }, '&.Mui-disabled': { opacity: 0.2 } }}>
           <ChevronDown size={14} />
         </IconButton>
       </Box>
@@ -118,10 +118,10 @@ const DNSNodeItem: React.FC<{
 
       <Box sx={{ display: 'flex', gap: 0.5, flexShrink: 0 }}>
         <Button size="small" variant="text" onClick={() => onTest(node.id)} disabled={isTesting}>{t('dns.test')}</Button>
-        <IconButton size="small" aria-label="编辑" onClick={() => onEdit(node)} sx={{ color: 'text.secondary', '&:hover': { bgcolor: hoverBg, color: 'primary.main' } }}>
+        <IconButton size="small" aria-label={t('common.edit')} onClick={() => onEdit(node)} sx={{ color: 'text.secondary', '&:hover': { bgcolor: hoverBg, color: 'primary.main' } }}>
           <Edit3 size={14} />
         </IconButton>
-        <IconButton size="small" aria-label="删除" color="error" onClick={() => onDelete(node.id)}>
+        <IconButton size="small" aria-label={t('common.delete')} color="error" onClick={() => onDelete(node.id)}>
           <Trash2 size={14} />
         </IconButton>
       </Box>

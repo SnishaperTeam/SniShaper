@@ -19,7 +19,10 @@
     "ready": "就绪",
     "running": "运行中",
     "stopped": "已停止",
-    "error": "错误"
+    "error": "错误",
+    "no_matches": "无匹配选项",
+    "clear": "清除",
+    "expand_options": "展开选项"
   },
   "sidebar": {
     "dashboard": "仪表盘",
@@ -31,7 +34,10 @@
     "settings": "系统设置",
     "about": "关于",
     "light_mode": "浅色模式",
-    "dark_mode": "深色模式"
+    "dark_mode": "深色模式",
+    "nav_label": "主导航",
+    "dark_mode_aria": "切换到深色模式",
+    "light_mode_aria": "切换到浅色模式"
   },
   "welcome": {
     "title": "欢迎使用 SniShaper",
@@ -69,7 +75,23 @@
     "notifications": {
       "tun_not_running": "TUN 未进入运行态",
       "tun_updated": "TUN 状态已更新",
-      "tun_failed": "TUN 切换失败"
+      "tun_failed": "TUN 切换失败",
+      "proxy_toggle_failed": "代理操作失败",
+      "kill_process_failed": "结束进程或重启失败",
+      "sys_proxy_failed": "系统代理操作失败",
+      "tun_starting": "TUN 启动中，请稍候...",
+      "tun_stopped": "已关闭 TUN 路径。"
+    },
+    "port_occupied": {
+      "title_unavailable": "端口不可用",
+      "title_occupied": "端口被占用",
+      "ok": "知道了",
+      "kill_and_retry": "结束进程并重试",
+      "excluded_range": "端口 {port} 位于 Windows 系统排除端口范围（{name}）",
+      "excluded_desc": "该端口被系统保留（通常由 Hyper-V / WSL / Docker 等占用），没有可结束的进程。请在设置中更换监听端口，或关闭相关服务后重新启动代理。",
+      "occupied_by": "端口 {port} 正被 {name}（PID {pid}）占用",
+      "occupied_desc": "代理无法监听该端口。结束该进程后会自动重试启动代理。请确认这不是重要程序。",
+      "unknown_process": "未知程序"
     }
   },
   "proxies": {
@@ -95,7 +117,17 @@
     "migration_service": "连接迁移服务",
     "migration_service_title": "迁移 API 地址",
     "migration_service_desc": "配置连接迁移服务地址",
-    "migration_service_hint": "输入迁移服务 API 地址"
+    "migration_service_hint": "输入迁移服务 API 地址",
+    "delete_aria": "删除 {name}",
+    "nat64_placeholder_name": "例如：特定黑名单绕过",
+    "nat64_placeholder_prefix": "例如：64:ff9b::",
+    "notifications": {
+      "connect_success": "{name}: 连接成功，延迟 {ms} ms",
+      "connect_failed": "{name}: 连接失败: {error}",
+      "migration_required": "请输入迁移服务地址",
+      "test_success": "测试成功",
+      "saved": "已保存"
+    }
   },
   "ech_form": {
     "title": "ECH 借力探测",
@@ -153,7 +185,9 @@
       "updated": "DNS 节点已更新",
       "added": "DNS 节点已添加",
       "deleted": "DNS 节点已删除"
-    }
+    },
+    "move_up": "上移",
+    "move_down": "下移"
   },
   "rules": {
     "title": "网站规则",
@@ -190,7 +224,17 @@
       "cf_pool_hint": "优先使用 Cloudflare 优选 IP",
       "nat64_enable": "启用 NAT64 映射",
       "nat64_hint": "开启此功能以执行 NAT64 映射转换",
-      "nat64_profile": "NAT64 配置"
+      "nat64_profile": "NAT64 配置",
+      "add_domain": "添加域名",
+      "remove_domain": "移除域名",
+      "cert_verify_warn": "仅在你明确知道目标证书来源时启用",
+      "allow_spki_list": "允许 SPKI SHA256 列表",
+      "prefix_label": "前缀：{prefix}",
+      "placeholder_domains": "每行一个域名，例如\n*.github.com\ngithub.com",
+      "placeholder_suffixes": "每行一个后缀，例如\n.github.com\n.cloudfront.net",
+      "placeholder_spki": "每行一个 Base64 指纹",
+      "placeholder_mapped": "例如: github-com.mapped",
+      "manual_ech": "手动配置 ECH"
     },
     "modes": {
       "mitm": "修改 SNI 或注入 ECH 配置",
@@ -214,11 +258,18 @@
       "transparent": "透传",
       "direct": "直连",
       "fragment": "分片",
-      "migration": "迁移"
+      "migration": "迁移",
+      "others": "其他",
+      "default_group": "默认",
+      "cf_ip_pool": "CF IP POOL",
+      "doh_dynamic": "DOH DYNAMIC"
     },
     "notifications": {
       "deleted": "规则已删除"
-    }
+    },
+    "edit_rule_aria": "编辑规则",
+    "delete_rule_aria": "删除规则",
+    "filter_mode_aria": "筛选模式"
   },
   "logs": {
     "title": "系统日志",
@@ -231,7 +282,13 @@
     "export": "导出",
     "search_placeholder": "搜索关键词、域、错误代码...",
     "capture_hint": "日志采集默认关闭。点击右上角“捕捉日志”后，页面会开始临时收集并自动滚动到最新日志。",
-    "no_logs": "暂无日志采集"
+    "no_logs": "暂无日志采集",
+    "latest": "最新",
+    "capture_disabled": "CAPTURE DISABLED",
+    "capture_on": "CAPTURE ON",
+    "capture_off": "CAPTURE OFF",
+    "buffer": "BUFFER: {count} LINES",
+    "refresh_paused": "REFRESH PAUSED"
   },
   "routing": {
     "title": "自动分流",
@@ -347,6 +404,10 @@
       "no_content": "（暂无内容）",
       "clean_done": "已清理 {count} 个旧日志文件"
     },
+    "notifications": {
+      "updated": "设置已更新",
+      "port_invalid": "请输入 1-65535 范围内的有效端口"
+    },
     "theme": {
       "label": "配色方案",
       "desc": "选择界面配色方案（均支持深色/浅色模式）。",
@@ -356,7 +417,11 @@
       "sunset": "暖阳橙",
       "ocean": "海洋青",
       "graphite": "石墨灰"
-    }
+    },
+    "select_language": "选择语言",
+    "select_theme": "选择主题",
+    "certs_count": "{count} CERTS",
+    "ip_pool": "IP POOL ({count})"
   },
   "evolution": {
     "title": "进化模式",
@@ -456,6 +521,19 @@
     "proxy_error": "代理配置错误，请检查系统代理设置。",
     "rights_reserved": "保留所有权利。",
     "made_with": "由 SniShaper 社区",
-    "by_community": "倾心打造"
+    "by_community": "倾心打造",
+    "latest_beta": "最新beta版",
+    "actions_build": "Actions 构建产物"
+  },
+  "window": {
+    "minimize": "最小化",
+    "maximize_restore": "最大化/还原",
+    "close": "关闭"
+  },
+  "modal": {
+    "close_dialog": "关闭对话框"
+  },
+  "toast": {
+    "close_notification": "关闭提示"
   }
 }

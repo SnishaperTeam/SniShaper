@@ -86,7 +86,7 @@ const About: React.FC = () => {
     { icon: <Users size={22} />, title: t('about.maintainers'), value: 'JetCPP Team, SniShaper Team', color: 'warning.main', valueColor: 'text.primary' },
     { icon: <Globe size={22} />, title: t('about.website'), value: 'github.com/SniShaper/SniShaper', color: 'primary.main', valueColor: 'primary.main', onClick: handleOpenWebsite },
     { icon: <GitBranch size={22} />, title: 'GitHub', value: 'SniShaper/SniShaper', color: 'text.primary', valueColor: 'text.primary', onClick: handleOpenGitHub },
-    { icon: <Download size={22} />, title: '最新beta版', value: 'Actions 构建产物', color: 'warning.main', valueColor: 'warning.main', onClick: handleOpenBeta },
+    { icon: <Download size={22} />, title: t('about.latest_beta'), value: t('about.actions_build'), color: 'warning.main', valueColor: 'warning.main', onClick: handleOpenBeta },
   ];
 
   return (

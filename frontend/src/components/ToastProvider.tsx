@@ -3,6 +3,7 @@ import { Box, Stack, IconButton, Typography, Paper } from '@mui/material';
 import { keyframes } from '@emotion/react';
 import { CheckCircle, Error, Info as InfoIcon, Close } from '@mui/icons-material';
 import { TOAST_EVENT, type ToastPayload } from '../lib/toast';
+import { useTranslation } from '../i18n/I18nContext';
 
 const ICONS = {
   success: CheckCircle,
@@ -17,6 +18,7 @@ const slideIn = keyframes`
 
 const ToastProvider: React.FC = () => {
   const [toasts, setToasts] = useState<ToastPayload[]>([]);
+  const { t } = useTranslation();
 
   useEffect(() => {
     const handleToast = (event: Event) => {
@@ -104,7 +106,7 @@ const ToastProvider: React.FC = () => {
                 )}
               </Box>
               <IconButton
-                aria-label="关闭提示"
+                aria-label={t('toast.close_notification')}
                 size="small"
                 onClick={() => setToasts((prev) => prev.filter((item) => item.id !== toast.id))}
               >

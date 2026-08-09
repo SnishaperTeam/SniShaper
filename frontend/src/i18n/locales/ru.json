@@ -19,7 +19,10 @@
     "ready": "Готово",
     "running": "Работает",
     "stopped": "Остановлено",
-    "error": "Ошибка"
+    "error": "Ошибка",
+    "no_matches": "Нет совпадений",
+    "clear": "Очистить",
+    "expand_options": "Развернуть список"
   },
   "sidebar": {
     "dashboard": "Главная",
@@ -31,7 +34,10 @@
     "settings": "Настройки",
     "about": "О программе",
     "light_mode": "Светлый режим",
-    "dark_mode": "Тёмный режим"
+    "dark_mode": "Тёмный режим",
+    "nav_label": "Основная навигация",
+    "dark_mode_aria": "Переключить тёмный режим",
+    "light_mode_aria": "Переключить светлый режим"
   },
   "welcome": {
     "title": "Добро пожаловать в SniShaper",
@@ -69,7 +75,23 @@
     "notifications": {
       "tun_not_running": "TUN не запущен",
       "tun_updated": "Статус TUN обновлён",
-      "tun_failed": "Ошибка переключения TUN"
+      "tun_failed": "Ошибка переключения TUN",
+      "proxy_toggle_failed": "Не удалось переключить прокси",
+      "kill_process_failed": "Не удалось завершить процесс или перезапустить",
+      "sys_proxy_failed": "Не удалось изменить системный прокси",
+      "tun_starting": "TUN запускается, подождите...",
+      "tun_stopped": "Путь TUN отключён."
+    },
+    "port_occupied": {
+      "title_unavailable": "Порт недоступен",
+      "title_occupied": "Порт занят",
+      "ok": "Понятно",
+      "kill_and_retry": "Завершить процесс и повторить",
+      "excluded_range": "Порт {port} входит в исключённый диапазон Windows ({name})",
+      "excluded_desc": "Порт зарезервирован системой (обычно занят Hyper-V / WSL / Docker). Завершать нечего. Смените порт в настройках или остановите службы и перезапустите прокси.",
+      "occupied_by": "Порт {port} занят процессом {name} (PID {pid})",
+      "occupied_desc": "Прокси не может прослушивать этот порт. После завершения процесса будет автоматически выполнена попытка запуска. Убедитесь, что это не важная программа.",
+      "unknown_process": "Неизвестная программа"
     }
   },
   "proxies": {
@@ -95,7 +117,17 @@
     "migration_service": "Служба миграции соединений",
     "migration_service_title": "URL API миграции",
     "migration_service_desc": "Настроить URL службы миграции соединений",
-    "migration_service_hint": "Введите URL API миграции"
+    "migration_service_hint": "Введите URL API миграции",
+    "delete_aria": "Удалить {name}",
+    "nat64_placeholder_name": "напр. обход конкретного чёрного списка",
+    "nat64_placeholder_prefix": "напр.: 64:ff9b::",
+    "notifications": {
+      "connect_success": "{name}: подключено, задержка {ms} мс",
+      "connect_failed": "{name}: сбой подключения: {error}",
+      "migration_required": "Введите адрес службы миграции",
+      "test_success": "Тест успешен",
+      "saved": "Сохранено"
+    }
   },
   "ech_form": {
     "title": "Определение ECH",
@@ -153,7 +185,9 @@
       "updated": "DNS узел обновлён",
       "added": "DNS узел добавлен",
       "deleted": "DNS узел удалён"
-    }
+    },
+    "move_up": "Вверх",
+    "move_down": "Вниз"
   },
   "rules": {
     "title": "Правила сайтов",
@@ -190,7 +224,17 @@
       "cf_pool_hint": "Приоритетные IP Cloudflare",
       "nat64_enable": "Включить сопоставление NAT64",
       "nat64_hint": "Включить преобразование NAT64 для этого правила",
-      "nat64_profile": "Конфигурация NAT64"
+      "nat64_profile": "Конфигурация NAT64",
+      "add_domain": "Добавить домен",
+      "remove_domain": "Удалить домен",
+      "cert_verify_warn": "Включайте только если уверены в источнике целевого сертификата",
+      "allow_spki_list": "Разрешить список SPKI SHA256",
+      "prefix_label": "Префикс: {prefix}",
+      "placeholder_domains": "По одному домену в строке, напр.\n*.github.com\ngithub.com",
+      "placeholder_suffixes": "По одному суффиксу в строке, напр.\n.github.com\n.cloudfront.net",
+      "placeholder_spki": "По одному Base64 отпечатку в строке",
+      "placeholder_mapped": "напр.: github-com.mapped",
+      "manual_ech": "ECH вручную"
     },
     "modes": {
       "mitm": "Изменение SNI или инъекция ECH",
@@ -214,11 +258,18 @@
       "transparent": "Прозрачный",
       "direct": "Прямой",
       "fragment": "Фрагмент",
-      "migration": "Миграция"
+      "migration": "Миграция",
+      "others": "Другие",
+      "default_group": "По умолчанию",
+      "cf_ip_pool": "CF IP POOL",
+      "doh_dynamic": "DOH DYNAMIC"
     },
     "notifications": {
       "deleted": "Правило удалено"
-    }
+    },
+    "edit_rule_aria": "Изменить правило",
+    "delete_rule_aria": "Удалить правило",
+    "filter_mode_aria": "Режим фильтрации"
   },
   "logs": {
     "title": "Системные логи",
@@ -231,7 +282,13 @@
     "export": "Экспорт",
     "search_placeholder": "Поиск ключевых слов, доменов, кодов ошибок...",
     "capture_hint": "Запись логов отключена по умолчанию. Нажмите «Запись логов» для начала сбора.",
-    "no_logs": "Логи не собраны"
+    "no_logs": "Логи не собраны",
+    "latest": "Последние",
+    "capture_disabled": "ЗАХВАТ ОТКЛЮЧЁН",
+    "capture_on": "ЗАХВАТ ВКЛ",
+    "capture_off": "ЗАХВАТ ВЫКЛ",
+    "buffer": "БУФЕР: {count} СТРОК",
+    "refresh_paused": "ОБНОВЛЕНИЕ ПРИОСТАНОВЛЕНО"
   },
   "routing": {
     "title": "Автоматическая маршрутизация",
@@ -347,6 +404,10 @@
       "no_content": "(пусто)",
       "clean_done": "Удалено файлов журналов: {count}"
     },
+    "notifications": {
+      "updated": "Настройки обновлены",
+      "port_invalid": "Введите допустимый порт от 1 до 65535"
+    },
     "theme": {
       "label": "Цветовая схема",
       "desc": "Выберите цветовую схему интерфейса (обе поддерживают тёмный/светлый режим).",
@@ -356,7 +417,11 @@
       "sunset": "Закатный оранжевый",
       "ocean": "Океанический бирюзовый",
       "graphite": "Графит"
-    }
+    },
+    "select_language": "Выберите язык",
+    "select_theme": "Выберите тему",
+    "certs_count": "{count} СЕРТИФИКАТОВ",
+    "ip_pool": "IP POOL ({count})"
   },
   "evolution": {
     "title": "Режим эволюции",
@@ -456,6 +521,19 @@
     "proxy_error": "Ошибка прокси. Проверьте системные настройки.",
     "rights_reserved": "Все права защищены.",
     "made_with": "Сделано с ❤️",
-    "by_community": "сообществом SniShaper"
+    "by_community": "сообществом SniShaper",
+    "latest_beta": "Последняя бета",
+    "actions_build": "Сборка Actions"
+  },
+  "window": {
+    "minimize": "Свернуть",
+    "maximize_restore": "Развернуть / Восстановить",
+    "close": "Закрыть"
+  },
+  "modal": {
+    "close_dialog": "Закрыть диалог"
+  },
+  "toast": {
+    "close_notification": "Закрыть уведомление"
   }
 }

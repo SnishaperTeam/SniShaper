@@ -227,7 +227,7 @@ const Logs: React.FC = () => {
           {!captureEnabled ? (
             <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: 'text.secondary', opacity: 0.6, px: 4, textAlign: 'center' }}>
               <Radio size={42} strokeWidth={1.5} aria-hidden />
-              <Typography variant="caption" sx={{ mt: 2, fontWeight: 900, textTransform: 'uppercase', letterSpacing: '0.2em', fontSize: '0.75rem' }}>Capture Disabled</Typography>
+              <Typography variant="caption" sx={{ mt: 2, fontWeight: 900, textTransform: 'uppercase', letterSpacing: '0.2em', fontSize: '0.75rem' }}>{t('logs.capture_disabled')}</Typography>
               <Typography variant="caption" sx={{ mt: 1.5, lineHeight: 1.6, maxWidth: 448, display: 'block' }}>{t('logs.capture_hint')}</Typography>
             </Box>
           ) : filteredLines.length === 0 ? (
@@ -255,7 +255,7 @@ const Logs: React.FC = () => {
             {newSinceAway > 0 && (
               <Box component="span" sx={{ bgcolor: 'rgba(255,255,255,0.2)', px: 0.75, borderRadius: 0.5, fontSize: '0.625rem' }}>+{newSinceAway}</Box>
             )}
-            最新
+            {t('logs.latest')}
           </Button>
         )}
 
@@ -263,12 +263,12 @@ const Logs: React.FC = () => {
           <Box sx={{ display: 'flex', gap: 2, fontSize: '0.5625rem', fontWeight: 900, textTransform: 'uppercase', letterSpacing: '0.1em', color: 'text.secondary' }}>
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
               <Box sx={{ width: 6, height: 6, borderRadius: '50%', bgcolor: captureEnabled ? 'success.main' : 'text.disabled', ...(captureEnabled ? { animation: `${pulse} 1.5s ease-in-out infinite` } : {}) }} aria-hidden />
-              {captureEnabled ? 'CAPTURE ON' : 'CAPTURE OFF'}
+              {captureEnabled ? t('logs.capture_on') : t('logs.capture_off')}
             </Box>
-            <Box>BUFFER: {lines.length} LINES</Box>
+            <Box>{t('logs.buffer', { count: lines.length })}</Box>
           </Box>
           {captureEnabled && isPaused && (
-            <Typography variant="caption" sx={{ fontWeight: 900, color: 'primary.main', bgcolor: 'rgba(11,123,255,0.1)', px: 1, py: 0.25, borderRadius: '999px', fontSize: '0.5625rem', animation: `${bounce} 1s ease-in-out infinite` }}>REFRESH PAUSED</Typography>
+            <Typography variant="caption" sx={{ fontWeight: 900, color: 'primary.main', bgcolor: 'rgba(11,123,255,0.1)', px: 1, py: 0.25, borderRadius: '999px', fontSize: '0.5625rem', animation: `${bounce} 1s ease-in-out infinite` }}>{t('logs.refresh_paused')}</Typography>
           )}
         </Box>
       </Box>

@@ -19,7 +19,10 @@
     "ready": "Ready",
     "running": "Running",
     "stopped": "Stopped",
-    "error": "Error"
+    "error": "Error",
+    "no_matches": "No options",
+    "clear": "Clear",
+    "expand_options": "Expand options"
   },
   "sidebar": {
     "dashboard": "Dashboard",
@@ -31,7 +34,10 @@
     "settings": "Settings",
     "about": "About",
     "light_mode": "Light mode",
-    "dark_mode": "Dark mode"
+    "dark_mode": "Dark mode",
+    "nav_label": "Main navigation",
+    "dark_mode_aria": "Switch to dark mode",
+    "light_mode_aria": "Switch to light mode"
   },
   "welcome": {
     "title": "Welcome to SniShaper",
@@ -69,7 +75,23 @@
     "notifications": {
       "tun_not_running": "TUN is not running",
       "tun_updated": "TUN status updated",
-      "tun_failed": "TUN toggle failed"
+      "tun_failed": "TUN toggle failed",
+      "proxy_toggle_failed": "Proxy operation failed",
+      "kill_process_failed": "Failed to kill process or restart",
+      "sys_proxy_failed": "System proxy operation failed",
+      "tun_starting": "TUN is starting, please wait...",
+      "tun_stopped": "TUN path disabled."
+    },
+    "port_occupied": {
+      "title_unavailable": "Port Unavailable",
+      "title_occupied": "Port In Use",
+      "ok": "OK",
+      "kill_and_retry": "Kill Process & Retry",
+      "excluded_range": "Port {port} falls within Windows excluded port range ({name})",
+      "excluded_desc": "This port is reserved by the system (usually occupied by Hyper-V / WSL / Docker). There is no process to kill. Change the listening port in settings, or stop the related services and restart the proxy.",
+      "occupied_by": "Port {port} is in use by {name} (PID {pid})",
+      "occupied_desc": "The proxy cannot listen on this port. Killing the process will automatically retry starting the proxy. Make sure this is not an important program.",
+      "unknown_process": "Unknown process"
     }
   },
   "proxies": {
@@ -95,7 +117,17 @@
     "migration_service": "Connection Migration Service",
     "migration_service_title": "Migration API URL",
     "migration_service_desc": "Configure connection migration service URL",
-    "migration_service_hint": "Enter migration service API URL"
+    "migration_service_hint": "Enter migration service API URL",
+    "delete_aria": "Delete {name}",
+    "nat64_placeholder_name": "e.g. bypass specific blacklist",
+    "nat64_placeholder_prefix": "e.g. 64:ff9b::",
+    "notifications": {
+      "connect_success": "{name}: connected, latency {ms} ms",
+      "connect_failed": "{name}: connection failed: {error}",
+      "migration_required": "Please enter the migration service address",
+      "test_success": "Test successful",
+      "saved": "Saved"
+    }
   },
   "ech_form": {
     "title": "ECH Assisted Discovery",
@@ -153,7 +185,9 @@
       "updated": "DNS Node updated",
       "added": "DNS Node added",
       "deleted": "DNS Node deleted"
-    }
+    },
+    "move_up": "Move Up",
+    "move_down": "Move Down"
   },
   "rules": {
     "title": "Site Rules",
@@ -190,7 +224,17 @@
       "cf_pool_hint": "Prioritize using Cloudflare Preferred IPs",
       "nat64_enable": "Enable NAT64 Mapping",
       "nat64_hint": "Enable NAT64 mapping transformation for this rule",
-      "nat64_profile": "NAT64 Configuration"
+      "nat64_profile": "NAT64 Configuration",
+      "add_domain": "Add domain",
+      "remove_domain": "Remove domain",
+      "cert_verify_warn": "Only enable if you are sure about the target certificate source",
+      "allow_spki_list": "Allow SPKI SHA256 list",
+      "prefix_label": "Prefix: {prefix}",
+      "placeholder_domains": "One domain per line, e.g.\n*.github.com\ngithub.com",
+      "placeholder_suffixes": "One suffix per line, e.g.\n.github.com\n.cloudfront.net",
+      "placeholder_spki": "One Base64 fingerprint per line",
+      "placeholder_mapped": "e.g. github-com.mapped",
+      "manual_ech": "Manually configured ECH"
     },
     "modes": {
       "mitm": "Modify SNI or inject ECH config",
@@ -214,11 +258,18 @@
       "transparent": "Pass-through",
       "direct": "Direct",
       "fragment": "Fragment",
-      "migration": "Migration"
+      "migration": "Migration",
+      "others": "Others",
+      "default_group": "Default",
+      "cf_ip_pool": "CF IP POOL",
+      "doh_dynamic": "DOH DYNAMIC"
     },
     "notifications": {
       "deleted": "Rule deleted"
-    }
+    },
+    "edit_rule_aria": "Edit rule",
+    "delete_rule_aria": "Delete rule",
+    "filter_mode_aria": "Filter mode"
   },
   "logs": {
     "title": "System Logs",
@@ -231,7 +282,13 @@
     "export": "Export",
     "search_placeholder": "Search keywords, domains, error codes...",
     "capture_hint": "Log capture is disabled by default. Click 'Capture Logs' to start temporary collection and auto-scroll to the latest logs.",
-    "no_logs": "No logs collected"
+    "no_logs": "No logs collected",
+    "latest": "Latest",
+    "capture_disabled": "CAPTURE DISABLED",
+    "capture_on": "CAPTURE ON",
+    "capture_off": "CAPTURE OFF",
+    "buffer": "BUFFER: {count} LINES",
+    "refresh_paused": "REFRESH PAUSED"
   },
   "routing": {
     "title": "Auto Routing",
@@ -347,6 +404,10 @@
       "no_content": "(empty)",
       "clean_done": "Cleaned {count} old log file(s)"
     },
+    "notifications": {
+      "updated": "Settings updated",
+      "port_invalid": "Please enter a valid port between 1 and 65535"
+    },
     "theme": {
       "label": "Color Scheme",
       "desc": "Choose the interface color scheme (both support dark/light mode).",
@@ -356,7 +417,11 @@
       "sunset": "Sunset Orange",
       "ocean": "Ocean Teal",
       "graphite": "Graphite"
-    }
+    },
+    "select_language": "Select language",
+    "select_theme": "Select theme",
+    "certs_count": "{count} CERTS",
+    "ip_pool": "IP POOL ({count})"
   },
   "evolution": {
     "title": "Evolution Mode",
@@ -456,6 +521,19 @@
     "proxy_error": "Proxy configuration error. Please check your system proxy settings.",
     "rights_reserved": "All rights reserved.",
     "made_with": "Made with",
-    "by_community": "by the SniShaper community"
+    "by_community": "by the SniShaper community",
+    "latest_beta": "Latest Beta",
+    "actions_build": "Actions build artifact"
+  },
+  "window": {
+    "minimize": "Minimize",
+    "maximize_restore": "Maximize / Restore",
+    "close": "Close"
+  },
+  "modal": {
+    "close_dialog": "Close dialog"
+  },
+  "toast": {
+    "close_notification": "Dismiss notification"
   }
 }

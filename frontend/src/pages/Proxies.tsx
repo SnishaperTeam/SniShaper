@@ -54,11 +54,11 @@ const Proxies: React.FC = () => {
     try {
       const ms = await TestNAT64Profile(profile.prefix);
       setTestResults((prev) => ({ ...prev, [id]: `${ms} ms` }));
-      toast.success(`${profile.name}: 连接成功，延迟 ${ms} ms`);
+      toast.success(t('proxies.notifications.connect_success', { name: profile.name, ms }));
     } catch (err: any) {
       const errMsg = err?.message || String(err);
-      setTestResults((prev) => ({ ...prev, [id]: '失败' }));
-      toast.error(`${profile.name}: 连接失败: ${errMsg}`);
+      setTestResults((prev) => ({ ...prev, [id]: t('common.failed') }));
+      toast.error(t('proxies.notifications.connect_failed', { name: profile.name, error: errMsg }));
     } finally {
       setTestingMap((prev) => ({ ...prev, [id]: false }));
     }
@@ -82,7 +82,7 @@ const Proxies: React.FC = () => {
   const handleEditNAT64 = (profile: any) => { setEditingNAT64(profile); setIsNAT64ModalOpen(true); };
   const handleDeleteNAT64 = async (id: string, e: React.MouseEvent) => {
     e.stopPropagation();
-    if (confirm(t('proxies.delete_nat64_confirm') || '确定要删除此 NAT64 配置吗？')) { await DeleteNAT64Profile(id); loadData(); }
+    if (confirm(t('proxies.delete_nat64_confirm'))) { await DeleteNAT64Profile(id); loadData(); }
   };
   const handleNAT64FormSuccess = () => { setIsNAT64ModalOpen(false); loadData(); };
 
@@ -91,7 +91,7 @@ const Proxies: React.FC = () => {
     try {
       await SetMigrationServer(migrationServerInput.trim());
       setMigrationServerState(migrationServerInput.trim());
-      toast.success(t('common.success') || '已保存');
+      toast.success(t('common.success'));
     } catch (err: any) {
       toast.error(err?.message || String(err));
     } finally {
@@ -102,13 +102,13 @@ const Proxies: React.FC = () => {
   const handleTestMigration = async () => {
     const server = migrationServerInput.trim() || migrationServer;
     if (!server) {
-      toast.error('请输入迁移服务地址');
+      toast.error(t('proxies.notifications.migration_required'));
       return;
     }
     setMigrationTesting(true);
     try {
       const msg = await TestMigration(server);
-      toast.success(msg || '测试成功');
+      toast.success(msg || t('proxies.notifications.test_success'));
     } catch (err: any) {
       toast.error(err?.message || String(err));
     } finally {
@@ -128,23 +128,23 @@ const Proxies: React.FC = () => {
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, px: 0.5, color: 'text.secondary' }}>
           <Public size={18} aria-hidden />
           <Typography variant="body2" sx={{ fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', display: 'flex', alignItems: 'center', gap: 1 }}>
-            {t('proxies.migration_service') || '连接迁移服务'}
+            {t('proxies.migration_service')}
           </Typography>
         </Box>
 
         <Box sx={{ p: 2.5, bgcolor: 'background.paper', border: 1, borderColor: 'divider', borderRadius: 2, boxShadow: 1, display: 'flex', flexDirection: 'column', gap: 2 }}>
-          <Typography variant="caption" sx={{ fontSize: 11, color: 'text.secondary' }}>{t('proxies.migration_service_desc') || '配置连接迁移服务地址'}</Typography>
+          <Typography variant="caption" sx={{ fontSize: 11, color: 'text.secondary' }}>{t('proxies.migration_service_desc')}</Typography>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
             <TextField
               type="text"
               size="small"
               value={migrationServerInput}
               onChange={(e) => setMigrationServerInput(e.target.value)}
-              placeholder={t('proxies.migration_service_hint') || '输入迁移服务 API 地址'}
+              placeholder={t('proxies.migration_service_hint')}
               sx={{ flex: 1, '& input': { fontSize: '0.75rem', fontWeight: 500 } }}
             />
             <Button onClick={handleSaveMigration} disabled={migrationSaving} variant="outlined" size="small" sx={{ flexShrink: 0 }}>
-              {migrationSaving ? '...' : (t('common.save') || '保存')}
+              {migrationSaving ? '...' : t('common.save')}
             </Button>
             <Button onClick={handleTestMigration} disabled={migrationTesting} variant="outlined" size="small" sx={{ flexShrink: 0 }}>
               {migrationTesting ? '...' : '测试连接'}
@@ -200,7 +200,7 @@ const Proxies: React.FC = () => {
                   </Box>
                   <IconButton
                     size="small"
-                    aria-label={`删除 ${p.name}`}
+                    aria-label={t('proxies.delete_aria', { name: p.name })}
                     onClick={(e) => handleDeleteProfile(p.id, e)}
                     sx={{ color: 'text.secondary', flexShrink: 0, '&:hover': { color: 'error.main', bgcolor: 'action.hover' } }}
                   >
@@ -217,10 +217,10 @@ const Proxies: React.FC = () => {
         <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', px: 0.5 }}>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, color: 'text.secondary' }}>
             <Public size={18} aria-hidden />
-            <Typography variant="body2" sx={{ fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em' }}>{t('proxies.nat64_management') || 'NAT64 配置管理'}</Typography>
+            <Typography variant="body2" sx={{ fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em' }}>{t('proxies.nat64_management')}</Typography>
           </Box>
           <Button onClick={handleAddNAT64} disabled={!ipv6Available} variant="outlined" size="small" startIcon={<AddCircle size={14} />}>
-            {t('proxies.add_nat64') || '添加 NAT64 配置'}
+            {t('proxies.add_nat64')}
           </Button>
         </Box>
 
@@ -238,7 +238,7 @@ const Proxies: React.FC = () => {
             <Grid size={12}>
               <Box sx={{ py: 12, display: 'flex', flexDirection: 'column', alignItems: 'center', color: 'text.secondary', opacity: 0.7, bgcolor: 'background.paper', border: '1px dashed', borderColor: 'divider', borderRadius: 2 }}>
                 <Layers size={32} strokeWidth={1.5} />
-                <Typography variant="body2" sx={{ mt: 1.5 }}>{t('proxies.no_nat64') || '暂无 NAT64 配置'}</Typography>
+                <Typography variant="body2" sx={{ mt: 1.5 }}>{t('proxies.no_nat64')}</Typography>
               </Box>
             </Grid>
           ) : (
@@ -292,7 +292,7 @@ const Proxies: React.FC = () => {
                     </Button>
                     <IconButton
                       size="small"
-                      aria-label={`删除 ${p.name}`}
+                      aria-label={t('proxies.delete_aria', { name: p.name })}
                       disabled={!ipv6Available}
                       onClick={(e) => ipv6Available && handleDeleteNAT64(p.id, e)}
                       sx={{ color: 'text.secondary', flexShrink: 0, '&:hover': { color: 'error.main', bgcolor: 'action.hover' } }}
@@ -320,8 +320,8 @@ const Proxies: React.FC = () => {
       <Modal
         isOpen={isNAT64ModalOpen}
         onClose={() => setIsNAT64ModalOpen(false)}
-        title={editingNAT64 ? t('proxies.edit_nat64') || '编辑 NAT64 配置' : t('proxies.add_nat64') || '添加 NAT64 配置'}
-        subtitle={editingNAT64 ? `${t('proxies.modifying') || '正在修改'}: ${editingNAT64.name}` : t('proxies.nat64_form_subtitle') || '配置独立映射规则前缀'}
+        title={editingNAT64 ? t('proxies.edit_nat64') : t('proxies.add_nat64')}
+        subtitle={editingNAT64 ? `${t('proxies.modifying')}: ${editingNAT64.name}` : t('proxies.nat64_form_subtitle')}
         maxWidth="48rem"
       >
         <NAT64ProfileForm initialData={editingNAT64} onSuccess={handleNAT64FormSuccess} onCancel={() => setIsNAT64ModalOpen(false)} />

@@ -15,6 +15,9 @@ build/bin/
 node_modules/
 frontend/node_modules/
 frontend/dist/
+frontend/dist_old/
+frontend/dist_old2/
+frontend/dist_old3/
 frontend/wailsjs/
 
 # Runtime generated data

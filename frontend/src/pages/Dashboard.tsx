@@ -185,7 +185,7 @@ const Dashboard: React.FC = () => {
           }
         } catch { /* ignore */ }
       }
-      toast.error('代理操作失败', msg);
+      toast.error(t('dashboard.notifications.proxy_toggle_failed'), msg);
     } finally {
       refresh();
       operatingRef.current = false;
@@ -204,7 +204,7 @@ const Dashboard: React.FC = () => {
       await StartProxy();
     } catch (err) {
       console.error("[UI] Failed to kill and restart proxy:", err);
-      toast.error('结束进程或重启失败', extractErrorMessage(err));
+      toast.error(t('dashboard.notifications.kill_process_failed'), extractErrorMessage(err));
     } finally {
       setPortOccupant(null);
       refresh();
@@ -222,7 +222,7 @@ const Dashboard: React.FC = () => {
       else await EnableSystemProxy();
     } catch (err) {
       console.error("[UI] Failed to toggle system proxy:", err);
-      toast.error('系统代理操作失败', extractErrorMessage(err));
+      toast.error(t('dashboard.notifications.sys_proxy_failed'), extractErrorMessage(err));
     } finally {
       refresh();
       operatingRef.current = false;
@@ -237,10 +237,10 @@ const Dashboard: React.FC = () => {
     try {
       if (nextEnabled) {
         await StartTUN();
-        toast.success(t('dashboard.notifications.tun_updated'), 'TUN 启动中，请稍候...');
+        toast.success(t('dashboard.notifications.tun_updated'), t('dashboard.notifications.tun_starting'));
       } else {
         await StopTUN();
-        toast.success(t('dashboard.notifications.tun_updated'), '已关闭 TUN 路径。');
+        toast.success(t('dashboard.notifications.tun_updated'), t('dashboard.notifications.tun_stopped'));
         refresh();
         setIsTUNBusy(false);
       }
@@ -446,10 +446,10 @@ const Dashboard: React.FC = () => {
         </Box>
       </Modal>
 
-      <Modal isOpen={showKillDialog} onClose={() => setShowKillDialog(false)} title={portOccupant && portOccupant.pid <= 0 ? '端口不可用' : '端口被占用'} maxWidth="sm"
+      <Modal isOpen={showKillDialog} onClose={() => setShowKillDialog(false)} title={portOccupant && portOccupant.pid <= 0 ? t('dashboard.port_occupied.title_unavailable') : t('dashboard.port_occupied.title_occupied')} maxWidth="sm"
         footer={portOccupant && portOccupant.pid <= 0 ? (
           <Button type="button" onClick={() => setShowKillDialog(false)} variant="contained" size="small">
-            知道了
+            {t('dashboard.port_occupied.ok')}
           </Button>
         ) : (
           <>
@@ -457,7 +457,7 @@ const Dashboard: React.FC = () => {
               {t('common.cancel')}
             </Button>
             <Button type="button" onClick={handleKillAndRetry} variant="contained" color="error" size="small" startIcon={<ShieldAlert size={16} />}>
-              结束进程并重试
+              {t('dashboard.port_occupied.kill_and_retry')}
             </Button>
           </>
         )}>
@@ -469,19 +469,19 @@ const Dashboard: React.FC = () => {
             {portOccupant && portOccupant.pid <= 0 ? (
               <>
                 <Typography variant="body2" sx={{ fontWeight: 'bold', color: 'text.primary' }}>
-                  端口 {portOccupant?.port} 位于 Windows 系统排除端口范围（{portOccupant?.name}）
+                  {t('dashboard.port_occupied.excluded_range', { port: portOccupant?.port, name: portOccupant?.name })}
                 </Typography>
                 <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.5, lineHeight: 1.6 }}>
-                  该端口被系统保留（通常由 Hyper-V / WSL / Docker 等占用），没有可结束的进程。请在设置中更换监听端口，或关闭相关服务后重新启动代理。
+                  {t('dashboard.port_occupied.excluded_desc')}
                 </Typography>
               </>
             ) : (
               <>
                 <Typography variant="body2" sx={{ fontWeight: 'bold', color: 'text.primary' }}>
-                  端口 {portOccupant?.port} 正被 {portOccupant?.name || '未知程序'}（PID {portOccupant?.pid}）占用
+                  {t('dashboard.port_occupied.occupied_by', { port: portOccupant?.port ?? '', name: portOccupant?.name || t('dashboard.port_occupied.unknown_process'), pid: portOccupant?.pid ?? '' })}
                 </Typography>
                 <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.5, lineHeight: 1.6 }}>
-                  代理无法监听该端口。结束该进程后会自动重试启动代理。请确认这不是重要程序。
+                  {t('dashboard.port_occupied.occupied_desc')}
                 </Typography>
               </>
             )}
