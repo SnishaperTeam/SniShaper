@@ -39,10 +39,10 @@ if ($PrereleaseSuffix) {
 
 if ($PreviousTag) {
     $range = "$PreviousTag..HEAD"
-    $rangeDesc = "对比自上个正式版标签 $PreviousTag"
+    $rangeDesc = "Changes since the previous stable release tag $PreviousTag"
 } else {
     $range = "HEAD"
-    $rangeDesc = "首次发布，汇总全部提交记录"
+    $rangeDesc = "First release: all commits included"
 }
 Write-Host "[release-notes] Commit range: $range"
 
@@ -101,18 +101,27 @@ $batch = $commitList | Select-Object -First $LlmMaxCommits
 $commitText = ($batch | ForEach-Object { "- $($_.Hash) $($_.Subject)" }) -join "`n"
 
 $systemPrompt = @"
-你是一个总结 Git commit 日志的助手。只输出要求的 Markdown 分类摘要，不要输出多余的前言后语。
+You are a senior technical writer producing formal, rigorous English release notes for an open-source software project.
+
+Writing requirements:
+1. Use formal, precise, professional English. Be objective and factual; avoid marketing tone, casual phrasing, and filler.
+2. Be detailed and concrete: for each category, explain what changed, why it changed, and its impact on users or the system.
+3. Structure the output clearly with Markdown headings (### and below), lists, and bullets.
+4. Strictly forbid any emoji or emoticons. Do not output commit hashes.
+5. Output only the release-notes body. No preamble, postscript, or explanatory text.
 "@
 
 $userPrompt = @"
-你是一个总结 Git commit 日志的助手。下面是一段 commit 消息列表（每个 commit 一行），请用中文总结本次提交的主要变更内容。
+Write the official English release notes for this version of SniShaper (a Windows local proxy tool), based on the commit message list below.
 
-输出要求：
-1. 按"变更类型"分类（如：功能、修复、文档、重构、测试等）。
-2. 每个类型下用一句话概括核心变动。
-3. 若涉及多模块，请分别列出。
+Writing requirements:
+1. Organize the content by change type, e.g.: New Features, Bug Fixes, Performance Improvements, Refactoring, Documentation, Build & CI, Tests, Other.
+2. For each type, describe the core changes in detail: what was modified, why, and the impact on users or the system. Use one or more concise bullet points per item.
+3. If a change touches multiple modules (proxy core, TUN, frontend UI, build scripts, etc.), break them out per module.
+4. Minor changes such as dependency bumps, formatting, or merges may be condensed into a single brief note.
+5. Write in formal, rigorous English. Strictly forbid emoji. Do not output commit hashes.
 
-Commit 日志：
+Commit log:
 $commitText
 "@
 
@@ -198,19 +207,27 @@ $sb = New-Object System.Text.StringBuilder
 if ($PrereleaseSuffix) {
     [void]$sb.AppendLine("# SniShaper $displayVersion ($channelLabel)")
     [void]$sb.AppendLine("")
-    [void]$sb.AppendLine("> **预发布版本**：该版本可能不稳定，部分功能会被移除或重做，不代表最终版本。")
+    [void]$sb.AppendLine("> Prerelease version: This release may be unstable; some features may be removed or reworked. It does not represent the final version.")
+    [void]$sb.AppendLine("")
+    [void]$sb.AppendLine("---")
     [void]$sb.AppendLine("")
 } else {
     [void]$sb.AppendLine("# SniShaper $displayVersion")
     [void]$sb.AppendLine("")
+    [void]$sb.AppendLine("---")
+    [void]$sb.AppendLine("")
 }
 
-[void]$sb.AppendLine("- 构建时间：$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss zzz')")
-[void]$sb.AppendLine("- 版本来源：Package.appxmanifest")
-[void]$sb.AppendLine("- 提交范围：$rangeDesc")
+[void]$sb.AppendLine("## Version Information")
+[void]$sb.AppendLine("")
+[void]$sb.AppendLine("- Build time: $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss zzz')")
+[void]$sb.AppendLine("- Version source: Package.appxmanifest")
+[void]$sb.AppendLine("- Commit range: $rangeDesc")
+[void]$sb.AppendLine("")
+[void]$sb.AppendLine("---")
 [void]$sb.AppendLine("")
 
-[void]$sb.AppendLine("## 变更摘要（共 $totalCommits 次提交）")
+[void]$sb.AppendLine("## Changes ($totalCommits commits)")
 [void]$sb.AppendLine("")
 
 if ($llmSummary) {
@@ -219,36 +236,40 @@ if ($llmSummary) {
 } else {
     # Fallback: grouped commit list, cap each category to a few representative entries
     $sectionMap = @{
-        feat     = '新功能'
-        fix      = '问题修复'
-        perf     = '性能优化'
-        refactor = '重构'
-        docs     = '文档'
-        build    = '构建 / CI'
-        test     = '测试'
-        other    = '其他'
+        feat     = 'New Features'
+        fix      = 'Bug Fixes'
+        perf     = 'Performance Improvements'
+        refactor = 'Refactoring'
+        docs     = 'Documentation'
+        build    = 'Build & CI'
+        test     = 'Tests'
+        other    = 'Other'
     }
     foreach ($key in @('feat', 'fix', 'perf', 'refactor', 'docs', 'build', 'test', 'other')) {
         $items = $groups[$key]
         if ($items.Count -eq 0) { continue }
-        [void]$sb.AppendLine("### $($sectionMap[$key])（$($items.Count)）")
+        [void]$sb.AppendLine("### $($sectionMap[$key]) ($($items.Count))")
         [void]$sb.AppendLine("")
         $shown = $items | Select-Object -First 8
         foreach ($item in $shown) {
             [void]$sb.AppendLine("- $($item.Hash) $($item.Subject)")
         }
         if ($items.Count -gt 8) {
-            [void]$sb.AppendLine("- ... 及其他 $($items.Count - 8) 条提交")
+            [void]$sb.AppendLine("- ... and $($items.Count - 8) more commits")
         }
         [void]$sb.AppendLine("")
     }
 }
 
-[void]$sb.AppendLine("## 贡献者（$($authors.Count) 人）")
+[void]$sb.AppendLine("---")
+[void]$sb.AppendLine("")
+
+[void]$sb.AppendLine("## Contributors ($($authors.Count))")
 [void]$sb.AppendLine("")
 $sorted = $authors.GetEnumerator() | Sort-Object { $_.Value.Count } -Descending
 foreach ($a in $sorted) {
-    [void]$sb.AppendLine("- $($a.Value.Name) <$($a.Key)>：$($a.Value.Count) 次提交")
+    $commitWord = if ($a.Value.Count -gt 1) { 'commits' } else { 'commit' }
+    [void]$sb.AppendLine("- $($a.Value.Name) <$($a.Key)>: $($a.Value.Count) $commitWord")
 }
 [void]$sb.AppendLine("")
 
