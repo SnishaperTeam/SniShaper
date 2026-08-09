@@ -6,7 +6,7 @@ param(
     [Parameter(Mandatory = $false)][string]$PreviousTag = "",
     [Parameter(Mandatory = $true)][string]$OutputPath,
     [Parameter(Mandatory = $false)][string]$OllamaUrl = "http://127.0.0.1:11434",
-    [Parameter(Mandatory = $false)][string]$OllamaModel = "qwen2.5:0.5b",
+    [Parameter(Mandatory = $false)][string]$OllamaModel = "qwen3.5:0.8b",
     [Parameter(Mandatory = $false)][string]$LlmApiKey = "",
     [Parameter(Mandatory = $false)][string]$LlmModel = "gpt-4o-mini",
     [Parameter(Mandatory = $false)][string]$LlmBaseUrl = "https://api.openai.com/v1",
@@ -96,23 +96,25 @@ foreach ($line in $lines) {
 
 # ---------- LLM summarization (Ollama first, then external API) ----------
 $llmSummary = $null
-$llmSource = $null
 
 $batch = $commitList | Select-Object -First $LlmMaxCommits
 $commitText = ($batch | ForEach-Object { "- $($_.Hash) $($_.Subject)" }) -join "`n"
 
 $systemPrompt = @"
-你是 SniShaper（Windows 本地代理工具）的开源项目发布说明撰写助手。
-根据给出的 git commit 列表，用中文撰写简洁的变更摘要。
-要求：
-1. 按类别组织：新功能 / 问题修复 / 性能优化 / 重构 / 文档 / 构建与 CI / 其他
-2. 每个类别用 Markdown 二级标题（###），类别下用简短要点总结（每点一句话，不要逐条罗列 commit）
-3. 只总结实质变化，忽略依赖升级、格式化、merge 等噪音（依赖升级可合并为一条）
-4. 不要输出 commit hash，不要输出多余的前言后语，直接输出摘要正文
-5. 如果该版本是预发布版本（Beta/Alpha/RC），在开头用一句话说明这是预发布版本
+你是一个总结 Git commit 日志的助手。只输出要求的 Markdown 分类摘要，不要输出多余的前言后语。
 "@
 
-$userPrompt = "版本：$displayVersion`n以下是从上个发布标签到当前的所有提交（共 $totalCommits 条，展示前 $($batch.Count) 条）：`n$commitText"
+$userPrompt = @"
+你是一个总结 Git commit 日志的助手。下面是一段 commit 消息列表（每个 commit 一行），请用中文总结本次提交的主要变更内容。
+
+输出要求：
+1. 按"变更类型"分类（如：功能、修复、文档、重构、测试等）。
+2. 每个类型下用一句话概括核心变动。
+3. 若涉及多模块，请分别列出。
+
+Commit 日志：
+$commitText
+"@
 
 # --- Priority 1: local Ollama ---
 $ollamaAvailable = $false
@@ -139,7 +141,6 @@ if ($ollamaAvailable) {
         $resp = Invoke-RestMethod -Uri "$OllamaUrl/api/chat" -Method Post -ContentType 'application/json; charset=utf-8' -Body $ollamaBody -TimeoutSec 300
         if ($resp.message -and $resp.message.content) {
             $llmSummary = $resp.message.content.Trim()
-            $llmSource = "Ollama ($OllamaModel)"
             Write-Host "[release-notes] Ollama summary generated ($($llmSummary.Length) chars)"
         } else {
             Write-Host "::warning::Ollama returned empty response"
@@ -171,7 +172,6 @@ if (-not $llmSummary -and -not [string]::IsNullOrEmpty($LlmApiKey)) {
         $resp = Invoke-RestMethod -Uri $uri -Method Post -Headers $headers -ContentType 'application/json; charset=utf-8' -Body $body -TimeoutSec 120
         if ($resp.choices -and $resp.choices.Count -gt 0) {
             $llmSummary = $resp.choices[0].message.content.Trim()
-            $llmSource = "$LlmModel"
             Write-Host "[release-notes] LLM summary generated ($($llmSummary.Length) chars)"
         } else {
             Write-Host "::warning::LLM response missing choices, falling back to categorized list"
@@ -201,9 +201,6 @@ if ($PrereleaseSuffix) {
 [void]$sb.AppendLine("- 构建时间：$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss zzz')")
 [void]$sb.AppendLine("- 版本来源：Package.appxmanifest")
 [void]$sb.AppendLine("- 提交范围：$rangeDesc")
-if ($llmSummary) {
-    [void]$sb.AppendLine("- 变更摘要：AI 生成（$llmSource）")
-}
 [void]$sb.AppendLine("")
 
 [void]$sb.AppendLine("## 变更摘要（共 $totalCommits 次提交）")

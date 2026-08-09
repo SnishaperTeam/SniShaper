@@ -29,7 +29,7 @@ on:
         description: MSIX 签名证书 devcert.pfx 的 Base64 内容（仓库中无证书时使用）
         required: false
       OLLAMA_MODEL:
-        description: Ollama 本地模型名，用于 release 描述摘要（默认 qwen2.5:0.5b）
+        description: Ollama 本地模型名，用于 release 描述摘要（默认 qwen3.5:0.8b）
         required: false
       LLM_API_KEY:
         description: 备用 LLM API Key（OpenAI 兼容接口），Ollama 不可用时使用；不配置则回退为分类提交列表
@@ -253,13 +253,33 @@ jobs:
           # "no previous tag" case.
           exit 0
 
-      - name: Setup Ollama (local LLM for release notes)
+      - name: Resolve Ollama model
         shell: pwsh
         env:
           OLLAMA_MODEL: ${{ secrets.OLLAMA_MODEL }}
         run: |
+          $model = if ($env:OLLAMA_MODEL) { $env:OLLAMA_MODEL } else { 'qwen3.5:0.8b' }
+          Write-Host "::notice::Ollama model = $model"
+          "OLLAMA_MODEL=$model" >> $env:GITHUB_ENV
+
+      - name: Cache Ollama (binary + models)
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/AppData/Local/Programs/Ollama
+            ~/.ollama
+          key: ollama-${{ runner.os }}-${{ env.OLLAMA_MODEL }}
+          restore-keys: |
+            ollama-${{ runner.os }}-
+
+      - name: Setup Ollama (local LLM for release notes)
+        shell: pwsh
+        env:
+          OLLAMA_MODEL: ${{ env.OLLAMA_MODEL }}
+        run: |
           $ErrorActionPreference = 'Continue'
-          $model = if ($env:OLLAMA_MODEL) { $env:OLLAMA_MODEL } else { 'qwen2.5:0.5b' }
+          $model = $env:OLLAMA_MODEL
+          $env:Path += ";$env:LOCALAPPDATA\Programs\Ollama"
           Write-Host "::group::Install Ollama"
           $ollamaExe = Get-Command ollama -ErrorAction SilentlyContinue
           if (-not $ollamaExe) {
@@ -273,7 +293,6 @@ jobs:
               Add-Content -Path $env:GITHUB_PATH -Value $dir
             }
           }
-          $env:Path += ";$env:LOCALAPPDATA\Programs\Ollama"
           Write-Host "::endgroup::"
 
           Write-Host "::group::Start ollama serve"
@@ -293,7 +312,6 @@ jobs:
             Write-Host "::warning::ollama pull $model failed, release notes will fall back to categorized list"
           } else {
             Write-Host "::notice::Model $model ready"
-            "OLLAMA_MODEL=$model" >> $env:GITHUB_ENV
             "OLLAMA_READY=true" >> $env:GITHUB_ENV
           }
           Write-Host "::endgroup::"
