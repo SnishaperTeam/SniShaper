@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       version_suffix:
-        description: "预发布版本后缀（留空自动为 rc.1），例如 rc.2"
+        description: "Prerelease suffix (defaults to rc.1 if empty), e.g. rc.2"
         required: false
         type: string
         default: ""

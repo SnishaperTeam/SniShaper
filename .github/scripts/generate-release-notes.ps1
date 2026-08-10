@@ -6,7 +6,7 @@ param(
     [Parameter(Mandatory = $false)][string]$PreviousTag = "",
     [Parameter(Mandatory = $true)][string]$OutputPath,
     [Parameter(Mandatory = $false)][string]$OllamaUrl = "http://127.0.0.1:11434",
-    [Parameter(Mandatory = $false)][string]$OllamaModel = "qwen3.5:0.8b",
+    [Parameter(Mandatory = $false)][string]$OllamaModel = "qwen3.5:2b",
     [Parameter(Mandatory = $false)][string]$LlmApiKey = "",
     [Parameter(Mandatory = $false)][string]$LlmModel = "gpt-4o-mini",
     [Parameter(Mandatory = $false)][string]$LlmBaseUrl = "https://api.openai.com/v1",
@@ -48,7 +48,7 @@ Write-Host "[release-notes] Commit range: $range"
 
 $gitLog = git log --pretty=format:"%h%x09%s%x09%an%x09%ae" $range 2>&1
 if ($LASTEXITCODE -ne 0) {
-    throw "git log 失败: $gitLog"
+    throw "git log failed: $gitLog"
 }
 
 $lines = ($gitLog | Out-String) -split "`r?`n"
@@ -103,16 +103,32 @@ $commitText = ($batch | ForEach-Object { "- $($_.Hash) $($_.Subject)" }) -join "
 $systemPrompt = @"
 You are a senior technical writer producing formal, rigorous English release notes for an open-source software project.
 
+LANGUAGE CONSTRAINT (highest priority):
+- The ENTIRE output MUST be written in English. Chinese, Japanese, or any other language is strictly forbidden.
+- All section headings, bullet points, and sentences must be English.
+- If you are unsure how to express something in English, choose simpler English phrasing rather than switching languages.
+
 Writing requirements:
 1. Use formal, precise, professional English. Be objective and factual; avoid marketing tone, casual phrasing, and filler.
 2. Be detailed and concrete: for each category, explain what changed, why it changed, and its impact on users or the system.
 3. Structure the output clearly with Markdown headings (### and below), lists, and bullets.
 4. Strictly forbid any emoji or emoticons. Do not output commit hashes.
 5. Output only the release-notes body. No preamble, postscript, or explanatory text.
+
+Expected output shape (English only):
+### New Features
+- Feature A: what it does and its impact.
+- Feature B: ...
+### Bug Fixes
+- Fix A: what was broken and how it is resolved.
 "@
 
 $userPrompt = @"
 Write the official English release notes for this version of SniShaper (a Windows local proxy tool), based on the commit message list below.
+
+LANGUAGE CONSTRAINT (highest priority):
+- The ENTIRE output MUST be entirely in English. Do not use Chinese or any other language anywhere in the output.
+- Category names MUST be English, e.g. New Features, Bug Fixes, Performance Improvements, Refactoring, Documentation, Build & CI, Tests, Other.
 
 Writing requirements:
 1. Organize the content by change type, e.g.: New Features, Bug Fixes, Performance Improvements, Refactoring, Documentation, Build & CI, Tests, Other.
@@ -274,4 +290,4 @@ foreach ($a in $sorted) {
 [void]$sb.AppendLine("")
 
 [System.IO.File]::WriteAllText($OutputPath, $sb.ToString(), [System.Text.Encoding]::UTF8)
-Write-Host "[release-notes] 已生成 $OutputPath"
+Write-Host "[release-notes] Release notes written to $OutputPath"

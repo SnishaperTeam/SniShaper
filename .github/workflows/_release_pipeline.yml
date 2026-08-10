@@ -4,41 +4,41 @@ on:
   workflow_call:
     inputs:
       channel:
-        description: 发布渠道，release | beta | alpha | rc
+        description: "Release channel: release | beta | alpha | rc"
         required: true
         type: string
       prerelease:
-        description: 是否为预发布版本
+        description: Whether this is a prerelease version
         required: true
         type: boolean
       version_suffix:
-        description: 预发布版本后缀，如 beta.1 / alpha.2 / rc.3；正式版留空
+        description: Prerelease suffix, e.g. beta.1 / alpha.2 / rc.3; empty for stable
         required: false
         type: string
         default: ""
       tag_override:
-        description: 指定 Release 标签名（正式版通过推送标签触发时使用推送的标签名）；留空则根据 manifest 版本自动生成
+        description: Release tag to use (set by tag push for stable); empty auto-derives from manifest version
         required: false
         type: string
         default: ""
     secrets:
       MSIX_PFX_PASSWORD:
-        description: MSIX 签名证书密码（默认 password）
+        description: "MSIX signing certificate password (default: password)"
         required: false
       MSIX_PFX_BASE64:
-        description: MSIX 签名证书 devcert.pfx 的 Base64 内容（仓库中无证书时使用）
+        description: Base64 content of devcert.pfx signing certificate (used when repo has no certificate)
         required: false
       OLLAMA_MODEL:
-        description: Ollama 本地模型名，用于 release 描述摘要（默认 qwen3.5:0.8b）
+        description: "Local Ollama model for release notes summary (default: qwen3.5:2b)"
         required: false
       LLM_API_KEY:
-        description: 备用 LLM API Key（OpenAI 兼容接口），Ollama 不可用时使用；不配置则回退为分类提交列表
+        description: Fallback LLM API key (OpenAI-compatible), used when Ollama is unavailable; falls back to categorized list if not set
         required: false
       LLM_MODEL:
-        description: 备用 LLM 模型名（默认 gpt-4o-mini）
+        description: "Fallback LLM model name (default: gpt-4o-mini)"
         required: false
       LLM_BASE_URL:
-        description: 备用 LLM API 基础地址（默认 https://api.openai.com/v1）
+        description: "Fallback LLM API base URL (default: https://api.openai.com/v1)"
         required: false
 
 permissions:
@@ -92,7 +92,7 @@ jobs:
             $displayVersion = $tag -replace '^v', ''
           } elseif ($channel -ne 'release' -and [string]::IsNullOrEmpty($suffix)) {
             $suffix = "$channel.1"
-            Write-Host "::warning::version_suffix 为空，自动使用 $suffix"
+            Write-Host "::warning::version_suffix empty, using $suffix automatically"
             $tag = "v$version-$suffix"
             $displayVersion = "$version-$suffix"
           } elseif ($suffix) {
@@ -137,10 +137,10 @@ jobs:
           $tag = "${{ steps.resolve.outputs.tag }}"
           $exists = gh release view $tag --json tagName --jq '.tagName' 2>$null
           if ($LASTEXITCODE -eq 0 -and $exists) {
-            Write-Host "::notice::Release $tag 已存在，跳过本次发布（避免重复构建）"
+            Write-Host "::notice::Release $tag already exists, skipping (avoid duplicate build)"
             "skip=true" >> $env:GITHUB_OUTPUT
           } else {
-            Write-Host "::notice::Release $tag 不存在，继续构建发布"
+            Write-Host "::notice::Release $tag does not exist, proceeding with build"
             "skip=false" >> $env:GITHUB_OUTPUT
           }
           exit 0
@@ -214,7 +214,7 @@ jobs:
           } elseif (Test-Path $certPath) {
             Write-Host "::notice::using repo devcert.pfx"
           } else {
-            Write-Host "::warning::devcert.pfx 不存在且未提供 MSIX_PFX_BASE64，将使用 build_windows.ps1 自动生成的证书"
+            Write-Host "::warning::devcert.pfx not found and MSIX_PFX_BASE64 not set; build_windows.ps1 will generate a certificate"
           }
 
       - name: Determine previous release tag
@@ -243,7 +243,7 @@ jobs:
               }
             }
           } catch {
-            Write-Host "::warning::gh release list 失败，回退到 git tag: $_"
+            Write-Host "::warning::gh release list failed, falling back to git tags: $_"
           }
           if (-not $prev) {
             # Fallback: nearest git tag that is NOT a prerelease-style tag
