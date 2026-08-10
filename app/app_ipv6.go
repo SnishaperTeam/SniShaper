@@ -6,10 +6,13 @@ import (
 	"time"
 )
 
-// checkIPv6Available reports whether any up interface carries a global
-// unicast IPv6 address. Link-local (fe80::/10) and ULA (fd00::/8) addresses
-// are excluded — they exist even on pure-IPv4 networks and cannot reach the
-// IPv6 internet.
+// checkIPv6Available reports whether any up interface carries a usable IPv6
+// address beyond link-local/loopback. ULA (fc00::/7) addresses count: many
+// ISPs and routers (NAT66 / NPTv6 / NAT64 deployments) provide IPv6
+// connectivity through ULA prefixes, so an interface with only ULA is still
+// an IPv6-enabled network — it must not be reported as IPv4-only. Whether
+// global addresses are actually reachable is a runtime concern handled by the
+// dialer (orderIPsByDNSMode), not by this capability check.
 func (a *App) checkIPv6Available() bool {
 	ifaces, err := net.Interfaces()
 	if err != nil {
@@ -29,21 +32,12 @@ func (a *App) checkIPv6Available() bool {
 				continue
 			}
 			ip := ipnet.IP
-			if ip.To4() == nil && ip.IsGlobalUnicast() && !ip.IsPrivate() {
+			if ip.To4() == nil && !ip.IsLinkLocalUnicast() && !ip.IsLoopback() && !ip.IsUnspecified() {
 				return true
 			}
 		}
 	}
 	return false
-}
-
-// ensureIPv6 is the backend backstop for IPv6-dependent operations: it
-// rejects them on IPv4-only networks even if a caller bypasses the UI.
-func (a *App) ensureIPv6() error {
-	if a.checkIPv6Available() {
-		return nil
-	}
-	return fmt.Errorf("当前网络为纯 IPv4，IPv6 功能不可用 (IPv4-only network, IPv6 features unavailable)")
 }
 
 // GetIPv6Available returns whether the current network has usable IPv6.

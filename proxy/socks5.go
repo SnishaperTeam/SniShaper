@@ -7,6 +7,7 @@ import (
 	"io"
 	"log"
 	"net"
+	"strconv"
 	"strings"
 	"time"
 
@@ -81,9 +82,9 @@ func (p *ProxyServer) handleSocks5Connect(ctx context.Context, writer io.Writer,
 	}
 	port := req.RawDestAddr.Port
 
-	p.tracef("[SOCKS5] CMD=CONNECT target=%s:%d", host, port)
+	targetAddr := net.JoinHostPort(host, strconv.Itoa(port))
 
-	targetAddr := fmt.Sprintf("%s:%d", host, port)
+	p.tracef("[SOCKS5] CMD=CONNECT target=%s", targetAddr)
 
 	matchHost := normalizeHost(host)
 	mode := p.GetMode()
@@ -123,10 +124,19 @@ func (p *ProxyServer) handleSocks5Connect(ctx context.Context, writer io.Writer,
 
 
 
-	// QUIC 规则命中的 TCP 连接：浏览器 TCP fallback 期望标准 HTTPS，
-	// 劫持成 H3 replay 会收到非 HTTP/2 preface。回退为普通 MITM。
+	// QUIC 规则命中的 TCP 连接：本地终结 TLS 后经 H3/QUIC 上游 replay
+	// （handleQUICMITM），用 QUIC 绕过 TCP 层 SNI 阻断。
 	if cr.effectiveMode == "quic" {
-		cr.effectiveMode = "mitm"
+		p.tracef("[SOCKS5] quic mode")
+		socks5.SendReply(writer, statute.RepSuccess, req.LocalAddr)
+		hijackConn := &socks5HijackConn{
+			Conn:   clientConn,
+			reader: req.Reader,
+			writer: writer,
+		}
+		_ = hijackConn.SetDeadline(time.Time{})
+		p.handleQUICMITM(hijackConn, cr.targetHost, cr.rule)
+		return nil
 	}
 
 	if err := p.dialUpstream(cr); err != nil {

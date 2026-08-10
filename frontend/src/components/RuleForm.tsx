@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useContext } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Zap,
   Globe,
@@ -15,7 +15,7 @@ import { Box, Typography, TextField, Switch, IconButton, Button, useColorScheme 
 import { alpha } from '@mui/material/styles';
 import { AddSiteGroup, UpdateSiteGroup, GetECHProfiles, GetNAT64Profiles } from '../api/bindings';
 import { useTranslation } from '../i18n/I18nContext';
-import { SettingsCtx } from '../App';
+import { toast } from '../lib/toast';
 
 interface RuleFormProps {
   initialData?: any;
@@ -57,11 +57,8 @@ const normalizeCertVerify = (value: any) => {
 
 const RuleForm: React.FC<RuleFormProps> = ({ initialData, onSuccess, onCancel }) => {
   const { t } = useTranslation();
-  const { cache } = useContext(SettingsCtx);
   const { mode } = useColorScheme();
   const hoverBg = mode === 'light' ? 'rgba(0,0,0,0.04)' : 'rgba(255,255,255,0.08)';
-  const ipv6Available = cache.ipv6Available !== false;
-  const ipv6Option = (id: string) => id === 'prefer_ipv6' || id === 'ipv6_only';
 
   const MODES = [
     { id: 'mitm', label: 'MITM', icon: <Zap size={14} />, desc: t('rules.modes.mitm') },
@@ -163,12 +160,18 @@ const RuleForm: React.FC<RuleFormProps> = ({ initialData, onSuccess, onCancel })
         ? ''
         : String(formData.upstream || '').trim()
     };
-    if (formData.id) {
-      await UpdateSiteGroup(payload);
-    } else {
-      await AddSiteGroup(payload);
+    try {
+      if (formData.id) {
+        await UpdateSiteGroup(payload);
+      } else {
+        await AddSiteGroup(payload);
+      }
+      toast.success(t('rules.notifications.save_success'));
+      onSuccess();
+    } catch (err: any) {
+      const detail = err && typeof err.message === 'string' && err.message ? err.message : err ? String(err) : '';
+      toast.error(t('rules.notifications.save_error'), detail || t('rules.notifications.save_error_hint'));
     }
-    onSuccess();
   };
 
   const certVerifyMode = String(formData.cert_verify?.mode || '').trim();
@@ -366,11 +369,10 @@ const RuleForm: React.FC<RuleFormProps> = ({ initialData, onSuccess, onCancel })
               <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 1 }}>
                 {DNS_OPTIONS.map((option) => {
                   const active = String(formData.dns_mode || '') === option.id;
-                  const disabled = !ipv6Available && ipv6Option(option.id);
                   return (
-                    <Box key={option.id || 'default'} onClick={() => !disabled && setFormData({ ...formData, dns_mode: option.id })} sx={cardSx(active, { disabled })}>
+                    <Box key={option.id || 'default'} onClick={() => setFormData({ ...formData, dns_mode: option.id })} sx={cardSx(active)}>
                       <Typography variant="caption" sx={{ fontWeight: 900, letterSpacing: '0.05em' }}>{option.label}</Typography>
-                      <Typography variant="caption" sx={{ fontSize: 10, lineHeight: 1.6, opacity: 0.8 }}>{disabled ? t('network.ipv6_disabled_title') : option.desc}</Typography>
+                      <Typography variant="caption" sx={{ fontSize: 10, lineHeight: 1.6, opacity: 0.8 }}>{option.desc}</Typography>
                     </Box>
                   );
                 })}
@@ -428,9 +430,8 @@ const RuleForm: React.FC<RuleFormProps> = ({ initialData, onSuccess, onCancel })
                     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1, maxHeight: 176, overflowY: 'auto', pr: 0.5 }}>
                       {nat64Profiles.map((p) => {
                         const active = formData.nat64_profile_id === p.id;
-                        const disabled = !ipv6Available;
                         return (
-                          <Box key={p.id} onClick={() => ipv6Available && setFormData({ ...formData, nat64_profile_id: p.id })} sx={cardSx(active, { disabled })}>
+                          <Box key={p.id} onClick={() => setFormData({ ...formData, nat64_profile_id: p.id })} sx={cardSx(active)}>
                             <Typography variant="caption" sx={{ fontWeight: 900, letterSpacing: '0.05em' }}>{p.name}</Typography>
                             <Typography variant="caption" sx={{ fontSize: 10, opacity: 0.8 }}>{t('rules.form.prefix_label', { prefix: p.prefix })}</Typography>
                           </Box>
@@ -464,15 +465,15 @@ const RuleForm: React.FC<RuleFormProps> = ({ initialData, onSuccess, onCancel })
               </Box>
             )}
             {showNat64Config && (
-              <Box onClick={() => ipv6Available && toggleBooleanField('nat64_enabled')} sx={cardSx(formData.nat64_enabled, { row: true, inactiveBg: hoverBg, disabled: !ipv6Available })}>
+              <Box onClick={() => toggleBooleanField('nat64_enabled')} sx={cardSx(formData.nat64_enabled, { row: true, inactiveBg: hoverBg })}>
                 <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
                   <Typography variant="caption" sx={{ fontWeight: 'bold', color: 'text.primary', display: 'flex', alignItems: 'center', gap: 0.5 }}>
                     <Box component="span" sx={{ display: 'inline-flex', color: 'secondary.main' }}><Globe size={12} /></Box>
                     {t('rules.form.nat64_enable')}
                   </Typography>
-                  <Typography variant="caption" sx={{ fontSize: 10, color: 'text.secondary' }}>{!ipv6Available ? t('network.ipv6_disabled_title') : t('rules.form.nat64_hint')}</Typography>
+                  <Typography variant="caption" sx={{ fontSize: 10, color: 'text.secondary' }}>{t('rules.form.nat64_hint')}</Typography>
                 </Box>
-                <Switch size="small" checked={Boolean(formData.nat64_enabled)} disabled={!ipv6Available} />
+                <Switch size="small" checked={Boolean(formData.nat64_enabled)} />
               </Box>
             )}
             {showCfPool && (

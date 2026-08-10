@@ -9,6 +9,7 @@ import (
 	"net/netip"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/miekg/dns"
@@ -474,6 +475,11 @@ func (h *Handler) sendDNSResponse(conn N.PacketConn, msg *dns.Msg, dest M.Socksa
 	}
 }
 
+// udpIdleTimeout UDP 中继的读写轮询间隔。
+// 仅用于让 ReadPacket/ReadFrom 定期唤醒以检查 ctx 取消，
+// 不代表会话超时——空闲会话由 sing-tun 的 NAT 表自行回收。
+const udpIdleTimeout = 5 * time.Second
+
 // forwardUDPDirect 直接转发 UDP 流量到上游
 // 仅处理非 fake-ip 的真实 IP 目标（如 DoH 自行解析的应用 QUIC 流量）
 // fake-ip 目标的 UDP 流量直接丢弃（浏览器会回退到 TCP，走代理规则链路）
@@ -486,12 +492,19 @@ func (h *Handler) forwardUDPDirect(ctx context.Context, conn N.PacketConn, sourc
 		return
 	}
 
+	// 按目标地址族选择 udp4/udp6 与对应的物理网卡地址，避免绑定族不匹配
+	network := "udp4"
+	wantIPv6 := destination.Addr.Is6()
+	if wantIPv6 {
+		network = "udp6"
+	}
+
 	// 绑定物理网卡，避免 UDP 包进 TUN 形成循环
 	var laddr *net.UDPAddr
-	if bindIP := h.getPhysicalUDPAddr(); bindIP != nil {
+	if bindIP := h.getPhysicalUDPAddr(wantIPv6); bindIP != nil {
 		laddr = &net.UDPAddr{IP: bindIP}
 	}
-	remoteConn, err := net.ListenUDP("udp4", laddr)
+	remoteConn, err := net.ListenUDP(network, laddr)
 	if err != nil {
 		h.logf("[sing-tun] failed to create UDP conn: " + err.Error())
 		if onClose != nil {
@@ -499,68 +512,105 @@ func (h *Handler) forwardUDPDirect(ctx context.Context, conn N.PacketConn, sourc
 		}
 		return
 	}
-	defer remoteConn.Close()
 
 	// 解析目标地址
 	destAddr := destination.String()
-	destUDPAddr, err := net.ResolveUDPAddr("udp4", destAddr)
+	destUDPAddr, err := net.ResolveUDPAddr(network, destAddr)
 	if err != nil {
 		h.logf("[sing-tun] failed to resolve dest: " + err.Error())
+		remoteConn.Close()
 		if onClose != nil {
 			onClose(err)
 		}
 		return
 	}
 
-	// 3. 转发数据包
+	// 3. 转发数据包（双向独立中继）
+	// ★ 必须是两个独立方向的 goroutine 并发转发：
+	//   旧的"读客户端包 → 写上游 → 读一个上游响应 → 回写 → 再等客户端包"
+	//   串行一问一答模型对 QUIC 是致命的：QUIC 握手期服务端会连续回多个
+	//   datagram（ServerHello / EncryptedExtensions / Cert / Finished），
+	//   而串行模型读完第一个响应后必须等客户端下一个包才继续读上游，
+	//   客户端此时正在等服务端后续包 → 双向僵死，浏览器迟迟不回退 TCP。
+	// ★ socket 生命周期必须跟随转发 goroutine：defer 放在 goroutine 内，
+	//   否则函数返回时 remoteConn 已被关闭，goroutine 的 WriteTo/ReadFrom
+	//   必然报 "use of closed network connection"（此前所有 UDP/QUIC 转发失败的根因）。
 	go func() {
+		defer remoteConn.Close()
 		defer func() {
 			if onClose != nil {
 				onClose(nil)
 			}
 		}()
 
-		for {
-			select {
-			case <-ctx.Done():
-				return
-			default:
-			}
+		var wg sync.WaitGroup
+		wg.Add(2)
 
-			conn.SetReadDeadline(time.Now().Add(5 * time.Second))
-			packetBuf := buf.NewPacket()
-			_, err := conn.ReadPacket(packetBuf)
-			if err != nil {
+		// 方向一：客户端 → 上游
+		go func() {
+			defer wg.Done()
+			for {
+				select {
+				case <-ctx.Done():
+					remoteConn.Close() // 解除另一方向阻塞
+					return
+				default:
+				}
+
+				conn.SetReadDeadline(time.Now().Add(udpIdleTimeout))
+				packetBuf := buf.NewPacket()
+				_, err := conn.ReadPacket(packetBuf)
+				if err != nil {
+					packetBuf.Release()
+					if netErr, ok := err.(net.Error); ok && netErr.Timeout() {
+						continue // 客户端暂时空闲，等待会话由 sing-tun NAT 回收
+					}
+					// 客户端关闭/会话结束 → 关闭上游 socket，结束整个转发流
+					remoteConn.Close()
+					return
+				}
+
+				_, err = remoteConn.WriteTo(packetBuf.Bytes(), destUDPAddr)
 				packetBuf.Release()
-				if netErr, ok := err.(net.Error); ok && netErr.Timeout() {
-					continue
+				if err != nil {
+					h.logf("[sing-tun] failed to forward UDP: " + err.Error())
+					remoteConn.Close()
+					return
 				}
-				return
 			}
+		}()
 
-			_, err = remoteConn.WriteTo(packetBuf.Bytes(), destUDPAddr)
-			packetBuf.Release()
-			if err != nil {
-				h.logf("[sing-tun] failed to forward UDP: " + err.Error())
-				continue
-			}
-
-			remoteConn.SetReadDeadline(time.Now().Add(5 * time.Second))
-			responseBuf := make([]byte, 1500)
-			n, _, err := remoteConn.ReadFrom(responseBuf)
-			if err != nil {
-				if netErr, ok := err.(net.Error); ok && netErr.Timeout() {
-					continue
+		// 方向二：上游 → 客户端（独立持续读取，QUIC 多包响应不会丢失）
+		go func() {
+			defer wg.Done()
+			responseBuf := make([]byte, 65535)
+			for {
+				select {
+				case <-ctx.Done():
+					return
+				default:
 				}
-				continue
-			}
 
-			responsePacket := buf.NewPacket()
-			responsePacket.Write(responseBuf[:n])
-			// WritePacket 的 dest 是响应包的源地址（远端服务器），不是目标（应用）
-			_ = conn.WritePacket(responsePacket, destination)
-			responsePacket.Release()
-		}
+				remoteConn.SetReadDeadline(time.Now().Add(udpIdleTimeout))
+				n, _, err := remoteConn.ReadFrom(responseBuf)
+				if err != nil {
+					if netErr, ok := err.(net.Error); ok && netErr.Timeout() {
+						continue // 上游暂时无数据（QUIC 静默期），等待方向一关闭 socket
+					}
+					// 上游 socket 被关闭 / 上游不可达 → 关闭并结束，确保方向一也及时退出
+					remoteConn.Close()
+					return
+				}
+
+				responsePacket := buf.NewPacket()
+				responsePacket.Write(responseBuf[:n])
+				// WritePacket 的 dest 是响应包的源地址（远端服务器），不是目标（应用）
+				_ = conn.WritePacket(responsePacket, destination)
+				responsePacket.Release()
+			}
+		}()
+
+		wg.Wait()
 	}()
 }
 
@@ -623,9 +673,10 @@ func (h *Handler) dialProxy() (net.Conn, error) {
 	return net.DialTimeout("tcp", h.proxyAddr, 5*time.Second)
 }
 
-// getPhysicalUDPAddr 获取物理网卡的 IPv4 地址（排除 TUN/Loopback）
+// getPhysicalUDPAddr 获取物理网卡对应地址族的地址（排除 TUN/Loopback）
+// wantIPv6=true 时返回 IPv6 地址，否则返回 IPv4 地址
 // 用于 forwardUDPDirect 绑定物理网卡，避免 UDP 包进 TUN 循环
-func (h *Handler) getPhysicalUDPAddr() net.IP {
+func (h *Handler) getPhysicalUDPAddr(wantIPv6 bool) net.IP {
 	interfaces, err := net.Interfaces()
 	if err != nil {
 		return nil
@@ -644,7 +695,16 @@ func (h *Handler) getPhysicalUDPAddr() net.IP {
 		}
 		for _, addr := range addrs {
 			ipNet, ok := addr.(*net.IPNet)
-			if !ok || ipNet.IP.To4() == nil {
+			if !ok {
+				continue
+			}
+			if wantIPv6 {
+				if ipNet.IP.To4() != nil {
+					continue
+				}
+				return ipNet.IP
+			}
+			if ipNet.IP.To4() == nil {
 				continue
 			}
 			return ipNet.IP

@@ -472,10 +472,15 @@ func (p *ProxyServer) NewQUICRoundTripper(host string, rule Rule) (*http3.Transp
 		QUICConfig: &quic.Config{
 			HandshakeIdleTimeout: 10 * time.Second,
 		},
-		Dial: func(ctx context.Context, _ string, tlsCfg *tls.Config, cfg *quic.Config) (*quic.Conn, error) {
+		Dial: func(_ context.Context, _ string, tlsCfg *tls.Config, cfg *quic.Config) (*quic.Conn, error) {
+			// 拨号使用独立的有界超时 context，不继承浏览器的请求 context：
+			// 浏览器关闭连接会取消请求 context，导致候选间拨号被中断
+			// （例如 IPv4 失败后没机会尝试 IPv6）。每个候选独立计时 8s。
 			var errs []string
 			for _, candidate := range dialCandidates {
-				conn, err := quic.DialAddr(ctx, candidate, tlsCfg, cfg)
+				dialCtx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
+				conn, err := quic.DialAddr(dialCtx, candidate, tlsCfg, cfg)
+				cancel()
 				if err == nil {
 					cs := conn.ConnectionState().TLS
 					log.Printf("[QUIC] H3 dial success host=%s addr=%s sni=%s alpn=%s echAccepted=%v", host, candidate, tlsCfg.ServerName, cs.NegotiatedProtocol, cs.ECHAccepted)

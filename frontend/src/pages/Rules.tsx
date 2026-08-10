@@ -132,10 +132,15 @@ const Rules: React.FC = () => {
 
   const handleDeleteConfirm = async () => {
     if (!pendingDeleteGroup?.id) return;
-    await DeleteSiteGroup(pendingDeleteGroup.id);
-    setPendingDeleteGroup(null);
-    await loadData();
-    toast.success(t('rules.notifications.deleted'));
+    try {
+      await DeleteSiteGroup(pendingDeleteGroup.id);
+      setPendingDeleteGroup(null);
+      await loadData();
+      toast.success(t('rules.notifications.deleted'));
+    } catch (err: any) {
+      const detail = err && typeof err.message === 'string' && err.message ? err.message : err ? String(err) : '';
+      toast.error(t('rules.notifications.delete_error'), detail || t('rules.notifications.save_error_hint'));
+    }
   };
 
   const OTHERS_KEY = 'Others';

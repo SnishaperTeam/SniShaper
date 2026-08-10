@@ -265,7 +265,11 @@
       "doh_dynamic": "DOH DYNAMIC"
     },
     "notifications": {
-      "deleted": "Rule deleted"
+      "deleted": "Rule deleted",
+      "save_success": "Rule saved",
+      "save_error": "Failed to save rule",
+      "delete_error": "Failed to delete rule",
+      "save_error_hint": "Check your input and try again"
     },
     "edit_rule_aria": "Edit rule",
     "delete_rule_aria": "Delete rule",
@@ -322,11 +326,11 @@
     "ipv6_refresh": "Re-check",
     "ipv6_checking": "Checking...",
     "ipv6_ok": "IPv6 detected",
-    "ipv6_ok_desc": "A global IPv6 address exists on this network. IPv6 features (NAT64 mapping, IPv6 DNS policy, evolution test IPv6 option) are available.",
+    "ipv6_ok_desc": "IPv6 addresses (including ULA) exist on this network. IPv6 features (NAT64 mapping, IPv6 DNS policy, evolution test IPv6 option) are available; runtime connectivity adapts to the current network.",
     "ipv6_disabled_title": "Current network is IPv4-only",
-    "ipv6_disabled_desc": "No usable global IPv6 address was detected. NAT64 profiles, IPv6-prefer / IPv6-only DNS rules and the evolution test IPv6 option are disabled and cannot be clicked; they unlock automatically once IPv6 is detected. A check runs every 10 minutes, or use the button to re-check now.",
-    "ipv6_disabled": "IPv4-only network: IPv6 features (NAT64, IPv6 rules) are disabled",
-    "ipv6_restored": "IPv6 detected: NAT64, IPv6 rules and other features are back"
+    "ipv6_disabled_desc": "No usable IPv6 address detected (IPv4-only network). Rule editing is unaffected — IPv6 policies can still be configured, and the runtime will adapt to the current network. A check runs every 10 minutes, or use the button to re-check now.",
+    "ipv6_disabled": "IPv4-only network: no IPv6 address detected",
+    "ipv6_restored": "IPv6 address detected"
   },
   "settings": {
     "title": "Settings",

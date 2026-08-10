@@ -47,6 +47,7 @@ pkg/certmanager/*.key
 pkg/certmanager/*.pem
 
 # Local temp / backups
+temp/
 *.bak
 *.bak.*
 rules/*.bak*

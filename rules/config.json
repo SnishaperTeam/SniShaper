@@ -2343,7 +2343,7 @@
     {
       "id": "1775733151073116400",
       "name": "googlevideo",
-      "mode": "quic",
+      "mode": "mitm",
       "dns_mode": "prefer_ipv6",
       "sni_fake": "g.cn",
       "domains": [
@@ -3662,17 +3662,17 @@
       "id": "1784437653624307800",
       "name": "nat",
       "mode": "mitm",
-        "domains": [
-          "chatgpt.com",
-          "grok.com",
-          "arena.ai",
-          "openai.com",
-          "x.ai",
-          "poe.com"
-        ],
-        "ech_enabled": false,
-        "ech_profile_id": "legacy-cloudflare",
-        "use_cf_pool": false,
+      "domains": [
+        "chatgpt.com",
+        "grok.com",
+        "arena.ai",
+        "openai.com",
+        "x.ai",
+        "poe.com"
+      ],
+      "ech_enabled": true,
+      "ech_profile_id": "legacy-cloudflare",
+      "use_cf_pool": false,
       "cert_verify": {
         "mode": "strict_real"
       },
@@ -3852,7 +3852,7 @@
     {
       "id": "legacy-cloudflare",
       "name": "Cloudflare",
-      "config": "AEX+DQBBWwAgACCUBXGiLqn/cDEhgdTg28RwBKatg69MIC7HxIe9jA/oPQAEAAEAAQASY2xvdWRmbGFyZS1lY2guY29tAAA=",
+      "config": "AEX+DQBBOgAgACBq+Hu7wZl0u5XO6FHk79rKLOurWle6xjUI8MqpJMGNBAAEAAEAAQASY2xvdWRmbGFyZS1lY2guY29tAAA=",
       "discovery_domain": "crypto.cloudflare.com",
       "doh_upstream": "https://xwfpeb16ii.cloudflare-gateway.com/dns-query",
       "auto_update": true

@@ -56,11 +56,31 @@ func (p *ProxyServer) handleConnect(w http.ResponseWriter, req *http.Request, ru
 
 
 
-	// QUIC 规则命中的 TCP 连接：浏览器对 QUIC 站点的 TCP fallback 期望标准
-	// HTTPS 服务，不应劫持成 H3 replay（会收到非 HTTP/2 preface 且上游 QUIC 直连
-	// 同样被墙）。回退为普通 MITM 处理。
+	// QUIC 规则命中的 TCP 连接：浏览器对 QUIC 站点回退到 TCP 时，本地终结 TLS
+	// 后经 H3/QUIC 上游 replay（NewQUICRoundTripper），用 QUIC 绕过 TCP 层 SNI 阻断。
 	if cr.effectiveMode == "quic" {
-		cr.effectiveMode = "mitm"
+		hijacker, ok := w.(http.Hijacker)
+		if !ok {
+			http.Error(w, "Hijack not supported", http.StatusInternalServerError)
+			return
+		}
+		clientConn, rw, err := hijacker.Hijack()
+		if err != nil {
+			log.Printf("[Connect] QUIC hijack failed: %v", err)
+			return
+		}
+		if _, err := rw.WriteString("HTTP/1.1 200 Connection Established\r\n\r\n"); err != nil {
+			clientConn.Close()
+			return
+		}
+		if err := rw.Flush(); err != nil {
+			clientConn.Close()
+			return
+		}
+		clientConn = wrapHijackedConn(clientConn, rw)
+		_ = clientConn.SetDeadline(time.Time{})
+		p.handleQUICMITM(clientConn, cr.targetHost, cr.rule)
+		return
 	}
 
 	if cr.effectiveMode == "migration" {

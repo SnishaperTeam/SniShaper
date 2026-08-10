@@ -45,6 +45,38 @@ func mapNAT64Addr(ipStr string, prefix string) (string, bool) {
 	return mappedIP.String(), true
 }
 
+// orderIPsByDNSMode 按 dns_mode 对解析出的 IP 列表排序/过滤地址族：
+//
+//	ipv4_only: 仅保留 IPv4
+//	ipv6_only: 仅保留 IPv6
+//	prefer_ipv6: IPv6 优先，IPv4 兜底
+//	prefer_ipv4 / 默认: IPv4 优先，IPv6 兜底
+func orderIPsByDNSMode(ips []string, dnsMode string) []string {
+	var v4, v6 []string
+	for _, ip := range ips {
+		parsed := net.ParseIP(ip)
+		if parsed == nil {
+			continue
+		}
+		if parsed.To4() != nil {
+			v4 = append(v4, ip)
+		} else {
+			v6 = append(v6, ip)
+		}
+	}
+
+	switch dnsMode {
+	case "ipv4_only":
+		return v4
+	case "ipv6_only":
+		return v6
+	case "prefer_ipv6":
+		return append(v6, v4...)
+	default:
+		return append(v4, v6...)
+	}
+}
+
 func (p *ProxyServer) resolveDomainCandidates(ctx context.Context, host, port, dnsMode string) []string {
 	if isLiteralIP(host) {
 		return []string{net.JoinHostPort(host, port)}
@@ -65,24 +97,14 @@ func (p *ProxyServer) resolveDomainCandidates(ctx context.Context, host, port, d
 	if p.dohResolver != nil {
 		ips, err := p.dohResolver.ResolveIPs(ctx, host)
 		if err == nil && len(ips) > 0 {
-			// IPv4 优先：除非 dnsMode == "ipv6_only"，否则 IPv4 排在前面
-			// 避免 IPv6 成为唯一候选导致连接失败
-			var v4, v6 []string
-			for _, ip := range ips {
-				parsed := net.ParseIP(ip)
-				if parsed == nil {
-					continue
-				}
-				if parsed.To4() != nil {
-					v4 = append(v4, net.JoinHostPort(ip, port))
-				} else {
-					v6 = append(v6, net.JoinHostPort(ip, port))
-				}
+			// 按 dns_mode 排序/过滤 v4/v6（prefer_ipv6 / ipv6_only / ipv4_only 等），
+			// 避免 prefer_ipv6 规则仍以 IPv4 优先导致拨号失败。
+			ordered := orderIPsByDNSMode(ips, dnsMode)
+			candidates := make([]string, 0, len(ordered))
+			for _, ip := range ordered {
+				candidates = append(candidates, net.JoinHostPort(ip, port))
 			}
-			if dnsMode == "ipv6_only" {
-				return append(v6, v4...)
-			}
-			return append(v4, v6...)
+			return candidates
 		}
 	}
 
@@ -90,19 +112,23 @@ func (p *ProxyServer) resolveDomainCandidates(ctx context.Context, host, port, d
 }
 
 func (p *ProxyServer) buildDialCandidates(ctx context.Context, targetHost, targetAddr string, rule Rule, effectiveMode string) []string {
-	// 字面 IP 目标（如 TUN 下浏览器 DoH 解析的真实 IP）：保留原始端口，
-	// 避免后面 resolveDomainCandidates 用默认 443 改写端口（如 7680 -> 443）。
+	// 提取目标地址的原始端口（域名/IP 目标通用），避免解析时被默认 443 改写。
+	origPort := portFromTargetAddr(targetAddr)
+	defaultPort := "443"
+	dialPort := origPort
+	if dialPort == "" {
+		dialPort = defaultPort
+	}
+
+	// 字面 IP 目标（如 TUN 下浏览器 DoH 解析的真实 IP）：直接返回原地址保留端口
 	if isLiteralIP(targetHost) {
-		if _, port, err := net.SplitHostPort(targetAddr); err == nil && port != "" {
-			return []string{targetAddr}
-		}
+		return []string{targetAddr}
 	}
 	resolvedUpstream := resolveRuleUpstream(targetHost, rule)
 	isWarpRoute := strings.EqualFold(strings.TrimSpace(rule.Upstream), "warp")
-	defaultPort := "443"
 
 	if isWarpRoute {
-		if resolved := p.resolveDomainCandidates(ctx, targetHost, defaultPort, rule.DNSMode); len(resolved) > 0 {
+		if resolved := p.resolveDomainCandidates(ctx, targetHost, dialPort, rule.DNSMode); len(resolved) > 0 {
 			return resolved
 		}
 		return []string{targetAddr}
@@ -133,18 +159,26 @@ func (p *ProxyServer) buildDialCandidates(ctx context.Context, targetHost, targe
 			if len(topIPs) > 0 {
 				prefs := make([]string, 0, len(topIPs))
 				for _, ip := range topIPs {
-					prefs = append(prefs, net.JoinHostPort(ip, defaultPort))
+					prefs = append(prefs, net.JoinHostPort(ip, dialPort))
 				}
 				return dedupeDialCandidates(prefs)
 			}
 		}
 
-		if resolved := p.resolveDomainCandidates(ctx, targetHost, defaultPort, rule.DNSMode); len(resolved) > 0 {
+		if resolved := p.resolveDomainCandidates(ctx, targetHost, dialPort, rule.DNSMode); len(resolved) > 0 {
 			return resolved
 		}
 	}
 
 	return []string{targetAddr}
+}
+
+// portFromTargetAddr 从目标地址（host:port 或 IP:port）提取端口，无端口返回空字符串
+func portFromTargetAddr(targetAddr string) string {
+	if _, port, err := net.SplitHostPort(targetAddr); err == nil && port != "" {
+		return port
+	}
+	return ""
 }
 
 func (p *ProxyServer) prepareConnect(targetHost, targetAddr string, rule Rule) *connectResult {
@@ -298,11 +332,10 @@ func (p *ProxyServer) dialWithRule(ctx context.Context, network, addr string, ru
 		if splitErr == nil && !isLiteralIP(host) && ctx.Value(dohResolveCtxKey) == nil && p.dohResolver != nil {
 			dohCtx := context.WithValue(ctx, dohResolveCtxKey, true)
 			if ips, err := p.dohResolver.ResolveIPs(dohCtx, host); err == nil && len(ips) > 0 {
-				for _, ip := range ips {
-					if net.ParseIP(ip).To4() != nil {
-						addr = net.JoinHostPort(ip, port)
-						break
-					}
+				// 按规则的 dns_mode 选择地址族（prefer_ipv6 / ipv6_only / ipv4_only 等），
+				// 修复之前固定选 IPv4、无视 dns_mode 配置的问题。
+				if ordered := orderIPsByDNSMode(ips, rule.DNSMode); len(ordered) > 0 {
+					addr = net.JoinHostPort(ordered[0], port)
 				}
 			}
 		}

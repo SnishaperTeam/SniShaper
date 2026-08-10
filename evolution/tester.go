@@ -364,6 +364,11 @@ func (t *Tester) testTCPing(domain string, config TestConfig) (StepResult, []str
 	var bestDelay time.Duration
 
 	for _, ip := range ips {
+		// Respect the "启用 IPv6" option: when disabled, only IPv4 candidates
+		// are probed (ResolveIPAddrs returns both A and AAAA records).
+		if !config.EnableIPv6 && ip.To4() == nil {
+			continue
+		}
 		pingResult := t.tcpingIP(ip.String(), config)
 		if pingResult.Success {
 			successIPs = append(successIPs, ip.String())

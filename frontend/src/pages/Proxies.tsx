@@ -1,6 +1,6 @@
-import React, { useState, useEffect, useContext } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
-  Delete, Shield, Bolt, Lock, History, AddCircle, Public, Layers, Error as ErrorIcon
+  Delete, Shield, Bolt, Lock, History, AddCircle, Public, Layers
 } from '../lib/icons';
 import {
   GetECHProfiles, DeleteECHProfile, GetNAT64Profiles, DeleteNAT64Profile, TestNAT64Profile,
@@ -14,13 +14,10 @@ import ECHProfileForm from '../components/ECHProfileForm';
 import NAT64ProfileForm from '../components/NAT64ProfileForm';
 import { useTranslation } from '../i18n/I18nContext';
 import { toast } from '../lib/toast';
-import { SettingsCtx } from '../App';
 
 const Proxies: React.FC = () => {
   const { t } = useTranslation();
-  const { cache } = useContext(SettingsCtx);
   const { mode } = useColorScheme();
-  const ipv6Available = cache.ipv6Available !== false;
   const [echProfiles, setEchProfiles] = useState<any[]>([]);
   const [nat64Profiles, setNat64Profiles] = useState<any[]>([]);
 
@@ -219,19 +216,10 @@ const Proxies: React.FC = () => {
             <Public size={18} aria-hidden />
             <Typography variant="body2" sx={{ fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em' }}>{t('proxies.nat64_management')}</Typography>
           </Box>
-          <Button onClick={handleAddNAT64} disabled={!ipv6Available} variant="outlined" size="small" startIcon={<AddCircle size={14} />}>
+          <Button onClick={handleAddNAT64} variant="outlined" size="small" startIcon={<AddCircle size={14} />}>
             {t('proxies.add_nat64')}
           </Button>
         </Box>
-
-        {!ipv6Available && (
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, px: 1.5, py: 1, borderRadius: 2, bgcolor: 'rgba(239,68,68,0.05)', border: 1, borderColor: 'rgba(239,68,68,0.3)', color: 'error.main' }}>
-            <ErrorIcon size={14} aria-hidden />
-            <Typography variant="caption" sx={{ fontSize: 11, fontWeight: 700 }}>
-              {t('network.ipv6_disabled_title')}：{t('network.ipv6_disabled_desc')}
-            </Typography>
-          </Box>
-        )}
 
         <Grid container spacing={2}>
           {nat64Profiles.length === 0 ? (
@@ -245,12 +233,12 @@ const Proxies: React.FC = () => {
             nat64Profiles.map((p) => (
               <Grid key={p.id} size={{ xs: 12, md: 6, xl: 4 }}>
                 <Box
-                  onClick={() => ipv6Available && handleEditNAT64(p)}
+                  onClick={() => handleEditNAT64(p)}
                   sx={{
                     display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 2,
                     p: 2.5, bgcolor: 'background.paper', border: 1, borderColor: 'divider', borderRadius: 2,
-                    boxShadow: 1, transition: 'all 0.2s', opacity: ipv6Available ? 1 : 0.6,
-                    ...cardHoverSx(ipv6Available),
+                    boxShadow: 1, transition: 'all 0.2s',
+                    ...cardHoverSx(true),
                   }}
                 >
                   <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, minWidth: 0 }}>
@@ -284,7 +272,7 @@ const Proxies: React.FC = () => {
                     <Button
                       size="small"
                       variant="outlined"
-                      disabled={testingMap[p.id] || !ipv6Available}
+                      disabled={testingMap[p.id]}
                       onClick={(e) => handleTestNAT64(p, e)}
                       sx={{ fontSize: 10, fontWeight: 700, minWidth: 0, flexShrink: 0 }}
                     >
@@ -293,8 +281,7 @@ const Proxies: React.FC = () => {
                     <IconButton
                       size="small"
                       aria-label={t('proxies.delete_aria', { name: p.name })}
-                      disabled={!ipv6Available}
-                      onClick={(e) => ipv6Available && handleDeleteNAT64(p.id, e)}
+                      onClick={(e) => handleDeleteNAT64(p.id, e)}
                       sx={{ color: 'text.secondary', flexShrink: 0, '&:hover': { color: 'error.main', bgcolor: 'action.hover' } }}
                     >
                       <Delete size={16} />

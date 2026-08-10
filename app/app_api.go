@@ -791,12 +791,11 @@ func (a *App) GetSiteGroups() []proxy.SiteGroup {
 	return a.ruleManager.GetSiteGroups()
 }
 
+// Site-group rules are saved verbatim: dns_mode / NAT64 are the user's intent
+// (config layer) and must not be rewritten based on the current network state.
+// Whether IPv6 is actually usable is a runtime-execution concern handled by the
+// dialer (orderIPsByDNSMode), not by the save path.
 func (a *App) AddSiteGroup(sg proxy.SiteGroup) error {
-	if sg.NAT64Enabled || sg.DNSMode == "prefer_ipv6" || sg.DNSMode == "ipv6_only" {
-		if err := a.ensureIPv6(); err != nil {
-			return err
-		}
-	}
 	err := a.ruleManager.AddSiteGroup(sg)
 	if err == nil && a.core != nil {
 		a.core.ReloadIfRunning()
@@ -805,11 +804,6 @@ func (a *App) AddSiteGroup(sg proxy.SiteGroup) error {
 }
 
 func (a *App) UpdateSiteGroup(sg proxy.SiteGroup) error {
-	if sg.NAT64Enabled || sg.DNSMode == "prefer_ipv6" || sg.DNSMode == "ipv6_only" {
-		if err := a.ensureIPv6(); err != nil {
-			return err
-		}
-	}
 	err := a.ruleManager.UpdateSiteGroup(sg)
 	if err == nil && a.core != nil {
 		a.core.ReloadIfRunning()
@@ -1327,9 +1321,6 @@ func (a *App) GetNAT64Profiles() []proxy.NAT64Profile {
 }
 
 func (a *App) AddNAT64Profile(p proxy.NAT64Profile) error {
-	if err := a.ensureIPv6(); err != nil {
-		return err
-	}
 	err := a.ruleManager.AddNAT64Profile(p)
 	if err == nil {
 		a.syncCFPoolNAT64Prefix()
@@ -1341,9 +1332,6 @@ func (a *App) AddNAT64Profile(p proxy.NAT64Profile) error {
 }
 
 func (a *App) UpdateNAT64Profile(p proxy.NAT64Profile) error {
-	if err := a.ensureIPv6(); err != nil {
-		return err
-	}
 	err := a.ruleManager.UpdateNAT64Profile(p)
 	if err == nil {
 		a.syncCFPoolNAT64Prefix()
@@ -1366,9 +1354,6 @@ func (a *App) DeleteNAT64Profile(id string) error {
 }
 
 func (a *App) TestNAT64Profile(prefix string) (int64, error) {
-	if err := a.ensureIPv6(); err != nil {
-		return 0, err
-	}
 	ips, err := net.LookupIP("www.cloudflare.com")
 	if err != nil || len(ips) == 0 {
 		return 0, fmt.Errorf("DNS lookup failed: %w", err)

@@ -432,19 +432,58 @@ func (r *FailoverResolver) resolveAndCache(ctx context.Context, domain string) (
 }
 
 func (r *FailoverResolver) ResolveIPAddrs(ctx context.Context, domain string) ([]net.IP, error) {
-	msg := new(dns.Msg)
-	msg.SetQuestion(dns.Fqdn(domain), dns.TypeA)
-
-	resp, err := r.Exchange(ctx, msg)
-	if err != nil {
-		return nil, err
+	type result struct {
+		ips []net.IP
+		err error
 	}
 
-	var ips []net.IP
-	for _, ans := range resp.Answer {
-		if a, ok := ans.(*dns.A); ok {
-			ips = append(ips, a.A)
+	query := func(qtype uint16) ([]net.IP, error) {
+		msg := new(dns.Msg)
+		msg.SetQuestion(dns.Fqdn(domain), qtype)
+		resp, err := r.Exchange(ctx, msg)
+		if err != nil {
+			return nil, err
 		}
+		var ips []net.IP
+		for _, ans := range resp.Answer {
+			switch a := ans.(type) {
+			case *dns.A:
+				ips = append(ips, a.A)
+			case *dns.AAAA:
+				ips = append(ips, a.AAAA)
+			}
+		}
+		return ips, nil
+	}
+
+	// 同时查询 A（IPv4）与 AAAA（IPv6）：
+	// 之前只查 A，导致 dns_mode 为 prefer_ipv6 / ipv6_only 时永远没有 IPv6 候选。
+	// 并发查询避免双重延迟；返回顺序 IPv4 在前，调用方按 dns_mode 自行排序/过滤。
+	chA := make(chan result, 1)
+	chAAAA := make(chan result, 1)
+	go func() {
+		ips, err := query(dns.TypeA)
+		chA <- result{ips, err}
+	}()
+	go func() {
+		ips, err := query(dns.TypeAAAA)
+		chAAAA <- result{ips, err}
+	}()
+
+	rA := <-chA
+	rAAAA := <-chAAAA
+
+	var ips []net.IP
+	ips = append(ips, rA.ips...)
+	ips = append(ips, rAAAA.ips...)
+	if len(ips) == 0 {
+		if rA.err != nil {
+			return nil, rA.err
+		}
+		if rAAAA.err != nil {
+			return nil, rAAAA.err
+		}
+		return nil, fmt.Errorf("no A/AAAA records for %s", domain)
 	}
 	return ips, nil
 }
