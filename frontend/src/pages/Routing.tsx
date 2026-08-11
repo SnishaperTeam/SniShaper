@@ -99,7 +99,15 @@ const Routing: React.FC = () => {
   };
 
   return (
-    <Box sx={{ p: 3, maxWidth: '5xl', mx: 'auto', display: 'flex', flexDirection: 'column', gap: 4 }}>
+    <Box sx={{ pt: 4, pb: 6, width: '100%', display: 'flex', flexDirection: 'column', gap: 4 }}>
+      <Box sx={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: { xs: 'flex-start', sm: 'flex-end' }, gap: 2 }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+          <Box sx={{ p: 1.25, borderRadius: 1.5, border: 1, color: 'primary.main', bgcolor: (theme) => alpha(theme.palette.primary.main, 0.1), borderColor: (theme) => alpha(theme.palette.primary.main, 0.1), display: 'flex' }}>
+            <Activity size={20} />
+          </Box>
+          <Typography variant="h5" sx={{ fontWeight: 700, letterSpacing: '-0.02em' }}>{t('routing.title')}</Typography>
+        </Box>
+      </Box>
 
       <Box sx={{ bgcolor: 'background.paper', border: 1, borderColor: 'divider', borderRadius: 2, overflow: 'hidden', display: 'flex', flexDirection: 'column', height: 340 }}>
         <Box sx={{ px: 3, py: 2, borderBottom: 1, borderColor: 'divider', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -118,9 +126,9 @@ const Routing: React.FC = () => {
             {flows.map((flow) => (
                 <Box
                     key={flow.id}
-                    sx={{ display: 'flex', alignItems: 'center', gap: 1, px: 1.5, py: 0.75, bgcolor: 'action.hover', border: 1, borderColor: 'divider', borderRadius: '999px', boxShadow: 1 }}
+                    sx={{ display: 'flex', alignItems: 'center', gap: 1, px: 1.5, py: 0.75, bgcolor: 'action.hover', border: 1, borderColor: 'divider', borderRadius: '999px', boxShadow: 1, minWidth: 0 }}
                 >
-                    <Typography variant="caption" sx={{ fontWeight: 700, maxWidth: 150, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={flow.domain}>
+                    <Typography variant="caption" sx={{ fontWeight: 700, maxWidth: 150, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', py: 0.25, outline: '1px solid transparent' }} title={flow.domain}>
                         {flow.domain}
                     </Typography>
                     <Typography variant="caption" sx={{ color: 'text.secondary', fontSize: '0.625rem' }}>➔</Typography>
@@ -132,7 +140,7 @@ const Routing: React.FC = () => {
         </Box>
       </Box>
 
-      <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', lg: '1fr 1fr' }, gap: 4 }}>
+      <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: '1fr 1fr', xl: 'repeat(3, 1fr)' }, gap: 4 }}>
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, px: 0.5 }}>
                 <Box sx={{ display: 'inline-flex', color: 'primary.main' }}><Workflow size={18} /></Box>
@@ -158,7 +166,7 @@ const Routing: React.FC = () => {
                                         bgcolor: active ? (theme) => alpha(theme.palette.primary.main, 0.05) : 'background.paper',
                                         color: active ? 'primary.main' : 'text.secondary',
                                         boxShadow: active ? 1 : 'none',
-                                        '&:hover': { borderColor: active ? 'primary.main' : 'rgba(11,123,255,0.3)' },
+                                        '&:hover': { borderColor: active ? 'primary.main' : (theme) => alpha(theme.palette.primary.main, 0.3) },
                                     }}
                                 >
                                     <Box sx={{ width: 28, height: 28, borderRadius: 1, bgcolor: 'action.hover', display: 'flex', alignItems: 'center', justifyContent: 'center', color: active ? 'primary.main' : opt.color }}>
@@ -172,9 +180,9 @@ const Routing: React.FC = () => {
                 </Box>
 
                 <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderTop: 1, borderColor: 'divider', pt: 2 }}>
-                    <Box>
-                        <Typography variant="body2" sx={{ fontWeight: 700 }}>{t('routing.gfwlist_check')}</Typography>
-                        <Typography variant="caption" sx={{ fontSize: '0.6875rem', color: 'text.secondary', display: 'block', mt: 0.25 }}>
+                    <Box sx={{ minWidth: 0 }}>
+                        <Typography variant="body2" sx={{ fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t('routing.gfwlist_check')}</Typography>
+                        <Typography variant="caption" sx={{ fontSize: '0.6875rem', color: 'text.secondary', display: 'block', mt: 0.25, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                             {status.enabled ? t('routing.preloaded', { count: status.domain_count }) : t('routing.inactive')}
                         </Typography>
                     </Box>
@@ -217,7 +225,7 @@ const Routing: React.FC = () => {
                     { icon: Zap, title: t('routing.feature_smart'), color: 'success.main', desc: t('routing.feature_smart_desc') },
                     { icon: Activity, title: t('routing.feature_priority'), color: 'secondary.main', desc: t('routing.feature_priority_desc') }
                 ].map((item, i) => (
-                    <Box key={i} sx={{ p: 2, bgcolor: 'background.paper', border: 1, borderColor: 'divider', borderRadius: 2, display: 'flex', gap: 2, transition: 'border-color 0.15s', '&:hover': { borderColor: 'rgba(11,123,255,0.4)' } }}>
+                    <Box key={i} sx={{ p: 2, bgcolor: 'background.paper', border: 1, borderColor: 'divider', borderRadius: 2, display: 'flex', gap: 2, transition: 'border-color 0.15s', '&:hover': { borderColor: (theme) => alpha(theme.palette.primary.main, 0.4) } }}>
                         <Box sx={{ flexShrink: 0, width: 40, height: 40, borderRadius: 2, display: 'flex', alignItems: 'center', justifyContent: 'center', bgcolor: 'action.hover', color: item.color }}>
                             <item.icon size={20} />
                         </Box>

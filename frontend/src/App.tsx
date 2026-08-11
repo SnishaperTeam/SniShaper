@@ -1,6 +1,6 @@
 import React, { Suspense, lazy, useState, useEffect, useCallback, useRef, createContext, useContext } from 'react';
 import { HashRouter as Router, Routes, Route, Navigate, useLocation } from 'react-router-dom';
-import { Box, CssBaseline, ThemeProvider, AppBar, Toolbar, Typography, CircularProgress } from '@mui/material';
+import { Box, CssBaseline, ThemeProvider, AppBar, Toolbar, Typography } from '@mui/material';
 import { alpha } from '@mui/material/styles';
 import { keyframes } from '@emotion/react';
 import Sidebar from './components/Sidebar';
@@ -16,6 +16,8 @@ import {
 } from './api/bindings';
 import { I18nProvider, useTranslation } from './i18n/I18nContext';
 import { toast } from './lib/toast';
+import logoUrl from './assets/logo.svg';
+import AnimatedIcon from './lib/animated-icon';
 
 const Welcome = lazy(() => import('./pages/Welcome'));
 
@@ -215,14 +217,14 @@ const App: React.FC = () => {
 
 const routeFallback = (
   <Box sx={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', animation: `${fadeIn} 0.25s ease` }}>
-    <CircularProgress size={28} />
+    <AnimatedIcon icon="svg-spinners:3-dots-fade" width={28} />
   </Box>
 );
 
 const AppRoutes: React.FC<{ settingsCache: SettingsCache, updateSettingsCache: any, themeId: string, onThemeChange: (id: string) => void }> = ({ settingsCache, updateSettingsCache, themeId, onThemeChange }) => {
   const location = useLocation();
   return (
-    <Box key={location.key} sx={{ animation: `${fadeIn} 0.3s cubic-bezier(0.16, 1, 0.3, 1)` }}>
+    <Box key={location.key} sx={{ flexGrow: 1, flexShrink: 0, minWidth: 0, display: 'flex', flexDirection: 'column', animation: `${fadeIn} 0.3s cubic-bezier(0.16, 1, 0.3, 1)` }}>
       <SettingsCtx.Provider value={{ cache: settingsCache, updateCache: updateSettingsCache }}>
         <Suspense fallback={routeFallback}>
           <Routes>
@@ -245,6 +247,18 @@ const AppRoutes: React.FC<{ settingsCache: SettingsCache, updateSettingsCache: a
 
 const AppContent: React.FC<{ settingsCache: SettingsCache, updateSettingsCache: any, themeId: string, onThemeChange: (id: string) => void }> = ({ settingsCache, updateSettingsCache, themeId, onThemeChange }) => {
   const { t } = useTranslation();
+  const [glowPos, setGlowPos] = useState({ x: 0.5, y: 0.3 });
+  const glowRef = useRef<HTMLDivElement>(null);
+
+  const handleGlowMove = useCallback((e: React.MouseEvent) => {
+    const rect = e.currentTarget.getBoundingClientRect();
+    requestAnimationFrame(() => {
+      setGlowPos({
+        x: (e.clientX - rect.left) / rect.width,
+        y: (e.clientY - rect.top) / rect.height,
+      });
+    });
+  }, []);
 
   const prevIpv6Ref = useRef<boolean | null>(null);
   useEffect(() => {
@@ -274,20 +288,59 @@ const AppContent: React.FC<{ settingsCache: SettingsCache, updateSettingsCache: 
         <ToastProvider />
         <Sidebar />
 
-        <Box sx={{ flexGrow: 1, display: 'flex', flexDirection: 'column', position: 'relative', bgcolor: 'background.default', minWidth: 0 }}>
+        <Box
+          ref={glowRef}
+          onMouseMove={handleGlowMove}
+          sx={{
+            flexGrow: 1, display: 'flex', flexDirection: 'column', position: 'relative', bgcolor: 'background.default', minWidth: 0,
+            '&::before': {
+              content: '""', position: 'absolute', inset: 0, pointerEvents: 'none', zIndex: 0,
+              backgroundImage: (theme: any) => {
+                const line = theme.palette.mode === 'dark' ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.08)';
+                const glow = theme.palette.mode === 'dark' ? 'rgba(255,255,255,0.1)' : alpha(theme.palette.primary.main, 0.12);
+                return `
+                  linear-gradient(${line} 1px, transparent 1px),
+                  linear-gradient(90deg, ${line} 1px, transparent 1px),
+                  radial-gradient(ellipse 800px 500px at ${glowPos.x * 100}% ${glowPos.y * 100}%, ${glow} 0%, transparent 70%)
+                `;
+              },
+              backgroundSize: '48px 48px, 48px 48px, 100% 100%',
+              opacity: 1,
+            },
+          }}>
           <AppBar position="fixed" sx={{
             zIndex: (theme) => theme.zIndex.drawer + 1,
-            bgcolor: (theme) => alpha(theme.palette.background.paper, 0.72),
-            backdropFilter: 'blur(14px)',
-            boxShadow: '0 1px 0 rgba(127,127,127,0.18)',
+            bgcolor: (theme) => alpha(theme.palette.background.paper, 0.64),
+            backdropFilter: 'blur(20px) saturate(180%)',
+            WebkitBackdropFilter: 'blur(20px) saturate(180%)',
+            boxShadow: '0 1px 0 rgba(127,127,127,0.12)',
           }}>
-            <Toolbar variant="dense" sx={{ '--wails-draggable': 'drag' }}>
-              <Typography variant="h6" noWrap sx={{ flexGrow: 1, color: 'text.primary' }}>SniShaper</Typography>
+            <Toolbar variant="dense" sx={{ '--wails-draggable': 'drag', gap: 1.5 }}>
+              <Box
+                component="img"
+                src={logoUrl}
+                alt="SniShaper"
+                sx={{ width: 22, height: 22, objectFit: 'contain', flexShrink: 0 }}
+              />
+              <Typography
+                variant="subtitle1"
+                noWrap
+                sx={{
+                  fontWeight: 700,
+                  letterSpacing: '0.1em',
+                  color: 'text.primary',
+                  opacity: 0.82,
+                  userSelect: 'none',
+                }}
+              >
+                SniShaper
+              </Typography>
+              <Box sx={{ flexGrow: 1 }} />
               <WindowControls />
             </Toolbar>
           </AppBar>
 
-          <Box component="main" sx={{ flexGrow: 1, p: 3, overflowY: 'auto' }}>
+          <Box component="main" sx={{ flexGrow: 1, pt: 3, px: 3, pb: 0, overflowY: 'auto', overflowX: 'hidden', display: 'flex', flexDirection: 'column', position: 'relative', zIndex: 1 }}>
             <Toolbar sx={{ visibility: 'hidden' }} />
             <AppRoutes
               settingsCache={settingsCache}

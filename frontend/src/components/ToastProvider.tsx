@@ -67,8 +67,10 @@ const ToastProvider: React.FC = () => {
                 alignItems: 'flex-start',
                 gap: 1.5,
                 bgcolor: (theme) =>
-                  `color-mix(in srgb, ${theme.palette.background.paper} 88%, transparent)`,
-                backdropFilter: 'blur(10px)',
+                  `color-mix(in srgb, ${theme.palette.background.paper} 82%, transparent)`,
+                backdropFilter: 'blur(16px) saturate(180%)',
+                WebkitBackdropFilter: 'blur(16px) saturate(180%)',
+                boxShadow: (theme) => `0 8px 32px ${theme.palette.mode === 'dark' ? 'rgba(0,0,0,0.4)' : 'rgba(0,0,0,0.08)'}`,
                 animation: `${slideIn} 0.25s cubic-bezier(0.16, 1, 0.3, 1)`,
               }}
             >

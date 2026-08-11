@@ -8,6 +8,7 @@ import {
   Box, Button, TextField, Stack, Typography, LinearProgress,
   Alert, FormControlLabel, Switch,
 } from '@mui/material';
+import { alpha } from '@mui/material/styles';
 
 interface ECHProfileFormProps {
   initialData?: any;
@@ -90,7 +91,7 @@ const ECHProfileForm: React.FC<ECHProfileFormProps> = ({ initialData, onSuccess,
   return (
     <form onSubmit={handleSubmit}>
       <Stack direction="column" spacing={3} sx={{ alignItems: 'stretch', color: 'text.primary' }}>
-        <Box sx={{ p: 1.5, bgcolor: 'rgba(25, 118, 210, 0.05)', border: 1, borderColor: 'rgba(25, 118, 210, 0.2)', borderRadius: 2 }}>
+        <Box sx={{ p: 1.5, bgcolor: (theme) => alpha(theme.palette.primary.main, 0.05), border: 1, borderColor: (theme) => alpha(theme.palette.primary.main, 0.2), borderRadius: 2 }}>
           <Stack direction="row" spacing={1.5} sx={{ alignItems: 'center', mb: 1.5 }}>
             <Shield size={24} color="primary.main" />
             <Stack direction="column" spacing={0.25}>
@@ -171,12 +172,13 @@ const ECHProfileForm: React.FC<ECHProfileFormProps> = ({ initialData, onSuccess,
             value={formData.config}
             onChange={(e) => setFormData({ ...formData, config: e.target.value })}
             placeholder={t('ech_form.raw_placeholder')}
-            slotProps={{ input: { style: { borderRadius: 1, fontSize: '0.75rem', fontFamily: 'mono' } }, inputLabel: { shrink: true } }}
+            slotProps={{ input: { style: { borderRadius: 1, fontSize: '0.75rem', fontFamily: 'monospace' } }, inputLabel: { shrink: true } }}
           />
         </Box>
 
         <Box sx={{ pt: 0.5, display: 'flex', alignItems: 'center', gap: 1.5 }}>
           <FormControlLabel
+            sx={{ gap: 1, marginLeft: 0, marginRight: 0 }}
             control={
               <Switch
                 checked={formData.auto_update}

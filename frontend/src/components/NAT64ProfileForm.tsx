@@ -5,6 +5,7 @@ import { useTranslation } from '../i18n/I18nContext';
 import {
   Box, Button, TextField, Stack, Typography, FormControlLabel, Switch,
 } from '@mui/material';
+import { alpha } from '@mui/material/styles';
 
 interface NAT64ProfileFormProps {
   initialData?: any;
@@ -53,7 +54,7 @@ const NAT64ProfileForm: React.FC<NAT64ProfileFormProps> = ({ initialData, onSucc
   return (
     <form onSubmit={handleSubmit}>
       <Stack direction="column" spacing={3} sx={{ alignItems: 'stretch', color: 'text.primary' }}>
-        <Box sx={{ p: 1.5, bgcolor: 'rgba(25, 118, 210, 0.05)', border: 1, borderColor: 'rgba(25, 118, 210, 0.2)', borderRadius: 2 }}>
+        <Box sx={{ p: 1.5, bgcolor: (theme) => alpha(theme.palette.primary.main, 0.05), border: 1, borderColor: (theme) => alpha(theme.palette.primary.main, 0.2), borderRadius: 2 }}>
           <Stack direction="row" spacing={1.5} sx={{ alignItems: 'center' }}>
             <Layers size={24} color="primary.main" />
             <Stack direction="column" spacing={0.25}>
@@ -90,7 +91,7 @@ const NAT64ProfileForm: React.FC<NAT64ProfileFormProps> = ({ initialData, onSucc
               value={formData.prefix}
               onChange={(e) => setFormData({ ...formData, prefix: e.target.value })}
               placeholder={t('proxies.nat64_placeholder_prefix')}
-              slotProps={{ input: { style: { borderRadius: 1, fontFamily: 'mono' } }, inputLabel: { shrink: true } }}
+              slotProps={{ input: { style: { borderRadius: 1, fontFamily: 'monospace' } }, inputLabel: { shrink: true } }}
             />
           </Box>
         </Stack>

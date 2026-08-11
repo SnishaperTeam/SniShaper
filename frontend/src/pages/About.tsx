@@ -33,10 +33,10 @@ const About: React.FC = () => {
     GetAppVersion().then((v) => { if (v) setVersion(v); }).catch(() => setVersion('1.29'));
   }, []);
 
-  const handleOpenWebsite = () => OpenURL('https://github.com/SniShaper/SniShaper');
+  const handleOpenWebsite = () => OpenURL('https://jetcpp.dpdns.org');
   const handleOpenGitHub = () => OpenURL('https://github.com/SniShaper/SniShaper');
   const handleOpenBeta = () => OpenURL('https://github.com/SniShaper/SniShaper/actions');
-  const handleOpenAdaptation = () => OpenURL('https://github.com/SniShaper/SniShaper/issues/32');
+  const handleOpenAdaptation = () => OpenURL('https://github.com/SniShaper/SniShaper/issues/95');
   const handleOpenDevPlan = () => OpenURL('https://github.com/SniShaper/SniShaper/issues/36');
 
   const handleDownloadUpdate = () => {
@@ -84,7 +84,7 @@ const About: React.FC = () => {
   const infoCards = [
     { icon: <Heart size={22} />, title: t('about.contributors'), value: 'mechrevo, dongzheyu, JetCPP-dongle', color: 'success.main', valueColor: 'text.primary' },
     { icon: <Users size={22} />, title: t('about.maintainers'), value: 'JetCPP Team, SniShaper Team', color: 'warning.main', valueColor: 'text.primary' },
-    { icon: <Globe size={22} />, title: t('about.website'), value: 'github.com/SniShaper/SniShaper', color: 'primary.main', valueColor: 'primary.main', onClick: handleOpenWebsite },
+    { icon: <Globe size={22} />, title: t('about.website'), value: 'jetcpp.dpdns.org', color: 'primary.main', valueColor: 'primary.main', onClick: handleOpenWebsite },
     { icon: <GitBranch size={22} />, title: 'GitHub', value: 'SniShaper/SniShaper', color: 'text.primary', valueColor: 'text.primary', onClick: handleOpenGitHub },
     { icon: <Download size={22} />, title: t('about.latest_beta'), value: t('about.actions_build'), color: 'warning.main', valueColor: 'warning.main', onClick: handleOpenBeta },
   ];
@@ -101,7 +101,7 @@ const About: React.FC = () => {
             </Box>
             <Typography variant="h1" sx={{ fontSize: '2.25rem', fontWeight: 900, color: 'text.primary', mb: 0.5, letterSpacing: '-0.025em' }}>SniShaper</Typography>
             <Typography sx={{ fontSize: '1.125rem', fontWeight: 500, color: 'text.secondary', mb: 2 }}>{t('about.title')}</Typography>
-            <Box sx={{ display: 'inline-flex', alignItems: 'center', gap: 1, px: 2.5, py: 1.25, borderRadius: '999px', bgcolor: (theme) => alpha(theme.palette.primary.main, 0.1), border: 1, borderColor: (theme) => alpha(theme.palette.primary.main, 0.2), backdropFilter: 'blur(4px)' }}>
+            <Box sx={{ display: 'inline-flex', alignItems: 'center', gap: 1, px: 2.5, py: 1.25, borderRadius: '999px', bgcolor: (theme) => alpha(theme.palette.primary.main, 0.1), border: 1, borderColor: (theme) => alpha(theme.palette.primary.main, 0.2) }}>
               <Shield size={16} aria-hidden />
               <Typography variant="body2" sx={{ fontWeight: 700, color: 'primary.main' }}>{t('about.version')}: {version}</Typography>
             </Box>
@@ -165,8 +165,8 @@ const About: React.FC = () => {
                 >
                   <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 2 }}>
                     <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', p: 1.5, borderRadius: 2, bgcolor: 'var(--chip-bg)', color: c.color, transition: 'background-color 0.3s' }}>{c.icon}</Box>
-                    <Box sx={{ flex: 1 }}>
-                      <Typography sx={{ fontSize: '1rem', fontWeight: 700, color: 'text.primary', mb: 0.75, display: 'flex', alignItems: 'center', gap: 1 }}>
+                    <Box sx={{ flex: 1, minWidth: 0 }}>
+                      <Typography sx={{ fontSize: '1rem', fontWeight: 700, color: 'text.primary', mb: 0.75, display: 'flex', alignItems: 'center', gap: 1, overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '100%' }}>
                         {c.title}
                         <Box component="span" sx={{ display: 'inline-flex', color: 'text.secondary', opacity: 'var(--reveal, 0)', transition: 'opacity 0.3s' }}><ExternalLink size={14} /></Box>
                       </Typography>
@@ -206,7 +206,7 @@ const About: React.FC = () => {
               >
                 <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 2 }}>
                   <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', p: 1.5, borderRadius: 2, bgcolor: 'var(--chip-bg)', color: c.color, transition: 'background-color 0.3s' }}>{c.icon}</Box>
-                  <Box sx={{ flex: 1 }}>
+                  <Box sx={{ flex: 1, minWidth: 0 }}>
                     <Typography sx={{ fontSize: '0.75rem', fontWeight: 700, color: 'text.secondary', textTransform: 'uppercase', letterSpacing: '0.05em', mb: 0.75 }}>{c.title}</Typography>
                     <Typography sx={{ fontSize: '0.9375rem', fontWeight: 600, color: c.valueColor, lineHeight: 1.375 }}>{c.value}</Typography>
                   </Box>

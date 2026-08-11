@@ -8,6 +8,7 @@ import {
 } from '../api/bindings';
 import { useTranslation } from '../i18n/I18nContext';
 import { Box, Typography, Button, TextField, InputAdornment } from '@mui/material';
+import { alpha } from '@mui/material/styles';
 import { keyframes } from '@emotion/react';
 
 const RE_ERROR = /error|failed|panic/i;
@@ -33,19 +34,19 @@ const LogLine: React.FC<{ line: string }> = React.memo(({ line }) => {
   const levelColor = level === 'error' ? 'error.main' : level === 'warn' ? 'warning.main' : 'text.primary';
   const borderColor = level === 'error' ? 'rgba(239,68,68,0.7)' : level === 'warn' ? 'rgba(245,158,11,0.7)' : 'transparent';
   const bgColor = level === 'error' ? 'rgba(239,68,68,0.03)' : level === 'warn' ? 'rgba(245,158,11,0.03)' : 'transparent';
-  const badgeBg = level === 'error' ? 'rgba(239,68,68,0.2)' : level === 'warn' ? 'rgba(245,158,11,0.2)' : 'rgba(11,123,255,0.1)';
+  const badgeBg = level === 'error' ? 'rgba(239,68,68,0.2)' : level === 'warn' ? 'rgba(245,158,11,0.2)' : (theme: any) => alpha(theme.palette.primary.main, 0.1);
   const badgeColor = level === 'error' ? 'error.main' : level === 'warn' ? 'warning.main' : 'primary.main';
 
   return (
     <Box sx={{
-      display: 'flex', gap: 1.25, px: 2, py: 0.75, fontFamily: 'mono', fontSize: '0.6875rem', lineHeight: 1.6,
-      borderLeft: 2, borderLeftColor: borderColor, bgcolor: bgColor, color: levelColor,
+      display: 'flex', gap: 1.5, px: 2.5, py: 1, fontFamily: 'monospace', fontSize: '0.75rem', lineHeight: 1.75,
+      borderLeft: 3, borderLeftColor: borderColor, bgcolor: bgColor, color: levelColor,
       transition: 'background-color 0.15s', '&:hover': { bgcolor: 'action.hover' },
     }}>
-      <Box component="span" sx={{ flexShrink: 0, color: 'text.secondary', width: 60, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{time}</Box>
+      <Box component="span" sx={{ flexShrink: 0, color: 'text.secondary', width: 68, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{time}</Box>
       <Box component="span" sx={{
-        flexShrink: 0, px: 0.75, borderRadius: 0.5, fontSize: '0.5625rem', fontWeight: 900, textTransform: 'uppercase',
-        lineHeight: '16px', height: 16, textAlign: 'center', minWidth: 34, bgcolor: badgeBg, color: badgeColor,
+        flexShrink: 0, px: 0.75, borderRadius: 0.5, fontSize: '0.625rem', fontWeight: 900, textTransform: 'uppercase',
+        lineHeight: '18px', height: 18, textAlign: 'center', minWidth: 38, bgcolor: badgeBg, color: badgeColor,
       }}>
         {level === 'error' ? 'ERR' : level === 'warn' ? 'WRN' : 'INF'}
       </Box>
@@ -156,9 +157,9 @@ const Logs: React.FC = () => {
         lastDate = date;
         elements.push(
           <Box key={`d-${date}`} sx={{
-            position: 'sticky', top: 0, zIndex: 10, px: 2, py: 0.5, bgcolor: 'background.paper', opacity: 0.9,
-            backdropFilter: 'blur(4px)', borderBottom: 1, borderColor: 'divider',
-            fontSize: '0.625rem', fontWeight: 900, textTransform: 'uppercase', letterSpacing: '0.1em', color: 'text.secondary',
+            position: 'sticky', top: 0, zIndex: 10, px: 2.5, py: 0.75, bgcolor: 'background.paper',
+            borderBottom: 1, borderColor: 'divider',
+            fontSize: '0.6875rem', fontWeight: 900, textTransform: 'uppercase', letterSpacing: '0.1em', color: 'text.secondary',
           }}>
             {date}
           </Box>
@@ -170,9 +171,14 @@ const Logs: React.FC = () => {
   }, [filteredLines, captureEnabled]);
 
   return (
-    <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column', p: 3, overflow: 'hidden' }}>
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', mb: 3, flexShrink: 0 }}>
-        <Typography variant="h4" sx={{ fontWeight: 900, letterSpacing: '-0.03em' }}>{t('logs.title')}</Typography>
+    <Box sx={{ flexGrow: 1, minHeight: 0, display: 'flex', flexDirection: 'column', pt: 4, px: 3, pb: 0, overflow: 'hidden' }}>
+      <Box sx={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: { xs: 'flex-start', sm: 'flex-end' }, gap: 2, mb: 6, flexShrink: 0 }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+          <Box sx={{ p: 1.25, borderRadius: 1.5, border: 1, color: 'primary.main', bgcolor: (theme) => alpha(theme.palette.primary.main, 0.1), borderColor: (theme) => alpha(theme.palette.primary.main, 0.1), display: 'flex' }}>
+            <FileText size={20} />
+          </Box>
+          <Typography variant="h5" sx={{ fontWeight: 700, letterSpacing: '-0.02em' }}>{t('logs.title')}</Typography>
+        </Box>
         <Box sx={{ display: 'flex', gap: 1 }}>
           <Button onClick={handleToggleCapture} loading={isTogglingCapture}
             color={captureEnabled ? 'error' : 'primary'} variant="contained" size="small" startIcon={<Radio size={14} />}>
@@ -196,7 +202,7 @@ const Logs: React.FC = () => {
         </Box>
       </Box>
 
-      <Box sx={{ mb: 2, flexShrink: 0 }}>
+      <Box sx={{ mb: 2.5, flexShrink: 0 }}>
         <TextField
           type="text"
           value={search}
@@ -219,8 +225,8 @@ const Logs: React.FC = () => {
       </Box>
 
       <Box ref={scrollRef} onScroll={handleScroll} sx={{
-        flex: 1, bgcolor: 'background.paper', border: 1, borderColor: 'divider', borderRadius: 2,
-        overflow: 'hidden', display: 'flex', flexDirection: 'column', position: 'relative',
+        flex: 1, bgcolor: 'background.paper', border: 1, borderColor: 'divider', borderRadius: '16px 16px 0 0',
+        borderBottom: 0, overflow: 'hidden', display: 'flex', flexDirection: 'column', position: 'relative',
         boxShadow: 'inset 0 2px 4px 0 rgba(0,0,0,0.05)',
       }}>
         <Box sx={{ flex: 1, overflowY: 'auto', overflowX: 'hidden' }}>
@@ -259,8 +265,8 @@ const Logs: React.FC = () => {
           </Button>
         )}
 
-        <Box sx={{ px: 3, py: 1, bgcolor: 'action.hover', borderTop: 1, borderColor: 'divider', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0 }}>
-          <Box sx={{ display: 'flex', gap: 2, fontSize: '0.5625rem', fontWeight: 900, textTransform: 'uppercase', letterSpacing: '0.1em', color: 'text.secondary' }}>
+        <Box sx={{ px: 3, py: 1.25, bgcolor: 'action.hover', borderTop: 1, borderColor: 'divider', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0 }}>
+          <Box sx={{ display: 'flex', gap: 2.5, fontSize: '0.625rem', fontWeight: 900, textTransform: 'uppercase', letterSpacing: '0.1em', color: 'text.secondary' }}>
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
               <Box sx={{ width: 6, height: 6, borderRadius: '50%', bgcolor: captureEnabled ? 'success.main' : 'text.disabled', ...(captureEnabled ? { animation: `${pulse} 1.5s ease-in-out infinite` } : {}) }} aria-hidden />
               {captureEnabled ? t('logs.capture_on') : t('logs.capture_off')}
@@ -268,7 +274,7 @@ const Logs: React.FC = () => {
             <Box>{t('logs.buffer', { count: lines.length })}</Box>
           </Box>
           {captureEnabled && isPaused && (
-            <Typography variant="caption" sx={{ fontWeight: 900, color: 'primary.main', bgcolor: 'rgba(11,123,255,0.1)', px: 1, py: 0.25, borderRadius: '999px', fontSize: '0.5625rem', animation: `${bounce} 1s ease-in-out infinite` }}>{t('logs.refresh_paused')}</Typography>
+            <Typography variant="caption" sx={{ fontWeight: 900, color: 'primary.main', bgcolor: (theme) => alpha(theme.palette.primary.main, 0.1), px: 1, py: 0.25, borderRadius: '999px', fontSize: '0.5625rem', animation: `${bounce} 1s ease-in-out infinite` }}>{t('logs.refresh_paused')}</Typography>
           )}
         </Box>
       </Box>

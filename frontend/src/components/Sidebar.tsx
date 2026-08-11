@@ -66,10 +66,8 @@ const SidebarContent: React.FC = () => {
                   borderRadius: 1,
                   bgcolor: isActive ? 'primary.main' : 'transparent',
                   color: isActive ? 'primary.contrastText' : 'text.secondary',
-                  transition: 'background-color 0.15s, box-shadow 0.15s',
-                  boxShadow: isActive
-                    ? (theme) => `0 0 12px ${theme.palette.primary.main}66, inset 0 1px 0 rgba(255,255,255,0.12)`
-                    : 'none',
+                  transition: 'background-color 0.15s',
+                  boxShadow: isActive ? 'inset 0 1px 0 rgba(255,255,255,0.1)' : 'none',
                   '&::before': isActive
                     ? {
                         content: '""',
@@ -95,7 +93,11 @@ const SidebarContent: React.FC = () => {
                   variant="body2"
                   sx={{
                     fontWeight: isActive ? 700 : 500,
-                    textAlign: 'left'
+                    textAlign: 'left',
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    whiteSpace: 'nowrap',
+                    maxWidth: '100%',
                   }}>
                   {item.label}
                 </Typography>
@@ -138,7 +140,15 @@ const Sidebar: React.FC = React.memo(() => {
       sx={{
         width: DRAWER_WIDTH,
         flexShrink: 0,
-        '& .MuiDrawer-paper': { width: DRAWER_WIDTH, boxSizing: 'border-box' },
+        '& .MuiDrawer-paper': {
+          width: DRAWER_WIDTH,
+          boxSizing: 'border-box',
+          bgcolor: (theme: any) => `color-mix(in srgb, ${theme.palette.background.paper} 78%, transparent)`,
+          backdropFilter: 'blur(20px) saturate(180%)',
+          WebkitBackdropFilter: 'blur(20px) saturate(180%)',
+          borderRight: '1px solid',
+          borderColor: 'divider',
+        },
       }}
     >
       <SidebarContent />

@@ -12,6 +12,7 @@ import {
   Download,
   Lock
 } from '../lib/icons';
+import { alpha } from '@mui/material/styles';
 import {
   GetProxyMode,
   IsProxyRunning,
@@ -41,12 +42,10 @@ import {
   Typography,
   Button,
   Grid,
-  useColorScheme,
 } from '@mui/material';
 
 const Dashboard: React.FC = () => {
   const { t } = useTranslation();
-  const { mode } = useColorScheme();
   const [proxyRunning, setProxyRunning] = useState(false);
   const [sysProxyEnabled, setSysProxyEnabled] = useState(false);
   const [proxyMode, setProxyMode] = useState('MITM');
@@ -66,8 +65,6 @@ const Dashboard: React.FC = () => {
   const [isInstallingCert, setIsInstallingCert] = useState(false);
   const [portOccupant, setPortOccupant] = useState<{ port: number; pid: number; name: string } | null>(null);
   const [showKillDialog, setShowKillDialog] = useState(false);
-
-  const hoverBg = mode === 'light' ? 'rgba(0,0,0,0.04)' : 'rgba(255,255,255,0.08)';
 
   const refresh = async () => {
     try {
@@ -267,11 +264,16 @@ const Dashboard: React.FC = () => {
   };
 
   return (
-    <Box sx={{ px: 6, pt: 5, pb: 6, maxWidth: '5xl', mx: 'auto' }}>
+    <Box sx={{ pt: 4, pb: 6, width: '100%' }}>
       <Box sx={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: { xs: 'flex-start', sm: 'flex-end' }, gap: 2, mb: 6 }}>
-        <Typography variant="h4" sx={{ fontWeight: 900, letterSpacing: '-0.02em' }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+          <Box sx={{ p: 1.25, borderRadius: 1.5, border: 1, color: 'primary.main', bgcolor: (theme) => alpha(theme.palette.primary.main, 0.1), borderColor: (theme) => alpha(theme.palette.primary.main, 0.1), display: 'flex' }}>
+            <Cpu size={20} />
+          </Box>
+          <Typography variant="h5" sx={{ fontWeight: 700, letterSpacing: '-0.02em', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '100%' }}>
           {t('dashboard.title')}
         </Typography>
+        </Box>
         <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
           <Button
             onClick={handleToggleProxy}
@@ -307,8 +309,8 @@ const Dashboard: React.FC = () => {
       </Box>
 
       <Grid container spacing={3}>
-        <Grid size={12}>
-          <Box sx={{ p: 3, bgcolor: 'background.paper', border: 1, borderColor: 'divider', borderRadius: 2, boxShadow: 1, transition: 'box-shadow 0.25s ease', '&:hover': { boxShadow: (theme) => `0 6px 24px ${theme.palette.primary.main}33` } }}>
+        <Grid size={{ xs: 12, md: 6, xl: 4 }}>
+          <Box className="ss-card-hover" sx={{ p: 3, bgcolor: 'background.paper', border: 1, borderColor: 'divider', borderRadius: 2, boxShadow: 1 }}>
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 2 }}>
               <Box sx={{ color: 'primary.main' }}><Cpu size={20} /></Box>
               <Typography variant="body2" sx={{ fontWeight: 'bold', color: 'text.secondary', letterSpacing: '-0.01em', textTransform: 'uppercase' }}>
@@ -316,27 +318,27 @@ const Dashboard: React.FC = () => {
               </Typography>
             </Box>
             <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
-              <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <Typography variant="body2" color="text.secondary">{t('dashboard.run_status')}</Typography>
-                <Box sx={{ px: 1, py: 0.25, borderRadius: 1, fontSize: '0.75rem', fontWeight: 'bold', textTransform: 'uppercase', bgcolor: proxyRunning ? 'success.main' : 'error.main', color: proxyRunning ? 'success.contrastText' : 'error.contrastText' }}>
+              <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', minWidth: 0 }}>
+                <Typography variant="body2" color="text.secondary" sx={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '100%', py: 0.25, outline: '1px solid transparent' }}>{t('dashboard.run_status')}</Typography>
+                <Box sx={{ px: 1, py: 0.25, borderRadius: 1, fontSize: '0.75rem', fontWeight: 'bold', textTransform: 'uppercase', bgcolor: proxyRunning ? 'success.main' : 'error.main', color: proxyRunning ? 'success.contrastText' : 'error.contrastText', flexShrink: 0, ...(proxyRunning ? { animation: 'ss-pulse-glow 2s ease-in-out infinite' } : {}) }}>
                   {proxyRunning ? t('common.running') : t('common.stopped')}
                 </Box>
               </Box>
-              <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <Typography variant="body2" color="text.secondary">{t('dashboard.work_mode')}</Typography>
-                <Typography variant="body2" sx={{ fontWeight: 'bold', color: 'primary.main' }}>
+              <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', minWidth: 0 }}>
+                <Typography variant="body2" color="text.secondary" sx={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '100%', py: 0.25, outline: '1px solid transparent' }}>{t('dashboard.work_mode')}</Typography>
+                <Typography variant="body2" sx={{ fontWeight: 'bold', color: 'primary.main', flexShrink: 0 }}>
                   {proxyMode}
                 </Typography>
               </Box>
-              <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <Typography variant="body2" color="text.secondary">{t('dashboard.listen_port')}</Typography>
-                <Typography variant="body2" sx={{ fontWeight: 'bold' }}>
+              <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', minWidth: 0 }}>
+                <Typography variant="body2" color="text.secondary" sx={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '100%', py: 0.25, outline: '1px solid transparent' }}>{t('dashboard.listen_port')}</Typography>
+                <Typography variant="body2" sx={{ fontWeight: 'bold', flexShrink: 0 }}>
                   {port}
                 </Typography>
               </Box>
-              <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <Typography variant="body2" color="text.secondary">{t('dashboard.tun_status')}</Typography>
-                <Box sx={{ px: 1, py: 0.25, borderRadius: 1, fontSize: '0.75rem', fontWeight: 'bold', textTransform: 'uppercase', bgcolor: tunStatus.running ? 'warning.main' : hoverBg, color: tunStatus.running ? 'warning.contrastText' : 'text.secondary' }}>
+              <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', minWidth: 0 }}>
+                <Typography variant="body2" color="text.secondary" sx={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '100%', py: 0.25, outline: '1px solid transparent' }}>{t('dashboard.tun_status')}</Typography>
+                <Box sx={{ px: 1, py: 0.25, borderRadius: 1, fontSize: '0.75rem', fontWeight: 'bold', textTransform: 'uppercase', bgcolor: tunStatus.running ? 'warning.main' : 'action.hover', color: tunStatus.running ? 'warning.contrastText' : 'text.secondary', flexShrink: 0 }}>
                   {tunStatus.running ? t('common.running') : t('common.off')}
                 </Box>
               </Box>
@@ -344,8 +346,8 @@ const Dashboard: React.FC = () => {
           </Box>
         </Grid>
 
-        <Grid size={12}>
-          <Box sx={{ p: 3, bgcolor: 'background.paper', border: 1, borderColor: 'divider', borderRadius: 2, boxShadow: 1, transition: 'box-shadow 0.25s ease', '&:hover': { boxShadow: (theme) => `0 6px 24px ${theme.palette.primary.main}33` } }}>
+        <Grid size={{ xs: 12, md: 6, xl: 4 }}>
+          <Box className="ss-card-hover" sx={{ p: 3, bgcolor: 'background.paper', border: 1, borderColor: 'divider', borderRadius: 2, boxShadow: 1 }}>
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 2 }}>
               <Box sx={{ color: 'primary.main' }}><ShieldCheck size={20} /></Box>
               <Typography variant="body2" sx={{ fontWeight: 'bold', color: 'text.secondary', letterSpacing: '-0.01em', textTransform: 'uppercase' }}>
@@ -353,21 +355,21 @@ const Dashboard: React.FC = () => {
               </Typography>
             </Box>
             <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, p: 1.25, borderRadius: 2, border: 1, bgcolor: caStatus.Installed ? 'success.main' : 'error.main', color: caStatus.Installed ? 'success.contrastText' : 'error.contrastText', borderColor: caStatus.Installed ? 'success.light' : 'error.light' }}>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, p: 1.25, borderRadius: 2, border: 1, bgcolor: caStatus.Installed ? 'success.main' : 'error.main', color: caStatus.Installed ? 'success.contrastText' : 'error.contrastText', borderColor: caStatus.Installed ? 'success.light' : 'error.light', minWidth: 0 }}>
                 {caStatus.Installed ? <ShieldCheck size={18} /> : <ShieldAlert size={18} />}
-                <Typography variant="caption" sx={{ fontWeight: 'bold', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                <Typography variant="caption" sx={{ fontWeight: 'bold', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '100%', py: 0.25, outline: '1px solid transparent' }}>
                   {caStatus.Installed ? t('dashboard.cert_installed') : t('dashboard.cert_not_installed')}
                 </Typography>
               </Box>
-              <Box sx={{ display: 'flex', fontSize: '0.75rem', color: 'text.secondary', fontWeight: 'medium', px: 1, justifyContent: 'space-between', alignItems: 'center' }}>
-                <Typography noWrap sx={{ maxWidth: 140, opacity: 0.6, fontSize: '0.625rem' }} title={caStatus.CertPath}>
+              <Box sx={{ display: 'flex', fontSize: '0.75rem', color: 'text.secondary', fontWeight: 'medium', px: 1, justifyContent: 'space-between', alignItems: 'center', minWidth: 0 }}>
+                <Typography noWrap sx={{ maxWidth: 140, opacity: 0.6, fontSize: '0.625rem', py: 0.25, outline: '1px solid transparent' }} title={caStatus.CertPath}>
                   {caStatus.CertPath || t('dashboard.path_pending')}
                 </Typography>
                 <Button
                   variant="text"
                   size="small"
                   onClick={() => OpenCAFile()}
-                  sx={{ gap: 0.5, color: 'primary.main', fontWeight: 'bold', '&:hover': { textDecoration: 'underline' } }}
+                  sx={{ gap: 0.5, color: 'primary.main', fontWeight: 'bold', '&:hover': { textDecoration: 'underline' }, flexShrink: 0 }}
                   startIcon={<Search size={14} />}
                 >
                   {t('common.view')}
@@ -378,7 +380,7 @@ const Dashboard: React.FC = () => {
         </Grid>
 
         <Grid size={12}>
-          <Box sx={{ p: 3, bgcolor: 'background.paper', border: 1, borderColor: 'divider', borderRadius: 2, boxShadow: 1, transition: 'box-shadow 0.25s ease', '&:hover': { boxShadow: (theme) => `0 6px 24px ${theme.palette.primary.main}33` } }}>
+          <Box className="ss-card-hover" sx={{ p: 3, bgcolor: 'background.paper', border: 1, borderColor: 'divider', borderRadius: 2, boxShadow: 1 }}>
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 2 }}>
               <Box sx={{ color: 'primary.main' }}><ShieldCheck size={20} /></Box>
               <Typography variant="body2" sx={{ fontWeight: 'bold', color: 'text.secondary', letterSpacing: '-0.01em', textTransform: 'uppercase' }}>
@@ -386,14 +388,14 @@ const Dashboard: React.FC = () => {
               </Typography>
             </Box>
             <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, p: 1.25, bgcolor: 'primary.main', border: 1, borderColor: 'primary.main', borderRadius: 2 }}>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, p: 1.25, bgcolor: 'primary.main', border: 1, borderColor: 'primary.main', borderRadius: 2, minWidth: 0 }}>
                 <Zap size={18} color="primary.contrastText" aria-hidden />
-                <Typography variant="body2" sx={{ fontWeight: 'bold', color: 'primary.contrastText', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                <Typography variant="body2" sx={{ fontWeight: 'bold', color: 'primary.contrastText', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '100%', py: 0.25, outline: '1px solid transparent' }}>
                   127.0.0.1:{port}
                 </Typography>
               </Box>
               <Box sx={{ display: 'flex', fontSize: '0.75rem', color: 'text.secondary', fontWeight: 'medium', px: 1, justifyContent: 'flex-end', alignItems: 'center' }}>
-                <Typography sx={{ fontSize: '0.625rem', bgcolor: hoverBg, px: 1.5, py: 0.25, borderRadius: 1, textTransform: 'uppercase', color: 'text.secondary' }}>
+                <Typography sx={{ fontSize: '0.625rem', bgcolor: 'action.hover', px: 1.5, py: 0.25, borderRadius: 1, textTransform: 'uppercase', color: 'text.secondary' }}>
                   {t('common.ready')}
                 </Typography>
               </Box>

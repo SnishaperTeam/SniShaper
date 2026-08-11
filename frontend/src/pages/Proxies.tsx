@@ -1,6 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useContext } from 'react';
 import {
-  Delete, Shield, Bolt, Lock, History, AddCircle, Public, Layers
+  Delete, Shield, Bolt, Lock, History, AddCircle, Public, Layers, AlertCircle
 } from '../lib/icons';
 import {
   GetECHProfiles, DeleteECHProfile, GetNAT64Profiles, DeleteNAT64Profile, TestNAT64Profile,
@@ -9,15 +9,19 @@ import {
 import {
   Box, Typography, Button, IconButton, TextField, Grid, useColorScheme,
 } from '@mui/material';
+import { alpha } from '@mui/material/styles';
 import Modal from '../components/Modal';
 import ECHProfileForm from '../components/ECHProfileForm';
 import NAT64ProfileForm from '../components/NAT64ProfileForm';
 import { useTranslation } from '../i18n/I18nContext';
 import { toast } from '../lib/toast';
+import { SettingsCtx } from '../App';
 
 const Proxies: React.FC = () => {
   const { t } = useTranslation();
   const { mode } = useColorScheme();
+  const { cache } = useContext(SettingsCtx);
+  const ipv6Available = cache.ipv6Available !== false;
   const [echProfiles, setEchProfiles] = useState<any[]>([]);
   const [nat64Profiles, setNat64Profiles] = useState<any[]>([]);
 
@@ -118,10 +122,17 @@ const Proxies: React.FC = () => {
     : { cursor: 'default' };
 
   return (
-    <Box sx={{ px: 6, pt: 4, pb: 6, maxWidth: '5xl', mx: 'auto' }}>
-      <Typography variant="h4" sx={{ fontWeight: 900, letterSpacing: '-0.02em' }}>{t('proxies.title')}</Typography>
+    <Box sx={{ pt: 4, pb: 6, width: '100%' }}>
+      <Box sx={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: { xs: 'flex-start', sm: 'flex-end' }, gap: 2, mb: 6 }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+          <Box sx={{ p: 1.25, borderRadius: 1.5, border: 1, color: 'primary.main', bgcolor: (theme) => alpha(theme.palette.primary.main, 0.1), borderColor: (theme) => alpha(theme.palette.primary.main, 0.1), display: 'flex' }}>
+            <Shield size={20} />
+          </Box>
+          <Typography variant="h5" sx={{ fontWeight: 700, letterSpacing: '-0.02em' }}>{t('proxies.title')}</Typography>
+        </Box>
+      </Box>
 
-      <Box sx={{ mt: 5, display: 'flex', flexDirection: 'column', gap: 2 }}>
+      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, px: 0.5, color: 'text.secondary' }}>
           <Public size={18} aria-hidden />
           <Typography variant="body2" sx={{ fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', display: 'flex', alignItems: 'center', gap: 1 }}>
@@ -186,10 +197,10 @@ const Proxies: React.FC = () => {
                       <Bolt size={18} fill="currentColor" aria-hidden />
                     </Box>
                     <Box sx={{ minWidth: 0 }}>
-                      <Typography variant="body2" sx={{ fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.name}</Typography>
+                      <Typography variant="body2" sx={{ fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '100%' }}>{p.name}</Typography>
                       <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, mt: 0.25, color: 'text.secondary' }}>
                         <History size={10} aria-hidden />
-                        <Typography variant="caption" sx={{ fontSize: 10, fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        <Typography variant="caption" sx={{ fontSize: 10, fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '100%' }}>
                           {p.auto_update ? t('proxies.auto_sync') : t('proxies.static_config')}
                         </Typography>
                       </Box>
@@ -221,6 +232,15 @@ const Proxies: React.FC = () => {
           </Button>
         </Box>
 
+        {!ipv6Available && (
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, px: 1.5, py: 1, borderRadius: 2, bgcolor: 'rgba(239,68,68,0.05)', border: 1, borderColor: 'rgba(239,68,68,0.3)', color: 'error.main', minWidth: 0 }}>
+              <AlertCircle size={14} aria-hidden />
+              <Typography variant="caption" sx={{ fontSize: 11, fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', py: 0.25, outline: '1px solid transparent' }}>
+                {t('network.ipv6_disabled_title')}：{t('network.ipv6_disabled_desc')}
+              </Typography>
+            </Box>
+        )}
+
         <Grid container spacing={2}>
           {nat64Profiles.length === 0 ? (
             <Grid size={12}>
@@ -242,14 +262,14 @@ const Proxies: React.FC = () => {
                   }}
                 >
                   <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, minWidth: 0 }}>
-                    <Box sx={{ width: 40, height: 40, borderRadius: 2, bgcolor: 'rgba(11,123,255,0.1)', color: 'primary.main', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                    <Box sx={{ width: 40, height: 40, borderRadius: 2, bgcolor: (theme) => alpha(theme.palette.primary.main, 0.1), color: 'primary.main', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
                       <Public size={18} aria-hidden />
                     </Box>
                     <Box sx={{ minWidth: 0 }}>
-                      <Typography variant="body2" sx={{ fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.name}</Typography>
+                      <Typography variant="body2" sx={{ fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '100%' }}>{p.name}</Typography>
                       <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, mt: 0.25, color: 'text.secondary', minWidth: 0 }}>
                         <Layers size={10} aria-hidden />
-                        <Typography variant="caption" sx={{ fontSize: 10, fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        <Typography variant="caption" sx={{ fontSize: 10, fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '100%' }}>
                           前缀：{p.prefix}
                         </Typography>
                       </Box>
@@ -260,7 +280,7 @@ const Proxies: React.FC = () => {
                       <Box
                         component="span"
                         sx={{
-                          fontSize: 10, fontWeight: 700, fontFamily: 'mono', px: 1, py: 0.25, borderRadius: 1, border: 1,
+                          fontSize: 10, fontWeight: 700, fontFamily: 'monospace', px: 1, py: 0.25, borderRadius: 1, border: 1,
                           color: testResults[p.id] === '失败' ? 'error.main' : 'success.main',
                           borderColor: testResults[p.id] === '失败' ? 'rgba(239,68,68,0.2)' : 'rgba(34,197,94,0.2)',
                           bgcolor: testResults[p.id] === '失败' ? 'rgba(239,68,68,0.1)' : 'rgba(34,197,94,0.1)',

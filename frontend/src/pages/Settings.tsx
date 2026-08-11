@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import {
   ShieldAlert, Download, FolderOpen, RefreshCcw, Monitor, Anchor,
   Cpu, Globe, BellRing, Activity, CloudLightning, Zap, Trash2,
-  AlertCircle, Sun, Moon, Wifi, FileText
+  AlertCircle, Sun, Moon, Wifi, FileText, Settings as SettingsIcon
 } from '../lib/icons';
 import {
   GetListenPort, SetListenPort, GetCloseToTray, SetCloseToTray,
@@ -21,6 +21,7 @@ import {
   Box, Button, TextField, Select, MenuItem, FormControl, InputLabel, Switch,
   FormControlLabel, Tooltip, Typography, Stack, Grid, Badge, Divider, CircularProgress,
 } from '@mui/material';
+import { alpha } from '@mui/material/styles';
 import { toast } from '../lib/toast';
 import { parseLatencyMs } from '../lib/utils';
 import { useTranslation } from '../i18n/I18nContext';
@@ -47,28 +48,30 @@ const SectionHeader = ({ icon, label, action }: { icon: React.ReactNode; label: 
 );
 
 const SettingRowInline = ({ icon, title, desc, children }: { icon: React.ReactNode; title: string; desc?: string; children: React.ReactNode }) => (
-  <Box sx={{ p: 2.5, bgcolor: 'background.paper', border: 1, borderColor: 'divider', borderRadius: 2, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 2, transition: 'box-shadow 0.25s ease, border-color 0.25s ease', '&:hover': { borderColor: 'divider', boxShadow: (theme) => `0 4px 18px ${theme.palette.primary.main}2e` } }}>
+  <Box sx={{ p: 2.5, bgcolor: 'background.paper', border: 1, borderColor: 'divider', borderRadius: 2, display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 3 }}>
     <Stack direction="row" spacing={1.5} sx={{ flex: 1, minWidth: 0 }}>
       <Box sx={{ width: 40, height: 40, borderRadius: 1, bgcolor: 'primary.main', color: 'primary.contrastText', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
         {icon}
       </Box>
-      <Box sx={{ minWidth: 0 }}>
-        <Typography variant="body2" sx={{ fontWeight: 'bold' }}>{title}</Typography>
+      <Box sx={{ minWidth: 0, py: 0.25 }}>
+        <Typography variant="body2" sx={{ fontWeight: 'bold', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '100%' }}>{title}</Typography>
         {desc && <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>{desc}</Typography>}
       </Box>
     </Stack>
-    {children}
+    <Box sx={{ flexShrink: 0, outline: '1px solid transparent' }}>
+      {children}
+    </Box>
   </Box>
 );
 
 const StackedRow = ({ icon, title, desc, children }: { icon: React.ReactNode; title: string; desc?: string; children: React.ReactNode }) => (
-  <Box sx={{ p: 2.5, bgcolor: 'background.paper', border: 1, borderColor: 'divider', borderRadius: 2, transition: 'box-shadow 0.25s ease, border-color 0.25s ease', '&:hover': { borderColor: 'divider', boxShadow: (theme) => `0 4px 18px ${theme.palette.primary.main}2e` } }}>
+  <Box sx={{ p: 2.5, bgcolor: 'background.paper', border: 1, borderColor: 'divider', borderRadius: 2 }}>
     <Stack direction="row" spacing={1.5} sx={{ mb: desc ? 1.5 : 0, alignItems: 'center' }}>
       <Box sx={{ width: 40, height: 40, borderRadius: 1, bgcolor: 'primary.main', color: 'primary.contrastText', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
         {icon}
       </Box>
       <Box>
-        <Typography variant="body2" sx={{ fontWeight: 'bold' }}>{title}</Typography>
+        <Typography variant="body2" sx={{ fontWeight: 'bold', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '100%' }}>{title}</Typography>
         {desc && <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>{desc}</Typography>}
       </Box>
     </Stack>
@@ -276,13 +279,20 @@ const Settings: React.FC<SettingsProps> = ({ cache, onCacheUpdate, currentThemeI
       : bytes >= 1024 ? `${(bytes / 1024).toFixed(0)} KB`
         : `${bytes} B`;
 
-  const bgColor = mode === 'light' ? 'rgba(0,0,0,0.04)' : 'rgba(255,255,255,0.08)';
+  const bgColor = 'action.hover';
 
   return (
-    <Box sx={{ p: 6, maxWidth: '5xl', mx: 'auto', gap: 4, display: 'flex', flexDirection: 'column' }}>
-      <Typography variant="h4" sx={{ fontWeight: 900, letterSpacing: '-0.02em' }}>
-        {t('settings.title')}
-      </Typography>
+    <Box sx={{ pt: 4, pb: 6, width: '100%', display: 'flex', flexDirection: 'column' }}>
+      <Box sx={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: { xs: 'flex-start', sm: 'flex-end' }, gap: 2, mb: 6 }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+          <Box sx={{ p: 1.25, borderRadius: 1.5, border: 1, color: 'primary.main', bgcolor: (theme) => alpha(theme.palette.primary.main, 0.1), borderColor: (theme) => alpha(theme.palette.primary.main, 0.1), display: 'flex' }}>
+            <SettingsIcon size={20} />
+          </Box>
+          <Typography variant="h5" sx={{ fontWeight: 700, letterSpacing: '-0.02em' }}>
+            {t('settings.title')}
+          </Typography>
+        </Box>
+      </Box>
 
       <Grid container spacing={3}>
         <Grid size={{ xs: 12, lg: 6 }}>
@@ -291,33 +301,35 @@ const Settings: React.FC<SettingsProps> = ({ cache, onCacheUpdate, currentThemeI
 
             <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
               <SettingRowInline icon={<Monitor size={18} />} title={t('settings.port_title')}>
-                <Stack direction="row" spacing={1} sx={{ alignItems: 'flex-start' }}>
-                  <TextField
-                    label={t('settings.http_port')}
-                    type="text"
-                    size="small"
-                    value={port}
-                    onChange={(e) => setPort(e.target.value.replace(/\D/g, '').slice(0, 5))}
-                    sx={{ width: 104, '& input': { textAlign: 'right' } }}
-                  />
-                  <Button size="small" variant="contained" color="primary" onClick={handleSavePort}>
-                    {t('common.apply')}
-                  </Button>
-                </Stack>
-                <Stack direction="row" spacing={1} sx={{ alignItems: 'flex-start', mt: 1 }}>
-                  <TextField
-                    label={t('settings.socks_port')}
-                    type="text"
-                    size="small"
-                    value={socks5Port}
-                    onChange={(e) => setSocks5Port(e.target.value.replace(/\D/g, '').slice(0, 5))}
-                    onBlur={(e) => handleSaveSocks5Port(e.target.value)}
-                    onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }}
-                    sx={{ width: 104, '& input': { textAlign: 'right' } }}
-                  />
-                  <Button size="small" variant="contained" color="primary" onClick={() => handleSaveSocks5Port(socks5Port)}>
-                    {t('common.apply')}
-                  </Button>
+                <Stack direction="row" spacing={1.5} sx={{ alignItems: 'flex-start' }}>
+                  <Stack direction="row" spacing={1} sx={{ alignItems: 'flex-start' }}>
+                    <TextField
+                      label={t('settings.http_port')}
+                      type="text"
+                      size="small"
+                      value={port}
+                      onChange={(e) => setPort(e.target.value.replace(/\D/g, '').slice(0, 5))}
+                      sx={{ width: 88, '& input': { fontSize: '0.875rem', textAlign: 'center' } }}
+                    />
+                    <Button size="small" variant="contained" color="primary" onClick={handleSavePort}>
+                      {t('common.apply')}
+                    </Button>
+                  </Stack>
+                  <Stack direction="row" spacing={1} sx={{ alignItems: 'flex-start' }}>
+                    <TextField
+                      label={t('settings.socks_port')}
+                      type="text"
+                      size="small"
+                      value={socks5Port}
+                      onChange={(e) => setSocks5Port(e.target.value.replace(/\D/g, '').slice(0, 5))}
+                      onBlur={(e) => handleSaveSocks5Port(e.target.value)}
+                      onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }}
+                      sx={{ width: 88, '& input': { fontSize: '0.875rem', textAlign: 'center' } }}
+                    />
+                    <Button size="small" variant="contained" color="primary" onClick={() => handleSaveSocks5Port(socks5Port)}>
+                      {t('common.apply')}
+                    </Button>
+                  </Stack>
                 </Stack>
               </SettingRowInline>
 
@@ -327,6 +339,7 @@ const Settings: React.FC<SettingsProps> = ({ cache, onCacheUpdate, currentThemeI
                     <Switch checked={closeToTray} onChange={(e) => handleToggleTray(e.target.checked)} />
                   }
                   label={t('settings.min_to_tray.title')}
+                  sx={{ gap: 1, marginLeft: 0, marginRight: 0 }}
                 />
               </SettingRowInline>
 
@@ -445,18 +458,21 @@ const Settings: React.FC<SettingsProps> = ({ cache, onCacheUpdate, currentThemeI
                 <FormControlLabel
                   control={<Switch checked={autoStart} onChange={(e) => handleToggleAutoStart(e.target.checked)} />}
                   label={t('settings.auto_start.title')}
+                  sx={{ gap: 1, marginLeft: 0, marginRight: 0 }}
                 />
               </SettingRowInline>
               <SettingRowInline title={t('settings.auto_proxy.title')} desc={t('settings.auto_proxy.desc')} icon={<Activity size={18} />}>
                 <FormControlLabel
                   control={<Switch checked={autoEnableProxyOnAutoStart} onChange={(e) => handleToggleAutoEnableProxyOnAutoStart(e.target.checked)} />}
                   label={t('settings.auto_proxy.title')}
+                  sx={{ gap: 1, marginLeft: 0, marginRight: 0 }}
                 />
               </SettingRowInline>
               <SettingRowInline title={t('settings.show_main.title')} desc={t('settings.show_main.desc')} icon={<Monitor size={18} />}>
                 <FormControlLabel
                   control={<Switch checked={showMainOnAutoStart} onChange={(e) => handleToggleShowMainWindowOnAutoStart(e.target.checked)} />}
                   label={t('settings.show_main.title')}
+                  sx={{ gap: 1, marginLeft: 0, marginRight: 0 }}
                 />
               </SettingRowInline>
             </Box>
@@ -618,7 +634,7 @@ const Settings: React.FC<SettingsProps> = ({ cache, onCacheUpdate, currentThemeI
                               <Box sx={{ p: 1, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1.5, border: 1, borderColor: 'divider', borderRadius: 1, bgcolor: 'background.default', '&:hover': { borderColor: 'primary.main' }, transition: 'all 0.15s' }}>
                                 <Box sx={{ display: 'flex', gap: 1, alignItems: 'center', minWidth: 0 }}>
                                   <Box sx={{ width: 8, height: 8, borderRadius: '50%', flexShrink: 0, bgcolor: ok ? 'success.main' : 'error.main', boxShadow: ok ? '0 0 8px rgba(34,197,94,0.5)' : undefined }} />
-                                  <Typography variant="caption" sx={{ fontFamily: 'mono', fontWeight: 'bold', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                  <Typography variant="caption" sx={{ fontFamily: 'monospace', fontWeight: 'bold', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                                     {ip.ip}
                                   </Typography>
                                 </Box>

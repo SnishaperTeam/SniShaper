@@ -6,8 +6,9 @@ import {
   GetSiteGroups, DeleteSiteGroup, ExportConfig
 } from '../api/bindings';
 import {
-  Box, Typography, Button, IconButton, TextField, InputAdornment, useColorScheme,
+  Box, Typography, Button, IconButton, TextField, InputAdornment,
 } from '@mui/material';
+import { alpha } from '@mui/material/styles';
 import Modal from '../components/Modal';
 import RuleForm from '../components/RuleForm';
 import { toast } from '../lib/toast';
@@ -30,8 +31,6 @@ const getEffectiveMode = (group: any) => {
 
 const RuleItem: React.FC<{ group: any; onEdit: (group: any) => void; onDelete: (id: string) => void }> = ({ group, onEdit, onDelete }) => {
   const { t } = useTranslation();
-  const { mode } = useColorScheme();
-  const hoverBg = mode === 'light' ? 'rgba(0,0,0,0.04)' : 'rgba(255,255,255,0.08)';
   const getModeDisplay = (mode: string) => {
     switch (mode) {
       case 'TRANSPARENT': return t('rules.display.transparent');
@@ -58,15 +57,15 @@ const RuleItem: React.FC<{ group: any; onEdit: (group: any) => void; onDelete: (
   const modeKey = normalizeMode(group?.mode) || normalizeMode(effectiveMode);
 
   return (
-    <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, py: 1.5, px: 3, bgcolor: 'background.paper', borderBottom: 1, borderColor: 'divider', transition: 'background-color 0.2s', '&:hover': { bgcolor: hoverBg } }}>
-      <Box sx={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', gap: 3 }}>
-        <Box sx={{ width: '33%', minWidth: 0 }}>
-          <Typography variant="body2" sx={{ fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{group.name || t('common.unknown')}</Typography>
-          <Typography variant="caption" sx={{ fontSize: 10, color: 'text.secondary', fontWeight: 500, textTransform: 'uppercase', letterSpacing: '0.05em', display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{group.website || t('rules.display.default_group')}</Typography>
+    <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, py: 1.5, px: 3, bgcolor: 'background.paper', borderBottom: 1, borderColor: 'divider', transition: 'background-color 0.2s', '&:hover': { bgcolor: 'action.hover' }, minWidth: 0 }}>
+      <Box sx={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', gap: 3, flexWrap: 'wrap' }}>
+        <Box sx={{ width: { xs: '100%', md: '33%' }, minWidth: 0, flexShrink: 0 }}>
+          <Typography variant="body2" sx={{ fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '100%', py: 0.25, outline: '1px solid transparent' }}>{group.name || t('common.unknown')}</Typography>
+          <Typography variant="caption" sx={{ fontSize: 10, color: 'text.secondary', fontWeight: 500, textTransform: 'uppercase', letterSpacing: '0.05em', display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '100%', py: 0.25, outline: '1px solid transparent' }}>{group.website || t('rules.display.default_group')}</Typography>
         </Box>
         <Box sx={{ flex: 1, minWidth: 0, display: { xs: 'none', md: 'flex' }, alignItems: 'center', gap: 1, overflow: 'hidden' }}>
           {(group.domains || []).slice(0, 4).map((d: string, i: number) => (
-            <Typography key={i} variant="caption" sx={{ fontSize: 9, bgcolor: hoverBg, px: 1, py: 0.25, borderRadius: 1, border: 1, borderColor: 'divider', color: 'text.secondary', whiteSpace: 'nowrap', fontFamily: 'mono' }}>{d}</Typography>
+            <Typography key={i} variant="caption" sx={{ fontSize: 9, bgcolor: 'action.hover', px: 1, py: 0.25, borderRadius: 1, border: 1, borderColor: 'divider', color: 'text.secondary', whiteSpace: 'nowrap', fontFamily: 'monospace' }}>{d}</Typography>
           ))}
           {(group.domains || []).length > 4 && (
             <Typography variant="caption" sx={{ fontSize: 10, color: 'text.secondary', fontWeight: 700, px: 0.5, opacity: 0.5 }}>+{(group.domains || []).length - 4}</Typography>
@@ -75,19 +74,19 @@ const RuleItem: React.FC<{ group: any; onEdit: (group: any) => void; onDelete: (
       </Box>
 
       <Box sx={{ width: 128, flexShrink: 0, display: 'flex', flexDirection: 'column', alignItems: 'flex-end', px: 1.5, borderRight: 1, borderColor: 'divider', mr: 1 }}>
-        <Typography variant="caption" sx={{ fontSize: 10, fontWeight: 900, textTransform: 'uppercase', letterSpacing: '0.1em', color: modeColors[modeKey] || 'text.secondary' }}>
+        <Typography variant="caption" sx={{ fontSize: 10, fontWeight: 900, textTransform: 'uppercase', letterSpacing: '0.1em', color: modeColors[modeKey] || 'text.secondary', py: 0.25, outline: '1px solid transparent' }}>
           {getModeDisplay(effectiveMode)}
         </Typography>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, mt: 0.25, color: 'text.secondary', maxWidth: '100%', minWidth: 0 }}>
           <Box component="span" sx={{ color: 'success.main', display: 'inline-flex', flexShrink: 0 }}>
             <Activity size={10} aria-hidden />
           </Box>
-          <Typography variant="caption" sx={{ fontSize: 10, fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', textTransform: 'uppercase' }}>{getEffectiveUpstream(group)}</Typography>
+          <Typography variant="caption" sx={{ fontSize: 10, fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', textTransform: 'uppercase', maxWidth: '100%', py: 0.25, outline: '1px solid transparent' }}>{getEffectiveUpstream(group)}</Typography>
         </Box>
       </Box>
 
       <Box sx={{ display: 'flex', gap: 0.75, flexShrink: 0 }}>
-        <IconButton size="small" aria-label={t('rules.edit_rule_aria')} onClick={() => onEdit(group)} sx={{ color: 'text.secondary', '&:hover': { bgcolor: hoverBg, color: 'primary.main' } }}>
+        <IconButton size="small" aria-label={t('rules.edit_rule_aria')} onClick={() => onEdit(group)} sx={{ color: 'text.secondary', '&:hover': { bgcolor: 'action.hover', color: 'primary.main' } }}>
           <Edit size={15} />
         </IconButton>
         <IconButton size="small" aria-label={t('rules.delete_rule_aria')} color="error" onClick={() => onDelete(group.id)}>
@@ -100,7 +99,6 @@ const RuleItem: React.FC<{ group: any; onEdit: (group: any) => void; onDelete: (
 
 const Rules: React.FC = () => {
   const { t } = useTranslation();
-  const { mode } = useColorScheme();
   const [groups, setGroups] = useState<any[]>([]);
   const [search, setSearch] = useState('');
   const [filterMode, setFilterMode] = useState('ALL');
@@ -166,11 +164,16 @@ const Rules: React.FC = () => {
   }, [groups, search, filterMode]);
 
   return (
-    <Box sx={{ px: 6, pt: 4, pb: 6, maxWidth: '5xl', mx: 'auto' }}>
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', bgcolor: 'background.paper', border: 1, borderColor: 'divider', p: 2.5, borderRadius: 2, boxShadow: 1 }}>
-        <Typography variant="h4" sx={{ fontWeight: 900, letterSpacing: '-0.02em' }}>{t('rules.title')}</Typography>
+    <Box sx={{ pt: 4, pb: 6, width: '100%' }}>
+      <Box sx={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: { xs: 'flex-start', sm: 'flex-end' }, gap: 2, mb: 6 }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+          <Box sx={{ p: 1.25, borderRadius: 1.5, border: 1, color: 'primary.main', bgcolor: (theme) => alpha(theme.palette.primary.main, 0.1), borderColor: (theme) => alpha(theme.palette.primary.main, 0.1), display: 'flex' }}>
+            <Filter size={20} />
+          </Box>
+          <Typography variant="h5" sx={{ fontWeight: 700, letterSpacing: '-0.02em' }}>{t('rules.title')}</Typography>
+        </Box>
         <Box sx={{ display: 'flex', gap: 1 }}>
-          <Button onClick={handleExport} variant="outlined" size="small" aria-label={t('common.view')} sx={{ minWidth: 0, px: 1 }}>
+          <Button onClick={handleExport} variant="outlined" size="small" aria-label={t('rules.export_aria')} sx={{ minWidth: 0, px: 1 }}>
             <OpenInNew size={16} />
           </Button>
           <Button onClick={handleAdd} variant="contained" color="primary" size="small" startIcon={<Plus size={16} strokeWidth={3} />}>
@@ -179,8 +182,8 @@ const Rules: React.FC = () => {
         </Box>
       </Box>
 
-      <Box sx={{ position: 'sticky', top: 0, zIndex: 10, py: 1, display: 'flex', flexDirection: 'column', gap: 1.5, backdropFilter: 'blur(12px)', bgcolor: mode === 'light' ? 'rgba(255,255,255,0.5)' : 'rgba(13,17,23,0.5)' }}>
-        <Box sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.75, p: 0.5, bgcolor: 'background.paper', border: 1, borderColor: 'divider', borderRadius: 2, boxShadow: 1, width: 'fit-content' }} role="tablist" aria-label={t('rules.filter_mode_aria')}>
+      <Box sx={{ position: 'sticky', top: 0, zIndex: 10, py: 1, display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+        <Box sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.75, p: 0.5, border: 1, borderColor: 'divider', borderRadius: 2, width: 'fit-content', flexWrap: 'wrap', minWidth: 0 }} role="tablist" aria-label={t('rules.filter_mode_aria')}>
           {FILTER_MODES.map((m) => {
             const active = filterMode === m;
             return (
@@ -193,9 +196,9 @@ const Rules: React.FC = () => {
                 sx={{
                   px: 2, py: 0.5, borderRadius: 1.5, fontSize: 10, fontWeight: 900, letterSpacing: '0.05em',
                   textTransform: 'uppercase', minWidth: 0, color: active ? 'primary.main' : 'text.secondary',
-                  bgcolor: active ? 'rgba(11,123,255,0.12)' : 'transparent',
-                  boxShadow: active ? '0 4px 12px rgba(11,123,255,0.15)' : 'none',
-                  '&:hover': { bgcolor: active ? 'rgba(11,123,255,0.12)' : 'action.hover' },
+                  bgcolor: active ? (theme) => alpha(theme.palette.primary.main, 0.12) : 'transparent',
+                  boxShadow: active ? (theme) => `0 4px 12px ${alpha(theme.palette.primary.main, 0.15)}` : 'none',
+                  '&:hover': { bgcolor: active ? (theme) => alpha(theme.palette.primary.main, 0.12) : 'action.hover' },
                 }}
               >
                 {m === 'TLS-RF' ? t('rules.display.fragment') : m === 'TRANSPARENT' ? t('rules.display.transparent') : m === 'MIGRATION' ? (t('rules.display.migration') || '迁移') : m}
@@ -217,7 +220,7 @@ const Rules: React.FC = () => {
 
       <Box sx={{ mt: 2, display: 'flex', flexDirection: 'column', gap: 4, pb: 10 }}>
         {groupedResults.length === 0 ? (
-          <Box sx={{ py: 24, display: 'flex', flexDirection: 'column', alignItems: 'center', color: 'text.secondary', bgcolor: 'background.paper', border: 1, borderColor: 'divider', borderRadius: 2, boxShadow: 1, filter: 'grayscale(1)' }}>
+          <Box sx={{ py: 24, display: 'flex', flexDirection: 'column', alignItems: 'center', color: 'text.secondary', bgcolor: 'background.paper', border: 1, borderColor: 'divider', borderRadius: 2, boxShadow: 1 }}>
             <Filter size={48} strokeWidth={1} />
             <Typography variant="body2" sx={{ mt: 1.5 }}>{t('rules.no_results')}</Typography>
           </Box>

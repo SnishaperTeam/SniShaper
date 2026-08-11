@@ -41,6 +41,8 @@ const Modal: React.FC<ModalProps> = ({
           borderColor: 'divider',
           borderRadius: 2,
           boxShadow: 24,
+          backdropFilter: 'blur(24px) saturate(180%)',
+          WebkitBackdropFilter: 'blur(24px) saturate(180%)',
           p: 3,
         }}
       >
@@ -56,7 +58,7 @@ const Modal: React.FC<ModalProps> = ({
             )}
           </Box>
         )}
-        <Box sx={{ flexGrow: 1, py: 2, overflowY: 'auto' }}>
+        <Box sx={{ flexGrow: 1, py: 2, overflowY: 'auto', overflowX: 'hidden', minWidth: 0 }}>
           {children}
         </Box>
         {footer && (

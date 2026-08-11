@@ -2,7 +2,7 @@ import { createTheme } from '@mui/material/styles';
 
 const base = {
   typography: {
-    fontFamily: '"Inter", "Roboto", "Helvetica", "Arial", sans-serif',
+    fontFamily: '"Segoe UI", "Microsoft YaHei", "PingFang SC", "Helvetica Neue", sans-serif',
   },
   shape: { borderRadius: 8 },
   components: {
@@ -19,7 +19,7 @@ export const defaultTheme = createTheme({
     light: {
       palette: {
         primary: { main: '#1976d2', light: '#42a5f5', dark: '#1565c0' },
-        secondary: { main: '#9c27b0', light: '#ba68c8', dark: '#7b1fa2' },
+        secondary: { main: '#546e7a', light: '#78909c', dark: '#37474f' },
         background: { default: '#ffffff', paper: '#f5f5f5' },
         text: lightText,
       },
@@ -27,7 +27,7 @@ export const defaultTheme = createTheme({
     dark: {
       palette: {
         primary: { main: '#90caf9', light: '#e3f2fd', dark: '#42a5f5' },
-        secondary: { main: '#ce93d8', light: '#f3e5f5', dark: '#ab47bc' },
+        secondary: { main: '#90a4ae', light: '#b0bec5', dark: '#607d8b' },
         background: { default: '#121212', paper: '#1e1e1e' },
         text: darkText,
       },
@@ -41,7 +41,7 @@ export const sniShaperTheme = createTheme({
     light: {
       palette: {
         primary: { main: '#0b7bff', light: '#3396ff', dark: '#0969da', contrastText: '#ffffff' },
-        secondary: { main: '#9c27b0', light: '#ba68c8', dark: '#7b1fa2' },
+        secondary: { main: '#00acc1', light: '#4dd0e1', dark: '#00838f' },
         background: { default: '#ffffff', paper: '#f5f5f5' },
         text: lightText,
       },
@@ -49,7 +49,7 @@ export const sniShaperTheme = createTheme({
     dark: {
       palette: {
         primary: { main: '#0b7bff', light: '#3396ff', dark: '#0969da', contrastText: '#ffffff' },
-        secondary: { main: '#ce93d8', light: '#f3e5f5', dark: '#ab47bc' },
+        secondary: { main: '#4dd0e1', light: '#80deea', dark: '#0097a7' },
         background: { default: '#0d1117', paper: '#161b22' },
         text: { primary: '#e6edf3', secondary: '#8b949e' },
       },
