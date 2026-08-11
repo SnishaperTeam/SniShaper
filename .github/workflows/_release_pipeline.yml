@@ -458,10 +458,13 @@ jobs:
 
       - name: Create signed bundle 7z
         shell: pwsh
+        env:
+          MSIX_PFX_PASSWORD: ${{ secrets.MSIX_PFX_PASSWORD }}
         run: |
-          # Bundle the signed MSIX + cert + install.bat into one 7z named
-          # after the MSIX base name, so users get a single self-contained
-          # archive (e.g. dongle.Snishaper_1.29.0.0_x64.7z).
+          # Bundle the signed MSIX + cert + install.bat + signing password
+          # into one 7z named after the MSIX base name, so users get a
+          # single self-contained archive
+          # (e.g. dongle.Snishaper_1.29.0.0_x64.7z).
           $ErrorActionPreference = 'Stop'
           $root = $env:GITHUB_WORKSPACE
           $msix = Get-ChildItem -Path (Join-Path $root 'Apppackage') -Filter '*.msix' | Where-Object { $_.Name -notlike 'unsigned_*' } | Select-Object -First 1
@@ -476,8 +479,11 @@ jobs:
             Write-Host "::error::install.bat not found"
             exit 1
           }
-          Write-Host "::group::7z a $bundleName (msix + devcert.pfx + install.bat)"
-          7z a -mx=9 $bundlePath $msix.FullName (Join-Path $root 'devcert.pfx') $installBat
+          $password = if ($env:MSIX_PFX_PASSWORD) { $env:MSIX_PFX_PASSWORD } else { 'password' }
+          $passwordFile = Join-Path $root 'msix-signing-password.txt'
+          [IO.File]::WriteAllText($passwordFile, $password)
+          Write-Host "::group::7z a $bundleName (msix + devcert.pfx + install.bat + password)"
+          7z a -mx=9 $bundlePath $msix.FullName (Join-Path $root 'devcert.pfx') $installBat $passwordFile
           if ($LASTEXITCODE -ne 0) {
             Write-Host "::error::7z bundle failed (exit $LASTEXITCODE)"
             exit 1
