@@ -2890,20 +2890,6 @@
       "nat64_enabled": false
     },
     {
-      "id": "1777970965696331600",
-      "name": "nicovideo",
-      "mode": "tls-rf",
-      "domains": [
-        "nicovideo.jp"
-      ],
-      "ech_enabled": false,
-      "use_cf_pool": false,
-      "cert_verify": {},
-      "website": "nicovideo",
-      "enabled": true,
-      "nat64_enabled": false
-    },
-    {
       "id": "1777971841080514500",
       "name": "static",
       "mode": "tls-rf",
