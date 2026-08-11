@@ -456,6 +456,35 @@ jobs:
           $bat -join "`r`n" | Set-Content -Path install.bat
           Write-Host "::notice::install.bat created for $($msix.Name)"
 
+      - name: Create signed bundle 7z
+        shell: pwsh
+        run: |
+          # Bundle the signed MSIX + cert + install.bat into one 7z named
+          # after the MSIX base name, so users get a single self-contained
+          # archive (e.g. dongle.Snishaper_1.29.0.0_x64.7z).
+          $ErrorActionPreference = 'Stop'
+          $root = $env:GITHUB_WORKSPACE
+          $msix = Get-ChildItem -Path (Join-Path $root 'Apppackage') -Filter '*.msix' | Where-Object { $_.Name -notlike 'unsigned_*' } | Select-Object -First 1
+          if (-not $msix) {
+            Write-Host "::error::no signed .msix found for bundle"
+            exit 1
+          }
+          $bundleName = $msix.BaseName + '.7z'
+          $bundlePath = Join-Path $root $bundleName
+          $installBat = Join-Path $root 'install.bat'
+          if (-not (Test-Path $installBat)) {
+            Write-Host "::error::install.bat not found"
+            exit 1
+          }
+          Write-Host "::group::7z a $bundleName (msix + devcert.pfx + install.bat)"
+          7z a -mx=9 $bundlePath $msix.FullName (Join-Path $root 'devcert.pfx') $installBat
+          if ($LASTEXITCODE -ne 0) {
+            Write-Host "::error::7z bundle failed (exit $LASTEXITCODE)"
+            exit 1
+          }
+          Write-Host "::endgroup::"
+          Write-Host "::notice::Signed bundle ready: $bundlePath"
+
       - name: Stage artifacts
         id: stage
         shell: pwsh
@@ -471,6 +500,8 @@ jobs:
           $unsigned = Get-ChildItem -Path (Join-Path $root 'Apppackage') -Filter 'unsigned_*.msix' | Select-Object -First 1
           if ($unsigned) { Copy-Item $unsigned.FullName $assetsDir\ -ErrorAction Stop }
           Copy-Item (Join-Path $root 'snishaper-windows-amd64.7z') $assetsDir\ -ErrorAction Stop
+          $bundle = Get-ChildItem -Path $root -Filter '*_x64.7z' -ErrorAction SilentlyContinue | Where-Object { $_.Name -ne 'snishaper-windows-amd64.7z' } | Select-Object -First 1
+          if ($bundle) { Copy-Item $bundle.FullName $assetsDir\ -ErrorAction Stop }
           if (Test-Path (Join-Path $root 'devcert.pfx')) { Copy-Item (Join-Path $root 'devcert.pfx') $assetsDir\ }
           if (Test-Path (Join-Path $root 'install.bat')) { Copy-Item (Join-Path $root 'install.bat') $assetsDir\ }
 
@@ -508,10 +539,11 @@ jobs:
           Write-Host "::group::gh release create $tag"
           $args = @(
             'release', 'create', $tag,
-            (Join-Path $assetsDir '*.msix'),
+            # Signed MSIX + devcert.pfx + install.bat are bundled into the
+            # *_x64.7z archive, so only upload the unsigned MSIX (for
+            # Partner Center) plus the two 7z archives and the password.
+            (Join-Path $assetsDir 'unsigned_*.msix'),
             (Join-Path $assetsDir '*.7z'),
-            (Join-Path $assetsDir 'devcert.pfx'),
-            (Join-Path $assetsDir 'install.bat'),
             (Join-Path $assetsDir 'msix-signing-password.txt'),
             '--title', $releaseName,
             '--notes-file', $notesFile
