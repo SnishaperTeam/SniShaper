@@ -532,9 +532,8 @@ jobs:
           }
 
           $sb = New-Object System.Text.StringBuilder
-          [void]$sb.AppendLine("")
-          [void]$sb.AppendLine("---")
-          [void]$sb.AppendLine("")
+          # No leading --- here: the section above (Changes) already ends
+          # with a separator when the table is inserted before Contributors.
           [void]$sb.AppendLine("## Release Assets")
           [void]$sb.AppendLine("")
           [void]$sb.AppendLine("| File | Purpose | MD5 |")
@@ -554,10 +553,22 @@ jobs:
           Add-AssetRow $bundle "Signed bundle: MSIX installer + signing certificate (devcert.pfx) + install.bat + signing password, for one-click sideload"
           Add-AssetRow $portable "Portable build: extract and run snishaper.exe directly, no installation required"
           Add-AssetRow $unsigned "Unsigned MSIX for Microsoft Partner Center submission (re-signed by Microsoft on upload)"
+          # Blank line so the following ## Contributors heading is separated.
+          [void]$sb.AppendLine("")
 
           $existing = [System.IO.File]::ReadAllText($notesFile, [System.Text.Encoding]::UTF8)
-          [System.IO.File]::WriteAllText($notesFile, $existing + $sb.ToString(), [System.Text.Encoding]::UTF8)
-          Write-Host "::notice::Asset manifest appended to $notesFile"
+          $marker = '## Contributors'
+          $insertAt = $existing.IndexOf($marker)
+          $manifest = $sb.ToString()
+          if ($insertAt -ge 0) {
+            # Insert the asset table right before the Contributors section.
+            $newContent = $existing.Substring(0, $insertAt) + $manifest + $existing.Substring($insertAt)
+          } else {
+            # No Contributors section found (unexpected); append at the end.
+            $newContent = $existing + "`n---`n`n" + $manifest
+          }
+          [System.IO.File]::WriteAllText($notesFile, $newContent, [System.Text.Encoding]::UTF8)
+          Write-Host "::notice::Asset manifest inserted before Contributors in $notesFile"
 
       - name: Upload build artifacts
         uses: actions/upload-artifact@v7
