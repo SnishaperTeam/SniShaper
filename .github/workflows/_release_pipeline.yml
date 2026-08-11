@@ -511,15 +511,53 @@ jobs:
           if (Test-Path (Join-Path $root 'devcert.pfx')) { Copy-Item (Join-Path $root 'devcert.pfx') $assetsDir\ }
           if (Test-Path (Join-Path $root 'install.bat')) { Copy-Item (Join-Path $root 'install.bat') $assetsDir\ }
 
-          $password = if ($env:MSIX_PFX_PASSWORD) { $env:MSIX_PFX_PASSWORD } else { 'password' }
-          $passwordFile = Join-Path $assetsDir 'msix-signing-password.txt'
-          [IO.File]::WriteAllText($passwordFile, $password)
-
           Copy-Item -Path (Join-Path $root 'release-notes\RELEASE_NOTES.md') -Destination (Join-Path $assetsDir 'RELEASE_NOTES.md') -Force
 
           Write-Host "Staged files:" -ForegroundColor Green
           Get-ChildItem $assetsDir | ForEach-Object { Write-Host "  $($_.Name) ($($_.Length) bytes)" }
           "dir=$assetsDir" >> $env:GITHUB_OUTPUT
+
+      - name: Append asset manifest to release notes
+        shell: pwsh
+        run: |
+          # Release notes are generated before the build finishes, so the
+          # asset list (name + purpose + MD5) is appended here, after all
+          # artifacts are staged.
+          $ErrorActionPreference = 'Stop'
+          $assetsDir = "${{ steps.stage.outputs.dir }}"
+          $notesFile = Join-Path $assetsDir 'RELEASE_NOTES.md'
+          if (-not (Test-Path $notesFile)) {
+            Write-Host "::error::RELEASE_NOTES.md not found"
+            exit 1
+          }
+
+          $sb = New-Object System.Text.StringBuilder
+          [void]$sb.AppendLine("")
+          [void]$sb.AppendLine("---")
+          [void]$sb.AppendLine("")
+          [void]$sb.AppendLine("## Release Assets")
+          [void]$sb.AppendLine("")
+          [void]$sb.AppendLine("| File | Purpose | MD5 |")
+          [void]$sb.AppendLine("|------|---------|-----|")
+
+          $bundle = Get-ChildItem -Path $assetsDir -Filter '*_x64.7z' -ErrorAction SilentlyContinue | Where-Object { $_.Name -ne 'snishaper-windows-amd64.7z' } | Select-Object -First 1
+          $portable = Get-ChildItem -Path $assetsDir -Filter 'snishaper-windows-amd64.7z' -ErrorAction SilentlyContinue | Select-Object -First 1
+          $unsigned = Get-ChildItem -Path $assetsDir -Filter 'unsigned_*.msix' -ErrorAction SilentlyContinue | Select-Object -First 1
+
+          function Add-AssetRow($file, $purpose) {
+            if (-not $file) { return }
+            $md5 = (Get-FileHash -LiteralPath $file.FullName -Algorithm MD5).Hash.ToLowerInvariant()
+            $sizeMB = [Math]::Round($file.Length / 1MB, 1)
+            [void]$sb.AppendLine("| $($file.Name) | $purpose (Size: $sizeMB MB) | $md5 |")
+          }
+
+          Add-AssetRow $bundle "Signed bundle: MSIX installer + signing certificate (devcert.pfx) + install.bat + signing password, for one-click sideload"
+          Add-AssetRow $portable "Portable build: extract and run snishaper.exe directly, no installation required"
+          Add-AssetRow $unsigned "Unsigned MSIX for Microsoft Partner Center submission (re-signed by Microsoft on upload)"
+
+          $existing = [System.IO.File]::ReadAllText($notesFile, [System.Text.Encoding]::UTF8)
+          [System.IO.File]::WriteAllText($notesFile, $existing + $sb.ToString(), [System.Text.Encoding]::UTF8)
+          Write-Host "::notice::Asset manifest appended to $notesFile"
 
       - name: Upload build artifacts
         uses: actions/upload-artifact@v7
@@ -545,12 +583,11 @@ jobs:
           Write-Host "::group::gh release create $tag"
           $args = @(
             'release', 'create', $tag,
-            # Signed MSIX + devcert.pfx + install.bat are bundled into the
-            # *_x64.7z archive, so only upload the unsigned MSIX (for
-            # Partner Center) plus the two 7z archives and the password.
+            # Signed MSIX + devcert.pfx + install.bat + password are bundled
+            # into the *_x64.7z archive, so only upload the unsigned MSIX
+            # (for Partner Center) plus the two 7z archives.
             (Join-Path $assetsDir 'unsigned_*.msix'),
             (Join-Path $assetsDir '*.7z'),
-            (Join-Path $assetsDir 'msix-signing-password.txt'),
             '--title', $releaseName,
             '--notes-file', $notesFile
           )
