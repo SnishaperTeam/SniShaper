@@ -57,7 +57,7 @@ WizardStyle=modern polar
 
 [Languages]
 Name: "english"; MessagesFile: "compiler:Default.isl"
-Name: "chinesesimplified_2"; MessagesFile: "compiler:Languages\ChineseSimplified_2.isl"
+__ZH_LANG__
 Name: "russian"; MessagesFile: "compiler:Languages\Russian.isl"
 
 [Tasks]
@@ -82,8 +82,6 @@ $iss = $iss.Replace('__OUTNAME__', $outName)
 $iss = $iss.Replace('__BINDIR__', $binDir)
 
 $issPath = Join-Path $RepoRoot 'installer.iss'
-[System.IO.File]::WriteAllText($issPath, $iss, [System.Text.Encoding]::UTF8)
-Write-Host "[inno] .iss written to $issPath"
 
 $iscc = 'C:\Program Files (x86)\Inno Setup 6\ISCC.exe'
 if (-not (Test-Path $iscc)) {
@@ -94,6 +92,24 @@ if (-not (Test-Path $iscc)) {
     Write-Host "::error::ISCC.exe not found (Inno Setup install failed)"
     exit 1
 }
+
+# Simplified Chinese messages file ships with the repo (Inno Setup's own
+# install only provides ChineseSimplified.isl, not the _2 variant). Copy it
+# into the Inno Languages dir so the compiler:Languages\... reference works.
+$innoDir = Split-Path -Parent $iscc
+$langsDir = Join-Path $innoDir 'Languages'
+New-Item -ItemType Directory -Path $langsDir -Force | Out-Null
+$zhIsl = Join-Path $RepoRoot '.github\ChineseSimplified_2.isl'
+if (-not (Test-Path $zhIsl)) {
+    Write-Host "::error::.github/ChineseSimplified_2.isl not found"
+    exit 1
+}
+Copy-Item -Path $zhIsl -Destination (Join-Path $langsDir 'ChineseSimplified_2.isl') -Force
+$zhLangLine = 'Name: "chinesesimplified_2"; MessagesFile: "compiler:Languages\ChineseSimplified_2.isl"'
+$iss = $iss.Replace('__ZH_LANG__', $zhLangLine)
+
+[System.IO.File]::WriteAllText($issPath, $iss, [System.Text.Encoding]::UTF8)
+Write-Host "[inno] .iss written to $issPath"
 
 Write-Host "::group::ISCC compile $issPath"
 & $iscc /Qp $issPath
