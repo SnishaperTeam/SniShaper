@@ -203,6 +203,9 @@ jobs:
       - name: Install 7-Zip
         run: choco install 7zip -y --no-progress
 
+      - name: Install Inno Setup
+        run: choco install innosetup -y --no-progress
+
       - name: Restore signing certificate
         shell: pwsh
         run: |
@@ -491,6 +494,29 @@ jobs:
           Write-Host "::endgroup::"
           Write-Host "::notice::Signed bundle ready: $bundlePath"
 
+      - name: Create Inno Setup installer
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $script = Join-Path $env:GITHUB_WORKSPACE '.github/scripts/create-inno-installer.ps1'
+          if (-not (Test-Path $script)) {
+            Write-Host "::error::create-inno-installer.ps1 missing: $script"
+            exit 1
+          }
+          $psArgs = @{
+            RepoRoot = $env:GITHUB_WORKSPACE
+            Version  = "${{ needs.check.outputs.version }}"
+            Suffix   = "${{ needs.check.outputs.suffix }}"
+          }
+          & $script @psArgs
+          if ($LASTEXITCODE -ne 0) {
+            Write-Host "::error::create-inno-installer.ps1 failed"
+            exit 1
+          }
+          Write-Host "::notice::Inno Setup installer created"
+
       - name: Stage artifacts
         id: stage
         shell: pwsh
@@ -508,6 +534,8 @@ jobs:
           Copy-Item (Join-Path $root 'snishaper-windows-amd64.7z') $assetsDir\ -ErrorAction Stop
           $bundle = Get-ChildItem -Path $root -Filter '*_x64.7z' -ErrorAction SilentlyContinue | Where-Object { $_.Name -ne 'snishaper-windows-amd64.7z' } | Select-Object -First 1
           if ($bundle) { Copy-Item $bundle.FullName $assetsDir\ -ErrorAction Stop }
+          $setupExe = Get-ChildItem -Path (Join-Path $root 'installer') -Filter '*.exe' -ErrorAction SilentlyContinue | Select-Object -First 1
+          if ($setupExe) { Copy-Item $setupExe.FullName $assetsDir\ -ErrorAction Stop }
           if (Test-Path (Join-Path $root 'devcert.pfx')) { Copy-Item (Join-Path $root 'devcert.pfx') $assetsDir\ }
           if (Test-Path (Join-Path $root 'install.bat')) { Copy-Item (Join-Path $root 'install.bat') $assetsDir\ }
 
@@ -542,6 +570,7 @@ jobs:
           $bundle = Get-ChildItem -Path $assetsDir -Filter '*_x64.7z' -ErrorAction SilentlyContinue | Where-Object { $_.Name -ne 'snishaper-windows-amd64.7z' } | Select-Object -First 1
           $portable = Get-ChildItem -Path $assetsDir -Filter 'snishaper-windows-amd64.7z' -ErrorAction SilentlyContinue | Select-Object -First 1
           $unsigned = Get-ChildItem -Path $assetsDir -Filter 'unsigned_*.msix' -ErrorAction SilentlyContinue | Select-Object -First 1
+          $setupExe = Get-ChildItem -Path $assetsDir -Filter '*-x64Setup.exe' -ErrorAction SilentlyContinue | Select-Object -First 1
 
           function Add-AssetRow($file, $purpose) {
             if (-not $file) { return }
@@ -550,6 +579,7 @@ jobs:
             [void]$sb.AppendLine("| $($file.Name) | $purpose (Size: $sizeMB MB) | $md5 |")
           }
 
+          Add-AssetRow $setupExe "Windows installer (Inno Setup): classic guided installation with license and desktop shortcut, for regular users"
           Add-AssetRow $bundle "Signed bundle: MSIX installer + signing certificate (devcert.pfx) + install.bat + signing password, for one-click sideload"
           Add-AssetRow $portable "Portable build: extract and run snishaper.exe directly, no installation required"
           Add-AssetRow $unsigned "Unsigned MSIX for Microsoft Partner Center submission (re-signed by Microsoft on upload)"
@@ -596,8 +626,10 @@ jobs:
             'release', 'create', $tag,
             # Signed MSIX + devcert.pfx + install.bat + password are bundled
             # into the *_x64.7z archive, so only upload the unsigned MSIX
-            # (for Partner Center) plus the two 7z archives.
+            # (for Partner Center) plus the Inno Setup exe and the two 7z
+            # archives.
             (Join-Path $assetsDir 'unsigned_*.msix'),
+            (Join-Path $assetsDir '*.exe'),
             (Join-Path $assetsDir '*.7z'),
             '--title', $releaseName,
             '--notes-file', $notesFile
