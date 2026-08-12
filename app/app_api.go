@@ -1101,7 +1101,10 @@ func (a *App) RefreshGFWList() error {
 }
 
 func (a *App) GetAppVersion() string {
-	if v, err := manifestVersion(); err == nil {
+	if strings.TrimSpace(buildVersion) != "" {
+		return buildVersion
+	}
+	if v, err := manifestVersionFull(); err == nil && v != "" {
 		return v
 	}
 	return "1.29"
@@ -1140,120 +1143,6 @@ func parseManifestVersion(data []byte) (string, error) {
 		parts = parts[:len(parts)-1]
 	}
 	return strings.Join(parts, "."), nil
-}
-
-func (a *App) CheckUpdate() CheckUpdateResult {
-	updateURL := "https://gh.llkk.cc/https://raw.githubusercontent.com/dongzheyu/SniShaperWeb/master/update.txt"
-
-	client := &http.Client{
-		Timeout: 10 * time.Second,
-	}
-
-	resp, err := client.Get(updateURL)
-	if err != nil {
-		errorMsg := err.Error()
-		a.appendLog("[update] Failed to check update: " + errorMsg)
-
-		errorDetail := "check_failed"
-		if strings.Contains(errorMsg, "timeout") || strings.Contains(errorMsg, "deadline exceeded") {
-			errorDetail = "network_timeout"
-		} else if strings.Contains(errorMsg, "connection refused") {
-			errorDetail = "connection_refused"
-		} else if strings.Contains(errorMsg, "no such host") || strings.Contains(errorMsg, "DNS") {
-			errorDetail = "dns_error"
-		} else if strings.Contains(errorMsg, "proxy") {
-			errorDetail = "proxy_error"
-		}
-
-		return CheckUpdateResult{
-			HasUpdate:   false,
-			Message:     "check_failed",
-			ErrorDetail: errorDetail,
-		}
-	}
-	defer resp.Body.Close()
-
-	body, err := io.ReadAll(io.LimitReader(resp.Body, 10*1024*1024))
-	if err != nil {
-		a.appendLog("[update] Failed to read update info: " + err.Error())
-		return CheckUpdateResult{
-			HasUpdate: false,
-			Message:   "check_failed",
-		}
-	}
-
-	lines := strings.Split(strings.TrimSpace(string(body)), "\n")
-	if len(lines) < 2 {
-		a.appendLog("[update] Invalid update info format")
-		return CheckUpdateResult{
-			HasUpdate: false,
-			Message:   "check_failed",
-		}
-	}
-
-	latestVersion := strings.TrimSpace(lines[0])
-	downloadURL := strings.TrimSpace(lines[1])
-	currentVersion := a.GetAppVersion()
-
-	a.appendLog(fmt.Sprintf("[update] Current: %s, Latest: %s", currentVersion, latestVersion))
-
-	comparison := compareVersions(currentVersion, latestVersion)
-
-	switch comparison {
-	case -1:
-		return CheckUpdateResult{
-			HasUpdate:     true,
-			LatestVersion: latestVersion,
-			DownloadURL:   downloadURL,
-			Message:       "update_available",
-		}
-	case 0:
-		return CheckUpdateResult{
-			HasUpdate:     false,
-			LatestVersion: latestVersion,
-			DownloadURL:   downloadURL,
-			Message:       "up_to_date",
-		}
-	default:
-		return CheckUpdateResult{
-			HasUpdate:     false,
-			LatestVersion: latestVersion,
-			DownloadURL:   downloadURL,
-			Message:       "dev_version",
-		}
-	}
-}
-
-func compareVersions(v1, v2 string) int {
-	v1 = strings.TrimPrefix(v1, "v")
-	v2 = strings.TrimPrefix(v2, "v")
-
-	parts1 := strings.Split(v1, ".")
-	parts2 := strings.Split(v2, ".")
-
-	maxLen := len(parts1)
-	if len(parts2) > maxLen {
-		maxLen = len(parts2)
-	}
-
-	for i := 0; i < maxLen; i++ {
-		var num1, num2 int
-
-		if i < len(parts1) {
-			fmt.Sscanf(parts1[i], "%d", &num1)
-		}
-		if i < len(parts2) {
-			fmt.Sscanf(parts2[i], "%d", &num2)
-		}
-
-		if num1 < num2 {
-			return -1
-		} else if num1 > num2 {
-			return 1
-		}
-	}
-
-	return 0
 }
 
 func (a *App) OpenURL(rawURL string) {

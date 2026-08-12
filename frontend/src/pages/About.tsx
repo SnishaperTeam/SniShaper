@@ -1,19 +1,30 @@
-import React, { useEffect, useState } from 'react';
-import { Box, Button, Grid, Typography } from '@mui/material';
+import React, { useEffect, useState, useRef } from 'react';
+import { Box, Button, Grid, Typography, LinearProgress } from '@mui/material';
 import { alpha } from '@mui/material/styles';
 import { useTranslation } from '../i18n/I18nContext';
 import {
   Globe, Link as LinkIcon, Users, Shield, Heart, RefreshCw,
-  Download, Sparkles, Zap, Lock, Code2, GitBranch, Megaphone, Map, ExternalLink
+  Download, Sparkles, Zap, Lock, Code2, GitBranch, Megaphone, Map, ExternalLink,
+  FolderOpen, AlertCircle
 } from '../lib/icons';
 import logoUrl from '../assets/logo.svg';
-import { GetAppVersion, CheckUpdate, OpenURL } from '../api/bindings';
+import { GetAppVersion, GetReleaseChannel, CheckUpdate, OpenURL, DownloadUpdateAsset, InstallUpdateAsset, EventsOn } from '../api/bindings';
 import Modal from '../components/Modal';
 import { toast } from '../lib/toast';
+
+interface UpdateAsset {
+  name: string;
+  size: number;
+  download_url: string;
+  kind: string;
+}
 
 interface UpdateResult {
   has_update: boolean;
   latest_version: string;
+  channel: string;
+  release_name: string;
+  assets: UpdateAsset[];
   download_url: string;
   message: string;
   error_detail?: string;
@@ -22,26 +33,55 @@ interface UpdateResult {
 const softBg = (token: string, opacity: number) => (theme: any) =>
   alpha(theme.palette[token.split('.')[0]][token.split('.')[1]], opacity);
 
+const fmtSize = (bytes: number) => {
+  if (!bytes || bytes <= 0) return '---';
+  if (bytes >= 1024 * 1024) return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
+  if (bytes >= 1024) return `${(bytes / 1024).toFixed(0)} KB`;
+  return `${bytes} B`;
+};
+
 const About: React.FC = () => {
   const { t } = useTranslation();
   const [version, setVersion] = useState<string>('1.29');
   const [checkingUpdate, setCheckingUpdate] = useState<boolean>(false);
   const [showUpdateModal, setShowUpdateModal] = useState<boolean>(false);
-  const [updateInfo, setUpdateInfo] = useState<{ latestVersion: string; downloadURL: string } | null>(null);
+  const [showInstallConfirm, setShowInstallConfirm] = useState<boolean>(false);
+  const [updateInfo, setUpdateInfo] = useState<UpdateResult | null>(null);
+  const [downloadProgress, setDownloadProgress] = useState<number>(0);
+  const [downloadedPath, setDownloadedPath] = useState<string | null>(null);
+  const [releaseChannel, setReleaseChannel] = useState<string>('stable');
+  const downloadingRef = useRef<string | null>(null);
 
   useEffect(() => {
     GetAppVersion().then((v) => { if (v) setVersion(v); }).catch(() => setVersion('1.29'));
   }, []);
+
+  useEffect(() => {
+    GetReleaseChannel().then((c) => { if (c) setReleaseChannel(c); }).catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    const off = EventsOn('update:download_progress', (data: any) => {
+      if (data && downloadingRef.current && data.asset_name === downloadingRef.current) {
+        setDownloadProgress(Math.round(data.percent || 0));
+      }
+    });
+    return off;
+  }, []);
+
+  const channelMap: Record<string, { key: string; color: string }> = {
+    alpha: { key: 'about.channel_alpha', color: 'error.main' },
+    beta: { key: 'about.channel_beta', color: 'warning.main' },
+    rc: { key: 'about.channel_rc', color: 'primary.main' },
+    stable: { key: 'about.channel_stable', color: 'success.main' },
+  };
+  const channelConf = channelMap[releaseChannel] || channelMap.stable;
 
   const handleOpenWebsite = () => OpenURL('https://jetcpp.dpdns.org');
   const handleOpenGitHub = () => OpenURL('https://github.com/SniShaper/SniShaper');
   const handleOpenBeta = () => OpenURL('https://github.com/SniShaper/SniShaper/actions');
   const handleOpenAdaptation = () => OpenURL('https://github.com/SniShaper/SniShaper/issues/95');
   const handleOpenDevPlan = () => OpenURL('https://github.com/SniShaper/SniShaper/issues/36');
-
-  const handleDownloadUpdate = () => {
-    if (updateInfo) { OpenURL(updateInfo.downloadURL); setShowUpdateModal(false); }
-  };
 
   const handleCheckUpdate = async () => {
     if (checkingUpdate) return;
@@ -50,7 +90,9 @@ const About: React.FC = () => {
       const result: UpdateResult = await CheckUpdate();
       switch (result.message) {
         case 'update_available':
-          setUpdateInfo({ latestVersion: result.latest_version, downloadURL: result.download_url });
+          setUpdateInfo(result);
+          setDownloadedPath(null);
+          setDownloadProgress(0);
           setShowUpdateModal(true);
           break;
         case 'up_to_date':
@@ -59,15 +101,62 @@ const About: React.FC = () => {
         case 'dev_version':
           toast.info(t('about.dev_version'), t('about.dev_version_desc').replace('{version}', version).replace('{latestVersion}', result.latest_version));
           break;
-        case 'check_failed':
-        default:
-          const errorKey = result.error_detail || 'check_failed';
-          toast.error(t('about.check_failed'), t(`about.${errorKey}`) || t('about.check_failed_desc'));
+        case 'no_release_found':
+          toast.info(t('about.no_release_found'), t('about.no_release_found_desc'));
           break;
+        case 'check_failed':
+        default: {
+          const errorKey = result.error_detail || 'check_failed';
+          const errText = t(`about.${errorKey}`);
+          const errorDesc = errText === `about.${errorKey}` ? t('about.check_failed_desc') : errText;
+          toast.error(t('about.check_failed'), errorDesc);
+          break;
+        }
       }
     } catch (error) {
       toast.error(t('about.check_failed'), t('about.check_failed_desc'));
     } finally { setCheckingUpdate(false); }
+  };
+
+  const handleInstall = async (localPath: string | null, assetName: string) => {
+    if (!localPath) return;
+    setShowInstallConfirm(false);
+    try {
+      await InstallUpdateAsset(localPath);
+      const is7z = assetName.toLowerCase().endsWith('.7z');
+      toast.success(is7z ? t('about.install_7z_started') : t('about.install_started'));
+      setShowUpdateModal(false);
+    } catch (err: any) {
+      const msg = String(err?.message || err);
+      const keyMap: Record<string, string> = {
+        sevenzip_missing: t('about.sevenzip_missing'),
+        dir_not_writable: t('about.dir_not_writable'),
+        extract_failed: t('about.extract_failed'),
+        bad_archive: t('about.bad_archive'),
+      };
+      toast.error(t('about.install_failed'), keyMap[msg] || msg);
+    }
+  };
+
+  const handleDownload = async (asset: UpdateAsset) => {
+    if (downloadingRef.current) return;
+    downloadingRef.current = asset.name;
+    setDownloadProgress(0);
+    try {
+      const result = await DownloadUpdateAsset(asset.download_url);
+      const localPath = result?.local_path || null;
+      setDownloadedPath(localPath);
+      toast.success(t('about.download_done'), asset.name);
+      if (asset.kind === '7z') {
+        setShowInstallConfirm(true);
+      } else {
+        await handleInstall(localPath, asset.name);
+      }
+    } catch (err: any) {
+      toast.error(t('about.download_failed'), String(err?.message || err));
+    } finally {
+      downloadingRef.current = null;
+    }
   };
 
   const features = [
@@ -101,9 +190,12 @@ const About: React.FC = () => {
             </Box>
             <Typography variant="h1" sx={{ fontSize: '2.25rem', fontWeight: 900, color: 'text.primary', mb: 0.5, letterSpacing: '-0.025em' }}>SniShaper</Typography>
             <Typography sx={{ fontSize: '1.125rem', fontWeight: 500, color: 'text.secondary', mb: 2 }}>{t('about.title')}</Typography>
-            <Box sx={{ display: 'inline-flex', alignItems: 'center', gap: 1, px: 2.5, py: 1.25, borderRadius: '999px', bgcolor: (theme) => alpha(theme.palette.primary.main, 0.1), border: 1, borderColor: (theme) => alpha(theme.palette.primary.main, 0.2) }}>
+            <Box sx={{ display: 'inline-flex', alignItems: 'center', gap: 1.5, px: 2.5, py: 1.25, borderRadius: '999px', bgcolor: (theme) => alpha(theme.palette.primary.main, 0.1), border: 1, borderColor: (theme) => alpha(theme.palette.primary.main, 0.2) }}>
               <Shield size={16} aria-hidden />
               <Typography variant="body2" sx={{ fontWeight: 700, color: 'primary.main' }}>{t('about.version')}: {version}</Typography>
+              <Box component="span" sx={{ px: 1, py: 0.25, borderRadius: '999px', fontSize: '0.6875rem', fontWeight: 700, letterSpacing: '0.03em', color: channelConf.color, bgcolor: (theme) => alpha(theme.palette[channelConf.color.split('.')[0]][channelConf.color.split('.')[1]], 0.12) }}>
+                {t(channelConf.key)}
+              </Box>
             </Box>
           </Box>
         </Box>
@@ -230,27 +322,88 @@ const About: React.FC = () => {
         </Box>
       </Box>
 
-      <Modal isOpen={showUpdateModal} onClose={() => setShowUpdateModal(false)} title={updateInfo ? t('about.update_available') : t('common.status')}>
+      <Modal isOpen={showUpdateModal} onClose={() => setShowUpdateModal(false)} title={t('about.update_available')}>
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-          {updateInfo ? (
+          {updateInfo && (
             <>
               <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1.5, p: 2, bgcolor: (theme) => alpha(theme.palette.primary.main, 0.1), border: 1, borderColor: (theme) => alpha(theme.palette.primary.main, 0.2), borderRadius: 2 }}>
                 <Box component="span" sx={{ display: 'inline-flex', color: 'primary.main', flexShrink: 0, mt: 0.25 }}><Download size={20} aria-hidden /></Box>
-                <Box>
+                <Box sx={{ minWidth: 0 }}>
                   <Typography sx={{ fontSize: '0.875rem', fontWeight: 700, color: 'text.primary', mb: 0.5 }}>{t('about.update_available')}</Typography>
-                  <Typography sx={{ fontSize: '0.75rem', color: 'text.secondary' }}>{t('about.update_available_desc').replace('{version}', updateInfo.latestVersion)}</Typography>
+                  <Typography sx={{ fontSize: '0.75rem', color: 'text.secondary', wordBreak: 'break-all' }}>
+                    {updateInfo.release_name || updateInfo.latest_version}
+                  </Typography>
+                  <Typography sx={{ fontSize: '0.6875rem', color: 'text.secondary', mt: 0.5, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                    {updateInfo.channel} · {updateInfo.latest_version}
+                  </Typography>
                 </Box>
               </Box>
-              <Box sx={{ display: 'flex', gap: 1.5 }}>
-                <Button onClick={handleDownloadUpdate} startIcon={<Download size={16} />} sx={{ flex: 1 }}>{t('common.confirm')}</Button>
-                <Button onClick={() => setShowUpdateModal(false)} variant="outlined" sx={{ flex: 1 }}>{t('common.cancel')}</Button>
+
+              {updateInfo.assets && updateInfo.assets.length > 0 ? (
+                <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+                  <Typography variant="caption" sx={{ fontWeight: 'bold', color: 'text.secondary', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                    {t('about.choose_download')}
+                  </Typography>
+                  {updateInfo.assets.map((asset) => {
+                    const is7z = asset.kind === '7z';
+                    const isDownloading = downloadingRef.current === asset.name;
+                    return (
+                      <Box key={asset.name} sx={{ p: 1.5, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1.5, border: 1, borderColor: 'divider', borderRadius: 1.5, bgcolor: 'background.default' }}>
+                        <Box sx={{ display: 'flex', gap: 1.5, alignItems: 'center', minWidth: 0, flex: 1 }}>
+                          <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 36, height: 36, borderRadius: 1, flexShrink: 0, bgcolor: is7z ? 'rgba(234,179,8,0.12)' : 'rgba(33,150,243,0.12)', color: is7z ? 'warning.main' : 'primary.main' }}>
+                            {is7z ? <FolderOpen size={18} /> : <Download size={18} />}
+                          </Box>
+                          <Box sx={{ minWidth: 0 }}>
+                            <Typography sx={{ fontSize: '0.75rem', fontWeight: 'bold', color: 'text.primary', wordBreak: 'break-all', display: 'block' }}>
+                              {asset.name}
+                            </Typography>
+                            <Typography variant="caption" sx={{ fontSize: '0.6875rem', color: 'text.secondary', display: 'block' }}>
+                              {t(is7z ? 'about.asset_7z' : 'about.asset_exe')} · {t('about.asset_size')}: {fmtSize(asset.size)}
+                            </Typography>
+                          </Box>
+                        </Box>
+                        {isDownloading ? (
+                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, minWidth: 120, flexShrink: 0 }}>
+                            <LinearProgress variant="determinate" value={downloadProgress} sx={{ flex: 1 }} />
+                            <Typography variant="caption" sx={{ fontSize: '0.6875rem', color: 'text.secondary', flexShrink: 0 }}>
+                              {downloadProgress}%
+                            </Typography>
+                          </Box>
+                        ) : (
+                          <Button size="small" variant="outlined" startIcon={<Download size={14} />} sx={{ flexShrink: 0 }} onClick={() => handleDownload(asset)}>
+                            {t('about.download')}
+                          </Button>
+                        )}
+                      </Box>
+                    );
+                  })}
+                </Box>
+              ) : (
+                <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 1, py: 2, color: 'text.secondary' }}>
+                  <AlertCircle size={28} />
+                  <Typography sx={{ fontSize: '0.8125rem', fontWeight: 700 }}>{t('about.no_assets')}</Typography>
+                  <Typography sx={{ fontSize: '0.75rem', color: 'text.secondary', textAlign: 'center' }}>{t('about.no_assets_desc')}</Typography>
+                  <Button size="small" variant="outlined" sx={{ mt: 1 }} startIcon={<ExternalLink size={14} />} onClick={() => OpenURL('https://github.com/SniShaper/SniShaper/releases')}>
+                    {t('about.open_github')}
+                  </Button>
+                </Box>
+              )}
+
+              <Box sx={{ display: 'flex', gap: 1.5, justifyContent: 'flex-end' }}>
+                <Button onClick={() => setShowUpdateModal(false)} variant="outlined">{t('common.cancel')}</Button>
               </Box>
             </>
-          ) : (
-            <Box sx={{ textAlign: 'center', py: 2 }}>
-              <Typography sx={{ fontSize: '0.875rem', color: 'text.secondary' }}>{t('about.up_to_date_desc').replace('{version}', version)}</Typography>
-            </Box>
           )}
+        </Box>
+      </Modal>
+
+      <Modal isOpen={showInstallConfirm} onClose={() => setShowInstallConfirm(false)} title={t('about.install')}>
+        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+          <Typography sx={{ fontSize: '0.8125rem', color: 'text.secondary', lineHeight: 1.625 }}>{t('about.install_confirm_7z')}</Typography>
+          <Box sx={{ display: 'flex', gap: 1.5, justifyContent: 'flex-end' }}>
+            <Button variant="contained" onClick={() => handleInstall(downloadedPath, downloadingRef.current || '')}>{t('common.confirm')}</Button>
+            <Button variant="outlined" onClick={() => setShowInstallConfirm(false)}>{t('common.cancel')}</Button>
+          </Box>
         </Box>
       </Modal>
     </Box>

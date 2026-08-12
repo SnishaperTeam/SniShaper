@@ -505,12 +505,28 @@ type SystemProxyStatus struct {
 	Override string `json:"Override"`
 }
 
+type ReleaseAsset struct {
+	Name        string `json:"name"`
+	Size        int64  `json:"size"`
+	DownloadURL string `json:"download_url"`
+	Kind        string `json:"kind"`
+}
+
+type DownloadResult struct {
+	LocalPath string `json:"local_path"`
+	Size      int64  `json:"size"`
+}
+
 type CheckUpdateResult struct {
-	HasUpdate     bool   `json:"has_update"`
-	LatestVersion string `json:"latest_version"`
-	DownloadURL   string `json:"download_url"`
-	Message       string `json:"message"`
-	ErrorDetail   string `json:"error_detail"`
+	HasUpdate     bool           `json:"has_update"`
+	LatestVersion string         `json:"latest_version"`
+	Channel       string         `json:"channel"`
+	ReleaseName   string         `json:"release_name"`
+	ReleaseNotes  string         `json:"release_notes"`
+	Assets        []ReleaseAsset `json:"assets"`
+	DownloadURL   string         `json:"download_url"`
+	Message       string         `json:"message"`
+	ErrorDetail   string         `json:"error_detail"`
 }
 
 type DNSTestResult struct {

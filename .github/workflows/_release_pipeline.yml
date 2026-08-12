@@ -385,6 +385,23 @@ jobs:
           }
           Write-Host "::notice::Release notes written to $notesPath"
 
+      - name: Inject release channel into manifest
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $channel = "${{ inputs.channel }}"
+          $suffix = "${{ needs.check.outputs.suffix }}"
+          $relChannel = if ($channel -eq 'release') { 'stable' } else { $channel }
+          if ($suffix) { $relChannel = $suffix }
+          $relVersion = "${{ needs.check.outputs.version }}"
+          if ([string]::IsNullOrWhiteSpace($relVersion)) { $relVersion = '0.0.0' }
+          $manifest = Join-Path $env:GITHUB_WORKSPACE 'Package.appxmanifest'
+          $content = Get-Content -Raw $manifest
+          $content = $content -replace '<rel:ReleaseChannel>[^<]*</rel:ReleaseChannel>', "<rel:ReleaseChannel>$relChannel</rel:ReleaseChannel>"
+          $content = $content -replace '<rel:Version>[^<]*</rel:Version>', "<rel:Version>$relVersion</rel:Version>"
+          Set-Content -Path $manifest -Value $content -Encoding UTF8
+          Write-Host "::notice::Manifest ReleaseChannel=$relChannel ReleaseVersion=$relVersion"
+
       - name: Build, package & sign MSIX
         shell: pwsh
         run: |

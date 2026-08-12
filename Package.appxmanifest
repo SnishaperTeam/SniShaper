@@ -8,7 +8,8 @@
   xmlns:desktop="http://schemas.microsoft.com/appx/manifest/desktop/windows10"
   xmlns:desktop6="http://schemas.microsoft.com/appx/manifest/desktop/windows10/6"
   xmlns:rescap="http://schemas.microsoft.com/appx/manifest/foundation/windows10/restrictedcapabilities"
-  IgnorableNamespaces="uap uap2 uap3 uap10 desktop desktop6 rescap">
+  xmlns:rel="http://schemas.snishaper.dev/release"
+  IgnorableNamespaces="uap uap2 uap3 uap10 desktop desktop6 rescap rel">
 
   <Identity
     Name="dongle.Snishaper"
@@ -47,4 +48,7 @@
   <Capabilities>
     <rescap:Capability Name="runFullTrust" />
   </Capabilities>
+
+  <rel:ReleaseChannel>alpha.3</rel:ReleaseChannel>
+  <rel:Version>1.29.0</rel:Version>
 </Package>

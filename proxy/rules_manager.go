@@ -41,6 +41,7 @@ type RuleManager struct {
 	theme                      string
 	migrationEnabled           bool
 	migrationServer            string
+	updateChannel              string
 }
 
 func (r *RuleManager) SetRouteEventCallback(cb func(domain, mode string)) {
@@ -328,6 +329,10 @@ func (rm *RuleManager) loadSettingsConfig() error {
 		rm.migrationEnabled = *config.MigrationEnabled
 	}
 	rm.migrationServer = config.MigrationServer
+	rm.updateChannel = config.UpdateChannel
+	if rm.updateChannel == "" {
+		rm.updateChannel = "stable"
+	}
 	rm.applySettingsDefaults()
 	return nil
 }
@@ -822,6 +827,7 @@ func (rm *RuleManager) saveSettingsConfig() error {
 		Socks5Enabled:              &socks5Enabled,
 		MigrationEnabled:           &migrationEnabled,
 		MigrationServer:            rm.migrationServer,
+		UpdateChannel:              rm.updateChannel,
 	}
 
 	data, err := json.MarshalIndent(settings, "", "  ")
@@ -1123,6 +1129,22 @@ func (rm *RuleManager) GetMigrationServer() string {
 func (rm *RuleManager) SetMigrationServer(server string) error {
 	rm.mu.Lock()
 	rm.migrationServer = strings.TrimSpace(server)
+	rm.mu.Unlock()
+	return rm.saveSettingsConfig()
+}
+
+func (rm *RuleManager) GetUpdateChannel() string {
+	rm.mu.RLock()
+	defer rm.mu.RUnlock()
+	if rm.updateChannel == "" {
+		return "stable"
+	}
+	return rm.updateChannel
+}
+
+func (rm *RuleManager) SetUpdateChannel(channel string) error {
+	rm.mu.Lock()
+	rm.updateChannel = channel
 	rm.mu.Unlock()
 	return rm.saveSettingsConfig()
 }

@@ -15,7 +15,8 @@ import {
   ForceFetchCloudflareIPs, TriggerCFHealthCheck, RemoveInvalidCFIPs,
   GetLanguage, SetLanguage,
   GetIPv6Available, RefreshIPv6Check,
-  GetLogFiles, OpenLogFile, CleanOldLogs
+  GetLogFiles, OpenLogFile, CleanOldLogs,
+  GetUpdateChannel, SetUpdateChannel
 } from '../api/bindings';
 import {
   Box, Button, TextField, Select, MenuItem, FormControl, InputLabel, Switch,
@@ -79,6 +80,13 @@ const StackedRow = ({ icon, title, desc, children }: { icon: React.ReactNode; ti
   </Box>
 );
 
+const UPDATE_CHANNELS = [
+  { value: 'alpha', label: 'Alpha' },
+  { value: 'beta', label: 'Beta' },
+  { value: 'rc', label: 'Release Candidate' },
+  { value: 'stable', label: 'Stable' },
+];
+
 const Settings: React.FC<SettingsProps> = ({ cache, onCacheUpdate, currentThemeId, onThemeChange }) => {
   const { t, language, setLanguage: setI18nLanguage } = useTranslation();
   const { mode, setMode } = useColorScheme();
@@ -99,6 +107,7 @@ const Settings: React.FC<SettingsProps> = ({ cache, onCacheUpdate, currentThemeI
   const [ipStats, setIpStats] = useState<any[]>(cache.ipStats || []);
   const [isIpv6Checking, setIsIpv6Checking] = useState(false);
   const ipv6Available = cache.ipv6Available !== false;
+  const [updateChannel, setUpdateChannel] = useState<string>(cache.updateChannel || 'stable');
 
   const reloadCriticalData = useCallback(async () => {
     try {
@@ -121,12 +130,31 @@ const Settings: React.FC<SettingsProps> = ({ cache, onCacheUpdate, currentThemeI
   useEffect(() => {
     reloadCriticalData();
     TriggerCFHealthCheck().catch(console.error);
+    GetUpdateChannel().then((c) => {
+      if (c) {
+        setUpdateChannel(c);
+        onCacheUpdate({ updateChannel: c });
+      }
+    }).catch(() => {});
     const ipTimer = setInterval(async () => {
       const stats = await GetCloudflareIPStats();
       if (stats) setIpStats(stats);
     }, 5000);
     return () => clearInterval(ipTimer);
   }, []);
+
+  const handleChannelChange = async (value: string) => {
+    const prev = updateChannel;
+    setUpdateChannel(value);
+    try {
+      await SetUpdateChannel(value);
+      onCacheUpdate({ updateChannel: value });
+      toast.success(t('settings.notifications.updated'));
+    } catch (err: any) {
+      setUpdateChannel(prev);
+      toast.error(t('common.failed'), String(err));
+    }
+  };
 
   const handleSavePort = async () => {
     const parsed = parseInt(port, 10);
@@ -280,6 +308,9 @@ const Settings: React.FC<SettingsProps> = ({ cache, onCacheUpdate, currentThemeI
         : `${bytes} B`;
 
   const bgColor = 'action.hover';
+
+  const channelKey = 'settings.update_channel.' + updateChannel;
+  const channelDesc = t(channelKey) === channelKey ? t('settings.update_channel.stable') : t(channelKey);
 
   return (
     <Box sx={{ pt: 4, pb: 6, width: '100%', display: 'flex', flexDirection: 'column' }}>
@@ -441,6 +472,27 @@ const Settings: React.FC<SettingsProps> = ({ cache, onCacheUpdate, currentThemeI
                       {availableThemes.map((th) => (
                         <MenuItem key={th.id} value={th.id}>
                           {t(th.nameKey)}
+                        </MenuItem>
+                      ))}
+                    </Select>
+                  </FormControl>
+                </Box>
+              </SettingRowInline>
+
+              <SettingRowInline title={t('settings.update_channel.title')} desc={channelDesc} icon={<Download size={18} />}>
+                <Box sx={{ width: 240, flexShrink: 0 }}>
+                  <FormControl fullWidth size="small">
+                    <InputLabel id="update-channel-label">{t('settings.update_channel.title')}</InputLabel>
+                    <Select
+                      labelId="update-channel-label"
+                      id="update-channel-select"
+                      value={updateChannel}
+                      label={t('settings.update_channel.title')}
+                      onChange={(e) => handleChannelChange(e.target.value)}
+                    >
+                      {UPDATE_CHANNELS.map((ch) => (
+                        <MenuItem key={ch.value} value={ch.value}>
+                          {ch.label}
                         </MenuItem>
                       ))}
                     </Select>

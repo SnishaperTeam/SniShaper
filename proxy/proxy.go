@@ -111,6 +111,7 @@ type SettingsConfig struct {
 	Socks5Enabled              *bool             `json:"socks5_enabled,omitempty"`
 	MigrationEnabled           *bool             `json:"migration_enabled,omitempty"`
 	MigrationServer            string            `json:"migration_server,omitempty"`
+	UpdateChannel              string            `json:"update_channel,omitempty"`
 }
 
 type NAT64Profile struct {

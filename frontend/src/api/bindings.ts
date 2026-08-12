@@ -100,7 +100,12 @@ export const RefreshGFWList = () => appCall('RefreshGFWList');
 
 // About API
 export const GetAppVersion = () => appCall('GetAppVersion');
+export const GetReleaseChannel = () => appCall('GetReleaseChannel');
 export const CheckUpdate = () => appCall('CheckUpdate');
+export const GetUpdateChannel = () => appCall('GetUpdateChannel');
+export const SetUpdateChannel = (channel: string) => appCall('SetUpdateChannel', channel);
+export const DownloadUpdateAsset = (url: string) => appCall('DownloadUpdateAsset', url);
+export const InstallUpdateAsset = (localPath: string) => appCall('InstallUpdateAsset', localPath);
 export const OpenURL = (url: string) => appCall('OpenURL', url);
 
 // Evolution Mode API

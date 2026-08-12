@@ -20,20 +20,42 @@
     "#1": {
       "0000": {
         "fixed": {
-"file_version": "1.29.0.0",
-	"product_version": "1.29.0.0"
+          "file_version": "1.29.0.0",
+          "product_version": "1.29.0.0"
         },
         "info": {
           "0409": {
-            "Comments": "SniShaper desktop application",
-            "CompanyName": "SniShaper Project",
+            "Comments": "SniShaper is a local proxy tool designed for complex network environments, integrating ECH Injection, TLS Fragmentation, QUIC Obfuscation, Session Migration and other protocol stack technologies, paired with a TUN Virtual NIC for full traffic takeover, delivering a stable and flexible browsing experience.",
+            "CompanyName": "Snishaper Team and JetCPP Team",
             "FileDescription": "SniShaper",
-            "FileVersion": "0.0.0.0",
+            "FileVersion": "1.29.0.0",
             "InternalName": "snishaper",
-            "LegalCopyright": "Copyright (c) SniShaper Project",
+            "LegalCopyright": "Copyright (c) Snishaper Team and JetCPP Team",
             "OriginalFilename": "snishaper.exe",
             "ProductName": "SniShaper",
-            "ProductVersion": "0.0.0.0"
+            "ProductVersion": "1.29.0.0"
+          },
+          "0804": {
+            "Comments": "SniShaper 是一款专为复杂网络环境设计的本地代理软件，通过 ECH 注入、TLS 分片、QUIC 转换、会话迁移等多种功能，在复杂网络环境下提升体验。",
+            "CompanyName": "Snishaper Team and JetCPP Team",
+            "FileDescription": "SniShaper",
+            "FileVersion": "1.29.0.0",
+            "InternalName": "snishaper",
+            "LegalCopyright": "Copyright (c) Snishaper Team and JetCPP Team",
+            "OriginalFilename": "snishaper.exe",
+            "ProductName": "SniShaper",
+            "ProductVersion": "1.29.0.0"
+          },
+          "0419": {
+            "Comments": "SniShaper — это локальный прокси-инструмент, разработанный специально для сложных сетевых условий, интегрирующий инъекцию ECH, фрагментацию TLS, маскировку QUIC, миграцию сессий и другие технологии стека протоколов, в сочетании с виртуальным TUN-интерфейсом для полного перехвата трафика, обеспечивая стабильный и гибкий доступ в интернет.",
+            "CompanyName": "Snishaper Team and JetCPP Team",
+            "FileDescription": "SniShaper",
+            "FileVersion": "1.29.0.0",
+            "InternalName": "snishaper",
+            "LegalCopyright": "Copyright (c) Snishaper Team and JetCPP Team",
+            "OriginalFilename": "snishaper.exe",
+            "ProductName": "SniShaper",
+            "ProductVersion": "1.29.0.0"
           }
         }
       }

@@ -14,6 +14,26 @@ param(
     [switch]$Silent
 )
 
+function Get-RelVersion {
+    param([string]$ManifestPath)
+    $content = Get-Content -Raw $ManifestPath
+    $relVersion = ""
+    $relChannel = ""
+    if ($content -match '<rel:Version>([^<]+)</rel:Version>') { $relVersion = $Matches[1] }
+    if ($content -match '<rel:ReleaseChannel>([^<]+)</rel:ReleaseChannel>') { $relChannel = $Matches[1] }
+    if ($relVersion) {
+        if ($relChannel -and $relChannel -ne 'stable' -and $relChannel -ne 'release' -and $relChannel -ne 'official') {
+            return "$relVersion-$relChannel"
+        }
+        return $relVersion
+    }
+    [xml]$m = Get-Content $ManifestPath
+    $ver = $m.Package.Identity.Version
+    $parts = $ver.Split('.')
+    if ($parts.Count -eq 4 -and $parts[3] -eq '0') { return ($parts[0..2] -join '.') }
+    return $ver
+}
+
 $currentPrincipal = New-Object Security.Principal.WindowsPrincipal([Security.Principal.WindowsIdentity]::GetCurrent())
 $isAdmin = $currentPrincipal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
 
@@ -85,6 +105,10 @@ $messages = @{
     "EN_BackDone" = "[Backend] Backend build and file copy completed!"
     "EN_AllDone" = "All selected tasks finished successfully!"
     "EN_Exit" = "Press Enter to exit"
+    "EN_BackBuildVersion" = "[Backend] Build version: {0}"
+    "EN_BackSyncVer" = "[Backend] Syncing version resource from manifest: {0} ..."
+    "EN_BackSyncVerDone" = "[Backend] Version resource synced: {0}"
+    "EN_BackSyncVerFail" = "[WARNING] go-winres failed, keeping existing version resource"
 
     "CN_MenuTitle" = "       项目构建菜单"
     "CN_DepPrompt" = "是否需要安装前端 npm 依赖？(Y/N，默认为 N)"
@@ -112,6 +136,10 @@ $messages = @{
     "CN_BackDone" = "[后端] 后端编译与文件复制完成！"
     "CN_AllDone" = "所有选定的任务已成功完成！"
     "CN_Exit" = "按回车键退出"
+    "CN_BackBuildVersion" = "[后端] 构建版本：{0}"
+    "CN_BackSyncVer" = "[后端] 正在从 manifest 同步版本资源：{0} ..."
+    "CN_BackSyncVerDone" = "[后端] 版本资源已同步：{0}"
+    "CN_BackSyncVerFail" = "[警告] go-winres 失败，保留现有版本资源"
 
     "RU_MenuTitle" = "       Меню сборки проекта"
     "RU_DepPrompt" = "Установить npm зависимости фронтенда? (Y/N, по умолчанию N)"
@@ -139,6 +167,10 @@ $messages = @{
     "RU_BackDone" = "[Бэкенд] Сборка бэкенда и копирование файлов завершены!"
     "RU_AllDone" = "Все выбранные задачи успешно завершены!"
     "RU_Exit" = "Нажмите Enter для выхода"
+    "RU_BackBuildVersion" = "[Бэкенд] Версия сборки: {0}"
+    "RU_BackSyncVer" = "[Бэкенд] Синхронизация ресурса версии из manifest: {0} ..."
+    "RU_BackSyncVerDone" = "[Бэкенд] Ресурс версии синхронизирован: {0}"
+    "RU_BackSyncVerFail" = "[ПРЕДУПРЕЖДЕНИЕ] go-winres не удался, сохраняем текущий ресурс версии"
 }
 
 # --- Silent mode defaults ---
@@ -348,11 +380,66 @@ if ($choice -eq "2" -or $choice -eq "3") {
         New-Item -ItemType Directory -Path $BuildBinPath -Force | Out-Null
     }
     
-    go build -tags with_gvisor -ldflags="-s -w -H windowsgui" -o "$BuildBinPath\snishaper.exe" .
-    if ($LASTEXITCODE -ne 0) {
-        Write-Host $messages["$($lang)_BackErrBuild"] -ForegroundColor Red
-        if (-not $Silent) { Read-Host $messages["$($lang)_Exit"] }
-        exit 1
+    $ManifestPath = Join-Path $ProjectRoot "Package.appxmanifest"
+    $buildVersion = Get-RelVersion -ManifestPath $ManifestPath
+    $ldflags = "-s -w -H windowsgui"
+    if ($buildVersion) { $ldflags += " -X snishaper/app.buildVersion=$buildVersion" }
+    Write-Host ($messages["$($lang)_BackBuildVersion"] -f $buildVersion) -ForegroundColor Green
+
+    $utf8NoBom = New-Object System.Text.UTF8Encoding $false
+    $WinResPath = Join-Path $ProjectRoot "winres\winres.json"
+    $SysoPath = Join-Path $ProjectRoot "snishaper.syso"
+    $WinResBackup = $null
+    $SysoBackup = $null
+    $winresOK = $false
+    try {
+        if (Test-Path $WinResPath) {
+            $WinResBackup = Get-Content -Raw $WinResPath
+            $winres = $WinResBackup | ConvertFrom-Json
+            [xml]$wm = Get-Content $ManifestPath
+            $mainVer = $wm.Package.Identity.Version
+            $winres.RT_VERSION.'#1'.'0000'.fixed.file_version = $mainVer
+            $winres.RT_VERSION.'#1'.'0000'.fixed.product_version = $mainVer
+            foreach ($langKey in $winres.RT_VERSION.'#1'.'0000'.info.PSObject.Properties.Name) {
+                $winres.RT_VERSION.'#1'.'0000'.info.$langKey.FileVersion = $mainVer
+                $winres.RT_VERSION.'#1'.'0000'.info.$langKey.ProductVersion = $mainVer
+            }
+            [System.IO.File]::WriteAllText($WinResPath, ($winres | ConvertTo-Json -Depth 10), $utf8NoBom)
+            if (Test-Path $SysoPath) { $SysoBackup = [System.IO.File]::ReadAllBytes($SysoPath) }
+            Write-Host ($messages["$($lang)_BackSyncVer"] -f $mainVer) -ForegroundColor Green
+            $WinResTmp = Join-Path $env:TEMP ("snishaper-winres-" + $PID)
+            New-Item -ItemType Directory -Path $WinResTmp -Force | Out-Null
+            go run github.com/tc-hib/go-winres@latest make --in $WinResPath --out (Join-Path $WinResTmp "rsrc")
+            if ($LASTEXITCODE -ne 0) {
+                Write-Host $messages["$($lang)_BackSyncVerFail"] -ForegroundColor Yellow
+            } else {
+                $genSyso = Get-ChildItem -Path $WinResTmp -Filter "*_windows_amd64.syso" -ErrorAction SilentlyContinue | Select-Object -First 1
+                if (-not $genSyso) {
+                    $genSyso = Get-ChildItem -Path $WinResTmp -Filter "*.syso" -ErrorAction SilentlyContinue | Select-Object -First 1
+                }
+                if ($genSyso) {
+                    Copy-Item $genSyso.FullName $SysoPath -Force
+                    $winresOK = $true
+                    Write-Host ($messages["$($lang)_BackSyncVerDone"] -f $mainVer) -ForegroundColor Green
+                } else {
+                    Write-Host $messages["$($lang)_BackSyncVerFail"] -ForegroundColor Yellow
+                }
+            }
+            Remove-Item -Path $WinResTmp -Recurse -Force -ErrorAction SilentlyContinue
+        }
+        go build -tags with_gvisor -ldflags="$ldflags" -o "$BuildBinPath\snishaper.exe" .
+        if ($LASTEXITCODE -ne 0) {
+            Write-Host $messages["$($lang)_BackErrBuild"] -ForegroundColor Red
+            if (-not $Silent) { Read-Host $messages["$($lang)_Exit"] }
+            exit 1
+        }
+    } finally {
+        if ($null -ne $WinResBackup) {
+            [System.IO.File]::WriteAllText($WinResPath, $WinResBackup, $utf8NoBom)
+        }
+        if ($null -ne $SysoBackup) {
+            [System.IO.File]::WriteAllBytes($SysoPath, $SysoBackup)
+        }
     }
 
     # 复制 rules 文件夹到 build/bin
@@ -438,8 +525,7 @@ if ($BuildMsix) {
         }
     }
 
-    # 4. Pack - only pack build\bin directory
-    Write-Host "[MSIX] Running winapp pack from build\bin..." -ForegroundColor Green
+    # 4. Pack using the manifest as-is (release channel/version markers come from the manifest)
     $SourceDir = Join-Path $ProjectRoot "build\bin"
     
     if (-not (Test-Path $SourceDir -PathType Container)) {
