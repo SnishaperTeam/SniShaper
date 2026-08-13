@@ -430,6 +430,16 @@
       "beta": "Beta (Testing): includes some new features, may contain defects, for test feedback",
       "rc": "Release Candidate: close to the official release, only critical fixes",
       "stable": "Stable: official releases only, recommended for most users"
+    },
+    "download_source": {
+      "title": "Download Source",
+      "desc": "Select the download source for update packages. The selected mirror is tried first, falling back to direct and other mirrors.",
+      "direct": "Direct",
+      "custom": "Custom",
+      "custom_placeholder": "https://your-mirror.example.com/",
+      "measure": "Measure",
+      "measuring": "Measuring...",
+      "unreachable": "unreachable"
     }
   },
   "evolution": {
@@ -562,7 +572,11 @@
     "channel_alpha": "Alpha",
     "channel_beta": "Beta",
     "channel_rc": "RC",
-    "channel_stable": "Stable"
+    "channel_stable": "Stable",
+    "restart_now": "Restart Now",
+    "restart_later": "Later",
+    "restart_to_update": "Restart to Update",
+    "restart_prompt_desc": "The new package has been downloaded. Restart now to apply the update?"
   },
   "window": {
     "minimize": "Minimize",

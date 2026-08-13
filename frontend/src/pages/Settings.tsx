@@ -16,7 +16,10 @@ import {
   GetLanguage, SetLanguage,
   GetIPv6Available, RefreshIPv6Check,
   GetLogFiles, OpenLogFile, CleanOldLogs,
-  GetUpdateChannel, SetUpdateChannel
+  GetUpdateChannel, SetUpdateChannel,
+  GetDownloadSource, SetDownloadSource,
+  GetCustomDownloadSource, SetCustomDownloadSource,
+  MeasureDownloadSources
 } from '../api/bindings';
 import {
   Box, Button, TextField, Select, MenuItem, FormControl, InputLabel, Switch,
@@ -87,6 +90,17 @@ const UPDATE_CHANNELS = [
   { value: 'stable', label: 'Stable' },
 ];
 
+const DOWNLOAD_SOURCES = [
+  { value: 'direct', labelKey: 'settings.download_source.direct' },
+  { value: 'down.mxw.qzz.io', label: 'down.mxw.qzz.io' },
+  { value: 'gh-proxy.org', label: 'gh-proxy.org' },
+  { value: 'v4.gh-proxy.org', label: 'v4.gh-proxy.org' },
+  { value: 'v6.gh-proxy.org', label: 'v6.gh-proxy.org' },
+  { value: 'cdn.gh-proxy.org', label: 'cdn.gh-proxy.org' },
+  { value: 'axisnow.gh-proxy.org', label: 'axisnow.gh-proxy.org' },
+  { value: 'custom', labelKey: 'settings.download_source.custom' },
+];
+
 const Settings: React.FC<SettingsProps> = ({ cache, onCacheUpdate, currentThemeId, onThemeChange }) => {
   const { t, language, setLanguage: setI18nLanguage } = useTranslation();
   const { mode, setMode } = useColorScheme();
@@ -108,6 +122,23 @@ const Settings: React.FC<SettingsProps> = ({ cache, onCacheUpdate, currentThemeI
   const [isIpv6Checking, setIsIpv6Checking] = useState(false);
   const ipv6Available = cache.ipv6Available !== false;
   const [updateChannel, setUpdateChannel] = useState<string>(cache.updateChannel || 'stable');
+  const [downloadSource, setDownloadSource] = useState<string>(cache.downloadSource || 'down.mxw.qzz.io');
+  const [customSource, setCustomSource] = useState<string>(cache.customDownloadSource || '');
+  const [sourceResults, setSourceResults] = useState<any[]>([]);
+  const [measuring, setMeasuring] = useState<boolean>(false);
+
+  const measureSources = async () => {
+    if (measuring) return;
+    setMeasuring(true);
+    try {
+      const results = await MeasureDownloadSources();
+      setSourceResults(Array.isArray(results) ? results : []);
+    } catch (err: any) {
+      toast.error(t('common.failed'), String(err));
+    } finally {
+      setMeasuring(false);
+    }
+  };
 
   const reloadCriticalData = useCallback(async () => {
     try {
@@ -136,6 +167,18 @@ const Settings: React.FC<SettingsProps> = ({ cache, onCacheUpdate, currentThemeI
         onCacheUpdate({ updateChannel: c });
       }
     }).catch(() => {});
+    GetDownloadSource().then((s) => {
+      if (s) {
+        setDownloadSource(s);
+        onCacheUpdate({ downloadSource: s });
+      }
+    }).catch(() => {});
+    GetCustomDownloadSource().then((s) => {
+      if (s) {
+        setCustomSource(s);
+        onCacheUpdate({ customDownloadSource: s });
+      }
+    }).catch(() => {});
     const ipTimer = setInterval(async () => {
       const stats = await GetCloudflareIPStats();
       if (stats) setIpStats(stats);
@@ -152,6 +195,31 @@ const Settings: React.FC<SettingsProps> = ({ cache, onCacheUpdate, currentThemeI
       toast.success(t('settings.notifications.updated'));
     } catch (err: any) {
       setUpdateChannel(prev);
+      toast.error(t('common.failed'), String(err));
+    }
+  };
+
+  const handleDownloadSourceChange = async (value: string) => {
+    const prev = downloadSource;
+    setDownloadSource(value);
+    try {
+      await SetDownloadSource(value);
+      onCacheUpdate({ downloadSource: value });
+      toast.success(t('settings.notifications.updated'));
+    } catch (err: any) {
+      setDownloadSource(prev);
+      toast.error(t('common.failed'), String(err));
+    }
+  };
+
+  const handleCustomSourceSave = async () => {
+    const prev = customSource;
+    try {
+      await SetCustomDownloadSource(customSource.trim());
+      onCacheUpdate({ customDownloadSource: customSource.trim() });
+      toast.success(t('settings.notifications.updated'));
+    } catch (err: any) {
+      setCustomSource(prev);
       toast.error(t('common.failed'), String(err));
     }
   };
@@ -497,6 +565,67 @@ const Settings: React.FC<SettingsProps> = ({ cache, onCacheUpdate, currentThemeI
                       ))}
                     </Select>
                   </FormControl>
+                </Box>
+              </SettingRowInline>
+
+              <SettingRowInline title={t('settings.download_source.title')} desc={t('settings.download_source.desc')} icon={<Globe size={18} />}>
+                <Box sx={{ width: 320, flexShrink: 0 }}>
+                  <FormControl fullWidth size="small">
+                    <InputLabel id="download-source-label">{t('settings.download_source.title')}</InputLabel>
+                    <Select
+                      labelId="download-source-label"
+                      id="download-source-select"
+                      value={downloadSource}
+                      label={t('settings.download_source.title')}
+                      onChange={(e) => handleDownloadSourceChange(e.target.value)}
+                    >
+                      {DOWNLOAD_SOURCES.map((src) => {
+                        let label = src.value;
+                        if (src.label) {
+                          label = src.label;
+                        } else if (src.labelKey) {
+                          const translated = t(src.labelKey);
+                          if (translated !== src.labelKey) label = translated;
+                        }
+                        return (
+                          <MenuItem key={src.value} value={src.value}>
+                            {label}
+                          </MenuItem>
+                        );
+                      })}
+                    </Select>
+                  </FormControl>
+                  {downloadSource === 'custom' && (
+                    <TextField
+                      size="small"
+                      fullWidth
+                      sx={{ mt: 1 }}
+                      placeholder={t('settings.download_source.custom_placeholder')}
+                      value={customSource}
+                      onChange={(e) => setCustomSource(e.target.value)}
+                      onBlur={handleCustomSourceSave}
+                    />
+                  )}
+                  <Button size="small" sx={{ mt: 1 }} startIcon={<Activity size={14} />} onClick={measureSources} disabled={measuring}>
+                    {measuring ? t('settings.download_source.measuring') : t('settings.download_source.measure')}
+                  </Button>
+                  {sourceResults.length > 0 && (
+                    <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5, mt: 1 }}>
+                      {sourceResults.map((r) => (
+                        <Box
+                          key={r.name}
+                          component="span"
+                          sx={{
+                            px: 0.75, py: 0.25, borderRadius: '999px', fontSize: '0.6875rem',
+                            bgcolor: (theme) => alpha(theme.palette[r.ok ? 'success' : 'error'].main, 0.12),
+                            color: r.ok ? 'success.main' : 'error.main',
+                          }}
+                        >
+                          {r.name} {r.ok ? `${r.latency_ms}ms` : t('settings.download_source.unreachable')}
+                        </Box>
+                      ))}
+                    </Box>
+                  )}
                 </Box>
               </SettingRowInline>
             </Box>

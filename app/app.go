@@ -53,6 +53,8 @@ type App struct {
 	core              *core.CoreClient
 	tunRestoreSysProxy bool
 	pendingShow       bool
+	pendingUpdateMu   sync.Mutex
+	pendingUpdatePath string
 }
 
 // SetWailsApp sets the wails application instance.

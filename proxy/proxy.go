@@ -112,6 +112,8 @@ type SettingsConfig struct {
 	MigrationEnabled           *bool             `json:"migration_enabled,omitempty"`
 	MigrationServer            string            `json:"migration_server,omitempty"`
 	UpdateChannel              string            `json:"update_channel,omitempty"`
+	DownloadSource             string            `json:"download_source,omitempty"`
+	CustomDownloadSource       string            `json:"custom_download_source,omitempty"`
 }
 
 type NAT64Profile struct {

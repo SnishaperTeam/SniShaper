@@ -430,6 +430,16 @@
       "beta": "Beta (тестирование): включает новые функции, возможны дефекты",
       "rc": "Release Candidate: близко к официальному релизу, только критические исправления",
       "stable": "Stable: только официальные релизы, рекомендуется большинству пользователей"
+    },
+    "download_source": {
+      "title": "Источник загрузки",
+      "desc": "Выберите источник загрузки обновлений. Выбранное зеркало используется первым, при неудаче — прямое соединение и другие зеркала.",
+      "direct": "Прямое соединение",
+      "custom": "Свой",
+      "custom_placeholder": "https://your-mirror.example.com/",
+      "measure": "Замер",
+      "measuring": "Замер...",
+      "unreachable": "недоступен"
     }
   },
   "evolution": {
@@ -562,7 +572,11 @@
     "channel_alpha": "Alpha",
     "channel_beta": "Beta",
     "channel_rc": "RC",
-    "channel_stable": "Stable"
+    "channel_stable": "Stable",
+    "restart_now": "Перезапустить сейчас",
+    "restart_later": "Позже",
+    "restart_to_update": "Перезапустить для обновления",
+    "restart_prompt_desc": "Новый пакет загружен. Перезапустить приложение сейчас, чтобы применить обновление?"
   },
   "window": {
     "minimize": "Свернуть",

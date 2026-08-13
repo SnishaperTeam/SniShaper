@@ -430,6 +430,16 @@
       "beta": "Beta（测试版）：包含部分新功能，可能存在缺陷，适合测试反馈",
       "rc": "Release Candidate（RC 候选版）：接近正式版，仅修复关键问题",
       "stable": "Stable（稳定版）：仅推送正式发布版本，推荐大多数用户使用"
+    },
+    "download_source": {
+      "title": "下载源",
+      "desc": "选择更新包下载源，所选加速站优先，失败后自动回退直连与其他加速站。",
+      "direct": "直连",
+      "custom": "自定义",
+      "custom_placeholder": "https://your-mirror.example.com/",
+      "measure": "测速",
+      "measuring": "测速中...",
+      "unreachable": "不可达"
     }
   },
   "evolution": {
@@ -562,7 +572,11 @@
     "channel_alpha": "Alpha",
     "channel_beta": "Beta",
     "channel_rc": "RC",
-    "channel_stable": "Stable"
+    "channel_stable": "Stable",
+    "restart_now": "立即重启",
+    "restart_later": "稍后重启",
+    "restart_to_update": "重启以更新",
+    "restart_prompt_desc": "新版安装包已下载完成，是否立即重启程序以完成更新？"
   },
   "window": {
     "minimize": "最小化",

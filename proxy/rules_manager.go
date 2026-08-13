@@ -42,6 +42,8 @@ type RuleManager struct {
 	migrationEnabled           bool
 	migrationServer            string
 	updateChannel              string
+	downloadSource             string
+	customDownloadSource       string
 }
 
 func (r *RuleManager) SetRouteEventCallback(cb func(domain, mode string)) {
@@ -333,6 +335,11 @@ func (rm *RuleManager) loadSettingsConfig() error {
 	if rm.updateChannel == "" {
 		rm.updateChannel = "stable"
 	}
+	rm.downloadSource = config.DownloadSource
+	if rm.downloadSource == "" {
+		rm.downloadSource = "down.mxw.qzz.io"
+	}
+	rm.customDownloadSource = config.CustomDownloadSource
 	rm.applySettingsDefaults()
 	return nil
 }
@@ -828,6 +835,8 @@ func (rm *RuleManager) saveSettingsConfig() error {
 		MigrationEnabled:           &migrationEnabled,
 		MigrationServer:            rm.migrationServer,
 		UpdateChannel:              rm.updateChannel,
+		DownloadSource:             rm.downloadSource,
+		CustomDownloadSource:       rm.customDownloadSource,
 	}
 
 	data, err := json.MarshalIndent(settings, "", "  ")
@@ -1145,6 +1154,35 @@ func (rm *RuleManager) GetUpdateChannel() string {
 func (rm *RuleManager) SetUpdateChannel(channel string) error {
 	rm.mu.Lock()
 	rm.updateChannel = channel
+	rm.mu.Unlock()
+	return rm.saveSettingsConfig()
+}
+
+func (rm *RuleManager) GetDownloadSource() string {
+	rm.mu.RLock()
+	defer rm.mu.RUnlock()
+	if rm.downloadSource == "" {
+		return "down.mxw.qzz.io"
+	}
+	return rm.downloadSource
+}
+
+func (rm *RuleManager) SetDownloadSource(src string) error {
+	rm.mu.Lock()
+	rm.downloadSource = src
+	rm.mu.Unlock()
+	return rm.saveSettingsConfig()
+}
+
+func (rm *RuleManager) GetCustomDownloadSource() string {
+	rm.mu.RLock()
+	defer rm.mu.RUnlock()
+	return rm.customDownloadSource
+}
+
+func (rm *RuleManager) SetCustomDownloadSource(prefix string) error {
+	rm.mu.Lock()
+	rm.customDownloadSource = prefix
 	rm.mu.Unlock()
 	return rm.saveSettingsConfig()
 }

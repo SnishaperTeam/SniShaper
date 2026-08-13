@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useState, useRef, useCallback } from 'react';
 import { Box, Button, Grid, Typography, LinearProgress } from '@mui/material';
 import { alpha } from '@mui/material/styles';
 import { useTranslation } from '../i18n/I18nContext';
@@ -8,7 +8,7 @@ import {
   FolderOpen, AlertCircle
 } from '../lib/icons';
 import logoUrl from '../assets/logo.svg';
-import { GetAppVersion, GetReleaseChannel, CheckUpdate, OpenURL, DownloadUpdateAsset, InstallUpdateAsset, EventsOn } from '../api/bindings';
+import { GetAppVersion, GetReleaseChannel, GetPendingUpdate, CheckUpdate, OpenURL, DownloadUpdateAsset, InstallUpdateAsset, EventsOn } from '../api/bindings';
 import Modal from '../components/Modal';
 import { toast } from '../lib/toast';
 
@@ -40,17 +40,34 @@ const fmtSize = (bytes: number) => {
   return `${bytes} B`;
 };
 
+const fmtSpeed = (bps: number) => {
+  if (!bps || bps <= 0) return '';
+  if (bps >= 1024 * 1024) return `${(bps / 1024 / 1024).toFixed(1)} MB/s`;
+  if (bps >= 1024) return `${(bps / 1024).toFixed(0)} KB/s`;
+  return `${bps.toFixed(0)} B/s`;
+};
+
 const About: React.FC = () => {
   const { t } = useTranslation();
   const [version, setVersion] = useState<string>('1.29');
   const [checkingUpdate, setCheckingUpdate] = useState<boolean>(false);
   const [showUpdateModal, setShowUpdateModal] = useState<boolean>(false);
-  const [showInstallConfirm, setShowInstallConfirm] = useState<boolean>(false);
+  const [showRestartPrompt, setShowRestartPrompt] = useState<boolean>(false);
   const [updateInfo, setUpdateInfo] = useState<UpdateResult | null>(null);
   const [downloadProgress, setDownloadProgress] = useState<number>(0);
-  const [downloadedPath, setDownloadedPath] = useState<string | null>(null);
+  const [downloadSpeed, setDownloadSpeed] = useState<number>(0);
+  const [downloadReceived, setDownloadReceived] = useState<number>(0);
+  const [downloadTotal, setDownloadTotal] = useState<number>(0);
+  const [pendingUpdate, setPendingUpdate] = useState<string | null>(null);
   const [releaseChannel, setReleaseChannel] = useState<string>('stable');
   const downloadingRef = useRef<string | null>(null);
+
+  const refreshPending = useCallback(async () => {
+    try {
+      const p = await GetPendingUpdate();
+      setPendingUpdate(p || null);
+    } catch { /* ignore */ }
+  }, []);
 
   useEffect(() => {
     GetAppVersion().then((v) => { if (v) setVersion(v); }).catch(() => setVersion('1.29'));
@@ -61,9 +78,16 @@ const About: React.FC = () => {
   }, []);
 
   useEffect(() => {
+    refreshPending();
+  }, [refreshPending]);
+
+  useEffect(() => {
     const off = EventsOn('update:download_progress', (data: any) => {
       if (data && downloadingRef.current && data.asset_name === downloadingRef.current) {
         setDownloadProgress(Math.round(data.percent || 0));
+        setDownloadSpeed(data.speed || 0);
+        setDownloadReceived(data.received || 0);
+        setDownloadTotal(data.total || 0);
       }
     });
     return off;
@@ -91,7 +115,6 @@ const About: React.FC = () => {
       switch (result.message) {
         case 'update_available':
           setUpdateInfo(result);
-          setDownloadedPath(null);
           setDownloadProgress(0);
           setShowUpdateModal(true);
           break;
@@ -118,14 +141,15 @@ const About: React.FC = () => {
     } finally { setCheckingUpdate(false); }
   };
 
-  const handleInstall = async (localPath: string | null, assetName: string) => {
+  const handleInstall = async (localPath: string) => {
     if (!localPath) return;
-    setShowInstallConfirm(false);
     try {
       await InstallUpdateAsset(localPath);
-      const is7z = assetName.toLowerCase().endsWith('.7z');
-      toast.success(is7z ? t('about.install_7z_started') : t('about.install_started'));
+      const is7z = localPath.toLowerCase().endsWith('.7z');
+      setShowRestartPrompt(false);
+      setPendingUpdate(null);
       setShowUpdateModal(false);
+      toast.success(is7z ? t('about.install_7z_started') : t('about.install_started'));
     } catch (err: any) {
       const msg = String(err?.message || err);
       const keyMap: Record<string, string> = {
@@ -144,13 +168,12 @@ const About: React.FC = () => {
     setDownloadProgress(0);
     try {
       const result = await DownloadUpdateAsset(asset.download_url);
-      const localPath = result?.local_path || null;
-      setDownloadedPath(localPath);
+      await refreshPending();
       toast.success(t('about.download_done'), asset.name);
       if (asset.kind === '7z') {
-        setShowInstallConfirm(true);
+        setShowRestartPrompt(true);
       } else {
-        await handleInstall(localPath, asset.name);
+        await handleInstall(result?.local_path || '');
       }
     } catch (err: any) {
       toast.error(t('about.download_failed'), String(err?.message || err));
@@ -193,7 +216,10 @@ const About: React.FC = () => {
             <Box sx={{ display: 'inline-flex', alignItems: 'center', gap: 1.5, px: 2.5, py: 1.25, borderRadius: '999px', bgcolor: (theme) => alpha(theme.palette.primary.main, 0.1), border: 1, borderColor: (theme) => alpha(theme.palette.primary.main, 0.2) }}>
               <Shield size={16} aria-hidden />
               <Typography variant="body2" sx={{ fontWeight: 700, color: 'primary.main' }}>{t('about.version')}: {version}</Typography>
-              <Box component="span" sx={{ px: 1, py: 0.25, borderRadius: '999px', fontSize: '0.6875rem', fontWeight: 700, letterSpacing: '0.03em', color: channelConf.color, bgcolor: (theme) => alpha(theme.palette[channelConf.color.split('.')[0]][channelConf.color.split('.')[1]], 0.12) }}>
+              <Box component="span" sx={{ px: 1, py: 0.25, borderRadius: '999px', fontSize: '0.6875rem', fontWeight: 700, letterSpacing: '0.03em', color: channelConf.color, bgcolor: (theme) => {
+                const parts = channelConf.color.split('.');
+                return alpha((theme.palette as any)[parts[0]]?.[parts[1]] ?? theme.palette.primary.main, 0.12);
+              } }}>
                 {t(channelConf.key)}
               </Box>
             </Box>
@@ -309,9 +335,15 @@ const About: React.FC = () => {
         </Grid>
 
         <Box sx={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'center', gap: 2, mb: 6 }}>
-          <Button onClick={handleCheckUpdate} variant="contained" size="large" loading={checkingUpdate} loadingPosition="start" startIcon={checkingUpdate ? undefined : <RefreshCw size={18} />}>
-            {checkingUpdate ? t('about.checking') : t('about.check_update')}
-          </Button>
+          {pendingUpdate ? (
+            <Button onClick={() => handleInstall(pendingUpdate)} variant="contained" size="large" startIcon={<RefreshCw size={18} />}>
+              {t('about.restart_to_update')}
+            </Button>
+          ) : (
+            <Button onClick={handleCheckUpdate} variant="contained" size="large" loading={checkingUpdate} loadingPosition="start" startIcon={checkingUpdate ? undefined : <RefreshCw size={18} />}>
+              {checkingUpdate ? t('about.checking') : t('about.check_update')}
+            </Button>
+          )}
           <Button onClick={handleOpenWebsite} variant="outlined" size="large" startIcon={<Globe size={18} />}>{t('about.website')}</Button>
           <Button onClick={handleOpenGitHub} variant="outlined" size="large" startIcon={<LinkIcon size={18} />}>GitHub</Button>
         </Box>
@@ -363,10 +395,16 @@ const About: React.FC = () => {
                           </Box>
                         </Box>
                         {isDownloading ? (
-                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, minWidth: 120, flexShrink: 0 }}>
-                            <LinearProgress variant="determinate" value={downloadProgress} sx={{ flex: 1 }} />
-                            <Typography variant="caption" sx={{ fontSize: '0.6875rem', color: 'text.secondary', flexShrink: 0 }}>
-                              {downloadProgress}%
+                          <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 0.5, minWidth: 120, flexShrink: 0 }}>
+                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, width: '100%' }}>
+                              <LinearProgress variant="determinate" value={downloadProgress} sx={{ flex: 1 }} />
+                              <Typography variant="caption" sx={{ fontSize: '0.6875rem', color: 'text.secondary', flexShrink: 0 }}>
+                                {downloadProgress}%
+                              </Typography>
+                            </Box>
+                            <Typography variant="caption" sx={{ fontSize: '0.6875rem', color: 'text.secondary', display: 'flex', gap: 1 }}>
+                              <Box component="span">{fmtSize(downloadReceived)} / {fmtSize(downloadTotal)}</Box>
+                              {downloadSpeed > 0 && <Box component="span" sx={{ color: 'primary.main' }}>{fmtSpeed(downloadSpeed)}</Box>}
                             </Typography>
                           </Box>
                         ) : (
@@ -397,12 +435,12 @@ const About: React.FC = () => {
         </Box>
       </Modal>
 
-      <Modal isOpen={showInstallConfirm} onClose={() => setShowInstallConfirm(false)} title={t('about.install')}>
+      <Modal isOpen={showRestartPrompt} onClose={() => setShowRestartPrompt(false)} title={t('about.download_done')}>
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-          <Typography sx={{ fontSize: '0.8125rem', color: 'text.secondary', lineHeight: 1.625 }}>{t('about.install_confirm_7z')}</Typography>
+          <Typography sx={{ fontSize: '0.8125rem', color: 'text.secondary', lineHeight: 1.625 }}>{t('about.restart_prompt_desc')}</Typography>
           <Box sx={{ display: 'flex', gap: 1.5, justifyContent: 'flex-end' }}>
-            <Button variant="contained" onClick={() => handleInstall(downloadedPath, downloadingRef.current || '')}>{t('common.confirm')}</Button>
-            <Button variant="outlined" onClick={() => setShowInstallConfirm(false)}>{t('common.cancel')}</Button>
+            <Button variant="contained" onClick={() => pendingUpdate && handleInstall(pendingUpdate)}>{t('about.restart_now')}</Button>
+            <Button variant="outlined" onClick={() => setShowRestartPrompt(false)}>{t('about.restart_later')}</Button>
           </Box>
         </Box>
       </Modal>
