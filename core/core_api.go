@@ -227,7 +227,6 @@ func RunCoreMain() error {
 		return err
 	}
 	defer runtime.shutdown()
-	writeCoreMarker(runtime.execDir, "run_core_main", markerDetail("entered pid=%d", os.Getpid()))
 
 	// Write RPC token to file for client to read
 	tokenPath := fmt.Sprintf("%s\\core_rpc_token", runtime.execDir)
@@ -255,26 +254,21 @@ func RunCoreMain() error {
 
 	listener, err = net.Listen("tcp", coreRPCAddr)
 	if err != nil {
-		writeCoreMarker(runtime.execDir, "run_core_main", markerDetail("listen failed: %v", err))
 		return err
 	}
 	defer listener.Close()
-	writeCoreMarker(runtime.execDir, "run_core_main", markerDetail("listen ok addr=%s", coreRPCAddr))
 
 	for {
 		conn, err := listener.Accept()
 		if err != nil {
 			if errors.Is(err, net.ErrClosed) {
-				writeCoreMarker(runtime.execDir, "run_core_main", "listener closed")
 				return nil
 			}
 			if ne, ok := err.(net.Error); ok && (ne.Timeout() || ne.Temporary()) {
 				runtime.appendLog(fmt.Sprintf("[core] rpc accept temporary error: %v", err))
-				writeCoreMarker(runtime.execDir, "run_core_main", markerDetail("accept temporary error: %v", err))
 				continue
 			}
 			runtime.appendLog(fmt.Sprintf("[core] rpc accept error: %v", err))
-			writeCoreMarker(runtime.execDir, "run_core_main", markerDetail("accept error: %v", err))
 			continue
 		}
 		go func(conn net.Conn) {

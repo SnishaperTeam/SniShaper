@@ -1,6 +1,6 @@
 import React, { Suspense, lazy, useState, useEffect, useCallback, useRef, createContext, useContext } from 'react';
 import { HashRouter as Router, Routes, Route, Navigate, useLocation } from 'react-router-dom';
-import { Box, CssBaseline, ThemeProvider, AppBar, Toolbar, Typography } from '@mui/material';
+import { Box, CssBaseline, ThemeProvider, AppBar, Toolbar, Typography, CircularProgress } from '@mui/material';
 import { alpha } from '@mui/material/styles';
 import { keyframes } from '@emotion/react';
 import Sidebar from './components/Sidebar';
@@ -17,7 +17,7 @@ import {
 import { I18nProvider, useTranslation } from './i18n/I18nContext';
 import { toast } from './lib/toast';
 import logoUrl from './assets/logo.svg';
-import AnimatedIcon from './lib/animated-icon';
+
 
 const Welcome = lazy(() => import('./pages/Welcome'));
 
@@ -217,7 +217,7 @@ const App: React.FC = () => {
 
 const routeFallback = (
   <Box sx={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', animation: `${fadeIn} 0.25s ease` }}>
-    <AnimatedIcon icon="svg-spinners:3-dots-fade" width={28} />
+    <CircularProgress size={28} color="primary" />
   </Box>
 );
 

@@ -1,7 +1,7 @@
 import React, { useMemo } from 'react';
 import { NavLink } from 'react-router-dom';
 import { Box, Drawer, IconButton, Tooltip, Typography, useColorScheme } from '@mui/material';
-import { LightMode, DarkMode } from '@mui/icons-material';
+import { Sun, Moon } from '../lib/icons';
 import logoUrl from '../assets/logo.svg';
 import {
   LayoutDashboard,
@@ -115,7 +115,7 @@ const SidebarContent: React.FC = () => {
             onClick={() => setMode(mode === 'light' ? 'dark' : 'light')}
             color={mode === 'dark' ? 'primary' : 'default'}
           >
-            {mode === 'light' ? <LightMode fontSize="small" /> : <DarkMode fontSize="small" />}
+            {mode === 'light' ? <Sun size={18} /> : <Moon size={18} />}
           </IconButton>
         </Tooltip>
         <Typography

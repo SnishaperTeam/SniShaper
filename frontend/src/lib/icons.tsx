@@ -40,10 +40,6 @@ import {
   CheckBadgeIcon as CheckSquareSolid,
 } from '@heroicons/react/24/solid'
 
-import { RadioButtonUnchecked } from '@mui/icons-material'
-
-export const RadioBtnUnchecked = RadioButtonUnchecked
-
 export const Activity = h(RectangleGroupIcon)
 export const Add = h(PlusIcon)
 export const AddCircle = h(PlusCircleIcon)

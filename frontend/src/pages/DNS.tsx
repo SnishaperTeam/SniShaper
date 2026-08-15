@@ -11,9 +11,9 @@ import Modal from '../components/Modal';
 import { toast } from '../lib/toast';
 import { splitListInput, joinListInput } from '../lib/utils';
 import { useTranslation } from '../i18n/I18nContext';
-import AnimatedIcon from '../lib/animated-icon';
+
 import {
-  Box, Typography, Button, IconButton, TextField, Switch,
+  Box, Typography, Button, IconButton, TextField, Switch, CircularProgress,
 } from '@mui/material';
 import { alpha } from '@mui/material/styles';
 
@@ -93,7 +93,7 @@ const DNSNodeItem: React.FC<{
       <Box sx={{ flexShrink: 0, width: 112, display: 'flex', justifyContent: 'flex-end' }}>
         {isTesting ? (
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, color: 'primary.main' }}>
-            <AnimatedIcon icon="svg-spinners:pulse" width={14} />
+            <CircularProgress size={14} color="primary" />
             <Typography variant="caption" sx={{ fontWeight: 'bold' }}>{t('dns.test')}...</Typography>
           </Box>
         ) : testResult ? (

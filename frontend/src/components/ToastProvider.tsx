@@ -1,14 +1,14 @@
 import React, { useEffect, useState } from 'react';
 import { Box, Stack, IconButton, Typography, Paper } from '@mui/material';
 import { keyframes } from '@emotion/react';
-import { CheckCircle, Error, Info as InfoIcon, Close } from '@mui/icons-material';
+import { CheckCircle, Error, Info, X } from '../lib/icons';
 import { TOAST_EVENT, type ToastPayload } from '../lib/toast';
 import { useTranslation } from '../i18n/I18nContext';
 
 const ICONS = {
   success: CheckCircle,
   error: Error,
-  info: InfoIcon
+  info: Info
 } as const;
 
 const slideIn = keyframes`
@@ -90,7 +90,7 @@ const ToastProvider: React.FC = () => {
                   justifyContent: 'center',
                 }}
               >
-                <Icon fontSize="medium" />
+                <Icon size={20} color="inherit" />
               </Box>
               <Box sx={{ minWidth: 0, flexGrow: 1 }}>
                 <Typography
@@ -112,7 +112,7 @@ const ToastProvider: React.FC = () => {
                 size="small"
                 onClick={() => setToasts((prev) => prev.filter((item) => item.id !== toast.id))}
               >
-                <Close fontSize="small" />
+                <X size={18} />
               </IconButton>
             </Paper>
           );

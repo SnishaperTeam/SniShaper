@@ -111,10 +111,6 @@ func NewApp() *App {
 	return a
 }
 
-func (a *App) Greet(name string) string {
-	return fmt.Sprintf("Hello %s, It's Wails v3!", name)
-}
-
 func (a *App) StartProxy() error {
 	a.proxyOpMu.Lock()
 	defer a.proxyOpMu.Unlock()

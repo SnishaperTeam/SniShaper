@@ -93,7 +93,6 @@ func newCoreRuntime() (*coreRuntime, error) {
 }
 
 func (r *coreRuntime) start() error {
-	writeCoreMarker(r.execDir, "core_runtime_start", "begin")
 	r.setupLogger()
 	var err error
 	r.certManager, err = certmanager.InitCertManager(r.certPath)
@@ -120,7 +119,6 @@ func (r *coreRuntime) start() error {
 	})
 
 	r.appendLog("[core] runtime ready")
-	writeCoreMarker(r.execDir, "core_runtime_start", "ready")
 	return nil
 }
 
@@ -282,51 +280,36 @@ func (r *coreRuntime) stopProxy() error {
 }
 
 func (r *coreRuntime) startTUN() (err error) {
-	writeCoreMarker(r.execDir, "start_tun", "entered")
 	r.setTUNStartState(true, nil)
 	defer func() {
-		if err != nil {
-			writeCoreMarker(r.execDir, "start_tun", markerDetail("leaving with error: %v", err))
-		} else {
-			writeCoreMarker(r.execDir, "start_tun", "leaving without error")
-		}
 		r.setTUNStartState(false, err)
 	}()
 
 	if !isProcessElevated() {
 		err = fmt.Errorf("TUN requires administrator privileges on Windows; please restart SniShaper as administrator")
-		writeCoreMarker(r.execDir, "start_tun", "not elevated")
 		return err
 	}
 	if !r.proxyServer.IsRunning() {
 		r.appendLog("[core] proxy not running, starting proxy before TUN")
-		writeCoreMarker(r.execDir, "start_tun", "before startProxy")
 		if err = r.startProxy(); err != nil {
-			writeCoreMarker(r.execDir, "start_tun", markerDetail("startProxy failed: %v", err))
 			return fmt.Errorf("start proxy before TUN: %w", err)
 		}
-		writeCoreMarker(r.execDir, "start_tun", "after startProxy")
 	}
 	if r.nativeTUN == nil {
 		err = fmt.Errorf("native TUN manager is not initialized")
-		writeCoreMarker(r.execDir, "start_tun", "native TUN manager missing")
 		return err
 	}
 	listenPort := r.currentListenPort()
 	if listenPort == "" {
 		err = fmt.Errorf("proxy listen port is empty")
-		writeCoreMarker(r.execDir, "start_tun", "empty listen port")
 		return err
 	}
-	writeCoreMarker(r.execDir, "start_tun", "before nativeTUN.Start")
 	r.appendLog("[core] startTUN: calling nativeTUN.Start with proxy=" + "127.0.0.1:" + listenPort)
 	proxyAddr := "127.0.0.1:" + listenPort
 	if err = r.nativeTUN.Start(r.ruleManager.GetTUNConfig(), proxyAddr); err != nil {
-		writeCoreMarker(r.execDir, "start_tun", markerDetail("nativeTUN.Start failed: %v", err))
 		r.appendLog("[core] startTUN: nativeTUN.Start failed: " + err.Error())
 		return err
 	}
-	writeCoreMarker(r.execDir, "start_tun", "after nativeTUN.Start")
 	r.appendLog("[core] native sing-tun started, status=" + fmt.Sprintf("%v", r.nativeTUN.Status().Running))
 	// 通知 ProxyServer 启用 TUN 模式，出站连接绑物理网卡
 	r.proxyServer.SetTUNMode(true)
@@ -334,10 +317,8 @@ func (r *coreRuntime) startTUN() (err error) {
 	// 解决 gvisor 数据面静默失效时（网卡存在但流量不通）无任何错误日志的问题。
 	if err := verifyTUNDataPlane("198.18.0.1", 5*time.Second); err != nil {
 		r.appendLog("[error] TUN data plane check failed: " + err.Error())
-		writeCoreMarker(r.execDir, "start_tun", markerDetail("data plane check failed: %v", err))
 	} else {
 		r.appendLog("[core] TUN data plane check passed")
-		writeCoreMarker(r.execDir, "start_tun", "data plane check passed")
 	}
 	return nil
 }

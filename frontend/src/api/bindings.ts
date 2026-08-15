@@ -57,7 +57,6 @@ export const GetSiteGroups = () => appCall('GetSiteGroups');
 export const GetStats = () => appCall('GetStats');
 export const GetSystemProxyStatus = () => appCall('GetSystemProxyStatus');
 export const GetUpstreams = () => appCall('GetUpstreams');
-export const Greet = (name: string) => appCall('Greet', name);
 export const HandleWindowClose = () => appCall('HandleWindowClose');
 export const ImportConfig = (content: string) => appCall('ImportConfig', content);
 export const ImportConfigWithSummary = (content: string) => appCall('ImportConfigWithSummary', content);

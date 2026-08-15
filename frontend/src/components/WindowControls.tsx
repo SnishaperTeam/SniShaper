@@ -1,6 +1,6 @@
 import React, { useCallback } from 'react';
 import { Box, IconButton, Tooltip } from '@mui/material';
-import { HorizontalRule, CropSquare, Close } from '@mui/icons-material';
+import { Minus, Square, X } from '../lib/icons';
 import { useTranslation } from '../i18n/I18nContext';
 import {
   HandleWindowClose,
@@ -43,7 +43,7 @@ const WindowControls: React.FC = React.memo(() => {
           onClick={handleMinimise}
           sx={{ color: 'text.primary' }}
         >
-          <HorizontalRule fontSize="small" />
+          <Minus size={18} />
         </IconButton>
       </Tooltip>
       <Tooltip title={t('window.maximize_restore')}>
@@ -53,7 +53,7 @@ const WindowControls: React.FC = React.memo(() => {
           onClick={handleToggleMaximise}
           sx={{ color: 'text.primary' }}
         >
-          <CropSquare fontSize="small" />
+          <Square size={18} />
         </IconButton>
       </Tooltip>
       <Tooltip title={t('window.close')}>
@@ -63,7 +63,7 @@ const WindowControls: React.FC = React.memo(() => {
           color="error"
           onClick={handleClose}
         >
-          <Close fontSize="small" />
+          <X size={18} />
         </IconButton>
       </Tooltip>
     </Box>

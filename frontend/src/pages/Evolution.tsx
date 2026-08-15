@@ -27,8 +27,7 @@ import Modal from '../components/Modal';
 import { toast } from '../lib/toast';
 import { useTranslation } from '../i18n/I18nContext';
 import { SettingsCtx } from '../App';
-import AnimatedIcon from '../lib/animated-icon';
-import { Box, Typography, Button, TextField, Switch, LinearProgress } from '@mui/material';
+import { Box, Typography, Button, TextField, Switch, LinearProgress, CircularProgress } from '@mui/material';
 import { alpha, keyframes } from '@mui/material/styles';
 
 const shimmer = keyframes`
@@ -367,7 +366,7 @@ const Evolution: React.FC = () => {
                         {t('evolution.stop_test')}
                       </Button>
                     ) : (
-                      <Button variant="contained" size="small" startIcon={isOperating ? <AnimatedIcon icon="line-md:loading-loop" width={16} /> : <Play size={16} />} onClick={handleStartTest} disabled={isOperating || domains.trim().length === 0} sx={{ fontWeight: 900, borderRadius: 1.5 }}>
+                      <Button variant="contained" size="small" startIcon={isOperating ? <CircularProgress size={16} color="primary" /> : <Play size={16} />} onClick={handleStartTest} disabled={isOperating || domains.trim().length === 0} sx={{ fontWeight: 900, borderRadius: 1.5 }}>
                         {t('evolution.start_test')}
                       </Button>
                     )}
@@ -379,7 +378,7 @@ const Evolution: React.FC = () => {
                     <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1.25 }}>
                       <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, color: 'text.secondary' }}>
                         <Box sx={{ display: 'flex', color: 'primary.main' }}>
-                          <AnimatedIcon icon="line-md:loading-loop" width={14} />
+                          <CircularProgress size={14} color="primary" />
                         </Box>
                         <Typography variant="caption" sx={{ fontWeight: 900 }}>{t('evolution.test_progress')}</Typography>
                       </Box>
