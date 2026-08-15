@@ -8,7 +8,7 @@
     "preview": "vite preview"
   },
   "devDependencies": {
-    "@emnapi/core": "^1.9.2",
+    "@emnapi/core": "^1.11.3",
     "@emnapi/runtime": "^1.11.2",
     "@types/node": "^26.1.0",
     "@types/react": "^19.2.14",
