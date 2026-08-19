@@ -48,6 +48,7 @@ pkg/certmanager/*.pem
 
 # Local temp / backups
 temp/
+.freebuff/
 *.bak
 *.bak.*
 rules/*.bak*
