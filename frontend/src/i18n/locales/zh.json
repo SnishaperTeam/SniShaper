@@ -8,6 +8,7 @@
     "off": "关",
     "success": "成功",
     "failed": "失败",
+    "saving": "保存中...",
     "status": "状态",
     "view": "查看",
     "edit": "编辑",
@@ -118,6 +119,8 @@
     "migration_service_title": "迁移 API 地址",
     "migration_service_desc": "配置连接迁移服务地址",
     "migration_service_hint": "输入迁移服务 API 地址",
+    "test_connect": "测试连接",
+    "testing": "测试中...",
     "delete_aria": "删除 {name}",
     "nat64_placeholder_name": "例如：特定黑名单绕过",
     "nat64_placeholder_prefix": "例如：64:ff9b::",
@@ -230,6 +233,7 @@
       "cert_verify_warn": "仅在你明确知道目标证书来源时启用",
       "allow_spki_list": "允许 SPKI SHA256 列表",
       "prefix_label": "前缀：{prefix}",
+      "website_placeholder": "例如：google.com",
       "placeholder_domains": "每行一个域名，例如\n*.github.com\ngithub.com",
       "placeholder_suffixes": "每行一个后缀，例如\n.github.com\n.cloudfront.net",
       "placeholder_spki": "每行一个 Base64 指纹",
@@ -265,7 +269,11 @@
       "doh_dynamic": "DOH DYNAMIC"
     },
     "notifications": {
-      "deleted": "规则已删除"
+      "deleted": "规则已删除",
+      "save_success": "规则已保存",
+      "save_error": "保存规则失败",
+      "save_error_hint": "请检查输入内容后重试",
+      "delete_error": "删除规则失败"
     },
     "edit_rule_aria": "编辑规则",
     "delete_rule_aria": "删除规则",
@@ -274,6 +282,9 @@
   },
   "logs": {
     "title": "系统日志",
+    "level_error": "ERR",
+    "level_warn": "WRN",
+    "level_info": "INF",
     "capture": "捕捉日志",
     "stop_capture": "停止捕捉",
     "resume": "继续刷新",
@@ -304,7 +315,6 @@
     "gfwlist_check": "GFWList 状态检测",
     "preloaded": "已预加载 {count} 条路由规则",
     "inactive": "规则源未激活",
-    "update_list": "更新规则列表",
     "save_apply": "应用并保存设置",
     "features": "功能说明",
     "feature_smart": "智能模式",
@@ -313,9 +323,7 @@
     "feature_priority_desc": "手动定义的【规则】页面条目拥有最高优先级。若均未命中且分流开启，则走此处的自动逻辑。",
     "notifications": {
       "saved": "分流设置已保存",
-      "saved_desc": "新的自动分流策略已经应用。",
-      "updated": "规则源已更新",
-      "updated_desc": "当前已加载 {count} 条自动分流规则。"
+      "saved_desc": "新的自动分流策略已经应用。"
     }
   },
   "network": {
@@ -496,6 +504,7 @@
     "steps": {
       "direct": "直连",
       "tcping": "TCPing",
+      "tcp_ping": "TCPing",
       "domain_fronting": "域前置",
       "tls_fragment": "TLS分片",
       "ech": "ECH",

@@ -9,7 +9,6 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
-	"time"
 
 	"snishaper/pkg/dohresolver"
 )
@@ -1005,46 +1004,6 @@ func (rm *RuleManager) InitAutoRouter(resolver *dohresolver.FailoverResolver) {
 	} else {
 		log.Printf("[AutoRoute] No cached GFW list at %s: %v", cachePath, err)
 	}
-}
-
-func (rm *RuleManager) RefreshGFWList() (int, error) {
-	rm.mu.RLock()
-	ar := rm.autoRouter
-	cfg := rm.autoRoutingConfig
-	rulesPath := rm.rulesPath
-	rm.mu.RUnlock()
-
-	if ar == nil {
-		return 0, fmt.Errorf("auto router not initialized")
-	}
-
-	url := cfg.GFWListURL
-	if url == "" {
-		url = defaultGFWListURL
-	}
-
-	count, err := ar.GetGFWList().LoadFromURL(url)
-	if err != nil {
-		return 0, err
-	}
-
-	// Save to local cache
-	cachePath := gfwListCachePath(rulesPath)
-	if saveErr := ar.GetGFWList().SaveToFile(cachePath); saveErr != nil {
-		log.Printf("[AutoRoute] Failed to save GFW list cache: %v", saveErr)
-	}
-
-	// Update last update time
-	rm.mu.Lock()
-	rm.autoRoutingConfig.LastUpdate = time.Now().Format("2006-01-02 15:04:05")
-	cfg = rm.autoRoutingConfig
-	if rm.autoRouter != nil {
-		rm.autoRouter.UpdateConfig(cfg)
-	}
-	rm.mu.Unlock()
-	_ = rm.saveSettingsConfig()
-
-	return count, nil
 }
 
 func (rm *RuleManager) GetAutoRoutingStatus() GFWListStatus {

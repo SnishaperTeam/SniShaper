@@ -8,6 +8,7 @@
     "off": "OFF",
     "success": "Success",
     "failed": "Failed",
+    "saving": "Saving...",
     "status": "Status",
     "view": "View",
     "edit": "Edit",
@@ -118,6 +119,8 @@
     "migration_service_title": "Migration API URL",
     "migration_service_desc": "Configure connection migration service URL",
     "migration_service_hint": "Enter migration service API URL",
+    "test_connect": "Test Connection",
+    "testing": "Testing...",
     "delete_aria": "Delete {name}",
     "nat64_placeholder_name": "e.g. bypass specific blacklist",
     "nat64_placeholder_prefix": "e.g. 64:ff9b::",
@@ -230,6 +233,7 @@
       "cert_verify_warn": "Only enable if you are sure about the target certificate source",
       "allow_spki_list": "Allow SPKI SHA256 list",
       "prefix_label": "Prefix: {prefix}",
+      "website_placeholder": "e.g. google.com",
       "placeholder_domains": "One domain per line, e.g.\n*.github.com\ngithub.com",
       "placeholder_suffixes": "One suffix per line, e.g.\n.github.com\n.cloudfront.net",
       "placeholder_spki": "One Base64 fingerprint per line",
@@ -265,7 +269,11 @@
       "doh_dynamic": "DOH DYNAMIC"
     },
     "notifications": {
-      "deleted": "Rule deleted"
+      "deleted": "Rule deleted",
+      "save_success": "Rule saved",
+      "save_error": "Failed to save rule",
+      "save_error_hint": "Please check your input and try again",
+      "delete_error": "Failed to delete rule"
     },
     "edit_rule_aria": "Edit rule",
     "delete_rule_aria": "Delete rule",
@@ -274,6 +282,9 @@
   },
   "logs": {
     "title": "System Logs",
+    "level_error": "ERR",
+    "level_warn": "WRN",
+    "level_info": "INF",
     "capture": "Capture Logs",
     "stop_capture": "Stop Capture",
     "resume": "Resume",
@@ -304,7 +315,6 @@
     "gfwlist_check": "GFWList Status",
     "preloaded": "Preloaded {count} routing rules",
     "inactive": "Rule source inactive",
-    "update_list": "Update Rules",
     "save_apply": "Save & Apply",
     "features": "Features",
     "feature_smart": "Smart Mode",
@@ -313,9 +323,7 @@
     "feature_priority_desc": "Manually defined 'Rules' have the highest priority. Auto routing applies if no rules match.",
     "notifications": {
       "saved": "Routing settings saved",
-      "saved_desc": "New auto routing policy has been applied.",
-      "updated": "Rule source updated",
-      "updated_desc": "Currently loaded {count} auto routing rules."
+      "saved_desc": "New auto routing policy has been applied."
     }
   },
   "network": {
@@ -496,6 +504,7 @@
     "steps": {
       "direct": "Direct",
       "tcping": "TCPing",
+      "tcp_ping": "TCPing",
       "domain_fronting": "Domain Front",
       "tls_fragment": "TLS Fragment",
       "ech": "ECH",

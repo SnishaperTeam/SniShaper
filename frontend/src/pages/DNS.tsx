@@ -39,7 +39,7 @@ const DNSNodeItem: React.FC<{
   const tags: { label: string; color: string; bg: string | ((t: any) => string); border: string | ((t: any) => string) }[] = [];
   if (node.ech_enabled) tags.push({ label: 'ECH', color: '#06b6d4', bg: 'rgba(6,182,212,0.1)', border: 'rgba(6,182,212,0.2)' });
   if (node.quic) tags.push({ label: 'QUIC', color: 'secondary.main', bg: (theme: any) => alpha(theme.palette.secondary.main, 0.1), border: (theme: any) => alpha(theme.palette.secondary.main, 0.2) });
-  if (node.sni) tags.push({ label: `SNI: ${node.sni}`, color: 'primary.main', bg: (theme: any) => alpha(theme.palette.primary.main, 0.1), border: (theme: any) => alpha(theme.palette.primary.main, 0.2) });
+  if (node.sni) tags.push({ label: `${t('evolution.sni')}: ${node.sni}`, color: 'primary.main', bg: (theme: any) => alpha(theme.palette.primary.main, 0.1), border: (theme: any) => alpha(theme.palette.primary.main, 0.2) });
 
   const vMode = node.cert_verify?.mode;
   if (vMode) {

@@ -84,10 +84,10 @@ const StackedRow = ({ icon, title, desc, children }: { icon: React.ReactNode; ti
 );
 
 const UPDATE_CHANNELS = [
-  { value: 'alpha', label: 'Alpha' },
-  { value: 'beta', label: 'Beta' },
-  { value: 'rc', label: 'Release Candidate' },
-  { value: 'stable', label: 'Stable' },
+  { value: 'alpha', labelKey: 'about.channel_alpha' },
+  { value: 'beta', labelKey: 'about.channel_beta' },
+  { value: 'rc', labelKey: 'about.channel_rc' },
+  { value: 'stable', labelKey: 'about.channel_stable' },
 ];
 
 const DOWNLOAD_SOURCES = [
@@ -308,7 +308,7 @@ const Settings: React.FC<SettingsProps> = ({ cache, onCacheUpdate, currentThemeI
     try {
       const available = await RefreshIPv6Check();
       onCacheUpdate({ ipv6Available: available === true });
-      toast[available ? 'success' : 'error'](available ? t('network.ipv6_ok') : t('network.ipv6_disabled_title'), t('network.ipv6_ok_desc'));
+      toast[available ? 'success' : 'error'](available ? t('network.ipv6_ok') : t('network.ipv6_disabled_title'), available ? t('network.ipv6_ok_desc') : t('network.ipv6_disabled_desc'));
     } catch (err: any) { toast.error(t('common.failed'), String(err));
     } finally { setIsIpv6Checking(false); }
   };
@@ -443,7 +443,7 @@ const Settings: React.FC<SettingsProps> = ({ cache, onCacheUpdate, currentThemeI
               </SettingRowInline>
 
               <SettingRowInline title={t('settings.language.title')} desc={t('settings.language.desc')} icon={<Globe size={18} />}>
-                <Stack direction="row" spacing={0.5} sx={{ alignItems: 'center', bgcolor: bgColor, border: 1, borderColor: 'divider', borderRadius: 2, p: 0.5 }} role="radiogroup" aria-label="选择语言">
+                <Stack direction="row" spacing={0.5} sx={{ alignItems: 'center', bgcolor: bgColor, border: 1, borderColor: 'divider', borderRadius: 2, p: 0.5 }} role="radiogroup" aria-label={t('settings.select_language')}>
                   {(['zh', 'en', 'ru'] as const).map((lang) => (
                     <Box
                       key={lang}
@@ -558,11 +558,14 @@ const Settings: React.FC<SettingsProps> = ({ cache, onCacheUpdate, currentThemeI
                       label={t('settings.update_channel.title')}
                       onChange={(e) => handleChannelChange(e.target.value)}
                     >
-                      {UPDATE_CHANNELS.map((ch) => (
-                        <MenuItem key={ch.value} value={ch.value}>
-                          {ch.label}
-                        </MenuItem>
-                      ))}
+                      {UPDATE_CHANNELS.map((ch) => {
+                        const translated = t(ch.labelKey);
+                        return (
+                          <MenuItem key={ch.value} value={ch.value}>
+                            {translated !== ch.labelKey ? translated : ch.value}
+                          </MenuItem>
+                        );
+                      })}
                     </Select>
                   </FormControl>
                 </Box>

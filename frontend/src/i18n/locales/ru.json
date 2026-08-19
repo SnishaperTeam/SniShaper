@@ -8,6 +8,7 @@
     "off": "Выкл",
     "success": "Успешно",
     "failed": "Ошибка",
+    "saving": "Сохранение...",
     "status": "Статус",
     "view": "Просмотр",
     "edit": "Редактировать",
@@ -118,6 +119,8 @@
     "migration_service_title": "URL API миграции",
     "migration_service_desc": "Настроить URL службы миграции соединений",
     "migration_service_hint": "Введите URL API миграции",
+    "test_connect": "Проверить соединение",
+    "testing": "Проверка...",
     "delete_aria": "Удалить {name}",
     "nat64_placeholder_name": "напр. обход конкретного чёрного списка",
     "nat64_placeholder_prefix": "напр.: 64:ff9b::",
@@ -230,6 +233,7 @@
       "cert_verify_warn": "Включайте только если уверены в источнике целевого сертификата",
       "allow_spki_list": "Разрешить список SPKI SHA256",
       "prefix_label": "Префикс: {prefix}",
+      "website_placeholder": "напр.: google.com",
       "placeholder_domains": "По одному домену в строке, напр.\n*.github.com\ngithub.com",
       "placeholder_suffixes": "По одному суффиксу в строке, напр.\n.github.com\n.cloudfront.net",
       "placeholder_spki": "По одному Base64 отпечатку в строке",
@@ -265,7 +269,11 @@
       "doh_dynamic": "DOH DYNAMIC"
     },
     "notifications": {
-      "deleted": "Правило удалено"
+      "deleted": "Правило удалено",
+      "save_success": "Правило сохранено",
+      "save_error": "Не удалось сохранить правило",
+      "save_error_hint": "Проверьте введённые данные и повторите попытку",
+      "delete_error": "Не удалось удалить правило"
     },
     "edit_rule_aria": "Изменить правило",
     "delete_rule_aria": "Удалить правило",
@@ -274,6 +282,9 @@
   },
   "logs": {
     "title": "Системные логи",
+    "level_error": "ERR",
+    "level_warn": "WRN",
+    "level_info": "INF",
     "capture": "Запись логов",
     "stop_capture": "Остановить запись",
     "resume": "Возобновить",
@@ -304,7 +315,6 @@
     "gfwlist_check": "Статус GFWList",
     "preloaded": "Загружено {count} правил маршрутизации",
     "inactive": "Источник правил неактивен",
-    "update_list": "Обновить правила",
     "save_apply": "Сохранить и применить",
     "features": "Возможности",
     "feature_smart": "Умный режим",
@@ -313,9 +323,7 @@
     "feature_priority_desc": "Ручные правила имеют наивысший приоритет. Автоматическая маршрутизация применяется при отсутствии совпадений.",
     "notifications": {
       "saved": "Настройки сохранены",
-      "saved_desc": "Новая стратегия применена.",
-      "updated": "Правила обновлены",
-      "updated_desc": "Загружено {count} правил автоматической маршрутизации."
+      "saved_desc": "Новая стратегия применена."
     }
   },
   "network": {
@@ -377,7 +385,7 @@
     "socks_port": "SOCKS5",
     "port_title": "Порт",
     "lan_sharing": {
-      "title": "Локальное共享",
+      "title": "Локальный общий доступ",
       "desc": "Разрешить подключение с других устройств в сети."
     },
     "tun_mode": {
@@ -496,6 +504,7 @@
     "steps": {
       "direct": "Прямой",
       "tcping": "TCPing",
+      "tcp_ping": "TCPing",
       "domain_fronting": "Фронтинг",
       "tls_fragment": "Фрагмент TLS",
       "ech": "ECH",
@@ -530,7 +539,7 @@
     "update_available_desc": "Последняя версия: {version}\nСкачать сейчас?",
     "up_to_date": "Уже последняя версия",
     "up_to_date_desc": "Текущая версия {version} является последней.",
-    "dev_version": "Используется开发版本",
+    "dev_version": "Используется разработочная версия",
     "dev_version_desc": "Ваша версия ({version}) новее последней ({latestVersion}).",
     "check_failed": "Ошибка проверки",
     "check_failed_desc": "Не удалось подключиться к серверу обновлений.",

@@ -23,9 +23,7 @@ const (
 
 // AutoRoutingConfig is persisted in settings.json.
 type AutoRoutingConfig struct {
-	Mode       AutoRoutingMode `json:"mode"`
-	GFWListURL string          `json:"gfwlist_url,omitempty"`
-	LastUpdate string          `json:"last_update,omitempty"`
+	Mode AutoRoutingMode `json:"mode"`
 }
 
 // Cloudflare IPv4 CIDR ranges — https://www.cloudflare.com/ips-v4/
@@ -207,8 +205,6 @@ type GFWListStatus struct {
 	Enabled     bool   `json:"enabled"`
 	Mode        string `json:"mode"`
 	DomainCount int    `json:"domain_count"`
-	LastUpdate  string `json:"last_update"`
-	GFWListURL  string `json:"gfwlist_url"`
 }
 
 func (ar *AutoRouter) GetStatus() GFWListStatus {
@@ -216,8 +212,6 @@ func (ar *AutoRouter) GetStatus() GFWListStatus {
 		Enabled:     ar.config.Mode != "" && ar.config.Mode != AutoRoutingOff,
 		Mode:        string(ar.config.Mode),
 		DomainCount: ar.gfwList.Count(),
-		LastUpdate:  ar.config.LastUpdate,
-		GFWListURL:  ar.config.GFWListURL,
 	}
 }
 

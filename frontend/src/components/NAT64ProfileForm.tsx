@@ -113,7 +113,7 @@ const NAT64ProfileForm: React.FC<NAT64ProfileFormProps> = ({ initialData, onSucc
             startIcon={<Save size={14} />}
             disabled={isSubmitting}
           >
-            {isSubmitting ? t('ech_form.probing') : t('common.save')}
+            {isSubmitting ? t('common.saving') : t('common.save')}
           </Button>
         </Stack>
       </Stack>

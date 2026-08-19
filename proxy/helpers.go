@@ -8,10 +8,11 @@ import (
 	"snishaper/pkg/dohresolver"
 )
 
-const (
-	defaultGFWListURL = "https://raw.githubusercontent.com/Loyalsoldier/v2ray-rules-dat/release/gfw.txt"
-	gfwListCacheFile  = "gfwlist_cache.txt"
-)
+// gfwListCachePath returns the path of the local GFW list cache file,
+// relative to the rules file.
+func gfwListCachePath(rulesPath string) string {
+	return filepath.Join(filepath.Dir(rulesPath), "gfwlist_cache.txt")
+}
 
 func normalizeHost(hostport string) string {
 	hostport = strings.TrimSpace(hostport)
@@ -95,10 +96,6 @@ func toDohCertVerify(c CertVerifyConfig) dohresolver.CertVerifyConfig {
 		SPKISHA256:            c.SPKISHA256,
 		AllowUnknownAuthority: c.AllowUnknownAuthority,
 	}
-}
-
-func gfwListCachePath(rulesPath string) string {
-	return filepath.Join(filepath.Dir(rulesPath), gfwListCacheFile)
 }
 
 func normalizeDNSMode(mode string) string {

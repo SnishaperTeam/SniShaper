@@ -30,6 +30,7 @@ const bounce = keyframes`0%,100%{transform:translateY(0)}50%{transform:translate
 
 const LogLine: React.FC<{ line: string }> = React.memo(({ line }) => {
   const { time, msg, level } = parseLine(line);
+  const { t } = useTranslation();
 
   const levelColor = level === 'error' ? 'error.main' : level === 'warn' ? 'warning.main' : 'text.primary';
   const borderColor = level === 'error' ? 'rgba(239,68,68,0.7)' : level === 'warn' ? 'rgba(245,158,11,0.7)' : 'transparent';
@@ -48,7 +49,7 @@ const LogLine: React.FC<{ line: string }> = React.memo(({ line }) => {
         flexShrink: 0, px: 0.75, borderRadius: 0.5, fontSize: '0.625rem', fontWeight: 900, textTransform: 'uppercase',
         lineHeight: '18px', height: 18, textAlign: 'center', minWidth: 38, bgcolor: badgeBg, color: badgeColor,
       }}>
-        {level === 'error' ? 'ERR' : level === 'warn' ? 'WRN' : 'INF'}
+        {level === 'error' ? t('logs.level_error') : level === 'warn' ? t('logs.level_warn') : t('logs.level_info')}
       </Box>
       <Box component="span" sx={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', '&:hover': { whiteSpace: 'normal', wordBreak: 'break-all' } }}>{msg}</Box>
     </Box>

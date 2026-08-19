@@ -94,7 +94,6 @@ export const WindowToggleMaximise = () => appCall('WindowToggleMaximise');
 export const GetAutoRoutingConfig = () => appCall('GetAutoRoutingConfig');
 export const UpdateAutoRoutingConfig = (cfg: any) => appCall('UpdateAutoRoutingConfig', cfg);
 export const GetAutoRoutingStatus = () => appCall('GetAutoRoutingStatus');
-export const RefreshGFWList = () => appCall('RefreshGFWList');
 
 
 // About API

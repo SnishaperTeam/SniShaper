@@ -201,7 +201,7 @@ const Rules: React.FC = () => {
                   '&:hover': { bgcolor: active ? (theme) => alpha(theme.palette.primary.main, 0.12) : 'action.hover' },
                 }}
               >
-                {m === 'TLS-RF' ? t('rules.display.fragment') : m === 'TRANSPARENT' ? t('rules.display.transparent') : m === 'MIGRATION' ? (t('rules.display.migration') || '迁移') : m}
+                {m === 'TLS-RF' ? t('rules.display.fragment') : m === 'TRANSPARENT' ? t('rules.display.transparent') : m === 'MIGRATION' ? t('rules.display.migration') : m}
               </Button>
             );
           })}

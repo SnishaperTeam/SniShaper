@@ -2,21 +2,12 @@ package rules
 
 import (
 	"bufio"
-	"fmt"
 	"io"
 	"log"
-	"net/http"
-	"net/url"
 	"os"
-	"path/filepath"
 	"strings"
 	"sync"
 	"time"
-)
-
-const (
-	defaultGFWListURL = "https://raw.githubusercontent.com/Loyalsoldier/v2ray-rules-dat/release/gfw.txt"
-	gfwListCacheFile  = "gfwlist_cache.txt"
 )
 
 type GFWList struct {
@@ -59,30 +50,6 @@ func (g *GFWList) LoadFromReader(r io.Reader) (int, error) {
 	return count, nil
 }
 
-func (g *GFWList) LoadFromURL(rawURL string) (int, error) {
-	if rawURL == "" {
-		rawURL = defaultGFWListURL
-	}
-	parsedURL, err := url.Parse(rawURL)
-	if err != nil {
-		return 0, fmt.Errorf("invalid URL: %w", err)
-	}
-	if parsedURL.Scheme != "https" {
-		return 0, fmt.Errorf("GFWList URL must use HTTPS: %s", rawURL)
-	}
-	log.Printf("[GFWList] Fetching from %s", rawURL)
-	client := &http.Client{Timeout: 30 * time.Second}
-	resp, err := client.Get(rawURL)
-	if err != nil {
-		return 0, fmt.Errorf("fetch GFWList: %w", err)
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		return 0, fmt.Errorf("fetch GFWList: HTTP %d", resp.StatusCode)
-	}
-	return g.LoadFromReader(resp.Body)
-}
-
 func (g *GFWList) LoadFromFile(path string) (int, error) {
 	f, err := os.Open(path)
 	if err != nil {
@@ -90,22 +57,6 @@ func (g *GFWList) LoadFromFile(path string) (int, error) {
 	}
 	defer f.Close()
 	return g.LoadFromReader(f)
-}
-
-func (g *GFWList) SaveToFile(path string) error {
-	g.mu.RLock()
-	defer g.mu.RUnlock()
-
-	if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
-		return err
-	}
-
-	var sb strings.Builder
-	for domain := range g.domains {
-		sb.WriteString(domain)
-		sb.WriteByte('\n')
-	}
-	return os.WriteFile(path, []byte(sb.String()), 0644)
 }
 
 // IsBlocked checks if the host (or any parent domain) is in the GFW list.
@@ -148,9 +99,4 @@ func (g *GFWList) LastLoadTime() time.Time {
 	g.mu.RLock()
 	defer g.mu.RUnlock()
 	return g.lastLoad
-}
-
-// gfwListCachePath returns the path of the local cache file, relative to the rules file.
-func gfwListCachePath(rulesPath string) string {
-	return filepath.Join(filepath.Dir(rulesPath), gfwListCacheFile)
 }

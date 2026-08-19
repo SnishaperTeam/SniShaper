@@ -4,7 +4,6 @@ import {
   ShieldCheck,
   Activity,
   Share2,
-  RefreshCw,
   Power,
   Zap
 } from '../lib/icons';
@@ -12,11 +11,9 @@ import {
   GetAutoRoutingConfig,
   UpdateAutoRoutingConfig,
   GetAutoRoutingStatus,
-  RefreshGFWList,
   EventsOn
 } from '../api/bindings';
 import { toast } from '../lib/toast';
-import { extractErrorMessage } from '../lib/utils';
 import { useTranslation } from '../i18n/I18nContext';
 import { Box, Typography, Button } from '@mui/material';
 import { alpha } from '@mui/material/styles';
@@ -31,12 +28,11 @@ interface FlowEntry {
 }
 
 const pulse = keyframes`0%,100%{opacity:1}50%{opacity:0.4}`;
-const spin = keyframes`from{transform:rotate(0deg)}to{transform:rotate(360deg)}`;
 
 const Routing: React.FC = () => {
   const { t } = useTranslation();
   const [flows, setFlows] = useState<FlowEntry[]>([]);
-  const [config, setConfig] = useState<any>({ mode: '', gfwlist_url: '' });
+  const [config, setConfig] = useState<any>({ mode: '' });
   const [status, setStatus] = useState<any>({ enabled: false, domain_count: 0 });
   useEffect(() => {
     const loadData = async () => {
@@ -80,22 +76,6 @@ const Routing: React.FC = () => {
   const handleSave = async () => {
     await UpdateAutoRoutingConfig(config);
     toast.success(t('routing.notifications.saved'), t('routing.notifications.saved_desc'));
-  };
-
-  const [refreshing, setRefreshing] = useState(false);
-
-  const handleRefreshGFW = async () => {
-    setRefreshing(true);
-    try {
-      await RefreshGFWList();
-      const s = await GetAutoRoutingStatus();
-      setStatus(s);
-      toast.success(t('routing.notifications.updated'), t('routing.notifications.updated_desc', { count: s?.domain_count || 0 }));
-    } catch (e: any) {
-      toast.error(t('common.error'), extractErrorMessage(e));
-    } finally {
-      setRefreshing(false);
-    }
   };
 
   return (
@@ -186,22 +166,6 @@ const Routing: React.FC = () => {
                             {status.enabled ? t('routing.preloaded', { count: status.domain_count }) : t('routing.inactive')}
                         </Typography>
                     </Box>
-                    <Button
-                        onClick={handleRefreshGFW}
-                        disabled={refreshing}
-                        variant="outlined"
-                        size="small"
-                        sx={{
-                            borderRadius: 2, fontSize: '0.625rem', fontWeight: 900, textTransform: 'uppercase',
-                            letterSpacing: '0.1em', bgcolor: 'action.hover', borderColor: 'divider', color: 'text.secondary',
-                            '&:hover': { bgcolor: 'primary.main', color: 'common.white', borderColor: 'primary.main' },
-                        }}
-                        startIcon={
-                            <Box sx={{ display: 'inline-flex', animation: refreshing ? `${spin} 1s linear infinite` : 'none' }}><RefreshCw size={12} /></Box>
-                        }
-                    >
-                        {refreshing ? t('ech_form.probing') : t('routing.update_list')}
-                    </Button>
                 </Box>
                 <Button
                     onClick={handleSave}

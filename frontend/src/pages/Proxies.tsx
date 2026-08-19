@@ -155,7 +155,7 @@ const Proxies: React.FC = () => {
               {migrationSaving ? '...' : t('common.save')}
             </Button>
             <Button onClick={handleTestMigration} disabled={migrationTesting} variant="outlined" size="small" sx={{ flexShrink: 0 }}>
-              {migrationTesting ? '...' : '测试连接'}
+              {migrationTesting ? t('proxies.testing') : t('proxies.test_connect')}
             </Button>
           </Box>
         </Box>
@@ -270,7 +270,7 @@ const Proxies: React.FC = () => {
                       <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, mt: 0.25, color: 'text.secondary', minWidth: 0 }}>
                         <Layers size={10} aria-hidden />
                         <Typography variant="caption" sx={{ fontSize: 10, fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '100%' }}>
-                          前缀：{p.prefix}
+                          {t('rules.form.prefix_label', { prefix: p.prefix })}
                         </Typography>
                       </Box>
                     </Box>
@@ -281,9 +281,9 @@ const Proxies: React.FC = () => {
                         component="span"
                         sx={{
                           fontSize: 10, fontWeight: 700, fontFamily: 'monospace', px: 1, py: 0.25, borderRadius: 1, border: 1,
-                          color: testResults[p.id] === '失败' ? 'error.main' : 'success.main',
-                          borderColor: testResults[p.id] === '失败' ? 'rgba(239,68,68,0.2)' : 'rgba(34,197,94,0.2)',
-                          bgcolor: testResults[p.id] === '失败' ? 'rgba(239,68,68,0.1)' : 'rgba(34,197,94,0.1)',
+                          color: testResults[p.id] === t('common.failed') ? 'error.main' : 'success.main',
+                          borderColor: testResults[p.id] === t('common.failed') ? 'rgba(239,68,68,0.2)' : 'rgba(34,197,94,0.2)',
+                          bgcolor: testResults[p.id] === t('common.failed') ? 'rgba(239,68,68,0.1)' : 'rgba(34,197,94,0.1)',
                         }}
                       >
                         {testResults[p.id]}
@@ -296,7 +296,7 @@ const Proxies: React.FC = () => {
                       onClick={(e) => handleTestNAT64(p, e)}
                       sx={{ fontSize: 10, fontWeight: 700, minWidth: 0, flexShrink: 0 }}
                     >
-                      {testingMap[p.id] ? '测试中...' : '测试连接'}
+                      {testingMap[p.id] ? t('proxies.testing') : t('proxies.test_connect')}
                     </Button>
                     <IconButton
                       size="small"

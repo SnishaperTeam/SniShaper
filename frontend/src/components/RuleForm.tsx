@@ -273,7 +273,7 @@ const RuleForm: React.FC<RuleFormProps> = ({ initialData, onSuccess, onCancel })
             size="small"
             value={formData.website}
             onChange={(e) => setFormData({ ...formData, website: e.target.value })}
-            placeholder="google"
+            placeholder={t('rules.form.website_placeholder')}
             sx={inputSx}
           />
         </Box>

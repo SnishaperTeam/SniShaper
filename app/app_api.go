@@ -1082,20 +1082,6 @@ func (a *App) GetAutoRoutingStatus() proxy.GFWListStatus {
 	return a.ruleManager.GetAutoRoutingStatus()
 }
 
-func (a *App) RefreshGFWList() error {
-	a.appendLog("[action] RefreshGFWList called")
-	_, err := a.ruleManager.RefreshGFWList()
-	if err != nil {
-		a.appendLog("[error] RefreshGFWList failed: " + err.Error())
-	} else {
-		a.appendLog("[action] RefreshGFWList success")
-		if a.core != nil {
-			a.core.ReloadIfRunning()
-		}
-	}
-	return err
-}
-
 func (a *App) GetAppVersion() string {
 	if strings.TrimSpace(buildVersion) != "" {
 		return buildVersion
