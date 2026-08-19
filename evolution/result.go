@@ -46,23 +46,25 @@ type DomainTestResult struct {
 }
 
 type TempRule struct {
-	ID          string    `json:"id"`
-	Name        string    `json:"name"`
-	Domain      string    `json:"domain"`
-	Mode        string    `json:"mode"`
-	SniFake     string    `json:"sni_fake,omitempty"`
-	ECHEnabled  bool      `json:"ech_enabled"`
-	Method      TestMethod `json:"method"`
-	CreatedAt   time.Time `json:"created_at"`
-	IsApplied   bool      `json:"is_applied"`
-	UseCFPool   bool      `json:"use_cf_pool"`
+	ID             string     `json:"id"`
+	Name           string     `json:"name"`
+	Domain         string     `json:"domain"`
+	Mode           string     `json:"mode"`
+	SniFake        string     `json:"sni_fake,omitempty"`
+	ECHEnabled     bool       `json:"ech_enabled"`
+	Method         TestMethod `json:"method"`
+	CreatedAt      time.Time  `json:"created_at"`
+	IsApplied      bool       `json:"is_applied"`
+	UseCFPool      bool       `json:"use_cf_pool"`
+	NAT64Enabled   bool       `json:"nat64_enabled"`
+	NAT64ProfileID string     `json:"nat64_profile_id,omitempty"`
 }
 
 type TestConfig struct {
-	EnableIPv6        bool          `json:"enable_ipv6"`
-	DomainFrontingSNIs []string     `json:"domain_fronting_snis"`
-	Timeout           time.Duration `json:"timeout"`
-	Concurrency       int           `json:"concurrency"`
+	EnableIPv6         bool          `json:"enable_ipv6"`
+	DomainFrontingSNIs []string      `json:"domain_fronting_snis"`
+	Timeout            time.Duration `json:"timeout"`
+	Concurrency        int           `json:"concurrency"`
 }
 
 func DefaultTestConfig() TestConfig {
@@ -75,20 +77,20 @@ func DefaultTestConfig() TestConfig {
 }
 
 type TestTask struct {
-	ID        string            `json:"id"`
-	Domains   []string          `json:"domains"`
-	Status    TestStatus        `json:"status"`
-	Config    TestConfig        `json:"config"`
+	ID        string             `json:"id"`
+	Domains   []string           `json:"domains"`
+	Status    TestStatus         `json:"status"`
+	Config    TestConfig         `json:"config"`
 	Results   []DomainTestResult `json:"results"`
-	StartTime time.Time         `json:"start_time,omitempty"`
-	EndTime   time.Time         `json:"end_time,omitempty"`
-	Progress  int               `json:"progress"`
-	Total     int               `json:"total"`
+	StartTime time.Time          `json:"start_time,omitempty"`
+	EndTime   time.Time          `json:"end_time,omitempty"`
+	Progress  int                `json:"progress"`
+	Total     int                `json:"total"`
 }
 
 type TCPingResult struct {
-	IP       string        `json:"ip"`
-	Success  bool          `json:"success"`
-	Delay    time.Duration `json:"delay"`
-	Error    string        `json:"error,omitempty"`
+	IP      string        `json:"ip"`
+	Success bool          `json:"success"`
+	Delay   time.Duration `json:"delay"`
+	Error   string        `json:"error,omitempty"`
 }

@@ -505,6 +505,7 @@
       "direct": "直连",
       "tcping": "TCPing",
       "tcp_ping": "TCPing",
+      "tcp_ping_nat64": "TCPing (NAT64)",
       "domain_fronting": "域前置",
       "tls_fragment": "TLS分片",
       "ech": "ECH",

@@ -505,6 +505,7 @@
       "direct": "Direct",
       "tcping": "TCPing",
       "tcp_ping": "TCPing",
+      "tcp_ping_nat64": "TCPing (NAT64)",
       "domain_fronting": "Domain Front",
       "tls_fragment": "TLS Fragment",
       "ech": "ECH",

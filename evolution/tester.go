@@ -8,6 +8,7 @@ import (
 	"net"
 	"net/http"
 	"runtime"
+	"strings"
 	"sync"
 	"time"
 
@@ -123,6 +124,18 @@ func (t *Tester) GetTask() *TestTask {
 	return t.currentTask
 }
 
+// Snapshot 返回当前任务字段的安全副本（浅拷贝），供外部在持锁之外读取
+// 进度/状态/结果等展示数据，避免与 runTest 的写入发生数据竞争。
+func (t *Tester) Snapshot() *TestTask {
+	t.mu.RLock()
+	defer t.mu.RUnlock()
+	if t.currentTask == nil {
+		return nil
+	}
+	snap := *t.currentTask
+	return &snap
+}
+
 func (t *Tester) runTest(task *TestTask) {
 	t.log("[TASK] 开始进化模式测试任务, 域名数量: %d, 并发数: %d", task.Total, task.Config.Concurrency)
 
@@ -198,10 +211,31 @@ func (t *Tester) testDomain(domain string, config TestConfig) DomainTestResult {
 	result.ResolvedIPs = resolvedIPs
 	result.BestIP = bestIP
 
-	if !step1Result.Success {
+	// NAT64 回退：tcping 直连全部失败时不直接判定不可达，而是把解析出的 IPv4
+	// 候选依次映射为 NAT64 地址（逐个尝试所有已配置的 NAT64 profile）再探测。
+	// 仅在“启用 IPv6”时执行：NAT64 地址本身走 IPv6 通道。
+	nat64Attempted := false
+	nat64ProfileID := ""
+	if !step1Result.Success && config.EnableIPv6 {
+		if nat64Step, nat64IP, profileID := t.tryNAT64Fallback(domain, resolvedIPs, config); nat64Step != nil {
+			nat64Attempted = true
+			result.StepResults = append(result.StepResults, *nat64Step)
+			if nat64Step.Success {
+				bestIP = nat64IP
+				nat64ProfileID = profileID
+				result.BestIP = nat64IP
+				t.log("[DOMAIN] 域名 %s NAT64回退成功: 映射IP=%s profile=%s", domain, nat64IP, profileID)
+			}
+		}
+	}
+
+	if bestIP == "" {
 		result.Reachable = false
 		result.Error = "TCPing失败，所有IP不可达"
-		t.log("[DOMAIN] 域名 %s 测试完成: 可达=false, 原因=TCPing失败", domain)
+		if nat64Attempted {
+			result.Error = "TCPing失败（含NAT64回退），所有IP不可达"
+		}
+		t.log("[DOMAIN] 域名 %s 测试完成: 可达=false, 原因=%s", domain, result.Error)
 		return result
 	}
 
@@ -212,7 +246,7 @@ func (t *Tester) testDomain(domain string, config TestConfig) DomainTestResult {
 		t.log("[DOMAIN] 检测到域名 %s 为 Cloudflare 域名，开启 Cloudflare 专用测试流程 (ECH -> QUIC -> TLS分片)", domain)
 
 		// 1. ECH 测试
-		step5Result := t.testECH(domain, bestIP, config)
+		step5Result := t.testECH(domain, bestIP, nat64ProfileID, config)
 		result.StepResults = append(result.StepResults, step5Result)
 		if step5Result.Success {
 			result.Reachable = true
@@ -220,12 +254,13 @@ func (t *Tester) testDomain(domain string, config TestConfig) DomainTestResult {
 			result.Delay = step5Result.Delay
 			result.GeneratedRule = GenerateRule(domain, MethodECH, "", true)
 			result.GeneratedRule.UseCFPool = true
+			applyNAT64ToTempRule(result.GeneratedRule, nat64ProfileID)
 			t.log("[DOMAIN] 域名 %s 测试完成: 可达=true, 方法=ech (已开启cfpool)", domain)
 			return result
 		}
 
 		// 2. QUIC 测试
-		step6Result := t.testQUIC(domain, bestIP, config)
+		step6Result := t.testQUIC(domain, bestIP, nat64ProfileID, config)
 		result.StepResults = append(result.StepResults, step6Result)
 		if step6Result.Success {
 			result.Reachable = true
@@ -233,12 +268,13 @@ func (t *Tester) testDomain(domain string, config TestConfig) DomainTestResult {
 			result.Delay = step6Result.Delay
 			result.GeneratedRule = GenerateRule(domain, MethodQUIC, "", false)
 			result.GeneratedRule.UseCFPool = true
+			applyNAT64ToTempRule(result.GeneratedRule, nat64ProfileID)
 			t.log("[DOMAIN] 域名 %s 测试完成: 可达=true, 方法=quic (已开启cfpool)", domain)
 			return result
 		}
 
 		// 3. TLS 分片测试
-		step3Result := t.testTLSFragment(domain, bestIP, config)
+		step3Result := t.testTLSFragment(domain, bestIP, nat64ProfileID, config)
 		result.StepResults = append(result.StepResults, step3Result)
 		if step3Result.Success {
 			result.Reachable = true
@@ -246,6 +282,7 @@ func (t *Tester) testDomain(domain string, config TestConfig) DomainTestResult {
 			result.Delay = step3Result.Delay
 			result.GeneratedRule = GenerateRule(domain, MethodTLSFragment, "", false)
 			result.GeneratedRule.UseCFPool = true
+			applyNAT64ToTempRule(result.GeneratedRule, nat64ProfileID)
 			t.log("[DOMAIN] 域名 %s 测试完成: 可达=true, 方法=tls_fragment (已开启cfpool)", domain)
 			return result
 		}
@@ -254,37 +291,40 @@ func (t *Tester) testDomain(domain string, config TestConfig) DomainTestResult {
 		t.log("[DOMAIN] 域名 %s 为常规域名，进行常规测试流程 (域前置 -> TLS分片 -> QUIC)", domain)
 
 		// 1. 域前置测试
-		step2Result, sni := t.testDomainFronting(domain, bestIP, config)
+		step2Result, sni := t.testDomainFronting(domain, bestIP, nat64ProfileID, config)
 		result.StepResults = append(result.StepResults, step2Result)
 		if step2Result.Success {
 			result.Reachable = true
 			result.Method = MethodDomainFronting
 			result.Delay = step2Result.Delay
 			result.GeneratedRule = GenerateRule(domain, MethodDomainFronting, sni, false)
+			applyNAT64ToTempRule(result.GeneratedRule, nat64ProfileID)
 			t.log("[DOMAIN] 域名 %s 测试完成: 可达=true, 方法=domain_fronting", domain)
 			return result
 		}
 
 		// 2. TLS 分片测试
-		step3Result := t.testTLSFragment(domain, bestIP, config)
+		step3Result := t.testTLSFragment(domain, bestIP, nat64ProfileID, config)
 		result.StepResults = append(result.StepResults, step3Result)
 		if step3Result.Success {
 			result.Reachable = true
 			result.Method = MethodTLSFragment
 			result.Delay = step3Result.Delay
 			result.GeneratedRule = GenerateRule(domain, MethodTLSFragment, "", false)
+			applyNAT64ToTempRule(result.GeneratedRule, nat64ProfileID)
 			t.log("[DOMAIN] 域名 %s 测试完成: 可达=true, 方法=tls_fragment", domain)
 			return result
 		}
 
 		// 3. QUIC 测试
-		step6Result := t.testQUIC(domain, bestIP, config)
+		step6Result := t.testQUIC(domain, bestIP, nat64ProfileID, config)
 		result.StepResults = append(result.StepResults, step6Result)
 		if step6Result.Success {
 			result.Reachable = true
 			result.Method = MethodQUIC
 			result.Delay = step6Result.Delay
 			result.GeneratedRule = GenerateRule(domain, MethodQUIC, "", false)
+			applyNAT64ToTempRule(result.GeneratedRule, nat64ProfileID)
 			t.log("[DOMAIN] 域名 %s 测试完成: 可达=true, 方法=quic", domain)
 			return result
 		}
@@ -455,7 +495,7 @@ func (t *Tester) tcpingIP(ip string, config TestConfig) TCPingResult {
 	}
 }
 
-func (t *Tester) testDomainFronting(domain string, ip string, config TestConfig) (StepResult, string) {
+func (t *Tester) testDomainFronting(domain string, ip string, nat64ProfileID string, config TestConfig) (StepResult, string) {
 	t.log("[DOMAIN-FRONTING] 开始域前置测试: %s (IP: %s)", domain, ip)
 	start := time.Now()
 
@@ -467,6 +507,7 @@ func (t *Tester) testDomainFronting(domain string, ip string, config TestConfig)
 			SniFake: sni,
 			Enabled: true,
 		}
+		applyNAT64ToRule(&rule, nat64ProfileID)
 
 		success, delay, err := t.testWithRule(domain, ip, rule, config)
 		if success {
@@ -492,7 +533,7 @@ func (t *Tester) testDomainFronting(domain string, ip string, config TestConfig)
 	}, ""
 }
 
-func (t *Tester) testTLSFragment(domain string, ip string, config TestConfig) StepResult {
+func (t *Tester) testTLSFragment(domain string, ip string, nat64ProfileID string, config TestConfig) StepResult {
 	t.log("[TLS-FRAGMENT] 开始TLS分片测试: %s (IP: %s)", domain, ip)
 	start := time.Now()
 
@@ -500,6 +541,7 @@ func (t *Tester) testTLSFragment(domain string, ip string, config TestConfig) St
 		Mode:    "tls-rf",
 		Enabled: true,
 	}
+	applyNAT64ToRule(&rule, nat64ProfileID)
 
 	success, delay, err := t.testWithRule(domain, ip, rule, config)
 	if success {
@@ -521,7 +563,7 @@ func (t *Tester) testTLSFragment(domain string, ip string, config TestConfig) St
 	}
 }
 
-func (t *Tester) testECH(domain string, ip string, config TestConfig) StepResult {
+func (t *Tester) testECH(domain string, ip string, nat64ProfileID string, config TestConfig) StepResult {
 	t.log("[ECH-TEST] 开始ECH测试: %s (IP: %s)", domain, ip)
 	start := time.Now()
 
@@ -532,6 +574,7 @@ func (t *Tester) testECH(domain string, ip string, config TestConfig) StepResult
 		ECHDiscoveryDomain: "crypto.cloudflare.com",
 		Enabled:            true,
 	}
+	applyNAT64ToRule(&rule, nat64ProfileID)
 
 	success, delay, err := t.testWithRule(domain, ip, rule, config)
 	if success {
@@ -553,7 +596,7 @@ func (t *Tester) testECH(domain string, ip string, config TestConfig) StepResult
 	}
 }
 
-func (t *Tester) testQUIC(domain string, ip string, config TestConfig) StepResult {
+func (t *Tester) testQUIC(domain string, ip string, nat64ProfileID string, config TestConfig) StepResult {
 	t.log("[QUIC-TEST] 开始QUIC测试: %s (IP: %s)", domain, ip)
 	start := time.Now()
 
@@ -561,6 +604,7 @@ func (t *Tester) testQUIC(domain string, ip string, config TestConfig) StepResul
 		Mode:    "quic",
 		Enabled: true,
 	}
+	applyNAT64ToRule(&rule, nat64ProfileID)
 
 	transport, err := t.proxyServer.NewQUICRoundTripper(domain, rule)
 	if err != nil {
@@ -645,6 +689,109 @@ func (t *Tester) testWithRule(domain string, ip string, rule proxy.Rule, config 
 	delay := time.Since(start)
 	t.log("[TEST] 真HTTP请求成功: %s, 延迟=%v", domain, delay)
 	return true, delay, nil
+}
+
+// tryNAT64Fallback 在 tcping 直连全部失败后，把解析出的 IPv4 候选逐个映射为
+// NAT64 地址并重新探测。逐个尝试所有已配置的 NAT64 profile，返回最先成功的
+// profile 及映射后的地址。没有任何可用 profile / 全部失败时返回 nil / 失败步骤。
+func (t *Tester) tryNAT64Fallback(domain string, resolvedIPs []string, config TestConfig) (*StepResult, string, string) {
+	var v4IPs []string
+	for _, ipStr := range resolvedIPs {
+		ip := net.ParseIP(ipStr)
+		if ip != nil && ip.To4() != nil {
+			v4IPs = append(v4IPs, ip.String())
+		}
+	}
+	if len(v4IPs) == 0 {
+		return nil, "", ""
+	}
+
+	profiles := t.ruleManager.GetNAT64Profiles()
+	start := time.Now()
+
+	for _, profile := range profiles {
+		prefix := strings.TrimSpace(profile.Prefix)
+		if prefix == "" || profile.ID == "" {
+			continue
+		}
+		for _, ipStr := range v4IPs {
+			mapped, ok := mapNAT64Addr(ipStr, prefix)
+			if !ok {
+				continue
+			}
+			ping := t.tcpingIP(mapped, config)
+			if ping.Success {
+				t.log("[TCP-PING-NAT64] NAT64回退成功: %s -> %s (profile=%s), 延迟: %v", ipStr, mapped, profile.ID, ping.Delay)
+				return &StepResult{
+					StepName:  "tcp_ping_nat64",
+					Success:   true,
+					Delay:     ping.Delay,
+					Timestamp: start,
+				}, mapped, profile.ID
+			}
+		}
+	}
+
+	t.log("[TCP-PING-NAT64] NAT64回退失败: %s, 所有映射IP均不可达", domain)
+	return &StepResult{
+		StepName:  "tcp_ping_nat64",
+		Success:   false,
+		Error:     "NAT64映射后所有IP仍不可达",
+		Timestamp: start,
+	}, "", ""
+}
+
+// mapNAT64Addr 把 IPv4 地址映射进 NAT64 前缀（prefix[:12] + ipv4）。
+// 与 proxy/dialer.go、app 中的实现保持一致。
+func mapNAT64Addr(ipStr string, prefix string) (string, bool) {
+	prefix = strings.TrimSpace(prefix)
+	if prefix == "" {
+		return ipStr, true
+	}
+	parsedIP := net.ParseIP(ipStr)
+	if parsedIP == nil {
+		return ipStr, true
+	}
+	ipv4 := parsedIP.To4()
+	if ipv4 == nil {
+		return ipStr, false
+	}
+
+	var prefixIP net.IP
+	if strings.Contains(prefix, "/") {
+		_, ipnet, err := net.ParseCIDR(prefix)
+		if err == nil && ipnet != nil {
+			prefixIP = ipnet.IP
+		}
+	} else {
+		prefixIP = net.ParseIP(prefix)
+	}
+
+	if prefixIP == nil || len(prefixIP) != 16 {
+		return ipStr, true
+	}
+	mappedIP := make(net.IP, 16)
+	copy(mappedIP, prefixIP[:12])
+	copy(mappedIP[12:], ipv4)
+	return mappedIP.String(), true
+}
+
+// applyNAT64ToRule 给测试/生成的规则绑定 NAT64 配置，后续拨号时
+// dialWithRule 会自动把 IPv4 候选映射为 NAT64 地址。
+func applyNAT64ToRule(rule *proxy.Rule, profileID string) {
+	if profileID == "" {
+		return
+	}
+	rule.NAT64Enabled = true
+	rule.NAT64ProfileID = profileID
+}
+
+func applyNAT64ToTempRule(rule *TempRule, profileID string) {
+	if profileID == "" {
+		return
+	}
+	rule.NAT64Enabled = true
+	rule.NAT64ProfileID = profileID
 }
 
 func (t *Tester) log(format string, args ...interface{}) {

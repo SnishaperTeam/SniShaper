@@ -51,6 +51,9 @@ func NewApp() *App {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	proxyServer := proxy.NewProxyServer("127.0.0.1:" + port)
+	// The evolution tester uses this app-level resolver. Bind the rule manager
+	// before the resolver's node callback is used; otherwise DoH sees no nodes.
+	proxyServer.SetRuleManager(ruleManager)
 	a := &App{
 		ctx:               ctx,
 		cancel:            cancel,

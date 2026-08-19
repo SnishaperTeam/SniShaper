@@ -23,38 +23,39 @@ import (
 )
 
 type App struct {
-	wailsApp          *application.App
-	mainWindow        *application.WebviewWindow
-	proxyServer       *proxy.ProxyServer
-	certManager       *certmanager.CertManager
-	ruleManager       *proxy.RuleManager
-	evolutionTester   *evolution.Tester
-	certPath          string
-	proxyMarkerPath   string
-	logBuffer         *common.RingLogWriter
-	logDir            string
-	logFilePath       string
-	logFile           *os.File
-	logFileMu         sync.Mutex
-	logCaptureMu      sync.RWMutex
-	logCaptureEnabled bool
-	shouldQuit        bool
-	systemTray        *application.SystemTray
-	trayMenuV3        *application.Menu
-	proxyItemV3       *application.MenuItem
-	systemProxyItemV3 *application.MenuItem
-	proxyOpMu         sync.Mutex // lock order: proxyOpMu → systemProxyOpMu (never reverse)
-	systemProxyOpMu   sync.Mutex
-	wg                sync.WaitGroup
-	ctx               context.Context
-	cancel            context.CancelFunc
-	launchedAtStartup bool
+	wailsApp           *application.App
+	mainWindow         *application.WebviewWindow
+	proxyServer        *proxy.ProxyServer
+	certManager        *certmanager.CertManager
+	ruleManager        *proxy.RuleManager
+	evolutionTester    *evolution.Tester
+	evolutionTesterMu  sync.Mutex
+	certPath           string
+	proxyMarkerPath    string
+	logBuffer          *common.RingLogWriter
+	logDir             string
+	logFilePath        string
+	logFile            *os.File
+	logFileMu          sync.Mutex
+	logCaptureMu       sync.RWMutex
+	logCaptureEnabled  bool
+	shouldQuit         bool
+	systemTray         *application.SystemTray
+	trayMenuV3         *application.Menu
+	proxyItemV3        *application.MenuItem
+	systemProxyItemV3  *application.MenuItem
+	proxyOpMu          sync.Mutex // lock order: proxyOpMu → systemProxyOpMu (never reverse)
+	systemProxyOpMu    sync.Mutex
+	wg                 sync.WaitGroup
+	ctx                context.Context
+	cancel             context.CancelFunc
+	launchedAtStartup  bool
 	autoProxyAtStartup bool
-	core              *core.CoreClient
+	core               *core.CoreClient
 	tunRestoreSysProxy bool
-	pendingShow       bool
-	pendingUpdateMu   sync.Mutex
-	pendingUpdatePath string
+	pendingShow        bool
+	pendingUpdateMu    sync.Mutex
+	pendingUpdatePath  string
 }
 
 // SetWailsApp sets the wails application instance.

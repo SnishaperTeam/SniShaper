@@ -64,6 +64,13 @@ func (r *TempRule) ToSiteGroup() map[string]interface{} {
 		siteGroup["use_cf_pool"] = true
 	}
 
+	// NAT64 绑定：tcping 直连失败后经 NAT64 映射回退成功的域名，
+	// 应用规则时必须携带 nat64 配置，实际拨号才会走 NAT64 通道。
+	if r.NAT64Enabled && r.NAT64ProfileID != "" {
+		siteGroup["nat64_enabled"] = true
+		siteGroup["nat64_profile_id"] = r.NAT64ProfileID
+	}
+
 	return siteGroup
 }
 

@@ -419,6 +419,27 @@ func (p *ProxyServer) NewQUICRoundTripper(host string, rule Rule) (*http3.Transp
 		dialCandidates = []string{targetAddr}
 	}
 
+	// NAT64：规则启用 NAT64 时把 QUIC 拨号候选映射为 NAT64 地址。
+	// quic.DialAddr 不走 dialWithRule，需要在这里显式映射。
+	if rule.NAT64Enabled && rule.NAT64ProfileID != "" && p.rules != nil {
+		if prefix := p.rules.GetNAT64PrefixByID(rule.NAT64ProfileID); prefix != "" {
+			var mapped []string
+			for _, candidate := range dialCandidates {
+				cHost, cPort, err := net.SplitHostPort(candidate)
+				if err != nil {
+					cHost = candidate
+					cPort = "443"
+				}
+				if m, ok := mapNAT64Addr(cHost, prefix); ok {
+					mapped = append(mapped, net.JoinHostPort(m, cPort))
+				}
+			}
+			if len(mapped) > 0 {
+				dialCandidates = mapped
+			}
+		}
+	}
+
 	// H3 上游必须用真实域名作为 SNI：QUIC 服务器按 SNI 路由请求，
 	// sni_fake（如 g.cn）只用于 TCP MITM 链路，H3 上 SNI 与 Host 不一致会挂起。
 	sniHost := host
@@ -730,8 +751,6 @@ func (l *singleConnListener) Close() error {
 }
 func (l *singleConnListener) Addr() net.Addr { return l.conn.LocalAddr() }
 
-
-
 func (p *ProxyServer) ClearCertCache() {
 	p.certCacheMu.Lock()
 	defer p.certCacheMu.Unlock()
@@ -817,5 +836,3 @@ func chooseUpstreamSNI(targetHost string, rule Rule) string {
 	}
 	return targetHost
 }
-
-
