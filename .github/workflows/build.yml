@@ -74,10 +74,3 @@ jobs:
           if (Test-Path install.bat) { Copy-Item install.bat staging\ }
           Write-Host "Staged files:" -ForegroundColor Green
           Get-ChildItem staging | ForEach-Object { Write-Host "  $($_.Name)" }
-
-      - name: Upload build artifacts
-        uses: actions/upload-artifact@v7
-        with:
-          name: snishaper-windows-amd64
-          path: staging/*
-          if-no-files-found: error

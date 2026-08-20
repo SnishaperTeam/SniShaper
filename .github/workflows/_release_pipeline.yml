@@ -617,13 +617,6 @@ jobs:
           [System.IO.File]::WriteAllText($notesFile, $newContent, [System.Text.Encoding]::UTF8)
           Write-Host "::notice::Asset manifest inserted before Contributors in $notesFile"
 
-      - name: Upload build artifacts
-        uses: actions/upload-artifact@v7
-        with:
-          name: snishaper-release-${{ needs.check.outputs.tag }}
-          path: staging/*
-          if-no-files-found: error
-
       - name: Create GitHub Release
         shell: pwsh
         env:
