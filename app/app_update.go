@@ -393,20 +393,39 @@ func (a *App) fetchGitHubReleases() ([]githubRelease, error) {
 }
 
 func resolveChannelRelease(releases []githubRelease, channel string) *githubRelease {
-	keyword := validUpdateChannels[channel]
+	threshold := channelRank(channel)
+	var best *githubRelease
 	for i := range releases {
 		rel := &releases[i]
-		if channel == "stable" {
-			if !rel.Prerelease {
-				return rel
-			}
+		if releaseRank(*rel) < threshold {
 			continue
 		}
-		if rel.Prerelease && keyword != "" && strings.Contains(strings.ToLower(rel.TagName), keyword) {
-			return rel
+		if best == nil {
+			best = rel
+			continue
+		}
+		if compareReleaseVersions(
+			strings.TrimPrefix(best.TagName, "v"), channelFromTag(best.TagName),
+			strings.TrimPrefix(rel.TagName, "v"), channelFromTag(rel.TagName),
+		) == -1 {
+			best = rel
 		}
 	}
-	return nil
+	return best
+}
+
+func releaseRank(rel githubRelease) int {
+	if !rel.Prerelease {
+		return 3
+	}
+	switch channelFromTag(rel.TagName) {
+	case "rc":
+		return 2
+	case "beta":
+		return 1
+	default:
+		return 0
+	}
 }
 
 func filterUpdateAssets(assets []githubAsset) []ReleaseAsset {
