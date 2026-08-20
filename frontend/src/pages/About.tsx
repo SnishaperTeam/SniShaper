@@ -202,7 +202,7 @@ const About: React.FC = () => {
   ];
 
   return (
-    <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column', overflowY: 'auto' }}>
+    <Box sx={{ flexGrow: 1, minHeight: 0, width: '100%', display: 'flex', flexDirection: 'column', overflowY: 'auto', overflowX: 'hidden' }}>
       <Box sx={{ flex: 1, p: 4, maxWidth: '64rem', mx: 'auto', width: '100%' }}>
         <Box sx={{ position: 'relative', mb: 6, p: 4, borderRadius: 3, border: 1, borderColor: 'divider', overflow: 'hidden', background: (theme) => `linear-gradient(135deg, ${alpha(theme.palette.primary.main, 0.05)}, ${theme.palette.background.paper}, ${alpha(theme.palette.primary.main, 0.05)})` }}>
           <Box sx={{ position: 'absolute', inset: 0, opacity: 0.5, background: (theme) => `radial-gradient(ellipse at top right, ${alpha(theme.palette.primary.main, 0.08)}, transparent 50%)` }} />

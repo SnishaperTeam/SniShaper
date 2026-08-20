@@ -18,13 +18,9 @@ import { I18nProvider, useTranslation } from './i18n/I18nContext';
 import { toast } from './lib/toast';
 import logoUrl from './assets/logo.svg';
 
-
 const Welcome = lazy(() => import('./pages/Welcome'));
 
-const fadeIn = keyframes`
-  from { opacity: 0; transform: translateY(8px); }
-  to { opacity: 1; transform: translateY(0); }
-`;
+const fadeIn = keyframes`from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); }`;
 
 const Dashboard = lazy(() => import('./pages/Dashboard'));
 const Proxies = lazy(() => import('./pages/Proxies'));
@@ -36,7 +32,6 @@ const DNS = lazy(() => import('./pages/DNS'));
 const About = lazy(() => import('./pages/About'));
 const Evolution = lazy(() => import('./pages/Evolution'));
 
-// Global settings cache — read once at app startup, shared across all pages
 interface SettingsCache {
   port: number;
   closeToTray: boolean;
@@ -52,7 +47,7 @@ interface SettingsCache {
   installedCerts: any[];
   ipStats: any[];
   language: string;
-  themeMode: string; // 変更: 'theme' から 'themeMode' に変更
+  themeMode: string;
   ipv6Available: boolean;
 }
 
@@ -67,7 +62,7 @@ const defaultCache: SettingsCache = {
   caStatus: { Installed: false, CertPath: '', Platform: 'windows' },
   installedCerts: [], ipStats: [],
   language: '',
-  themeMode: 'dark', // 変更: 'theme' から 'themeMode' に変更、デフォルトを'dark'に
+  themeMode: 'dark',
   ipv6Available: true
 };
 
@@ -75,14 +70,12 @@ const SettingsCtx = createContext<{ cache: SettingsCache; updateCache: (patch: P
   cache: defaultCache,
   updateCache: () => {}
 });
-
 export { SettingsCtx };
 
 const App: React.FC = () => {
   const [settingsCache, setSettingsCache] = useState<SettingsCache>({
     ...defaultCache,
     language: localStorage.getItem('language') || '',
-    // 从localStorage获取主题模式，默认为'dark'
     themeMode: (localStorage.getItem('mui-mode') as any) || 'dark'
   });
   const [initialized, setInitialized] = useState(false);
@@ -102,16 +95,13 @@ const App: React.FC = () => {
   }, []);
 
   useEffect(() => {
-    // Phase 1: Load fast settings (language, theme, port) — pure file reads, < 5ms
-    // Render immediately so there's zero loading screen.
     const fastLoad = async () => {
       try {
         const [language, port, closeToTray, autoStart,
           showMainOnAutoStart, autoEnableProxyOnAutoStart, socks5Enabled, socks5Port, cfConfig, ipv6Available] = await Promise.all([
-            GetLanguage(), GetListenPort(), GetCloseToTray(), GetAutoStart(),
-            GetShowMainWindowOnAutoStart(), GetAutoEnableProxyOnAutoStart(), GetSocks5Enabled(), GetSocks5Port(), GetCloudflareConfig(), GetIPv6Available()
-          ]);
-        
+          GetLanguage(), GetListenPort(), GetCloseToTray(), GetAutoStart(),
+          GetShowMainWindowOnAutoStart(), GetAutoEnableProxyOnAutoStart(), GetSocks5Enabled(), GetSocks5Port(), GetCloudflareConfig(), GetIPv6Available()
+        ]);
         if (language) {
           localStorage.setItem('language', language as string);
         }
@@ -131,8 +121,6 @@ const App: React.FC = () => {
       } catch { /* ignore */ }
       setInitialized(true);
     };
-
-    // Phase 2: Load slow settings (cert scan via PowerShell) — in background after render
     const slowLoad = async () => {
       try {
         const [tunConfig, tunStatus, caStatus, installedCerts, ipStats] = await Promise.all([
@@ -149,9 +137,7 @@ const App: React.FC = () => {
         }));
       } catch { /* ignore */ }
     };
-
     fastLoad().then(() => slowLoad());
-
     const unlisten = EventsOn("app:state", (state: any) => {
       if (!state) return;
       const updates: Partial<SettingsCache> = {};
@@ -168,13 +154,11 @@ const App: React.FC = () => {
         setSettingsCache(prev => ({ ...prev, ...updates }));
       }
     });
-
     const unlisten2 = EventsOn("app:state_changed", (state: any) => {
       if (state && typeof state.ipv6Available === 'boolean') {
         setSettingsCache(prev => ({ ...prev, ipv6Available: state.ipv6Available }));
       }
     });
-
     return () => {
       if (unlisten) unlisten();
       if (unlisten2) unlisten2();
@@ -190,12 +174,10 @@ const App: React.FC = () => {
       if (!(target instanceof HTMLElement)) return false;
       return Boolean(target.closest('input, textarea, [contenteditable="true"], [data-native-contextmenu="true"]'));
     };
-
     const handleContextMenu = (event: MouseEvent) => {
       if (shouldAllowNativeMenu(event.target)) return;
       event.preventDefault();
     };
-
     window.addEventListener('contextmenu', handleContextMenu);
     return () => window.removeEventListener('contextmenu', handleContextMenu);
   }, []);
@@ -224,7 +206,7 @@ const routeFallback = (
 const AppRoutes: React.FC<{ settingsCache: SettingsCache, updateSettingsCache: any, themeId: string, onThemeChange: (id: string) => void }> = ({ settingsCache, updateSettingsCache, themeId, onThemeChange }) => {
   const location = useLocation();
   return (
-    <Box key={location.key} sx={{ flexGrow: 1, flexShrink: 0, minWidth: 0, display: 'flex', flexDirection: 'column', animation: `${fadeIn} 0.3s cubic-bezier(0.16, 1, 0.3, 1)` }}>
+    <Box key={location.key} sx={{ flexGrow: 1, flexShrink: 1, minHeight: 0, minWidth: 0, display: 'flex', flexDirection: 'column', animation: `${fadeIn} 0.3s cubic-bezier(0.16, 1, 0.3, 1)` }}>
       <SettingsCtx.Provider value={{ cache: settingsCache, updateCache: updateSettingsCache }}>
         <Suspense fallback={routeFallback}>
           <Routes>
@@ -287,7 +269,6 @@ const AppContent: React.FC<{ settingsCache: SettingsCache, updateSettingsCache: 
       <Box sx={{ display: 'flex', height: '100vh', width: '100vw', overflow: 'hidden', position: 'relative', userSelect: 'none' }}>
         <ToastProvider />
         <Sidebar />
-
         <Box
           ref={glowRef}
           onMouseMove={handleGlowMove}
@@ -339,8 +320,7 @@ const AppContent: React.FC<{ settingsCache: SettingsCache, updateSettingsCache: 
               <WindowControls />
             </Toolbar>
           </AppBar>
-
-          <Box component="main" sx={{ flexGrow: 1, pt: 3, px: 3, pb: 0, overflowY: 'auto', overflowX: 'hidden', display: 'flex', flexDirection: 'column', position: 'relative', zIndex: 1 }}>
+          <Box component="main" sx={{ flexGrow: 1, pt: 3, px: 3, pb: 0, overflow: 'hidden', display: 'flex', flexDirection: 'column', position: 'relative', zIndex: 1 }}>
             <Toolbar sx={{ visibility: 'hidden' }} />
             <AppRoutes
               settingsCache={settingsCache}

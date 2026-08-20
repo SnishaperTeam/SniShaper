@@ -2,7 +2,7 @@ import { createTheme } from '@mui/material/styles';
 
 const base = {
   typography: {
-    fontFamily: '"Segoe UI", "Microsoft YaHei", "PingFang SC", "Helvetica Neue", sans-serif',
+    fontFamily: '"Microsoft YaHei", "微软雅黑", "PingFang SC", "Segoe UI", sans-serif',
   },
   shape: { borderRadius: 8 },
   components: {

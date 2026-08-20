@@ -232,6 +232,10 @@ const Evolution: React.FC = () => {
           .map((r: TestResult) => r.generated_rule!);
         setTempRules(newRules);
       }
+      // 手动停止（后端将任务状态置为 failed）时只同步结果，不跳转、不弹完成提示
+      if (data.status === 'failed') {
+        return;
+      }
       toast.success(t('evolution.complete_success', { count: data.results?.length || 0 }));
       setActiveTab('results');
     };
@@ -259,8 +263,8 @@ const Evolution: React.FC = () => {
   const flowSteps = [t('evolution.steps.direct'), t('evolution.steps.tcping'), t('evolution.steps.domain_fronting'), t('evolution.steps.tls_fragment'), t('evolution.steps.ech'), t('evolution.steps.quic')];
 
   return (
-    <Box sx={{ pt: 4, pb: 6, width: '100%', display: 'flex', flexDirection: 'column' }}>
-      <Box sx={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: { xs: 'flex-start', sm: 'flex-end' }, gap: 2, mb: 6 }}>
+    <Box sx={{ flexGrow: 1, minHeight: 0, width: '100%', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+      <Box sx={{ pt: 4, flexShrink: 0, display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: { xs: 'flex-start', sm: 'flex-end' }, gap: 2, mb: 6 }}>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
           <Box sx={{ p: 1.25, borderRadius: 1.5, border: 1, color: 'primary.main', bgcolor: (theme) => alpha(theme.palette.primary.main, 0.1), borderColor: (theme) => alpha(theme.palette.primary.main, 0.1), display: 'flex' }}>
             <Bolt size={20} />
@@ -284,7 +288,7 @@ const Evolution: React.FC = () => {
         )}
       </Box>
 
-      <Box sx={{ mb: 3, display: 'flex', gap: 1, flexWrap: 'wrap' }}>
+      <Box sx={{ mb: 3, flexShrink: 0, display: 'flex', gap: 1, flexWrap: 'wrap' }}>
         {tabs.map((tab) => {
           const active = activeTab === tab.id;
           return (
@@ -321,6 +325,7 @@ const Evolution: React.FC = () => {
         })}
       </Box>
 
+      <Box sx={{ flexGrow: 1, minHeight: 0, overflowY: 'auto', overflowX: 'hidden', width: '100%', pb: 6 }}>
       <Box sx={{ p: 3, width: '100%' }}>
       <Box sx={{ display: activeTab === 'test' ? 'block' : 'none' }}>
             <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2.5 }}>
@@ -330,7 +335,7 @@ const Evolution: React.FC = () => {
                     <Globe size={14} />
                   </Box>
                   <Typography variant="body2" sx={{ fontWeight: 900, color: 'text.secondary', textTransform: 'uppercase', letterSpacing: '0.01em' }}>{t('evolution.domain_list')}</Typography>
-                  <Typography variant="caption" color="text.secondary" sx={{ fontFamily: 'monospace', ml: 'auto' }}>
+                  <Typography variant="caption" color="text.secondary" sx={{ ml: 'auto' }}>
                     {t('evolution.domain_count', { count: domainCount })}
                   </Typography>
                 </Box>
@@ -342,7 +347,7 @@ const Evolution: React.FC = () => {
                   onChange={(e) => setDomains(e.target.value)}
                   placeholder={t('evolution.placeholder')}
                   disabled={isRunning}
-                  slotProps={{ input: { sx: { fontFamily: 'monospace', fontSize: '0.875rem', p: 2 } } }}
+                  slotProps={{ input: { sx: { fontSize: '0.875rem', p: 2 } } }}
                   sx={{ '& .MuiOutlinedInput-root': { bgcolor: 'action.hover', borderRadius: 1.5 } }}
                 />
 
@@ -382,7 +387,7 @@ const Evolution: React.FC = () => {
                         </Box>
                         <Typography variant="caption" sx={{ fontWeight: 900 }}>{t('evolution.test_progress')}</Typography>
                       </Box>
-                      <Typography variant="caption" sx={{ fontFamily: 'monospace', fontWeight: 900, color: 'primary.main', bgcolor: (theme) => alpha(theme.palette.primary.main, 0.1), px: 1, py: 0.25, borderRadius: 0.75, fontSize: 11 }}>
+                      <Typography variant="caption" sx={{ fontWeight: 900, color: 'primary.main', bgcolor: (theme) => alpha(theme.palette.primary.main, 0.1), px: 1, py: 0.25, borderRadius: 0.75, fontSize: 11 }}>
                         {progress.current} / {progress.total}
                       </Typography>
                     </Box>
@@ -460,7 +465,7 @@ const Evolution: React.FC = () => {
                         <Description size={16} />
                       </Box>
                       <Typography variant="body2" sx={{ fontWeight: 900 }}>{t('evolution.temp_rules')}</Typography>
-                      <Typography variant="caption" color="text.secondary" sx={{ fontFamily: 'monospace', bgcolor: 'action.hover', px: 1, py: 0.25, borderRadius: 0.75 }}>{tempRules.length}</Typography>
+                      <Typography variant="caption" color="text.secondary" sx={{ bgcolor: 'action.hover', px: 1, py: 0.25, borderRadius: 0.75 }}>{tempRules.length}</Typography>
                     </Box>
                     <Typography variant="caption" color="text.secondary">
                       {t('evolution.applied_count', { applied: tempRules.filter(r => r.is_applied).length, total: tempRules.length })}
@@ -489,11 +494,11 @@ const Evolution: React.FC = () => {
                                 )}
                               </Box>
                               <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mt: 0.5 }}>
-                                <Typography variant="caption" color="text.secondary" sx={{ fontFamily: 'monospace' }}>{rule.domain}</Typography>
+                                <Typography variant="caption" color="text.secondary" sx={{ }}>{rule.domain}</Typography>
                                 {rule.sni_fake && (
                                   <>
                                     <Typography variant="caption" sx={{ color: 'divider' }}>|</Typography>
-                                    <Typography variant="caption" color="text.secondary" sx={{ fontFamily: 'monospace' }}>{t('evolution.sni')}: {rule.sni_fake}</Typography>
+                                    <Typography variant="caption" color="text.secondary" sx={{ }}>{t('evolution.sni')}: {rule.sni_fake}</Typography>
                                   </>
                                 )}
                               </Box>
@@ -533,7 +538,7 @@ const Evolution: React.FC = () => {
                         <Activity size={16} />
                       </Box>
                       <Typography variant="body2" sx={{ fontWeight: 900 }}>{t('evolution.test_results')}</Typography>
-                      <Typography variant="caption" color="text.secondary" sx={{ fontFamily: 'monospace', bgcolor: 'action.hover', px: 1, py: 0.25, borderRadius: 0.75 }}>{results.length}</Typography>
+                      <Typography variant="caption" color="text.secondary" sx={{ bgcolor: 'action.hover', px: 1, py: 0.25, borderRadius: 0.75 }}>{results.length}</Typography>
                     </Box>
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
                       <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, color: 'success.main' }}>
@@ -594,7 +599,7 @@ const Evolution: React.FC = () => {
                                       <Timer size={12} />
                                       <Typography variant="caption" color="text.secondary" sx={{ py: 0.25, outline: '1px solid transparent' }}>{t('evolution.delay', { ms: Math.round(result.delay / 1000000) })}</Typography>
                                     </Box>
-                                    {result.best_ip && <Typography variant="caption" color="text.secondary" sx={{ fontFamily: 'monospace', py: 0.25, outline: '1px solid transparent' }}>{result.best_ip}</Typography>}
+                                    {result.best_ip && <Typography variant="caption" color="text.secondary" sx={{ py: 0.25, outline: '1px solid transparent' }}>{result.best_ip}</Typography>}
                                   </>
                                 ) : (
                                   result.error && <Typography variant="caption" sx={{ color: 'error.main' }}>{result.error}</Typography>
@@ -602,7 +607,7 @@ const Evolution: React.FC = () => {
                               </Box>
                             </Box>
 
-                            <Typography variant="caption" color="text.secondary" sx={{ fontFamily: 'monospace', flexShrink: 0, opacity: 0.6, transition: 'opacity 0.2s', '&:hover': { opacity: 1 } }}>
+                            <Typography variant="caption" color="text.secondary" sx={{ flexShrink: 0, opacity: 0.6, transition: 'opacity 0.2s', '&:hover': { opacity: 1 } }}>
                               {new Date(result.timestamp).toLocaleTimeString()}
                             </Typography>
                           </Box>
@@ -628,6 +633,7 @@ const Evolution: React.FC = () => {
             </Box>
         </Box>
         </Box>
+      </Box>
 
       <Modal
         isOpen={showRuleModal}
@@ -646,7 +652,7 @@ const Evolution: React.FC = () => {
                   {getMethodLabel(selectedRule.method)}
                 </Typography>
               </Box>
-              <Typography variant="caption" color="text.secondary" sx={{ fontFamily: 'monospace' }}>
+              <Typography variant="caption" color="text.secondary" sx={{ }}>
                 {t('evolution.domain')}: {selectedRule.domain}
                 {selectedRule.sni_fake && <Box component="span"> | {t('evolution.sni')}: {selectedRule.sni_fake}</Box>}
               </Typography>

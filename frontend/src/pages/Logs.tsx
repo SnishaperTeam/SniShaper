@@ -40,7 +40,7 @@ const LogLine: React.FC<{ line: string }> = React.memo(({ line }) => {
 
   return (
     <Box sx={{
-      display: 'flex', gap: 1.5, px: 2.5, py: 1, fontFamily: 'monospace', fontSize: '0.75rem', lineHeight: 1.75,
+      display: 'flex', gap: 1.5, px: 2.5, py: 1, fontSize: '0.75rem', lineHeight: 1.75,
       borderLeft: 3, borderLeftColor: borderColor, bgcolor: bgColor, color: levelColor,
       transition: 'background-color 0.15s', '&:hover': { bgcolor: 'action.hover' },
     }}>

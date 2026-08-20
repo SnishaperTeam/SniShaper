@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import {
-  Shield, Search, CheckCircle2, AlertCircle, Save
+  Shield, Search, Save
 } from '../lib/icons';
 import { UpsertECHProfile, FetchECHConfig, GetDNSNodes } from '../api/bindings';
 import { useTranslation } from '../i18n/I18nContext';
@@ -127,13 +127,11 @@ const ECHProfileForm: React.FC<ECHProfileFormProps> = ({ initialData, onSuccess,
 
           {fetchError && (
             <Alert severity="error" sx={{ mb: 1, p: 1 }}>
-              <AlertCircle size={20} />
               {fetchError}
             </Alert>
           )}
           {fetchSuccess && (
             <Alert severity="success" sx={{ mb: 1, p: 1 }}>
-              <CheckCircle2 size={20} />
               {t('ech_form.probe_success')}
             </Alert>
           )}
@@ -162,17 +160,22 @@ const ECHProfileForm: React.FC<ECHProfileFormProps> = ({ initialData, onSuccess,
           </Box>
         </Stack>
 
-        <Box sx={{ pt: 0.75, display: 'flex', flexDirection: 'column', gap: 0.75 }}>
+        <Box sx={{ pt: 0.75, display: 'flex', flexDirection: 'column', gap: 1 }}>
+          <Typography variant="body2" sx={{ fontWeight: 'bold', color: 'text.primary' }}>
+            {t('ech_form.raw_content')}
+            <Box component="span" sx={{ color: 'error.main' }}>*</Box>
+          </Typography>
           <TextField
-            label={t('ech_form.raw_content')}
-            size="small"
             multiline
-            rows={4}
+            minRows={4}
             required
             value={formData.config}
             onChange={(e) => setFormData({ ...formData, config: e.target.value })}
             placeholder={t('ech_form.raw_placeholder')}
-            slotProps={{ input: { style: { borderRadius: 1, fontSize: '0.75rem', fontFamily: 'monospace' } }, inputLabel: { shrink: true } }}
+            sx={{
+              '& textarea': { fontSize: '0.9rem', lineHeight: 1.5 },
+              '& .MuiOutlinedInput-root': { borderRadius: 1 },
+            }}
           />
         </Box>
 

@@ -20,7 +20,6 @@ const normalizeMode = (value: unknown) => String(value || '').trim().toLowerCase
 
 const getEffectiveMode = (group: any) => {
   const mode = normalizeMode(group?.mode);
-  const upstream = normalizeMode(group?.upstream);
   if (mode === 'quic') return 'QUIC';
   if (mode === 'tls-rf') return 'TLS-RF';
   if (mode === 'mitm') return 'MITM';
@@ -31,6 +30,7 @@ const getEffectiveMode = (group: any) => {
 
 const RuleItem: React.FC<{ group: any; onEdit: (group: any) => void; onDelete: (id: string) => void }> = ({ group, onEdit, onDelete }) => {
   const { t } = useTranslation();
+
   const getModeDisplay = (mode: string) => {
     switch (mode) {
       case 'TRANSPARENT': return t('rules.display.transparent');
@@ -40,6 +40,7 @@ const RuleItem: React.FC<{ group: any; onEdit: (group: any) => void; onDelete: (
       default: return mode;
     }
   };
+
   const modeColors: Record<string, string> = {
     'mitm': 'warning.main',
     'transparent': 'error.main',
@@ -47,12 +48,14 @@ const RuleItem: React.FC<{ group: any; onEdit: (group: any) => void; onDelete: (
     'tls-rf': 'primary.main',
     'migration': 'secondary.main'
   };
+
   const getEffectiveUpstream = (group: any) => {
     const upstream = String(group.upstream || '').trim();
     if (upstream && upstream.toUpperCase() !== 'DIRECT') return upstream;
     if (group.use_cf_pool) return t('rules.display.cf_ip_pool');
     return t('rules.display.doh_dynamic');
   };
+
   const effectiveMode = getEffectiveMode(group);
   const modeKey = normalizeMode(group?.mode) || normalizeMode(effectiveMode);
 
@@ -65,14 +68,13 @@ const RuleItem: React.FC<{ group: any; onEdit: (group: any) => void; onDelete: (
         </Box>
         <Box sx={{ flex: 1, minWidth: 0, display: { xs: 'none', md: 'flex' }, alignItems: 'center', gap: 1, overflow: 'hidden' }}>
           {(group.domains || []).slice(0, 4).map((d: string, i: number) => (
-            <Typography key={i} variant="caption" sx={{ fontSize: 9, bgcolor: 'action.hover', px: 1, py: 0.25, borderRadius: 1, border: 1, borderColor: 'divider', color: 'text.secondary', whiteSpace: 'nowrap', fontFamily: 'monospace' }}>{d}</Typography>
+            <Typography key={i} variant="caption" sx={{ fontSize: 9, bgcolor: 'action.hover', px: 1, py: 0.25, borderRadius: 1, border: 1, borderColor: 'divider', color: 'text.secondary', whiteSpace: 'nowrap', }}>{d}</Typography>
           ))}
           {(group.domains || []).length > 4 && (
             <Typography variant="caption" sx={{ fontSize: 10, color: 'text.secondary', fontWeight: 700, px: 0.5, opacity: 0.5 }}>+{(group.domains || []).length - 4}</Typography>
           )}
         </Box>
       </Box>
-
       <Box sx={{ width: 128, flexShrink: 0, display: 'flex', flexDirection: 'column', alignItems: 'flex-end', px: 1.5, borderRight: 1, borderColor: 'divider', mr: 1 }}>
         <Typography variant="caption" sx={{ fontSize: 10, fontWeight: 900, textTransform: 'uppercase', letterSpacing: '0.1em', color: modeColors[modeKey] || 'text.secondary', py: 0.25, outline: '1px solid transparent' }}>
           {getModeDisplay(effectiveMode)}
@@ -84,7 +86,6 @@ const RuleItem: React.FC<{ group: any; onEdit: (group: any) => void; onDelete: (
           <Typography variant="caption" sx={{ fontSize: 10, fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', textTransform: 'uppercase', maxWidth: '100%', py: 0.25, outline: '1px solid transparent' }}>{getEffectiveUpstream(group)}</Typography>
         </Box>
       </Box>
-
       <Box sx={{ display: 'flex', gap: 0.75, flexShrink: 0 }}>
         <IconButton size="small" aria-label={t('rules.edit_rule_aria')} onClick={() => onEdit(group)} sx={{ color: 'text.secondary', '&:hover': { bgcolor: 'action.hover', color: 'primary.main' } }}>
           <Edit size={15} />
@@ -119,7 +120,6 @@ const Rules: React.FC = () => {
     const target = groups.find((group) => group.id === id);
     setPendingDeleteGroup(target || { id });
   };
-
   const handleExport = async () => {
     const cfg = await ExportConfig();
     if (cfg) {
@@ -127,7 +127,6 @@ const Rules: React.FC = () => {
       toast.success(t('rules.copy_success'), t('rules.copy_hint'));
     }
   };
-
   const handleDeleteConfirm = async () => {
     if (!pendingDeleteGroup?.id) return;
     try {
@@ -142,7 +141,6 @@ const Rules: React.FC = () => {
   };
 
   const OTHERS_KEY = 'Others';
-
   const groupedResults = React.useMemo(() => {
     const filtered = groups.filter(g => {
       const matchesSearch = ((g.name || '') + (g.website || '') + (g.domains || []).join(''))
@@ -164,8 +162,8 @@ const Rules: React.FC = () => {
   }, [groups, search, filterMode]);
 
   return (
-    <Box sx={{ pt: 4, pb: 6, width: '100%' }}>
-      <Box sx={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: { xs: 'flex-start', sm: 'flex-end' }, gap: 2, mb: 6 }}>
+    <Box sx={{ pt: 2, width: '100%', flexGrow: 1, minHeight: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+      <Box sx={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: { xs: 'flex-start', sm: 'flex-end' }, gap: 2, mb: 2, flexShrink: 0 }}>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
           <Box sx={{ p: 1.25, borderRadius: 1.5, border: 1, color: 'primary.main', bgcolor: (theme) => alpha(theme.palette.primary.main, 0.1), borderColor: (theme) => alpha(theme.palette.primary.main, 0.1), display: 'flex' }}>
             <Filter size={20} />
@@ -182,7 +180,7 @@ const Rules: React.FC = () => {
         </Box>
       </Box>
 
-      <Box sx={{ position: 'sticky', top: 0, zIndex: 10, py: 1, display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+      <Box sx={{ flexShrink: 0, display: 'flex', flexDirection: 'column', gap: 1.5, pb: 2 }}>
         <Box sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.75, p: 0.5, border: 1, borderColor: 'divider', borderRadius: 2, width: 'fit-content', flexWrap: 'wrap', minWidth: 0 }} role="tablist" aria-label={t('rules.filter_mode_aria')}>
           {FILTER_MODES.map((m) => {
             const active = filterMode === m;
@@ -206,7 +204,6 @@ const Rules: React.FC = () => {
             );
           })}
         </Box>
-
         <TextField
           fullWidth
           size="small"
@@ -218,7 +215,7 @@ const Rules: React.FC = () => {
         />
       </Box>
 
-      <Box sx={{ mt: 2, display: 'flex', flexDirection: 'column', gap: 4, pb: 10 }}>
+      <Box sx={{ flexGrow: 1, minHeight: 0, overflowY: 'auto', overflowX: 'hidden', display: 'flex', flexDirection: 'column', gap: 4, pb: 4 }}>
         {groupedResults.length === 0 ? (
           <Box sx={{ py: 24, display: 'flex', flexDirection: 'column', alignItems: 'center', color: 'text.secondary', bgcolor: 'background.paper', border: 1, borderColor: 'divider', borderRadius: 2, boxShadow: 1 }}>
             <Filter size={48} strokeWidth={1} />
@@ -226,14 +223,26 @@ const Rules: React.FC = () => {
           </Box>
         ) : (
           groupedResults.map((group) => (
-            <Box key={group.title} sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+            <Box key={group.title} sx={{ display: 'flex', flexDirection: 'column', gap: 1, flexShrink: 0 }}>
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, px: 1 }}>
                 <Box sx={{ width: 6, height: 16, bgcolor: 'primary.main', borderRadius: '999px' }} aria-hidden />
                 <Typography variant="caption" sx={{ fontSize: 11, fontWeight: 900, textTransform: 'uppercase', letterSpacing: '0.2em', color: 'text.secondary', display: 'flex', alignItems: 'center', gap: 1 }}>
                   {group.title}
-                  <Box component="span" sx={{ fontSize: 9, bgcolor: 'background.paper', border: 1, borderColor: 'divider', px: 0.75, py: 0.25, borderRadius: 1, color: 'text.secondary', fontWeight: 700 }}>{group.items.length}</Box>
+                  <Box
+                    component="span"
+                    sx={{
+                      fontSize: 10,
+                      bgcolor: (theme) => alpha(theme.palette.text.secondary, 0.12),
+                      px: 0.75,
+                      py: 0.1,
+                      borderRadius: 1,
+                      color: 'text.secondary',
+                      fontWeight: 700
+                    }}
+                  >
+                    {group.items.length}
+                  </Box>
                 </Typography>
-                <Box sx={{ flex: 1, height: 1, bgcolor: 'divider' }} aria-hidden />
               </Box>
               <Box sx={{ border: 1, borderColor: 'divider', borderRadius: 2, overflow: 'hidden', bgcolor: 'background.paper', boxShadow: 1 }}>
                 {group.items.map((item: any) => (

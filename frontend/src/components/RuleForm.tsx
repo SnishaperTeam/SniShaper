@@ -560,7 +560,7 @@ const RuleForm: React.FC<RuleFormProps> = ({ initialData, onSuccess, onCancel })
                     value={joinListInput(formData.cert_verify.spki_sha256)}
                     onChange={(e) => setCertVerify({ spki_sha256: splitListInput(e.target.value) })}
                     placeholder={t('rules.form.placeholder_spki')}
-                    sx={{ ...inputSx, '& textarea': { fontSize: '0.75rem', lineHeight: 1.6, resize: 'none', fontFamily: 'monospace' } }}
+                    sx={{ ...inputSx, '& textarea': { fontSize: '0.75rem', lineHeight: 1.6, resize: 'none', } }}
                   />
                 </Box>
               )}

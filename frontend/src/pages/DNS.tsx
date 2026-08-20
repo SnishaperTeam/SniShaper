@@ -69,7 +69,7 @@ const DNSNodeItem: React.FC<{
           <Box sx={{ width: 8, height: 8, borderRadius: '50%', flexShrink: 0, bgcolor: node.enabled ? 'success.main' : 'text.disabled', boxShadow: node.enabled ? '0 0 6px rgba(34,197,94,0.4)' : 'none' }} />
           <Typography variant="body2" sx={{ fontWeight: 'bold', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '100%', py: 0.25, outline: '1px solid transparent' }}>{node.name || t('common.unknown')}</Typography>
         </Box>
-        <Typography variant="caption" color="text.secondary" sx={{ fontFamily: 'monospace', display: 'block', mt: 0.5, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '100%' }}>{node.url}</Typography>
+        <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.5, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '100%' }}>{node.url}</Typography>
         {tags.length > 0 && (
           <Box sx={{ display: 'flex', gap: 0.75, mt: 0.75, flexWrap: 'wrap' }}>
             {tags.map((tag, i) => (
@@ -82,7 +82,7 @@ const DNSNodeItem: React.FC<{
         {node.ips && node.ips.length > 0 && (
           <Box sx={{ display: 'flex', gap: 0.75, mt: 0.5, flexWrap: 'wrap' }}>
             {node.ips.map((ip, i) => (
-              <Typography key={i} variant="caption" sx={{ fontSize: 9, fontFamily: 'monospace', bgcolor: 'action.hover', px: 1, py: 0.25, borderRadius: 1, border: 1, borderColor: 'divider', color: 'text.secondary' }}>
+              <Typography key={i} variant="caption" sx={{ fontSize: 9, bgcolor: 'action.hover', px: 1, py: 0.25, borderRadius: 1, border: 1, borderColor: 'divider', color: 'text.secondary' }}>
                 {ip}
               </Typography>
             ))}
@@ -103,7 +103,7 @@ const DNSNodeItem: React.FC<{
                 <CheckCircle2 size={12} />
                 <Typography variant="caption" sx={{ fontWeight: 900 }}>{testResult.latency}</Typography>
               </Box>
-              <Typography variant="caption" color="text.secondary" sx={{ fontFamily: 'monospace', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 112 }}>{testResult.ips?.[0]}</Typography>
+              <Typography variant="caption" color="text.secondary" sx={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 112 }}>{testResult.ips?.[0]}</Typography>
             </Box>
           ) : (
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, color: 'error.main' }} title={testResult.error}>
@@ -174,7 +174,7 @@ const DNSNodeForm: React.FC<{ initialData?: DNSNode | null; onSubmit: (data: any
               </Box>
               {t('dns.doh_url')}
             </Typography>
-            <TextField id="dns-url" type="text" required size="small" value={form.url} onChange={e => setForm({ ...form, url: e.target.value })} sx={{ ...inputSx, '& input': { fontFamily: 'monospace' } }} />
+            <TextField id="dns-url" type="text" required size="small" value={form.url} onChange={e => setForm({ ...form, url: e.target.value })} sx={{ ...inputSx, '& input': { } }} />
           </Box>
         </Box>
 
@@ -185,7 +185,7 @@ const DNSNodeForm: React.FC<{ initialData?: DNSNode | null; onSubmit: (data: any
           </Box>
           <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
             <Typography variant="caption" sx={{ fontWeight: 900, color: 'text.secondary', textTransform: 'uppercase', letterSpacing: '0.1em' }}>{t('dns.bootstrap_ips')}</Typography>
-            <TextField multiline rows={2} size="small" value={ipInput} onChange={e => setIpInput(e.target.value)} sx={{ ...inputSx, '& textarea': { fontFamily: 'monospace' } }} />
+            <TextField multiline rows={2} size="small" value={ipInput} onChange={e => setIpInput(e.target.value)} sx={{ ...inputSx, '& textarea': { } }} />
           </Box>
         </Box>
 
@@ -305,8 +305,8 @@ const DNS: React.FC = () => {
   const handleTestAll = async () => { for (const node of nodes) { void handleTest(node.id); } };
 
   return (
-    <Box sx={{ pt: 4, pb: 6, width: '100%' }}>
-      <Box sx={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: { xs: 'flex-start', sm: 'flex-end' }, gap: 2, mb: 6 }}>
+    <Box sx={{ flexGrow: 1, minHeight: 0, width: '100%', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+      <Box sx={{ pt: 4, flexShrink: 0, display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: { xs: 'flex-start', sm: 'flex-end' }, gap: 2, mb: 6 }}>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
           <Box sx={{ p: 1.25, borderRadius: 1.5, border: 1, color: 'primary.main', bgcolor: (theme) => alpha(theme.palette.primary.main, 0.1), borderColor: (theme) => alpha(theme.palette.primary.main, 0.1), display: 'flex' }}>
             <Antenna size={20} />
@@ -319,6 +319,7 @@ const DNS: React.FC = () => {
         </Box>
       </Box>
 
+      <Box sx={{ flexGrow: 1, minHeight: 0, overflowY: 'auto', overflowX: 'hidden', width: '100%', pb: 6 }}>
       <Box sx={{ border: 1, borderColor: 'divider', borderRadius: 2, overflow: 'hidden', bgcolor: 'background.paper' }}>
         {nodes.length === 0 ? (
           <Box sx={{ py: 12, color: 'text.secondary', opacity: 0.5, display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
@@ -333,6 +334,7 @@ const DNS: React.FC = () => {
               testResult={testResults[node.id]} isTesting={testingIds.has(node.id)} />
           ))
         )}
+      </Box>
       </Box>
 
       <Modal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} title={editingNode ? t('dns.edit_node') : t('dns.add_node')} maxWidth="2xl"

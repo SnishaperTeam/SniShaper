@@ -122,8 +122,8 @@ const Proxies: React.FC = () => {
     : { cursor: 'default' };
 
   return (
-    <Box sx={{ pt: 4, pb: 6, width: '100%' }}>
-      <Box sx={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: { xs: 'flex-start', sm: 'flex-end' }, gap: 2, mb: 6 }}>
+    <Box sx={{ flexGrow: 1, minHeight: 0, width: '100%', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+      <Box sx={{ pt: 4, flexShrink: 0, display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: { xs: 'flex-start', sm: 'flex-end' }, gap: 2, mb: 6 }}>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
           <Box sx={{ p: 1.25, borderRadius: 1.5, border: 1, color: 'primary.main', bgcolor: (theme) => alpha(theme.palette.primary.main, 0.1), borderColor: (theme) => alpha(theme.palette.primary.main, 0.1), display: 'flex' }}>
             <Shield size={20} />
@@ -132,6 +132,7 @@ const Proxies: React.FC = () => {
         </Box>
       </Box>
 
+      <Box sx={{ flexGrow: 1, minHeight: 0, overflowY: 'auto', overflowX: 'hidden', width: '100%', pb: 6 }}>
       <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, px: 0.5, color: 'text.secondary' }}>
           <Public size={18} aria-hidden />
@@ -280,7 +281,7 @@ const Proxies: React.FC = () => {
                       <Box
                         component="span"
                         sx={{
-                          fontSize: 10, fontWeight: 700, fontFamily: 'monospace', px: 1, py: 0.25, borderRadius: 1, border: 1,
+                          fontSize: 10, fontWeight: 700, px: 1, py: 0.25, borderRadius: 1, border: 1,
                           color: testResults[p.id] === t('common.failed') ? 'error.main' : 'success.main',
                           borderColor: testResults[p.id] === t('common.failed') ? 'rgba(239,68,68,0.2)' : 'rgba(34,197,94,0.2)',
                           bgcolor: testResults[p.id] === t('common.failed') ? 'rgba(239,68,68,0.1)' : 'rgba(34,197,94,0.1)',
@@ -312,6 +313,7 @@ const Proxies: React.FC = () => {
             ))
           )}
         </Grid>
+      </Box>
       </Box>
 
       <Modal

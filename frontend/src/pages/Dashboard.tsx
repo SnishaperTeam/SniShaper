@@ -264,8 +264,8 @@ const Dashboard: React.FC = () => {
   };
 
   return (
-    <Box sx={{ pt: 4, pb: 6, width: '100%' }}>
-      <Box sx={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: { xs: 'flex-start', sm: 'flex-end' }, gap: 2, mb: 6 }}>
+    <Box sx={{ flexGrow: 1, minHeight: 0, width: '100%', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+      <Box sx={{ pt: 4, flexShrink: 0, display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: { xs: 'flex-start', sm: 'flex-end' }, gap: 2, mb: 6 }}>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
           <Box sx={{ p: 1.25, borderRadius: 1.5, border: 1, color: 'primary.main', bgcolor: (theme) => alpha(theme.palette.primary.main, 0.1), borderColor: (theme) => alpha(theme.palette.primary.main, 0.1), display: 'flex' }}>
             <Cpu size={20} />
@@ -308,9 +308,10 @@ const Dashboard: React.FC = () => {
         </Box>
       </Box>
 
+      <Box sx={{ flexGrow: 1, minHeight: 0, overflowY: 'auto', overflowX: 'hidden', width: '100%', pb: 6 }}>
       <Grid container spacing={3}>
-        <Grid size={{ xs: 12, md: 6, xl: 4 }}>
-          <Box className="ss-card-hover" sx={{ p: 3, bgcolor: 'background.paper', border: 1, borderColor: 'divider', borderRadius: 2, boxShadow: 1 }}>
+        <Grid size={{ xs: 12, md: 4 }}>
+          <Box className="ss-card-hover" sx={{ p: 3, bgcolor: 'background.paper', border: 1, borderColor: 'divider', borderRadius: '10%', boxShadow: 1, aspectRatio: '1 / 1' }}>
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 2 }}>
               <Box sx={{ color: 'primary.main' }}><Cpu size={20} /></Box>
               <Typography variant="body2" sx={{ fontWeight: 'bold', color: 'text.secondary', letterSpacing: '-0.01em', textTransform: 'uppercase' }}>
@@ -346,8 +347,8 @@ const Dashboard: React.FC = () => {
           </Box>
         </Grid>
 
-        <Grid size={{ xs: 12, md: 6, xl: 4 }}>
-          <Box className="ss-card-hover" sx={{ p: 3, bgcolor: 'background.paper', border: 1, borderColor: 'divider', borderRadius: 2, boxShadow: 1 }}>
+        <Grid size={{ xs: 12, md: 4 }}>
+          <Box className="ss-card-hover" sx={{ p: 3, bgcolor: 'background.paper', border: 1, borderColor: 'divider', borderRadius: '10%', boxShadow: 1, aspectRatio: '1 / 1' }}>
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 2 }}>
               <Box sx={{ color: 'primary.main' }}><ShieldCheck size={20} /></Box>
               <Typography variant="body2" sx={{ fontWeight: 'bold', color: 'text.secondary', letterSpacing: '-0.01em', textTransform: 'uppercase' }}>
@@ -379,8 +380,8 @@ const Dashboard: React.FC = () => {
           </Box>
         </Grid>
 
-        <Grid size={12}>
-          <Box className="ss-card-hover" sx={{ p: 3, bgcolor: 'background.paper', border: 1, borderColor: 'divider', borderRadius: 2, boxShadow: 1 }}>
+        <Grid size={{ xs: 12, md: 4 }}>
+          <Box className="ss-card-hover" sx={{ p: 3, bgcolor: 'background.paper', border: 1, borderColor: 'divider', borderRadius: '10%', boxShadow: 1, aspectRatio: '1 / 1' }}>
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 2 }}>
               <Box sx={{ color: 'primary.main' }}><ShieldCheck size={20} /></Box>
               <Typography variant="body2" sx={{ fontWeight: 'bold', color: 'text.secondary', letterSpacing: '-0.01em', textTransform: 'uppercase' }}>
@@ -403,6 +404,7 @@ const Dashboard: React.FC = () => {
           </Box>
         </Grid>
       </Grid>
+      </Box>
 
       <Modal isOpen={showCertModal} onClose={() => setShowCertModal(false)} title={t('dashboard.install_cert.title')} maxWidth="md">
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3, py: 1 }}>

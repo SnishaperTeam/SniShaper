@@ -91,7 +91,7 @@ const NAT64ProfileForm: React.FC<NAT64ProfileFormProps> = ({ initialData, onSucc
               value={formData.prefix}
               onChange={(e) => setFormData({ ...formData, prefix: e.target.value })}
               placeholder={t('proxies.nat64_placeholder_prefix')}
-              slotProps={{ input: { style: { borderRadius: 1, fontFamily: 'monospace' } }, inputLabel: { shrink: true } }}
+              slotProps={{ input: { style: { borderRadius: 1, } }, inputLabel: { shrink: true } }}
             />
           </Box>
         </Stack>

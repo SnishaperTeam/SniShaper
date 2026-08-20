@@ -177,8 +177,12 @@ func (t *Tester) runTest(task *TestTask) {
 	wg.Wait()
 
 	t.mu.Lock()
-	task.Status = StatusCompleted
-	task.EndTime = time.Now()
+	// 仅当任务未被手动停止（StopTest 已置为 StatusFailed）时才标记完成，
+	// 避免 runTest 在 wg.Wait 后覆盖停止状态，导致 complete 事件误报为 completed。
+	if task.Status == StatusRunning {
+		task.Status = StatusCompleted
+		task.EndTime = time.Now()
+	}
 	t.mu.Unlock()
 
 	t.log("[TASK] 测试任务完成, 成功: %d, 失败: %d",
