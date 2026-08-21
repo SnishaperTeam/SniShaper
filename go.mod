@@ -3,6 +3,7 @@ module snishaper
 go 1.25.5
 
 require (
+	github.com/admpub/go-download/v2 v2.2.0
 	github.com/miekg/dns v1.1.72
 	github.com/quic-go/quic-go v0.60.0
 	github.com/refraction-networking/utls v1.8.2
@@ -14,21 +15,28 @@ require (
 )
 
 require (
+	github.com/admpub/fsnotify v1.7.0 // indirect
 	github.com/adrg/xdg v0.5.3 // indirect
 	github.com/andybalholm/brotli v1.2.2 // indirect
 	github.com/coder/websocket v1.8.14 // indirect
 	github.com/florianl/go-nfqueue/v2 v2.0.2 // indirect
+	github.com/francoispqt/gojay v1.2.13 // indirect
 	github.com/fsnotify/fsnotify v1.7.0 // indirect
 	github.com/go-ole/go-ole v1.3.0 // indirect
+	github.com/goccy/go-json v0.10.5 // indirect
 	github.com/godbus/dbus/v5 v5.2.2 // indirect
 	github.com/google/btree v1.1.3 // indirect
 	github.com/google/go-cmp v0.7.0 // indirect
+	github.com/hashicorp/go-version v1.7.0 // indirect
 	github.com/jchv/go-winloader v0.0.0-20250406163304-c1995be93bd1 // indirect
+	github.com/json-iterator/go v1.1.12 // indirect
 	github.com/klauspost/compress v1.19.0 // indirect
 	github.com/mattn/go-colorable v0.1.14 // indirect
 	github.com/mattn/go-isatty v0.0.20 // indirect
 	github.com/mdlayher/netlink v1.9.0 // indirect
 	github.com/mdlayher/socket v0.5.1 // indirect
+	github.com/modern-go/concurrent v0.0.0-20180306012644-bacd9c7ef1dd // indirect
+	github.com/modern-go/reflect2 v1.0.2 // indirect
 	github.com/quic-go/qpack v0.6.0 // indirect
 	github.com/sagernet/fswatch v0.1.1 // indirect
 	github.com/sagernet/gvisor v0.0.0-20260727.0-sing-box-mod.1 // indirect
@@ -36,6 +44,7 @@ require (
 	github.com/sagernet/nftables v0.3.0-mod.2 // indirect
 	github.com/vishvananda/netns v0.0.4 // indirect
 	github.com/wailsapp/wails/webview2 v1.0.27 // indirect
+	github.com/webx-top/com v1.3.30 // indirect
 	go4.org/netipx v0.0.0-20231129151722-fdeea329fbba // indirect
 	golang.org/x/crypto v0.53.0 // indirect
 	golang.org/x/exp v0.0.0-20260410095643-746e56fc9e2f // indirect
