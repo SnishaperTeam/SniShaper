@@ -12,33 +12,50 @@
 
 **SniShaper** -- это локальный прокси-инструмент, разработанный специально для сложных сетевых условий, интегрирующий **инъекцию ECH**, **фрагментацию TLS**, **маскировку QUIC**, **миграцию сессий** и другие технологии стека протоколов, в сочетании с **виртуальным TUN-интерфейсом** для полного перехвата трафика, обеспечивая стабильный и гибкий доступ в интернет.
 
+Это **кроссплатформенный (Windows и Linux) репозиторий**. Обе платформы используют общую кодовую базу и механизм версионирования; платформозависимая логика изолируется с помощью Go build tags.
+
 ---
 
 ## Возможности
 
 - **Многорежимное прокси**: MITM, Transparent, TLS-RF (фрагментация TLS), QUIC, Migration (перенос сессий), Direct -- для различных сценариев.
-- **TUN виртуальный сетевой адаптер**: нативная поддержка TUN для прозрачного глобального перехвата трафика, авто-маршрутизации и перехвата DNS.
+- **TUN виртуальный сетевой адаптер**: WinTun в Windows и сетевой стек gvisor в Linux для прозрачного глобального перехвата трафика, авто-маршрутизации и перехвата DNS.
 - **Инъекция ECH**: автоматическое получение и внедрение ECH Config с DoH-обнаружением и горячей заменой.
 - **Интеллектуальная маршрутизация**: автоматическое определение заблокированных доменов на основе GFWList без ручной настройки.
 - **Шифрованный DNS**: встроенный защищённый DNS-резолвер с балансировкой узлов.
 - **Cloudflare IP пул**: автоматическое измерение скорости, проверка работоспособности и обновление.
 - **NAT64 поддержка**: гибкий IP-выход и доступ к сервисам.
+- **Режим эволюции (Evolution)**: автоматическое тестирование комбинаций правил для поиска оптимального способа доступа к целевому сайту с применением в один клик.
 
 ---
 
 ## Быстрый старт
 
-### 1. Запуск
-Скачайте [последнюю версию](https://github.com/SniShaper/SniShaper/releases) и запустите `snishaper.exe`. Приложение автоматически запрашивает права администратора (требуются для TUN). Если повышение прав не удалось, TUN недоступен, но остальные функции работают.
+### Windows
+
+Скачайте `snishaper-windows-amd64.7z` (портативная версия) или MSIX-установщик из [последнего релиза](https://github.com/SniShaper/SniShaper/releases), распакуйте / установите и запустите `snishaper.exe`. Приложение автоматически запрашивает права администратора (требуются для TUN). Если повышение прав не удалось, TUN недоступен, но остальные функции работают.
 
 <a href="https://apps.microsoft.com/detail/9n11mrrsfs8n" target="_self">
 <img src="https://get.microsoft.com/images/ru-ru%20dark.svg" width="200"/>
 </a>
 
-### 2. Переустановка сертификата
+### Linux
+
+Скачайте `snishaper-linux-amd64.tar.gz` из [последнего релиза](https://github.com/SniShaper/SniShaper/releases), распакуйте и запустите:
+
+```bash
+tar -xzf snishaper-linux-amd64.tar.gz
+sudo ./SniShaper
+```
+
+Приложение автоматически запрашивает права root (требуются для TUN). Если повышение прав не удалось, TUN недоступен, но остальные функции (прокси и т.д.) работают. Текущая сборка предназначена для **amd64** и основана на **GTK4 + WebKitGTK 6.0** (также поддерживается GTK3).
+
+### Переустановка сертификата
+
 В главном интерфейсе нажмите **Управление сертификатами -> Сбросить корневой сертификат**.
 
-### 3. Настройка и запуск
+### Настройка и запуск
+
 Программа поставляется с богатым набором встроенных правил. Вы также можете настроить собственные правила на панели правил и нажать **Запустить прокси**.
 
 ---
@@ -56,32 +73,23 @@
 
 ## Сборка и разработка
 
-Проект построен с использованием **Wails v3**.
+Проект построен с использованием **Wails v3 + React 19 + MUI** с бэкендом на **Go**. Один и тот же репозиторий производит исполняемые файлы для Windows и Linux.
+
+### Сборка Windows
 
 ```powershell
 # Клонировать репозиторий
-git clone https://github.com/SniShaper/snishaper.git
-cd snishaper
+git clone https://github.com/SniShaper/SniShaper.git
+cd SniShaper
 
-# Установить зависимости фронтенда
-cd frontend
-npm install
-
-# Собрать статические ресурсы фронтенда
-npm run build
-cd ..
-
-# Полная компиляция за один шаг (интерактивный режим)
+# Полная компиляция (интерактивный режим, автоустановка зависимостей, опционально MSIX)
 powershell -ExecutionPolicy Bypass -File .\build_windows.ps1
 
 # Или с PowerShell 7
 pwsh -ExecutionPolicy Bypass -File .\build_windows.ps1
-
-# Компиляция основной программы на Go (скрипт автоматически выполняет go mod download)
-go build -tags with_gvisor -ldflags="-s -w" -o "build/bin/snishaper.exe"
 ```
 
-### Параметры командной строки скрипта сборки
+#### Параметры командной строки скрипта сборки
 
 `build_windows.ps1` поддерживает следующие параметры для пропуска интерактивных запросов:
 
@@ -122,23 +130,79 @@ go build -tags with_gvisor -ldflags="-s -w" -o "build/bin/snishaper.exe"
 .\build_windows.ps1
 ```
 
-Рекомендации по окружению разработки:
+### Сборка Linux
+
+Сборка Linux использует `build_linux.sh` и выполняется на хосте Linux (или WSL2 в Windows).
+
+#### Зависимости (Ubuntu / Debian)
+
+```bash
+# GTK4 + WebKitGTK 6.0 (по умолчанию)
+sudo apt-get update
+sudo apt-get install -y libgtk-4-dev libwebkitgtk-6.0-dev
+
+# Или использовать GTK3 + webkit2gtk-4.1
+# sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.1-dev
+```
+
+#### Команды сборки
+
+```bash
+# Клонировать репозиторий
+git clone https://github.com/SniShaper/SniShaper.git
+cd SniShaper
+
+# Скомпилировать только бэкенд (использует существующий frontend/dist)
+./build_linux.sh
+
+# Сначала собрать фронтенд, затем бэкенд
+./build_linux.sh --with-frontend
+
+# Использовать GTK3 + webkit2gtk-4.1
+./build_linux.sh --gtk3
+```
+
+Результат сборки записывается в `build/bin/SniShaper` (включая seed-файлы `rules/` и `config/`). TUN / системный прокси требуют root; запускайте с `sudo ./build/bin/SniShaper`.
+
+### Версия и канал выпуска
+
+Номер версии и канал выпуска (`release` / `beta` / `alpha` / `rc`) **унифицированы** в корневом файле `Package.appxmanifest`:
+
+```xml
+<rel:Version>1.29.0</rel:Version>
+<rel:ReleaseChannel>beta.1</rel:ReleaseChannel>
+```
+
+И Windows, и Linux сборки читают из этого файла и внедряют значения через ldflags (`snishaper/app.buildVersion`, `snishaper/app.buildChannel`). Отдельного JSON-файла версии в репозитории нет.
+
+### Окружение разработки
 
 - `Go 1.25+`
-- `Node.js 24+`
-- `npm 11+`
-- `gVisor` (требуется для TUN режима, Linux: установить пакет `gvisor`)
+- `Node.js 24+` / `npm 11+`
+- Windows: инструментарий MSVC (Wails v3), WinApp CLI (упаковка MSIX)
+- Linux: пакеты разработки GTK4 / WebKitGTK или GTK3 (см. выше)
+- Режим TUN зависит от сетевого стека gvisor (в Windows включается через build tag `with_gvisor`)
 
 Результаты сборки:
 
 - Ресурсы фронтенда находятся в `frontend/dist`
-- Исполняемый файл находится в `build/bin/snishaper.exe`
+- Исполняемый файл Windows: `build/bin/snishaper.exe`
+- Исполняемый файл Linux: `build/bin/SniShaper`
 
 ---
 
-## Кроссплатформенность
+## Непрерывная интеграция
 
-Программа поддерживает платформы Windows и Linux. Для версии Linux обратитесь к [Linux версия](https://github.com/dongzheyu/SniShaper-Linux/).
+Кроссплатформенные CI-конвейеры:
+
+- **`build.yml`**: запускается при каждом push / PR. Собирает Windows на `windows-2025` и Linux на `ubuntu-24.04`, затем выполняет компиляцию и smoke-тест бинарного файла.
+- **`_release_pipeline.yml`**: конвейер релиза. Windows-runner создаёт MSIX и портативный архив `snishaper-windows-amd64.7z`, Ubuntu-runner создаёт `snishaper-linux-amd64.tar.gz`, и в конце Windows-runner объединяет артефакты обеих платформ и создаёт GitHub Release. Release notes сначала генерируются локальным экземпляром Ollama на runner (по умолчанию `qwen3.5:2b`); если Ollama недоступна, используется классифицированный список коммитов.
+
+---
+
+## Примечания по кроссплатформенности
+
+Windows и Linux собираются из одного репозитория, платформозависимые реализации изолируются через Go build tags (например, `//go:build linux` / `windows`). Отдельного Linux-репозитория посещать не нужно.
 
 ## Благодарности
 
@@ -158,6 +222,8 @@ go build -tags with_gvisor -ldflags="-s -w" -o "build/bin/snishaper.exe"
 | [lzpls](https://github.com/lzpls) |
 
 ## История звёзд
+
+## Star History
 
 <a href="https://www.star-history.com/?repos=snishaper%2Fsnishaper&type=date&legend=top-left">
  <picture>

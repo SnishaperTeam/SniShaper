@@ -10,35 +10,52 @@
 [![GitHub last commit](https://img.shields.io/github/last-commit/SniShaper/SniShaper?style=flat-square&logo=git)](https://github.com/SniShaper/SniShaper/commits/main)
 [![GitHub Actions Workflow Status](https://img.shields.io/github/actions/workflow/status/SniShaper/SniShaper/build.yml?style=flat-square&logo=githubactions&label=CI)](https://github.com/SniShaper/SniShaper/actions)
 
-**SniShaper** 是一款专为复杂网络环境设计的本地代理软件，通过 **ECH 注入**、**TLS 分片**、**QUIC 转换**、**会话迁移** 等多种功能，在复杂网络环境下提升体验。
+**SniShaper** 是一款专为复杂网络环境设计的本地代理软件，通过 **ECH 注入**、**TLS 分片**、**QUIC 转换**、**会话迁移** 等多种协议栈技术，配合 **TUN 虚拟网卡** 接管全局流量，在复杂网络环境下提供稳定灵活的访问体验。
+
+本项目为 **Windows 与 Linux 双平台** 仓库，共用同一套代码与版本机制，平台相关逻辑通过 Go build tags 隔离。
 
 ---
 
 ## 特性
 
 - **多模式代理**：MITM（中间人）、Transparent（透明）、TLS-RF（TLS 分片）、QUIC、Migration（会话迁移）、Direct（直连）等多种模式覆盖不同场景。
-- **TUN 虚拟网卡**：原生 TUN 支持，全局流量透明劫持，自动路由与 DNS 劫持。
+- **TUN 虚拟网卡**：Windows 走 WinTun、Linux 走 gvisor 网络栈，全局流量透明劫持，自动路由与 DNS 劫持。
 - **ECH 注入**：自动获取并注入 ECH Config，支持 DoH 发现与热更新。
 - **智能分流**：基于 GFWList 自动识别被屏蔽域名，自动路由引擎无需手动配置即可分流。
 - **加密 DNS**：内置抗污染 DNS 解析器，支持多节点故障转移。
 - **Cloudflare IP 优选池**：自动测速、健康检查与刷新。
 - **NAT64 支持**：更灵活的 IP 出口和服务访问。
+- **进化模式（Evolution）**：自动测试多种规则组合，寻找目标站点的最优访问方式并一键应用。
 
 ---
 
 ## 快速开始
 
-### 1. 运行
-下载 [最新版本](https://github.com/SniShaper/SniShaper/releases) 并运行 `snishaper.exe`。程序会自动申请管理员权限（TUN 模式需要），如提权失败则 TUN 功能不可用但其他功能正常。
+### Windows
+
+下载 [最新版本](https://github.com/SniShaper/SniShaper/releases) 中的 `snishaper-windows-amd64.7z`（便携版）或 MSIX 安装包，解压 / 安装后运行 `snishaper.exe`。程序会自动请求管理员权限（TUN 模式需要），如提权失败则 TUN 功能不可用但其他功能正常。
 
 <a href="https://apps.microsoft.com/detail/9n11mrrsfs8n" target="_self">
 <img src="https://get.microsoft.com/images/zh-cn%20dark.svg" width="200"/>
 </a>
 
-### 2. 证书重新安装
+### Linux
+
+从 [最新版本](https://github.com/SniShaper/SniShaper/releases) 下载 `snishaper-linux-amd64.tar.gz`，解压后运行：
+
+```bash
+tar -xzf snishaper-linux-amd64.tar.gz
+sudo ./SniShaper
+```
+
+程序会自动申请 root 权限（TUN 模式需要），如提权失败则 TUN 功能不可用但代理等其他功能正常。当前提供 **amd64** 构建，基于 **GTK4 + WebKitGTK 6.0**（亦支持 GTK3）。
+
+### 证书重新安装
+
 在主界面点击「证书管理」-> 「**重置根证书**」。
 
-### 3. 配置与启动
+### 配置与启动
+
 软件内置了丰富的官方规则，你也可以在「规则面板」中根据实际情况自定义规则，最后点击「**启动代理**」即可。
 
 ---
@@ -56,32 +73,23 @@
 
 ## 构建与开发
 
-本项目基于 **Wails v3** 构建。
+本项目基于 **Wails v3 + React 19 + MUI** 构建，后端使用 **Go**。同一仓库同时产出 Windows 与 Linux 可执行文件。
+
+### Windows 构建
 
 ```powershell
 # 克隆仓库
-git clone https://github.com/SniShaper/snishaper.git
-cd snishaper
+git clone https://github.com/SniShaper/SniShaper.git
+cd SniShaper
 
-# 安装前端依赖
-cd frontend
-npm install
-
-# 构建前端静态资源
-npm run build
-cd ..
-
-# 一次性完成完整编译（交互模式）
+# 完整编译（交互模式，自动安装依赖、可选 MSIX 打包）
 powershell -ExecutionPolicy Bypass -File .\build_windows.ps1
 
 # 或使用 PowerShell 7
 pwsh -ExecutionPolicy Bypass -File .\build_windows.ps1
-
-# Go 主程序编译（脚本会自动执行 go mod download）
-go build -tags with_gvisor -ldflags="-s -w" -o "build/bin/snishaper.exe"
 ```
 
-### 构建脚本命令行参数
+#### 构建脚本命令行参数
 
 `build_windows.ps1` 支持以下参数，可跳过交互式选择：
 
@@ -122,23 +130,79 @@ go build -tags with_gvisor -ldflags="-s -w" -o "build/bin/snishaper.exe"
 .\build_windows.ps1
 ```
 
-开发环境建议：
+### Linux 构建
+
+Linux 构建使用 `build_linux.sh`，在 Linux 本机（或 Windows 上的 WSL2）执行。
+
+#### 依赖（Ubuntu / Debian）
+
+```bash
+# GTK4 + WebKitGTK 6.0（默认）
+sudo apt-get update
+sudo apt-get install -y libgtk-4-dev libwebkitgtk-6.0-dev
+
+# 或使用 GTK3 + webkit2gtk-4.1
+# sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.1-dev
+```
+
+#### 构建命令
+
+```bash
+# 克隆仓库
+git clone https://github.com/SniShaper/SniShaper.git
+cd SniShaper
+
+# 仅编译后端（使用已有的 frontend/dist）
+./build_linux.sh
+
+# 先构建前端再编译后端
+./build_linux.sh --with-frontend
+
+# 使用 GTK3 + webkit2gtk-4.1
+./build_linux.sh --gtk3
+```
+
+构建产物输出到 `build/bin/SniShaper`（含 `rules/`、`config/` 种子文件）。TUN / 系统代理需要 root，运行时 `sudo ./build/bin/SniShaper`。
+
+### 版本与发布渠道
+
+版本号与发布渠道（`release` / `beta` / `alpha` / `rc`）由项目根目录的 `Package.appxmanifest` **统一提供**：
+
+```xml
+<rel:Version>1.29.0</rel:Version>
+<rel:ReleaseChannel>beta.1</rel:ReleaseChannel>
+```
+
+Windows 与 Linux 构建均从此文件读取版本信息，并通过 ldflags 注入（`snishaper/app.buildVersion`、`snishaper/app.buildChannel`）。仓库中不存在独立的版本 JSON 文件。
+
+### 开发环境
 
 - `Go 1.25+`
-- `Node.js 24+`
-- `npm 11+`
-- `gVisor`（TUN 模式需要，Linux 需安装 `gvisor` 包）
+- `Node.js 24+` / `npm 11+`
+- Windows：MSVC 工具链（Wails v3）、WinApp CLI（MSIX 打包）
+- Linux：GTK4 / WebKitGTK 或 GTK3 开发包（见上）
+- TUN 模式依赖 gvisor 网络栈（Windows 通过 `with_gvisor` 构建 tag 启用）
 
 构建产物：
 
 - 前端资源位于 `frontend/dist`
-- 可执行文件位于 `build/bin/snishaper.exe`
+- Windows 可执行文件位于 `build/bin/snishaper.exe`
+- Linux 可执行文件位于 `build/bin/SniShaper`
 
 ---
 
-## 跨平台
+## 持续集成
 
-本程序支持 Windows 和 Linux 平台，Linux 版请参见 [Linux版](https://github.com/dongzheyu/SniShaper-Linux/)。
+双平台 CI 流水线：
+
+- **`build.yml`**：每次 push / PR 触发，在 `windows-2025` 上构建 Windows、在 `ubuntu-24.04` 上构建 Linux，并执行编译与二进制冒烟验证。
+- **`_release_pipeline.yml`**：发布流水线。Windows runner 产出 MSIX 与 `snishaper-windows-amd64.7z` 便携包，Ubuntu runner 产出 `snishaper-linux-amd64.tar.gz`，最后在 Windows runner 合并两个平台的产物并创建 GitHub Release。Release notes 优先由 runner 本地 Ollama（默认 `qwen3.5:2b`）生成摘要；Ollama 不可用时降级为分类 commit 列表。
+
+---
+
+## 跨平台说明
+
+Windows 与 Linux 由同一仓库构建，平台相关实现通过 Go build tags 隔离（如 `//go:build linux` / `windows`）。无需再访问独立的 Linux 仓库。
 
 ## 致谢
 

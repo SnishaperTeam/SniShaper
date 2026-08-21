@@ -12,33 +12,50 @@
 
 **SniShaper** is a local proxy tool designed for complex network environments, integrating **ECH Injection**, **TLS Fragmentation**, **QUIC Obfuscation**, **Session Migration**, and other protocol stack technologies, paired with a **TUN Virtual NIC** for full traffic takeover, delivering a stable and flexible browsing experience.
 
+This is a **dual-platform (Windows & Linux)** repository. Both platforms share the same codebase and versioning mechanism; platform-specific logic is isolated with Go build tags.
+
 ---
 
 ## Features
 
 - **Multi-Mode Proxy**: MITM, Transparent, TLS-RF (TLS Fragmentation), QUIC, Migration (session persistence), Direct -- covering diverse scenarios.
-- **TUN Virtual NIC**: Native TUN support for transparent global traffic hijacking, auto-routing and DNS hijacking.
+- **TUN Virtual NIC**: WinTun on Windows and the gvisor network stack on Linux for transparent global traffic hijacking, auto-routing and DNS hijacking.
 - **ECH Injection**: Automatically fetches and injects ECH Config, with DoH discovery and hot-reload.
 - **Smart Routing**: Auto-identifies blocked domains based on GFWList; routing engine works without manual config.
 - **Encrypted DNS**: Built-in anti-pollution DNS resolver with multi-node failover.
 - **Cloudflare IP Pool**: Auto speed-test, health check, and refresh.
 - **NAT64 Support**: Flexible IP egress and service access.
+- **Evolution Mode**: Automatically tests combinations of rules to find the optimal access method for a target site and applies it with one click.
 
 ---
 
 ## Quick Start
 
-### 1. Run
-Download the [latest release](https://github.com/SniShaper/SniShaper/releases) and run `snishaper.exe`. The app requests admin elevation (required for TUN mode). If elevation fails, TUN is unavailable but other features work normally.
+### Windows
+
+Download `snishaper-windows-amd64.7z` (portable) or the MSIX installer from the [latest release](https://github.com/SniShaper/SniShaper/releases), then extract / install and run `snishaper.exe`. The app requests admin elevation (required for TUN mode). If elevation fails, TUN is unavailable but other features work normally.
 
 <a href="https://apps.microsoft.com/detail/9n11mrrsfs8n" target="_self">
 <img src="https://get.microsoft.com/images/en-us%20dark.svg" width="200"/>
 </a>
 
-### 2. Certificate Re-install
+### Linux
+
+Download `snishaper-linux-amd64.tar.gz` from the [latest release](https://github.com/SniShaper/SniShaper/releases), then extract and run:
+
+```bash
+tar -xzf snishaper-linux-amd64.tar.gz
+sudo ./SniShaper
+```
+
+The app requests root privileges automatically (required for TUN mode). If elevation fails, TUN is unavailable but other features (proxy, etc.) work normally. The current build targets **amd64** and is based on **GTK4 + WebKitGTK 6.0** (GTK3 is also supported).
+
+### Certificate Re-install
+
 In the main UI click **Certificate Management -> Reset Root Certificate**.
 
-### 3. Configure and Start
+### Configure and Start
+
 The software includes a rich set of built-in rules. You can also customize rules in the **Rule Panel**, then click **Start Proxy**.
 
 ---
@@ -56,32 +73,23 @@ For detailed technical principles, deployment tutorials, and customization guide
 
 ## Build and Development
 
-This project is built with **Wails v3**.
+This project is built with **Wails v3 + React 19 + MUI**, with a **Go** backend. The same repository produces both the Windows and Linux executables.
+
+### Windows Build
 
 ```powershell
 # Clone the repository
-git clone https://github.com/SniShaper/snishaper.git
-cd snishaper
+git clone https://github.com/SniShaper/SniShaper.git
+cd SniShaper
 
-# Install frontend dependencies
-cd frontend
-npm install
-
-# Build frontend static resources
-npm run build
-cd ..
-
-# Full compilation (interactive mode)
+# Full compilation (interactive mode, auto-installs deps, optional MSIX)
 powershell -ExecutionPolicy Bypass -File .\build_windows.ps1
 
 # Or with PowerShell 7
 pwsh -ExecutionPolicy Bypass -File .\build_windows.ps1
-
-# Go main program compilation (script auto-runs go mod download)
-go build -tags with_gvisor -ldflags="-s -w" -o "build/bin/snishaper.exe"
 ```
 
-### Build Script Command-Line Parameters
+#### Build Script Command-Line Parameters
 
 `build_windows.ps1` supports the following parameters to skip interactive prompts:
 
@@ -122,23 +130,79 @@ go build -tags with_gvisor -ldflags="-s -w" -o "build/bin/snishaper.exe"
 .\build_windows.ps1
 ```
 
-Development environment recommendations:
+### Linux Build
+
+The Linux build uses `build_linux.sh` and runs on a Linux host (or WSL2 on Windows).
+
+#### Dependencies (Ubuntu / Debian)
+
+```bash
+# GTK4 + WebKitGTK 6.0 (default)
+sudo apt-get update
+sudo apt-get install -y libgtk-4-dev libwebkitgtk-6.0-dev
+
+# Or use GTK3 + webkit2gtk-4.1
+# sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.1-dev
+```
+
+#### Build Commands
+
+```bash
+# Clone the repository
+git clone https://github.com/SniShaper/SniShaper.git
+cd SniShaper
+
+# Compile backend only (uses existing frontend/dist)
+./build_linux.sh
+
+# Build frontend first, then backend
+./build_linux.sh --with-frontend
+
+# Use GTK3 + webkit2gtk-4.1
+./build_linux.sh --gtk3
+```
+
+Build output is written to `build/bin/SniShaper` (including `rules/` and `config/` seed files). TUN / system proxy require root; run with `sudo ./build/bin/SniShaper`.
+
+### Version & Release Channel
+
+The version number and release channel (`release` / `beta` / `alpha` / `rc`) are **unified** in the root `Package.appxmanifest`:
+
+```xml
+<rel:Version>1.29.0</rel:Version>
+<rel:ReleaseChannel>beta.1</rel:ReleaseChannel>
+```
+
+Both the Windows and Linux builds read from this file and inject the values via ldflags (`snishaper/app.buildVersion`, `snishaper/app.buildChannel`). There is no separate version JSON file in the repository.
+
+### Development Environment
 
 - `Go 1.25+`
-- `Node.js 24+`
-- `npm 11+`
-- `gVisor` (required for TUN mode, Linux: install `gvisor` package)
+- `Node.js 24+` / `npm 11+`
+- Windows: MSVC toolchain (Wails v3), WinApp CLI (MSIX packaging)
+- Linux: GTK4 / WebKitGTK or GTK3 dev packages (see above)
+- TUN mode depends on the gvisor network stack (enabled on Windows via the `with_gvisor` build tag)
 
 Build outputs:
 
 - Frontend assets at `frontend/dist`
-- Executable at `build/bin/snishaper.exe`
+- Windows executable at `build/bin/snishaper.exe`
+- Linux executable at `build/bin/SniShaper`
 
 ---
 
-## Cross-platform
+## Continuous Integration
 
-Supports Windows and Linux platforms. For the Linux version, refer to [Linux Version](https://github.com/dongzheyu/SniShaper-Linux/).
+Dual-platform CI pipelines:
+
+- **`build.yml`**: Triggered on every push / PR. Builds Windows on `windows-2025` and Linux on `ubuntu-24.04`, then runs compilation and a binary smoke test.
+- **`_release_pipeline.yml`**: Release pipeline. The Windows runner produces the MSIX and `snishaper-windows-amd64.7z` portable archive, the Ubuntu runner produces `snishaper-linux-amd64.tar.gz`, and finally the Windows runner merges both platform artifacts and creates the GitHub Release. Release notes are generated first by a local Ollama instance on the runner (default `qwen3.5:2b`); when Ollama is unavailable, it falls back to a categorized commit list.
+
+---
+
+## Cross-Platform Notes
+
+Windows and Linux are built from the same repository, with platform-specific implementations isolated via Go build tags (e.g. `//go:build linux` / `windows`). There is no separate Linux repository to visit.
 
 ## Acknowledgements
 
@@ -171,7 +235,7 @@ Thanks to the following contributors for their contributions to this repository:
 
 ---
 
-## License
+## Project Activity & Contributors
 
 ### Activity Badges
 
