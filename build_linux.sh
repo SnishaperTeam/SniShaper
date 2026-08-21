@@ -82,11 +82,14 @@ echo "[backend] go mod download..."
 go mod download
 
 # ---------- 3. 版本号 ----------
+# Package.appxmanifest 是唯一版本源（与 Windows 共用）：
+#   <rel:Version>1.29.0</rel:Version>
+#   <rel:ReleaseChannel>beta.1</rel:ReleaseChannel>
 VERSION=""
 CHANNEL=""
-if [ -f version.json ]; then
-    VERSION="$(grep -oP '"version"\s*:\s*"\K[^"]+' version.json 2>/dev/null || true)"
-    CHANNEL="$(grep -oP '"releaseChannel"\s*:\s*"\K[^"]+' version.json 2>/dev/null || true)"
+if [ -f Package.appxmanifest ]; then
+    VERSION="$(grep -oP '<rel:Version>\K[^<]+' Package.appxmanifest 2>/dev/null | head -1 || true)"
+    CHANNEL="$(grep -oP '<rel:ReleaseChannel>\K[^<]+' Package.appxmanifest 2>/dev/null | head -1 || true)"
 fi
 LDFLAGS="-s -w"
 if [ -n "$VERSION" ]; then

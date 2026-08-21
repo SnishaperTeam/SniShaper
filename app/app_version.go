@@ -1,5 +1,3 @@
-//go:build windows
-
 package app
 
 import (
@@ -10,6 +8,11 @@ import (
 	"strings"
 )
 
+// manifestChannel returns the release channel encoded in the
+// Package.appxmanifest (e.g. "beta.1"), searching up from the executable
+// directory. It is the single version source for every platform; the
+// release version/channel are injected into the manifest by the CI
+// pipeline before building.
 func manifestChannel() (string, error) {
 	dir := filepath.Dir(os.Args[0])
 	var lastErr error
@@ -42,6 +45,11 @@ func manifestChannel() (string, error) {
 	return "", fmt.Errorf("manifest not found")
 }
 
+// manifestVersionFull returns the full version (with channel suffix when
+// the channel is non-stable) from Package.appxmanifest, searching up from
+// the executable directory. Mirrors the legacy Windows-only lookup; on
+// Linux the same manifest drives the version so both platforms stay in
+// sync from a single source.
 func manifestVersionFull() (string, error) {
 	dir := filepath.Dir(os.Args[0])
 	var lastErr error

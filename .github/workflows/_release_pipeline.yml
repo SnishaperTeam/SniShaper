@@ -61,50 +61,65 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Resolve version from version.json
+      - name: Resolve version from Package.appxmanifest
         id: resolve
+        shell: pwsh
         run: |
-          set -euo pipefail
-          # version.json is the single source of truth for release version
-          # and channel; the Windows Package.appxmanifest is kept in sync by
-          # the inject steps in each build job.
-          VERSION=$(python3 -c "import json;print(json.load(open('version.json'))['version'])" 2>/dev/null || echo "0.0.0")
-          CHANNEL="${{ inputs.channel }}"
-          SUFFIX="$(echo "${{ inputs.version_suffix }}" | tr -d '[:space:]')"
-          TAG_OVERRIDE="$(echo "${{ inputs.tag_override }}" | tr -d '[:space:]')"
+          # Package.appxmanifest is the single source of truth for the
+          # release version and channel on every platform; the manifest is
+          # injected with the resolved channel/version by each build job
+          # before compiling.
+          $ErrorActionPreference = 'Stop'
+          $manifestPath = Join-Path $env:GITHUB_WORKSPACE 'Package.appxmanifest'
+          if (-not (Test-Path $manifestPath)) {
+            Write-Host "::error::Package.appxmanifest not found at $manifestPath"
+            exit 1
+          }
+          [xml]$manifest = Get-Content -Raw $manifestPath
+          $pkgVersion = $manifest.Package.Identity.Version
+          $parts = $pkgVersion.Split('.')
+          if ($parts.Count -eq 4 -and $parts[3] -eq '0') {
+            $version = ($parts[0..2] -join '.')
+          } else {
+            $version = $pkgVersion
+          }
 
-          if [ -n "$TAG_OVERRIDE" ]; then
-            TAG="$TAG_OVERRIDE"
-            DISPLAY_VERSION="${TAG_OVERRIDE#v}"
-          elif [ "$CHANNEL" != "release" ] && [ -z "$SUFFIX" ]; then
-            SUFFIX="$CHANNEL.1"
-            echo "::warning::version_suffix empty, using $SUFFIX automatically"
-            TAG="v$VERSION-$SUFFIX"
-            DISPLAY_VERSION="$VERSION-$SUFFIX"
-          elif [ -n "$SUFFIX" ]; then
-            TAG="v$VERSION-$SUFFIX"
-            DISPLAY_VERSION="$VERSION-$SUFFIX"
-          else
-            TAG="v$VERSION"
-            DISPLAY_VERSION="$VERSION"
-          fi
+          $channel = "${{ inputs.channel }}"
+          $suffix = "${{ inputs.version_suffix }}".Trim()
+          $tagOverride = "${{ inputs.tag_override }}".Trim()
 
-          CHANNEL_LABEL=""
-          case "$CHANNEL" in
-            release) CHANNEL_LABEL="" ;;
-            beta) CHANNEL_LABEL="Beta" ;;
-            alpha) CHANNEL_LABEL="Alpha" ;;
-            rc) CHANNEL_LABEL="Release Candidate" ;;
-          esac
-          RELEASE_NAME="SniShaper v$DISPLAY_VERSION"
-          if [ -n "$CHANNEL_LABEL" ]; then RELEASE_NAME="$RELEASE_NAME ($CHANNEL_LABEL)"; fi
+          if ($tagOverride) {
+            $tag = $tagOverride
+            $displayVersion = $tag -replace '^v', ''
+          } elseif ($channel -ne 'release' -and [string]::IsNullOrEmpty($suffix)) {
+            $suffix = "$channel.1"
+            Write-Host "::warning::version_suffix empty, using $suffix automatically"
+            $tag = "v$version-$suffix"
+            $displayVersion = "$version-$suffix"
+          } elseif ($suffix) {
+            $tag = "v$version-$suffix"
+            $displayVersion = "$version-$suffix"
+          } else {
+            $tag = "v$version"
+            $displayVersion = $version
+          }
 
-          echo "::notice::Version=$VERSION Tag=$TAG Release=$RELEASE_NAME"
-          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
-          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
-          echo "display_version=$DISPLAY_VERSION" >> "$GITHUB_OUTPUT"
-          echo "release_name=$RELEASE_NAME" >> "$GITHUB_OUTPUT"
-          echo "suffix=$SUFFIX" >> "$GITHUB_OUTPUT"
+          $channelLabel = switch ($channel) {
+            'release' { '' }
+            'beta'    { 'Beta' }
+            'alpha'   { 'Alpha' }
+            'rc'      { 'Release Candidate' }
+            default   { $channel }
+          }
+          $releaseName = "SniShaper v$displayVersion"
+          if ($channelLabel) { $releaseName += " ($channelLabel)" }
+
+          Write-Host "::notice::ManifestVersion=$pkgVersion Version=$version Tag=$tag Release=$releaseName"
+          "version=$version" >> $env:GITHUB_OUTPUT
+          "tag=$tag" >> $env:GITHUB_OUTPUT
+          "display_version=$displayVersion" >> $env:GITHUB_OUTPUT
+          "release_name=$releaseName" >> $env:GITHUB_OUTPUT
+          "suffix=$suffix" >> $env:GITHUB_OUTPUT
 
       - name: Check if release already exists
         id: release-check
@@ -415,28 +430,22 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y libgtk-4-dev libwebkitgtk-6.0-dev
 
-      - name: Inject release channel into version.json
+      - name: Inject release channel into manifest
+        shell: pwsh
         run: |
-          set -euo pipefail
-          CHANNEL="${{ inputs.channel }}"
-          SUFFIX="${{ needs.check.outputs.suffix }}"
-          REL_CHANNEL="$CHANNEL"
-          if [ "$CHANNEL" = "release" ]; then REL_CHANNEL="stable"; fi
-          if [ -n "$SUFFIX" ]; then REL_CHANNEL="$SUFFIX"; fi
-          REL_VERSION="${{ needs.check.outputs.version }}"
-          if [ -z "$REL_VERSION" ]; then REL_VERSION="0.0.0"; fi
-          python3 - "$REL_VERSION" "$REL_CHANNEL" <<'PYEOF'
-          import json, sys
-          version, channel = sys.argv[1], sys.argv[2]
-          with open('version.json') as f:
-              data = json.load(f)
-          data['version'] = version
-          data['releaseChannel'] = channel
-          with open('version.json', 'w') as f:
-              json.dump(data, f, indent=2)
-              f.write('\n')
-          PYEOF
-          echo "::notice::version.json ReleaseChannel=$REL_CHANNEL Version=$REL_VERSION"
+          $ErrorActionPreference = 'Stop'
+          $channel = "${{ inputs.channel }}"
+          $suffix = "${{ needs.check.outputs.suffix }}"
+          $relChannel = if ($channel -eq 'release') { 'stable' } else { $channel }
+          if ($suffix) { $relChannel = $suffix }
+          $relVersion = "${{ needs.check.outputs.version }}"
+          if ([string]::IsNullOrWhiteSpace($relVersion)) { $relVersion = '0.0.0' }
+          $manifest = Join-Path $env:GITHUB_WORKSPACE 'Package.appxmanifest'
+          $content = Get-Content -Raw $manifest
+          $content = $content -replace '<rel:ReleaseChannel>[^<]*</rel:ReleaseChannel>', "<rel:ReleaseChannel>$relChannel</rel:ReleaseChannel>"
+          $content = $content -replace '<rel:Version>[^<]*</rel:Version>', "<rel:Version>$relVersion</rel:Version>"
+          Set-Content -Path $manifest -Value $content -Encoding UTF8
+          Write-Host "::notice::Manifest ReleaseChannel=$relChannel ReleaseVersion=$relVersion"
 
       - name: Build Linux
         run: |
