@@ -17,7 +17,7 @@ import (
 // Manager 管理 sing-tun TUN 接口
 type Manager struct {
 	mu          sync.Mutex
-	tun         tun.WinTun
+	tun         tun.Tun
 	stack       tun.Stack
 	handler     *Handler
 	options     tun.Options

@@ -74,3 +74,37 @@ jobs:
           if (Test-Path install.bat) { Copy-Item install.bat staging\ }
           Write-Host "Staged files:" -ForegroundColor Green
           Get-ChildItem staging | ForEach-Object { Write-Host "  $($_.Name)" }
+
+  linux-build:
+    runs-on: ubuntu-24.04
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install GTK4/WebKitGTK dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgtk-4-dev libwebkitgtk-6.0-dev
+
+      - name: Build Linux
+        run: |
+          set -euo pipefail
+          chmod +x build_linux.sh
+          ./build_linux.sh --with-frontend
+          test -f build/bin/SniShaper && echo "::notice::build/bin/SniShaper ready"
+
+      - name: Smoke test binary
+        run: |
+          set -euo pipefail
+          file build/bin/SniShaper
+          ./build/bin/SniShaper --version 2>&1 | head -5 || true

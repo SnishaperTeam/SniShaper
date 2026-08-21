@@ -17,7 +17,7 @@ on:
         type: string
         default: ""
       tag_override:
-        description: Release tag to use (set by tag push for stable); empty auto-derives from manifest version
+        description: Release tag to use (set by tag push for stable); empty auto-derives from version.json
         required: false
         type: string
         default: ""
@@ -47,14 +47,12 @@ permissions:
 jobs:
   check:
     name: Check and Resolve
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     outputs:
       version: ${{ steps.resolve.outputs.version }}
       tag: ${{ steps.resolve.outputs.tag }}
       release_name: ${{ steps.resolve.outputs.release_name }}
       display_version: ${{ steps.resolve.outputs.display_version }}
-      pkg_name: ${{ steps.resolve.outputs.pkg_name }}
-      pkg_version: ${{ steps.resolve.outputs.pkg_version }}
       suffix: ${{ steps.resolve.outputs.suffix }}
       skip: ${{ steps.release-check.outputs.skip }}
     steps:
@@ -63,95 +61,79 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Resolve version from Package.appxmanifest
+      - name: Resolve version from version.json
         id: resolve
-        shell: pwsh
         run: |
-          $ErrorActionPreference = 'Stop'
-          $manifestPath = Join-Path $env:GITHUB_WORKSPACE 'Package.appxmanifest'
-          if (-not (Test-Path $manifestPath)) {
-            Write-Host "::error::Package.appxmanifest not found at $manifestPath"
-            exit 1
-          }
-          [xml]$manifest = Get-Content -Raw $manifestPath
-          $pkgName = $manifest.Package.Identity.Name
-          $pkgVersion = $manifest.Package.Identity.Version
-          $parts = $pkgVersion.Split('.')
-          if ($parts.Count -eq 4 -and $parts[3] -eq '0') {
-            $version = ($parts[0..2] -join '.')
-          } else {
-            $version = $pkgVersion
-          }
+          set -euo pipefail
+          # version.json is the single source of truth for release version
+          # and channel; the Windows Package.appxmanifest is kept in sync by
+          # the inject steps in each build job.
+          VERSION=$(python3 -c "import json;print(json.load(open('version.json'))['version'])" 2>/dev/null || echo "0.0.0")
+          CHANNEL="${{ inputs.channel }}"
+          SUFFIX="$(echo "${{ inputs.version_suffix }}" | tr -d '[:space:]')"
+          TAG_OVERRIDE="$(echo "${{ inputs.tag_override }}" | tr -d '[:space:]')"
 
-          $channel = "${{ inputs.channel }}"
-          $suffix = "${{ inputs.version_suffix }}".Trim()
-          $tagOverride = "${{ inputs.tag_override }}".Trim()
+          if [ -n "$TAG_OVERRIDE" ]; then
+            TAG="$TAG_OVERRIDE"
+            DISPLAY_VERSION="${TAG_OVERRIDE#v}"
+          elif [ "$CHANNEL" != "release" ] && [ -z "$SUFFIX" ]; then
+            SUFFIX="$CHANNEL.1"
+            echo "::warning::version_suffix empty, using $SUFFIX automatically"
+            TAG="v$VERSION-$SUFFIX"
+            DISPLAY_VERSION="$VERSION-$SUFFIX"
+          elif [ -n "$SUFFIX" ]; then
+            TAG="v$VERSION-$SUFFIX"
+            DISPLAY_VERSION="$VERSION-$SUFFIX"
+          else
+            TAG="v$VERSION"
+            DISPLAY_VERSION="$VERSION"
+          fi
 
-          if ($tagOverride) {
-            $tag = $tagOverride
-            $displayVersion = $tag -replace '^v', ''
-          } elseif ($channel -ne 'release' -and [string]::IsNullOrEmpty($suffix)) {
-            $suffix = "$channel.1"
-            Write-Host "::warning::version_suffix empty, using $suffix automatically"
-            $tag = "v$version-$suffix"
-            $displayVersion = "$version-$suffix"
-          } elseif ($suffix) {
-            $tag = "v$version-$suffix"
-            $displayVersion = "$version-$suffix"
-          } else {
-            $tag = "v$version"
-            $displayVersion = $version
-          }
+          CHANNEL_LABEL=""
+          case "$CHANNEL" in
+            release) CHANNEL_LABEL="" ;;
+            beta) CHANNEL_LABEL="Beta" ;;
+            alpha) CHANNEL_LABEL="Alpha" ;;
+            rc) CHANNEL_LABEL="Release Candidate" ;;
+          esac
+          RELEASE_NAME="SniShaper v$DISPLAY_VERSION"
+          if [ -n "$CHANNEL_LABEL" ]; then RELEASE_NAME="$RELEASE_NAME ($CHANNEL_LABEL)"; fi
 
-          $channelLabel = switch ($channel) {
-            'release' { '' }
-            'beta'    { 'Beta' }
-            'alpha'   { 'Alpha' }
-            'rc'      { 'Release Candidate' }
-            default   { $channel }
-          }
-          $releaseName = "SniShaper v$displayVersion"
-          if ($channelLabel) { $releaseName += " ($channelLabel)" }
-
-          Write-Host "::notice::Package=$pkgName ManifestVersion=$pkgVersion Version=$version Tag=$tag Release=$releaseName"
-          "version=$version" >> $env:GITHUB_OUTPUT
-          "pkg_name=$pkgName" >> $env:GITHUB_OUTPUT
-          "pkg_version=$pkgVersion" >> $env:GITHUB_OUTPUT
-          "tag=$tag" >> $env:GITHUB_OUTPUT
-          "display_version=$displayVersion" >> $env:GITHUB_OUTPUT
-          "release_name=$releaseName" >> $env:GITHUB_OUTPUT
-          "suffix=$suffix" >> $env:GITHUB_OUTPUT
+          echo "::notice::Version=$VERSION Tag=$TAG Release=$RELEASE_NAME"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "display_version=$DISPLAY_VERSION" >> "$GITHUB_OUTPUT"
+          echo "release_name=$RELEASE_NAME" >> "$GITHUB_OUTPUT"
+          echo "suffix=$SUFFIX" >> "$GITHUB_OUTPUT"
 
       - name: Check if release already exists
         id: release-check
-        shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          # GitHub Actions PREPENDS $ErrorActionPreference='stop' and APPENDS
-          # `exit $LASTEXITCODE` to every pwsh step. So even with Continue,
-          # a stale non-zero $LASTEXITCODE (from `gh release view` returning 1
-          # when the release does not exist) fails the step at the end.
-          # We must end this step with an explicit `exit 0`.
-          $ErrorActionPreference = 'Continue'
-          $tag = "${{ steps.resolve.outputs.tag }}"
-          $exists = gh release view $tag --json tagName --jq '.tagName' 2>$null
-          if ($LASTEXITCODE -eq 0 -and $exists) {
-            Write-Host "::notice::Release $tag already exists, skipping (avoid duplicate build)"
-            "skip=true" >> $env:GITHUB_OUTPUT
-          } else {
-            Write-Host "::notice::Release $tag does not exist, proceeding with build"
-            "skip=false" >> $env:GITHUB_OUTPUT
-          }
+          set +e
+          TAG="${{ steps.resolve.outputs.tag }}"
+          EXISTS=$(gh release view "$TAG" --json tagName --jq '.tagName' 2>/dev/null)
+          if [ -n "$EXISTS" ]; then
+            echo "::notice::Release $TAG already exists, skipping (avoid duplicate build)"
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::notice::Release $TAG does not exist, proceeding with build"
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
           exit 0
 
-  build-and-publish:
-    name: Build and Publish (${{ inputs.channel }})
+  # ------------------------------------------------------------------
+  # Windows build (windows-2025): MSIX (signed + unsigned), portable 7z,
+  # signed bundle 7z, Inno Setup installer. No release publishing here.
+  # ------------------------------------------------------------------
+  build-windows:
+    name: Build Windows (${{ inputs.channel }})
     needs: check
     if: needs.check.outputs.skip != 'true'
     runs-on: windows-2025
     permissions:
-      contents: write
+      contents: read
     env:
       MSIX_PFX_PASSWORD: ${{ secrets.MSIX_PFX_PASSWORD }}
       MSIX_PFX_BASE64: ${{ secrets.MSIX_PFX_BASE64 }}
@@ -219,6 +201,295 @@ jobs:
           } else {
             Write-Host "::warning::devcert.pfx not found and MSIX_PFX_BASE64 not set; build_windows.ps1 will generate a certificate"
           }
+
+      - name: Inject release channel into manifest
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $channel = "${{ inputs.channel }}"
+          $suffix = "${{ needs.check.outputs.suffix }}"
+          $relChannel = if ($channel -eq 'release') { 'stable' } else { $channel }
+          if ($suffix) { $relChannel = $suffix }
+          $relVersion = "${{ needs.check.outputs.version }}"
+          if ([string]::IsNullOrWhiteSpace($relVersion)) { $relVersion = '0.0.0' }
+          $manifest = Join-Path $env:GITHUB_WORKSPACE 'Package.appxmanifest'
+          $content = Get-Content -Raw $manifest
+          $content = $content -replace '<rel:ReleaseChannel>[^<]*</rel:ReleaseChannel>', "<rel:ReleaseChannel>$relChannel</rel:ReleaseChannel>"
+          $content = $content -replace '<rel:Version>[^<]*</rel:Version>', "<rel:Version>$relVersion</rel:Version>"
+          Set-Content -Path $manifest -Value $content -Encoding UTF8
+          Write-Host "::notice::Manifest ReleaseChannel=$relChannel ReleaseVersion=$relVersion"
+
+      - name: Build, package & sign MSIX
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          Write-Host "::group::build_windows.ps1 -Build all -InstallDeps -BuildMsix -Silent"
+          ./build_windows.ps1 -Build all -InstallDeps -BuildMsix -Silent
+          if ($LASTEXITCODE -ne 0) {
+            Write-Host "::error::build_windows.ps1 failed"
+            exit 1
+          }
+          Write-Host "::endgroup::"
+          $msix = Get-ChildItem -Path Apppackage -Filter "*.msix" -ErrorAction Stop | Select-Object -First 1
+          if (-not $msix) {
+            Write-Host "::error::no .msix produced in Apppackage"
+            exit 1
+          }
+          Write-Host "::notice::MSIX ready: $($msix.FullName)"
+
+      - name: Create unsigned MSIX (Partner Center)
+        shell: pwsh
+        run: |
+          # Partner Center re-signs submitted packages, so publish an
+          # unsigned MSIX alongside the signed one. `winapp pack` is
+          # pure packaging - no signing - same layout as
+          # build_windows.ps1 -SkipSign (unsigned_ prefix).
+          $ErrorActionPreference = 'Stop'
+          $root = $env:GITHUB_WORKSPACE
+          $binDir = Join-Path $root 'build/bin'
+          if (-not (Test-Path (Join-Path $binDir 'snishaper.exe'))) {
+            Write-Host "::error::build/bin/snishaper.exe not found"
+            exit 1
+          }
+          $msix = Get-ChildItem -Path (Join-Path $root 'Apppackage') -Filter '*.msix' | Select-Object -First 1
+          if (-not $msix) {
+            Write-Host "::error::no signed msix to derive name from"
+            exit 1
+          }
+          $unsignedName = 'unsigned_' + $msix.Name
+          $unsignedPath = Join-Path (Join-Path $root 'Apppackage') $unsignedName
+          Write-Host "::group::winapp pack (unsigned) -> $unsignedName"
+          winapp pack $binDir --manifest (Join-Path $root 'Package.appxmanifest') --output $unsignedPath
+          if ($LASTEXITCODE -ne 0) {
+            Write-Host "::error::winapp pack (unsigned) failed"
+            exit 1
+          }
+          Write-Host "::endgroup::"
+          Write-Host "::notice::Unsigned MSIX ready: $unsignedPath"
+
+      - name: Create 7z archive
+        run: 7z a -mx=9 snishaper-windows-amd64.7z .\build\bin\*
+
+      - name: Create cert install batch
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $msix = Get-ChildItem -Path Apppackage -Filter '*.msix' | Where-Object { $_.Name -notlike 'unsigned_*' } | Select-Object -First 1
+          if (-not $msix) {
+            Write-Host "::error::no signed .msix found for install.bat"
+            exit 1
+          }
+          $password = if ($env:MSIX_PFX_PASSWORD) { $env:MSIX_PFX_PASSWORD } else { 'password' }
+          $bat = @(
+            '@echo off'
+            'chcp 65001 > nul'
+            'echo Installing certificate to Trusted Root Certification Authorities...'
+            "certutil -f -importpfx `"%~dp0devcert.pfx`" $password"
+            'echo Installing MSIX package...'
+            "powershell -Command `"Add-AppxPackage -Path '%~dp0$($msix.Name)'`""
+            'echo Done!'
+            'pause'
+          )
+          $bat -join "`r`n" | Set-Content -Path install.bat
+          Write-Host "::notice::install.bat created for $($msix.Name)"
+
+      - name: Create signed bundle 7z
+        shell: pwsh
+        env:
+          MSIX_PFX_PASSWORD: ${{ secrets.MSIX_PFX_PASSWORD }}
+        run: |
+          # Bundle the signed MSIX + cert + install.bat + signing password
+          # into one 7z named after the MSIX base name, so users get a
+          # single self-contained archive
+          # (e.g. dongle.Snishaper_1.29.0.0_x64.7z).
+          $ErrorActionPreference = 'Stop'
+          $root = $env:GITHUB_WORKSPACE
+          $msix = Get-ChildItem -Path (Join-Path $root 'Apppackage') -Filter '*.msix' | Where-Object { $_.Name -notlike 'unsigned_*' } | Select-Object -First 1
+          if (-not $msix) {
+            Write-Host "::error::no signed .msix found for bundle"
+            exit 1
+          }
+          $bundleName = $msix.BaseName + '.7z'
+          $bundlePath = Join-Path $root $bundleName
+          $installBat = Join-Path $root 'install.bat'
+          if (-not (Test-Path $installBat)) {
+            Write-Host "::error::install.bat not found"
+            exit 1
+          }
+          $password = if ($env:MSIX_PFX_PASSWORD) { $env:MSIX_PFX_PASSWORD } else { 'password' }
+          $passwordFile = Join-Path $root 'msix-signing-password.txt'
+          [IO.File]::WriteAllText($passwordFile, $password)
+          Write-Host "::group::7z a $bundleName (msix + devcert.pfx + install.bat + password)"
+          7z a -mx=9 $bundlePath $msix.FullName (Join-Path $root 'devcert.pfx') $installBat $passwordFile
+          if ($LASTEXITCODE -ne 0) {
+            Write-Host "::error::7z bundle failed (exit $LASTEXITCODE)"
+            exit 1
+          }
+          Write-Host "::endgroup::"
+          Write-Host "::notice::Signed bundle ready: $bundlePath"
+
+      - name: Create Inno Setup installer
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $script = Join-Path $env:GITHUB_WORKSPACE '.github/scripts/create-inno-installer.ps1'
+          if (-not (Test-Path $script)) {
+            Write-Host "::error::create-inno-installer.ps1 missing: $script"
+            exit 1
+          }
+          $psArgs = @{
+            RepoRoot = $env:GITHUB_WORKSPACE
+            Version  = "${{ needs.check.outputs.version }}"
+            Suffix   = "${{ needs.check.outputs.suffix }}"
+          }
+          & $script @psArgs
+          if ($LASTEXITCODE -ne 0) {
+            Write-Host "::error::create-inno-installer.ps1 failed"
+            exit 1
+          }
+          Write-Host "::notice::Inno Setup installer created"
+
+      - name: Stage Windows artifacts
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $root = $env:GITHUB_WORKSPACE
+          $assetsDir = Join-Path $root 'staging'
+          New-Item -ItemType Directory -Path $assetsDir -Force | Out-Null
+          Get-ChildItem $assetsDir -ErrorAction SilentlyContinue | Remove-Item -Recurse -Force
+
+          $msix = Get-ChildItem -Path (Join-Path $root 'Apppackage') -Filter '*.msix' | Where-Object { $_.Name -notlike 'unsigned_*' } | Select-Object -First 1
+          Copy-Item $msix.FullName $assetsDir\ -ErrorAction Stop
+          $unsigned = Get-ChildItem -Path (Join-Path $root 'Apppackage') -Filter 'unsigned_*.msix' | Select-Object -First 1
+          if ($unsigned) { Copy-Item $unsigned.FullName $assetsDir\ -ErrorAction Stop }
+          Copy-Item (Join-Path $root 'snishaper-windows-amd64.7z') $assetsDir\ -ErrorAction Stop
+          $bundle = Get-ChildItem -Path $root -Filter '*_x64.7z' -ErrorAction SilentlyContinue | Where-Object { $_.Name -ne 'snishaper-windows-amd64.7z' } | Select-Object -First 1
+          if ($bundle) { Copy-Item $bundle.FullName $assetsDir\ -ErrorAction Stop }
+          $setupExe = Get-ChildItem -Path (Join-Path $root 'installer') -Filter '*.exe' -ErrorAction SilentlyContinue | Select-Object -First 1
+          if ($setupExe) { Copy-Item $setupExe.FullName $assetsDir\ -ErrorAction Stop }
+          if (Test-Path (Join-Path $root 'devcert.pfx')) { Copy-Item (Join-Path $root 'devcert.pfx') $assetsDir\ }
+          if (Test-Path (Join-Path $root 'install.bat')) { Copy-Item (Join-Path $root 'install.bat') $assetsDir\ }
+
+          Write-Host "Staged files:" -ForegroundColor Green
+          Get-ChildItem $assetsDir | ForEach-Object { Write-Host "  $($_.Name) ($($_.Length) bytes)" }
+
+      - name: Upload Windows artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-artifacts
+          path: staging/
+          retention-days: 3
+
+  # ------------------------------------------------------------------
+  # Linux build (ubuntu-24.04): portable tar.gz via build_linux.sh.
+  # ------------------------------------------------------------------
+  build-linux:
+    name: Build Linux (${{ inputs.channel }})
+    needs: check
+    if: needs.check.outputs.skip != 'true'
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout full history
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+
+      - name: Setup Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install GTK4/WebKitGTK dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgtk-4-dev libwebkitgtk-6.0-dev
+
+      - name: Inject release channel into version.json
+        run: |
+          set -euo pipefail
+          CHANNEL="${{ inputs.channel }}"
+          SUFFIX="${{ needs.check.outputs.suffix }}"
+          REL_CHANNEL="$CHANNEL"
+          if [ "$CHANNEL" = "release" ]; then REL_CHANNEL="stable"; fi
+          if [ -n "$SUFFIX" ]; then REL_CHANNEL="$SUFFIX"; fi
+          REL_VERSION="${{ needs.check.outputs.version }}"
+          if [ -z "$REL_VERSION" ]; then REL_VERSION="0.0.0"; fi
+          python3 - "$REL_VERSION" "$REL_CHANNEL" <<'PYEOF'
+          import json, sys
+          version, channel = sys.argv[1], sys.argv[2]
+          with open('version.json') as f:
+              data = json.load(f)
+          data['version'] = version
+          data['releaseChannel'] = channel
+          with open('version.json', 'w') as f:
+              json.dump(data, f, indent=2)
+              f.write('\n')
+          PYEOF
+          echo "::notice::version.json ReleaseChannel=$REL_CHANNEL Version=$REL_VERSION"
+
+      - name: Build Linux
+        run: |
+          set -euo pipefail
+          chmod +x build_linux.sh
+          echo "::group::build_linux.sh --with-frontend"
+          ./build_linux.sh --with-frontend
+          echo "::endgroup::"
+          test -f build/bin/SniShaper && echo "::notice::build/bin/SniShaper ready"
+
+      - name: Create tar.gz archive
+        run: |
+          set -euo pipefail
+          ARCHIVE="snishaper-linux-amd64.tar.gz"
+          tar -czf "$ARCHIVE" -C build/bin .
+          ls -lh "$ARCHIVE"
+          echo "::notice::$ARCHIVE ready"
+
+      - name: Upload Linux artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-artifacts
+          path: snishaper-linux-amd64.tar.gz
+          retention-days: 3
+
+  # ------------------------------------------------------------------
+  # Publish (windows-2025): merge artifacts from both platforms, generate
+  # release notes via Ollama, and create the GitHub release.
+  # ------------------------------------------------------------------
+  publish:
+    name: Publish Release (${{ inputs.channel }})
+    needs: [check, build-windows, build-linux]
+    if: needs.check.outputs.skip != 'true'
+    runs-on: windows-2025
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout full history
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Download Windows artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: windows-artifacts
+          path: staging
+
+      - name: Download Linux artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: linux-artifacts
+          path: staging
 
       - name: Determine previous release tag
         id: prev-tag
@@ -384,192 +655,16 @@ jobs:
             exit 1
           }
           Write-Host "::notice::Release notes written to $notesPath"
-
-      - name: Inject release channel into manifest
-        shell: pwsh
-        run: |
-          $ErrorActionPreference = 'Stop'
-          $channel = "${{ inputs.channel }}"
-          $suffix = "${{ needs.check.outputs.suffix }}"
-          $relChannel = if ($channel -eq 'release') { 'stable' } else { $channel }
-          if ($suffix) { $relChannel = $suffix }
-          $relVersion = "${{ needs.check.outputs.version }}"
-          if ([string]::IsNullOrWhiteSpace($relVersion)) { $relVersion = '0.0.0' }
-          $manifest = Join-Path $env:GITHUB_WORKSPACE 'Package.appxmanifest'
-          $content = Get-Content -Raw $manifest
-          $content = $content -replace '<rel:ReleaseChannel>[^<]*</rel:ReleaseChannel>', "<rel:ReleaseChannel>$relChannel</rel:ReleaseChannel>"
-          $content = $content -replace '<rel:Version>[^<]*</rel:Version>', "<rel:Version>$relVersion</rel:Version>"
-          Set-Content -Path $manifest -Value $content -Encoding UTF8
-          Write-Host "::notice::Manifest ReleaseChannel=$relChannel ReleaseVersion=$relVersion"
-
-      - name: Build, package & sign MSIX
-        shell: pwsh
-        run: |
-          $ErrorActionPreference = 'Stop'
-          Write-Host "::group::build_windows.ps1 -Build all -InstallDeps -BuildMsix -Silent"
-          ./build_windows.ps1 -Build all -InstallDeps -BuildMsix -Silent
-          if ($LASTEXITCODE -ne 0) {
-            Write-Host "::error::build_windows.ps1 failed"
-            exit 1
-          }
-          Write-Host "::endgroup::"
-          $msix = Get-ChildItem -Path Apppackage -Filter "*.msix" -ErrorAction Stop | Select-Object -First 1
-          if (-not $msix) {
-            Write-Host "::error::no .msix produced in Apppackage"
-            exit 1
-          }
-          Write-Host "::notice::MSIX ready: $($msix.FullName)"
-
-      - name: Create unsigned MSIX (Partner Center)
-        shell: pwsh
-        run: |
-          # Partner Center re-signs submitted packages, so publish an
-          # unsigned MSIX alongside the signed one. `winapp pack` is
-          # pure packaging - no signing - same layout as
-          # build_windows.ps1 -SkipSign (unsigned_ prefix).
-          $ErrorActionPreference = 'Stop'
-          $root = $env:GITHUB_WORKSPACE
-          $binDir = Join-Path $root 'build/bin'
-          if (-not (Test-Path (Join-Path $binDir 'snishaper.exe'))) {
-            Write-Host "::error::build/bin/snishaper.exe not found"
-            exit 1
-          }
-          $msix = Get-ChildItem -Path (Join-Path $root 'Apppackage') -Filter '*.msix' | Select-Object -First 1
-          if (-not $msix) {
-            Write-Host "::error::no signed msix to derive name from"
-            exit 1
-          }
-          $unsignedName = 'unsigned_' + $msix.Name
-          $unsignedPath = Join-Path (Join-Path $root 'Apppackage') $unsignedName
-          Write-Host "::group::winapp pack (unsigned) -> $unsignedName"
-          winapp pack $binDir --manifest (Join-Path $root 'Package.appxmanifest') --output $unsignedPath
-          if ($LASTEXITCODE -ne 0) {
-            Write-Host "::error::winapp pack (unsigned) failed"
-            exit 1
-          }
-          Write-Host "::endgroup::"
-          Write-Host "::notice::Unsigned MSIX ready: $unsignedPath"
-
-      - name: Create 7z archive
-        run: 7z a -mx=9 snishaper-windows-amd64.7z .\build\bin\*
-
-      - name: Create cert install batch
-        shell: pwsh
-        run: |
-          $ErrorActionPreference = 'Stop'
-          $msix = Get-ChildItem -Path Apppackage -Filter '*.msix' | Where-Object { $_.Name -notlike 'unsigned_*' } | Select-Object -First 1
-          if (-not $msix) {
-            Write-Host "::error::no signed .msix found for install.bat"
-            exit 1
-          }
-          $password = if ($env:MSIX_PFX_PASSWORD) { $env:MSIX_PFX_PASSWORD } else { 'password' }
-          $bat = @(
-            '@echo off'
-            'chcp 65001 > nul'
-            'echo Installing certificate to Trusted Root Certification Authorities...'
-            "certutil -f -importpfx `"%~dp0devcert.pfx`" $password"
-            'echo Installing MSIX package...'
-            "powershell -Command `"Add-AppxPackage -Path '%~dp0$($msix.Name)'`""
-            'echo Done!'
-            'pause'
-          )
-          $bat -join "`r`n" | Set-Content -Path install.bat
-          Write-Host "::notice::install.bat created for $($msix.Name)"
-
-      - name: Create signed bundle 7z
-        shell: pwsh
-        env:
-          MSIX_PFX_PASSWORD: ${{ secrets.MSIX_PFX_PASSWORD }}
-        run: |
-          # Bundle the signed MSIX + cert + install.bat + signing password
-          # into one 7z named after the MSIX base name, so users get a
-          # single self-contained archive
-          # (e.g. dongle.Snishaper_1.29.0.0_x64.7z).
-          $ErrorActionPreference = 'Stop'
-          $root = $env:GITHUB_WORKSPACE
-          $msix = Get-ChildItem -Path (Join-Path $root 'Apppackage') -Filter '*.msix' | Where-Object { $_.Name -notlike 'unsigned_*' } | Select-Object -First 1
-          if (-not $msix) {
-            Write-Host "::error::no signed .msix found for bundle"
-            exit 1
-          }
-          $bundleName = $msix.BaseName + '.7z'
-          $bundlePath = Join-Path $root $bundleName
-          $installBat = Join-Path $root 'install.bat'
-          if (-not (Test-Path $installBat)) {
-            Write-Host "::error::install.bat not found"
-            exit 1
-          }
-          $password = if ($env:MSIX_PFX_PASSWORD) { $env:MSIX_PFX_PASSWORD } else { 'password' }
-          $passwordFile = Join-Path $root 'msix-signing-password.txt'
-          [IO.File]::WriteAllText($passwordFile, $password)
-          Write-Host "::group::7z a $bundleName (msix + devcert.pfx + install.bat + password)"
-          7z a -mx=9 $bundlePath $msix.FullName (Join-Path $root 'devcert.pfx') $installBat $passwordFile
-          if ($LASTEXITCODE -ne 0) {
-            Write-Host "::error::7z bundle failed (exit $LASTEXITCODE)"
-            exit 1
-          }
-          Write-Host "::endgroup::"
-          Write-Host "::notice::Signed bundle ready: $bundlePath"
-
-      - name: Create Inno Setup installer
-        shell: pwsh
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          $ErrorActionPreference = 'Stop'
-          $script = Join-Path $env:GITHUB_WORKSPACE '.github/scripts/create-inno-installer.ps1'
-          if (-not (Test-Path $script)) {
-            Write-Host "::error::create-inno-installer.ps1 missing: $script"
-            exit 1
-          }
-          $psArgs = @{
-            RepoRoot = $env:GITHUB_WORKSPACE
-            Version  = "${{ needs.check.outputs.version }}"
-            Suffix   = "${{ needs.check.outputs.suffix }}"
-          }
-          & $script @psArgs
-          if ($LASTEXITCODE -ne 0) {
-            Write-Host "::error::create-inno-installer.ps1 failed"
-            exit 1
-          }
-          Write-Host "::notice::Inno Setup installer created"
-
-      - name: Stage artifacts
-        id: stage
-        shell: pwsh
-        run: |
-          $ErrorActionPreference = 'Stop'
-          $root = $env:GITHUB_WORKSPACE
-          $assetsDir = Join-Path $root 'staging'
-          New-Item -ItemType Directory -Path $assetsDir -Force | Out-Null
-          Get-ChildItem $assetsDir -ErrorAction SilentlyContinue | Remove-Item -Recurse -Force
-
-          $msix = Get-ChildItem -Path (Join-Path $root 'Apppackage') -Filter '*.msix' | Where-Object { $_.Name -notlike 'unsigned_*' } | Select-Object -First 1
-          Copy-Item $msix.FullName $assetsDir\ -ErrorAction Stop
-          $unsigned = Get-ChildItem -Path (Join-Path $root 'Apppackage') -Filter 'unsigned_*.msix' | Select-Object -First 1
-          if ($unsigned) { Copy-Item $unsigned.FullName $assetsDir\ -ErrorAction Stop }
-          Copy-Item (Join-Path $root 'snishaper-windows-amd64.7z') $assetsDir\ -ErrorAction Stop
-          $bundle = Get-ChildItem -Path $root -Filter '*_x64.7z' -ErrorAction SilentlyContinue | Where-Object { $_.Name -ne 'snishaper-windows-amd64.7z' } | Select-Object -First 1
-          if ($bundle) { Copy-Item $bundle.FullName $assetsDir\ -ErrorAction Stop }
-          $setupExe = Get-ChildItem -Path (Join-Path $root 'installer') -Filter '*.exe' -ErrorAction SilentlyContinue | Select-Object -First 1
-          if ($setupExe) { Copy-Item $setupExe.FullName $assetsDir\ -ErrorAction Stop }
-          if (Test-Path (Join-Path $root 'devcert.pfx')) { Copy-Item (Join-Path $root 'devcert.pfx') $assetsDir\ }
-          if (Test-Path (Join-Path $root 'install.bat')) { Copy-Item (Join-Path $root 'install.bat') $assetsDir\ }
-
-          Copy-Item -Path (Join-Path $root 'release-notes\RELEASE_NOTES.md') -Destination (Join-Path $assetsDir 'RELEASE_NOTES.md') -Force
-
-          Write-Host "Staged files:" -ForegroundColor Green
-          Get-ChildItem $assetsDir | ForEach-Object { Write-Host "  $($_.Name) ($($_.Length) bytes)" }
-          "dir=$assetsDir" >> $env:GITHUB_OUTPUT
+          Copy-Item $notesPath (Join-Path $env:GITHUB_WORKSPACE 'staging\RELEASE_NOTES.md') -Force
 
       - name: Append asset manifest to release notes
         shell: pwsh
         run: |
-          # Release notes are generated before the build finishes, so the
-          # asset list (name + purpose + MD5) is appended here, after all
-          # artifacts are staged.
+          # Release notes are generated before the artifacts are listed, so
+          # the asset table (name + purpose + MD5) is appended here after
+          # all platform artifacts are staged.
           $ErrorActionPreference = 'Stop'
-          $assetsDir = "${{ steps.stage.outputs.dir }}"
+          $assetsDir = Join-Path $env:GITHUB_WORKSPACE 'staging'
           $notesFile = Join-Path $assetsDir 'RELEASE_NOTES.md'
           if (-not (Test-Path $notesFile)) {
             Write-Host "::error::RELEASE_NOTES.md not found"
@@ -584,11 +679,6 @@ jobs:
           [void]$sb.AppendLine("| File | Purpose | MD5 |")
           [void]$sb.AppendLine("|------|---------|-----|")
 
-          $bundle = Get-ChildItem -Path $assetsDir -Filter '*_x64.7z' -ErrorAction SilentlyContinue | Where-Object { $_.Name -ne 'snishaper-windows-amd64.7z' } | Select-Object -First 1
-          $portable = Get-ChildItem -Path $assetsDir -Filter 'snishaper-windows-amd64.7z' -ErrorAction SilentlyContinue | Select-Object -First 1
-          $unsigned = Get-ChildItem -Path $assetsDir -Filter 'unsigned_*.msix' -ErrorAction SilentlyContinue | Select-Object -First 1
-          $setupExe = Get-ChildItem -Path $assetsDir -Filter '*-x64Setup.exe' -ErrorAction SilentlyContinue | Select-Object -First 1
-
           function Add-AssetRow($file, $purpose) {
             if (-not $file) { return }
             $md5 = (Get-FileHash -LiteralPath $file.FullName -Algorithm MD5).Hash.ToLowerInvariant()
@@ -596,10 +686,17 @@ jobs:
             [void]$sb.AppendLine("| $($file.Name) | $purpose (Size: $sizeMB MB) | $md5 |")
           }
 
+          $bundle = Get-ChildItem -Path $assetsDir -Filter '*_x64.7z' -ErrorAction SilentlyContinue | Where-Object { $_.Name -ne 'snishaper-windows-amd64.7z' } | Select-Object -First 1
+          $portable = Get-ChildItem -Path $assetsDir -Filter 'snishaper-windows-amd64.7z' -ErrorAction SilentlyContinue | Select-Object -First 1
+          $unsigned = Get-ChildItem -Path $assetsDir -Filter 'unsigned_*.msix' -ErrorAction SilentlyContinue | Select-Object -First 1
+          $setupExe = Get-ChildItem -Path $assetsDir -Filter '*-x64Setup.exe' -ErrorAction SilentlyContinue | Select-Object -First 1
+          $linuxTgz = Get-ChildItem -Path $assetsDir -Filter 'snishaper-linux-amd64.tar.gz' -ErrorAction SilentlyContinue | Select-Object -First 1
+
           Add-AssetRow $setupExe "Windows installer (Inno Setup): classic guided installation with license and desktop shortcut, for regular users"
           Add-AssetRow $bundle "Signed bundle: MSIX installer + signing certificate (devcert.pfx) + install.bat + signing password, for one-click sideload"
-          Add-AssetRow $portable "Portable build: extract and run snishaper.exe directly, no installation required"
+          Add-AssetRow $portable "Windows portable build: extract and run snishaper.exe directly, no installation required"
           Add-AssetRow $unsigned "Unsigned MSIX for Microsoft Partner Center submission (re-signed by Microsoft on upload)"
+          Add-AssetRow $linuxTgz "Linux portable build (amd64): extract and run ./SniShaper, requires GTK4/WebKitGTK runtime"
           # Blank line so the following ## Contributors heading is separated.
           [void]$sb.AppendLine("")
 
@@ -617,6 +714,11 @@ jobs:
           [System.IO.File]::WriteAllText($notesFile, $newContent, [System.Text.Encoding]::UTF8)
           Write-Host "::notice::Asset manifest inserted before Contributors in $notesFile"
 
+      - name: List staged assets
+        shell: pwsh
+        run: |
+          Get-ChildItem -Path staging | ForEach-Object { Write-Host "  $($_.Name) ($($_.Length) bytes)" }
+
       - name: Create GitHub Release
         shell: pwsh
         env:
@@ -628,7 +730,7 @@ jobs:
           $tag = "${{ needs.check.outputs.tag }}"
           $releaseName = "${{ needs.check.outputs.release_name }}"
           $prerelease = "${{ inputs.prerelease }}".ToLowerInvariant()
-          $assetsDir = "${{ steps.stage.outputs.dir }}"
+          $assetsDir = Join-Path $env:GITHUB_WORKSPACE 'staging'
           $notesFile = Join-Path $assetsDir 'RELEASE_NOTES.md'
 
           Write-Host "::group::gh release create $tag"
@@ -636,11 +738,12 @@ jobs:
             'release', 'create', $tag,
             # Signed MSIX + devcert.pfx + install.bat + password are bundled
             # into the *_x64.7z archive, so only upload the unsigned MSIX
-            # (for Partner Center) plus the Inno Setup exe and the two 7z
-            # archives.
+            # (for Partner Center) plus the Inno Setup exe, the two 7z
+            # archives and the Linux tar.gz.
             (Join-Path $assetsDir 'unsigned_*.msix'),
             (Join-Path $assetsDir '*.exe'),
             (Join-Path $assetsDir '*.7z'),
+            (Join-Path $assetsDir 'snishaper-linux-amd64.tar.gz'),
             '--title', $releaseName,
             '--notes-file', $notesFile
           )

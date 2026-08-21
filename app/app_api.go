@@ -31,8 +31,8 @@ import (
 func NewApp() *App {
 	execPath, _ := os.Executable()
 	execDir := filepath.Dir(execPath)
-	settingsPath := common.ResolveRuntimeFile(execDir, filepath.Join("config", "settings.json"))
-	rulesPath := common.ResolveRuntimeFile(execDir, filepath.Join("rules", "config.json"))
+	settingsPath := common.ConfigSettingsPath(execDir)
+	rulesPath := common.ConfigRulesPath(execDir)
 
 	ruleManager := proxy.NewRuleManager(settingsPath, rulesPath)
 	if err := ruleManager.LoadConfig(); err != nil {
@@ -59,8 +59,8 @@ func NewApp() *App {
 		cancel:            cancel,
 		proxyServer:       proxyServer,
 		ruleManager:       ruleManager,
-		certPath:          filepath.Join(execDir, "cert"),
-		proxyMarkerPath:   filepath.Join(execDir, "config", "system_proxy_owner.json"),
+		certPath:          common.ConfigCertDir(execDir),
+		proxyMarkerPath:   common.ConfigProxyMarker(execDir),
 		launchedAtStartup: HasLaunchArg("--startup"),
 		autoProxyAtStartup: HasLaunchArg("--autoproxy"),
 		core:              core.NewCoreClient(),

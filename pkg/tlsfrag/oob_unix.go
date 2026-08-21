@@ -1,4 +1,4 @@
-//go:build unix
+//go:build !windows && !linux
 
 package tlsfrag
 

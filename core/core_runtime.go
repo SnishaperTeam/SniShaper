@@ -56,8 +56,8 @@ func newCoreRuntime() (*coreRuntime, error) {
 		return nil, err
 	}
 	execDir := filepath.Dir(execPath)
-	settingsPath := common.ResolveRuntimeFile(execDir, filepath.Join("config", "settings.json"))
-	rulesPath := common.ResolveRuntimeFile(execDir, filepath.Join("rules", "config.json"))
+	settingsPath := common.ConfigSettingsPath(execDir)
+	rulesPath := common.ConfigRulesPath(execDir)
 
 	ruleManager := proxy.NewRuleManager(settingsPath, rulesPath)
 	if err := ruleManager.LoadConfig(); err != nil {
@@ -77,7 +77,7 @@ func newCoreRuntime() (*coreRuntime, error) {
 	r := &coreRuntime{
 		execPath:    execPath,
 		execDir:     execDir,
-		certPath:    filepath.Join(execDir, "cert"),
+		certPath:    common.ConfigCertDir(execDir),
 		ruleManager: ruleManager,
 		proxyServer: proxy.NewProxyServer("127.0.0.1:" + port),
 		logBuffer:   common.NewRingLogWriter(5000),

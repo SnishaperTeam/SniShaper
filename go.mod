@@ -42,7 +42,8 @@ require (
 	github.com/sagernet/gvisor v0.0.0-20260727.0-sing-box-mod.1 // indirect
 	github.com/sagernet/netlink v0.0.0-20240612041022-b9a21c07ac6a // indirect
 	github.com/sagernet/nftables v0.3.0-mod.2 // indirect
-	github.com/vishvananda/netns v0.0.4 // indirect
+	github.com/vishvananda/netlink v1.3.1 // indirect
+	github.com/vishvananda/netns v0.0.5 // indirect
 	github.com/wailsapp/wails/webview2 v1.0.27 // indirect
 	github.com/webx-top/com v1.3.30 // indirect
 	go4.org/netipx v0.0.0-20231129151722-fdeea329fbba // indirect
