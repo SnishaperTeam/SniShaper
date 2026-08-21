@@ -17,6 +17,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/admpub/go-download/v2"
 	"github.com/wailsapp/wails/v3/pkg/application"
 )
 
@@ -38,19 +39,20 @@ var downloadSourceOrder = []string{
 }
 
 var downloadSources = map[string]string{
-	"direct":              "",
-	"down.mxw.qzz.io":     "https://down.mxw.qzz.io/",
-	"gh-proxy.org":        "https://gh-proxy.org/",
-	"v4.gh-proxy.org":     "https://v4.gh-proxy.org/",
-	"v6.gh-proxy.org":     "https://v6.gh-proxy.org/",
-	"cdn.gh-proxy.org":    "https://cdn.gh-proxy.org/",
+	"direct":               "",
+	"down.mxw.qzz.io":      "https://down.mxw.qzz.io/",
+	"gh-proxy.org":         "https://gh-proxy.org/",
+	"v4.gh-proxy.org":      "https://v4.gh-proxy.org/",
+	"v6.gh-proxy.org":      "https://v6.gh-proxy.org/",
+	"cdn.gh-proxy.org":     "https://cdn.gh-proxy.org/",
 	"axisnow.gh-proxy.org": "https://axisnow.gh-proxy.org/",
-	"custom":              "",
+	"custom":               "",
 }
 
 const defaultDownloadSource = "down.mxw.qzz.io"
 
 var buildVersion string
+var buildChannel string
 
 type githubRelease struct {
 	TagName    string        `json:"tag_name"`
@@ -173,6 +175,9 @@ func measureSourceLatency(name, prefix string) DownloadSourceStatus {
 }
 
 func (a *App) GetReleaseChannel() string {
+	if ch := strings.TrimSpace(buildChannel); ch != "" {
+		return normalizeReleaseChannel(ch)
+	}
 	if ch, err := manifestChannel(); err == nil && ch != "" {
 		return normalizeReleaseChannel(ch)
 	}
@@ -615,64 +620,173 @@ func (a *App) DownloadUpdateAsset(assetURL string) (DownloadResult, error) {
 	return DownloadResult{}, lastErr
 }
 
+const (
+	defaultDownloadConcurrency = 10
+	defaultDownloadChunkSize   = 8 * 1024 * 1024
+)
+
+func (a *App) getDownloadConcurrency() int {
+	if a.downloadConcurrency > 0 {
+		return a.downloadConcurrency
+	}
+	n := defaultDownloadConcurrency
+	if s := strings.TrimSpace(os.Getenv("DOWNLOAD_CONCURRENCY")); s != "" {
+		if v, err := strconv.Atoi(s); err == nil && v > 0 {
+			n = v
+		}
+	}
+	a.downloadConcurrency = n
+	return n
+}
+
+func (a *App) getDownloadChunkSize() int64 {
+	if a.downloadChunkSize > 0 {
+		return a.downloadChunkSize
+	}
+	n := int64(defaultDownloadChunkSize)
+	if s := strings.TrimSpace(os.Getenv("DOWNLOAD_CHUNK_SIZE")); s != "" {
+		if v, err := strconv.ParseInt(s, 10, 64); err == nil && v > 0 {
+			n = v
+		}
+	}
+	a.downloadChunkSize = n
+	return n
+}
+
+func (a *App) downloadConcurrencyFn() download.ConcurrencyFn {
+	conc := a.getDownloadConcurrency()
+	chunk := a.getDownloadChunkSize()
+	return func(size int64) int {
+		n := conc
+		if chunk > 0 && size > 0 {
+			if byChunk := int(size / chunk); byChunk > 0 && byChunk < n {
+				n = byChunk
+			}
+		}
+		if n < 1 {
+			n = 1
+		}
+		return n
+	}
+}
+
+type downloadProgress struct {
+	a         *App
+	name      string
+	mu        sync.Mutex
+	received  int64
+	total     int64
+	lastEmit  time.Time
+	lastBytes int64
+}
+
+type progressReader struct {
+	prog *downloadProgress
+	r    io.Reader
+}
+
+func (p *progressReader) Read(b []byte) (int, error) {
+	n, err := p.r.Read(b)
+	if n > 0 {
+		p.prog.add(int64(n))
+	}
+	return n, err
+}
+
+func (p *downloadProgress) addTotal(n int64) {
+	p.mu.Lock()
+	p.total += n
+	p.mu.Unlock()
+}
+
+func (p *downloadProgress) add(n int64) {
+	p.mu.Lock()
+	p.received += n
+	now := time.Now()
+	if now.Sub(p.lastEmit) <= 150*time.Millisecond {
+		p.mu.Unlock()
+		return
+	}
+	elapsed := now.Sub(p.lastEmit).Seconds()
+	var speed float64
+	if elapsed > 0 {
+		speed = float64(p.received-p.lastBytes) / elapsed
+	}
+	p.lastEmit = now
+	p.lastBytes = p.received
+	received, total, name := p.received, p.total, p.name
+	a := p.a
+	p.mu.Unlock()
+	a.emitDownloadProgress(name, received, total, speed)
+}
+
+func (p *downloadProgress) finish(written int64) {
+	p.mu.Lock()
+	received := p.received
+	if written > received {
+		received = written
+	}
+	total := p.total
+	if total < received {
+		total = received
+	}
+	name := p.name
+	a := p.a
+	p.mu.Unlock()
+	a.emitDownloadProgress(name, received, total, 0)
+}
+
 func (a *App) downloadFileWithProgress(url, dest, name string) error {
+	if a.ctx.Err() != nil {
+		return a.ctx.Err()
+	}
 	transport := &http.Transport{
 		DialContext:           (&net.Dialer{Timeout: 15 * time.Second, KeepAlive: 30 * time.Second}).DialContext,
 		ResponseHeaderTimeout: 30 * time.Second,
 	}
 	client := &http.Client{Transport: transport}
-	req, err := http.NewRequest(http.MethodGet, url, nil)
+
+	progress := &downloadProgress{
+		a:        a,
+		name:     name,
+		lastEmit: time.Now(),
+	}
+
+	options := &download.Options{
+		Concurrency: a.downloadConcurrencyFn(),
+		Client: func() http.Client {
+			return *client
+		},
+		Request: func(r *http.Request) {
+			r.Header.Set("User-Agent", updateUserAgent)
+		},
+		Proxy: func(_ string, _ int, size int64, r io.Reader) io.Reader {
+			progress.addTotal(size)
+			return &progressReader{prog: progress, r: r}
+		},
+	}
+
+	f, err := download.OpenContext(a.ctx, url, options)
 	if err != nil {
 		return err
 	}
-	req.Header.Set("User-Agent", updateUserAgent)
-	resp, err := client.Do(req)
-	if err != nil {
-		return err
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("http status %d", resp.StatusCode)
-	}
+	defer f.Close()
+
 	tmp := dest + ".part"
 	out, err := os.Create(tmp)
 	if err != nil {
 		return err
 	}
 	defer func() {
+		out.Close()
 		if _, statErr := os.Stat(tmp); statErr == nil {
 			os.Remove(tmp)
 		}
 	}()
-	total := resp.ContentLength
-	var received int64
-	var speed float64
-	lastEmit := time.Now()
-	lastBytes := int64(0)
-	buf := make([]byte, 256*1024)
-	for {
-		n, rerr := resp.Body.Read(buf)
-		if n > 0 {
-			if _, werr := out.Write(buf[:n]); werr != nil {
-				return werr
-			}
-			received += int64(n)
-			if time.Since(lastEmit) > 150*time.Millisecond {
-				now := time.Now()
-				if elapsed := now.Sub(lastEmit).Seconds(); elapsed > 0 {
-					speed = float64(received-lastBytes) / elapsed
-				}
-				lastEmit = now
-				lastBytes = received
-				a.emitDownloadProgress(name, received, total, speed)
-			}
-		}
-		if rerr == io.EOF {
-			break
-		}
-		if rerr != nil {
-			return rerr
-		}
+
+	written, err := io.Copy(out, f)
+	if err != nil {
+		return err
 	}
 	if err := out.Close(); err != nil {
 		return err
@@ -680,7 +794,7 @@ func (a *App) downloadFileWithProgress(url, dest, name string) error {
 	if err := os.Rename(tmp, dest); err != nil {
 		return err
 	}
-	a.emitDownloadProgress(name, received, total, speed)
+	progress.finish(written)
 	return nil
 }
 

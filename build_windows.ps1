@@ -382,9 +382,14 @@ if ($choice -eq "2" -or $choice -eq "3") {
     
     $ManifestPath = Join-Path $ProjectRoot "Package.appxmanifest"
     $buildVersion = Get-RelVersion -ManifestPath $ManifestPath
+    $relChannel = ""
+    $content = Get-Content -Raw $ManifestPath
+    if ($content -match '<rel:ReleaseChannel>([^<]+)</rel:ReleaseChannel>') { $relChannel = $Matches[1].Trim() }
     $ldflags = "-s -w -H windowsgui"
     if ($buildVersion) { $ldflags += " -X snishaper/app.buildVersion=$buildVersion" }
+    if ($relChannel) { $ldflags += " -X snishaper/app.buildChannel=$relChannel" }
     Write-Host ($messages["$($lang)_BackBuildVersion"] -f $buildVersion) -ForegroundColor Green
+    if ($relChannel) { Write-Host "[Backend] buildChannel=$relChannel" -ForegroundColor Green }
 
     $utf8NoBom = New-Object System.Text.UTF8Encoding $false
     $WinResPath = Join-Path $ProjectRoot "winres\winres.json"
