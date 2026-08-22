@@ -14,7 +14,7 @@
 
 本项目为 **Windows 与 Linux 双平台** 仓库，共用同一套代码与版本机制，平台相关逻辑通过 Go build tags 隔离。
 
-> 需要无图形界面的终端版本？请使用 [**SniShaper CLI**](https://github.com/dongzheyu/SniShaper-CLI)——剥离 GUI 的跨平台（Windows / Linux / macOS）headless 版，内置 TUI 分屏界面（实时日志 + 命令面板），保留全部核心代理能力。
+> 需要无图形界面的终端版本？本仓库内置 **SniShaper CLI**（`cli/` 目录）——跨平台（Windows / Linux / macOS）headless 版，内置 TUI 分屏界面（实时日志 + 命令面板），保留全部核心代理能力。构建与用法见 [CLI 说明](cli/README.md)。独立镜像仓库：[SniShaper CLI](https://github.com/dongzheyu/SniShaper-CLI)。
 
 ---
 

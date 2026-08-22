@@ -8,6 +8,7 @@ import (
 	"net"
 	"net/rpc"
 	"os"
+	"path/filepath"
 	"runtime/debug"
 	"sync"
 	"time"
@@ -229,7 +230,7 @@ func RunCoreMain() error {
 	defer runtime.shutdown()
 
 	// Write RPC token to file for client to read
-	tokenPath := fmt.Sprintf("%s\\core_rpc_token", runtime.execDir)
+	tokenPath := filepath.Join(runtime.execDir, "core_rpc_token")
 	if err := os.WriteFile(tokenPath, []byte(coreRPCToken), 0600); err != nil {
 		return fmt.Errorf("failed to write RPC token: %w", err)
 	}

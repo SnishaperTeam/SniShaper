@@ -11,6 +11,8 @@ param(
 
     [switch]$SkipSign,
 
+    [switch]$Cli,
+
     [switch]$Silent
 )
 
@@ -34,6 +36,33 @@ function Get-RelVersion {
     return $ver
 }
 
+# Build-Cli 交叉编译 CLI 版（Windows/Linux/macOS x amd64/arm64），
+# 纯 Go 无 GUI 依赖，输出到 build/bin/cli/（含 config/ rules/ 种子文件）。
+function Build-Cli {
+    param([string]$ProjectRoot)
+    $OutDir = Join-Path $ProjectRoot "build\bin\cli"
+    New-Item -ItemType Directory -Force -Path $OutDir | Out-Null
+    $platforms = @("windows", "linux", "darwin")
+    $archs = @("amd64", "arm64")
+    foreach ($goos in $platforms) {
+        foreach ($goarch in $archs) {
+            $name = "snishaper-cli-$goos-$goarch"
+            if ($goos -eq "windows") { $name += ".exe" }
+            $out = Join-Path $OutDir $name
+            Write-Host "[CLI] building $goos/$goarch -> build/bin/cli/$name" -ForegroundColor Green
+            $env:GOOS = $goos
+            $env:GOARCH = $goarch
+            $env:CGO_ENABLED = "0"
+            go build -tags with_gvisor -ldflags "-s -w" -o $out ./cli
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+        }
+    }
+    Remove-Item Env:GOOS, Env:GOARCH, Env:CGO_ENABLED -ErrorAction SilentlyContinue
+    Copy-Item -Recurse -Force (Join-Path $ProjectRoot "config") $OutDir
+    Copy-Item -Recurse -Force (Join-Path $ProjectRoot "rules") $OutDir
+    Write-Host "[CLI] 构建完成: $OutDir" -ForegroundColor Green
+}
+
 $currentPrincipal = New-Object Security.Principal.WindowsPrincipal([Security.Principal.WindowsIdentity]::GetCurrent())
 $isAdmin = $currentPrincipal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
 
@@ -45,6 +74,7 @@ if (-not $isAdmin) {
     if ($InstallDeps) { $params += "-InstallDeps" }
     if ($BuildMsix)  { $params += "-BuildMsix" }
     if ($SkipSign)   { $params += "-SkipSign" }
+    if ($Cli)        { $params += "-Cli" }
     if ($Silent)     { $params += "-Silent" }
     $paramStr = $params -join ' '
     Start-Process powershell.exe -Verb RunAs -ArgumentList "-NoProfile -ExecutionPolicy Bypass -File `"$PSCommandPath`" $paramStr"
@@ -481,6 +511,15 @@ if ($choice -eq "2" -or $choice -eq "3") {
 
     Write-Host $messages["$($lang)_BackDone"] -ForegroundColor Green
     Write-Host ""
+
+    # ---------- CLI Build (optional, cross-platform headless) ----------
+    if ($Cli) {
+        Write-Host ""
+        Write-Host "==========================================" -ForegroundColor Cyan
+        Write-Host "[CLI] Building headless CLI (windows/linux/darwin x amd64/arm64)..." -ForegroundColor Cyan
+        Write-Host "==========================================" -ForegroundColor Cyan
+        Build-Cli -ProjectRoot $ProjectRoot
+    }
 }
 
 # ---------- MSIX Package Build (optional) ----------

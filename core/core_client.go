@@ -59,6 +59,12 @@ func (c *CoreClient) Call(method string, args any, reply any) error {
 	return client.Call(method, args, reply)
 }
 
+// Ping reports whether the core process is reachable.
+func (c *CoreClient) Ping() bool {
+	var pong BoolReply
+	return c.Call("Core.Ping", EmptyArgs{}, &pong) == nil && pong.Value
+}
+
 // EnsureRunning makes sure the core process is alive and responding.
 func (c *CoreClient) EnsureRunning() error {
 	return c.ensureRunningWithElevation(false)
