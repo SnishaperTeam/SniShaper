@@ -99,8 +99,8 @@ jobs:
       - name: Build Linux
         run: |
           set -euo pipefail
-          chmod +x build_linux.sh
-          ./build_linux.sh --with-frontend
+          chmod +x build.sh
+          ./build.sh --with-frontend
           test -f build/bin/SniShaper && echo "::notice::build/bin/SniShaper ready"
 
       - name: Smoke test binary
@@ -108,3 +108,41 @@ jobs:
           set -euo pipefail
           file build/bin/SniShaper
           ./build/bin/SniShaper --version 2>&1 | head -5 || true
+
+  cli-build:
+    name: CLI build (all targets)
+    runs-on: windows-2025
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+
+      - name: Build CLI (6 targets)
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $platforms = @("windows", "linux", "darwin")
+          $archs = @("amd64", "arm64")
+          foreach ($goos in $platforms) {
+            foreach ($goarch in $archs) {
+              $name = "snishaper-cli-$goos-$goarch"
+              if ($goos -eq "windows") { $name += ".exe" }
+              Write-Host "building $goos/$goarch -> $name"
+              $env:GOOS = $goos
+              $env:GOARCH = $goarch
+              $env:CGO_ENABLED = "0"
+              go build -tags with_gvisor -ldflags "-s -w" -o $name ./cli
+              if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+            }
+          }
+          Remove-Item Env:GOOS, Env:GOARCH, Env:CGO_ENABLED -ErrorAction SilentlyContinue
+
+      - name: Smoke test
+        shell: pwsh
+        run: |
+          .\snishaper-cli-windows-amd64.exe version
+          .\snishaper-cli-windows-amd64.exe help | Out-Null
+          Write-Host "CLI 6-target build OK" -ForegroundColor Green

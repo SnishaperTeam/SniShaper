@@ -472,12 +472,99 @@ jobs:
           retention-days: 3
 
   # ------------------------------------------------------------------
-  # Publish (windows-2025): merge artifacts from both platforms, generate
+  # CLI build (windows-2025): cross-compile the headless CLI for all six
+  # targets (windows/linux/darwin x amd64/arm64) and package each target
+  # into its own 7z archive (binary + config/ + rules/ seed files).
+  # ------------------------------------------------------------------
+  build-cli:
+    name: Build CLI (${{ inputs.channel }})
+    needs: check
+    if: needs.check.outputs.skip != 'true'
+    runs-on: windows-2025
+    permissions:
+      contents: read
+    env:
+      DISPLAY_VERSION: ${{ needs.check.outputs.display_version }}
+      RELEASE_CHANNEL: ${{ inputs.channel }}
+    steps:
+      - name: Checkout full history
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+
+      - name: Install 7-Zip
+        run: choco install 7zip -y --no-progress
+
+      - name: Build and package CLI (6 targets, one 7z each)
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $LDFLAGS = "-s -w -X snishaper/cli/app.buildVersion=$env:DISPLAY_VERSION"
+          if ($env:RELEASE_CHANNEL -and $env:RELEASE_CHANNEL -ne 'release') {
+            $LDFLAGS += " -X snishaper/cli/app.buildChannel=$env:RELEASE_CHANNEL"
+          }
+          $platforms = @("windows", "linux", "darwin")
+          $archs = @("amd64", "arm64")
+          $work = Join-Path $env:RUNNER_TEMP 'cliwork'
+          New-Item -ItemType Directory -Force -Path $work | Out-Null
+          foreach ($goos in $platforms) {
+            foreach ($goarch in $archs) {
+              $bin = "snishaper-cli-$goos-$goarch"
+              if ($goos -eq "windows") { $bin += ".exe" }
+              Write-Host "::group::build $goos/$goarch"
+              Write-Host "building $goos/$goarch -> $bin"
+              $env:GOOS = $goos
+              $env:GOARCH = $goarch
+              $env:CGO_ENABLED = "0"
+              go build -tags with_gvisor -ldflags="$LDFLAGS" -o $bin ./cli
+              if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+              Write-Host "::endgroup::"
+
+              $pkgDir = Join-Path $work $bin
+              New-Item -ItemType Directory -Force -Path $pkgDir | Out-Null
+              Move-Item -Force $bin (Join-Path $pkgDir (Split-Path $bin -Leaf))
+              Copy-Item -Recurse -Force "config" $pkgDir
+              Copy-Item -Recurse -Force "rules" $pkgDir
+
+              $archive = "snishaper-cli-$goos-$goarch.7z"
+              Write-Host "packaging $archive"
+              7z a -mx=9 $archive (Join-Path $pkgDir '*')
+              if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+            }
+          }
+          Remove-Item Env:GOOS, Env:GOARCH, Env:CGO_ENABLED -ErrorAction SilentlyContinue
+
+      - name: Smoke test CLI binary
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $env:GOOS = 'windows'; $env:GOARCH = 'amd64'; $env:CGO_ENABLED = '0'
+          go build -tags with_gvisor -ldflags="-s -w" -o cli-smoke.exe ./cli
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          .\cli-smoke.exe version
+          .\cli-smoke.exe help | Out-Null
+          Remove-Item Env:GOOS, Env:GOARCH, Env:CGO_ENABLED -ErrorAction SilentlyContinue
+          Remove-Item -Force cli-smoke.exe
+
+      - name: Upload CLI artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: cli-artifacts
+          path: snishaper-cli-*.7z
+          retention-days: 3
+
+  # ------------------------------------------------------------------
+  # Publish (windows-2025): merge artifacts from all platforms, generate
   # release notes via Ollama, and create the GitHub release.
   # ------------------------------------------------------------------
   publish:
     name: Publish Release (${{ inputs.channel }})
-    needs: [check, build-windows, build-linux]
+    needs: [check, build-windows, build-linux, build-cli]
     if: needs.check.outputs.skip != 'true'
     runs-on: windows-2025
     permissions:
@@ -498,6 +585,12 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: linux-artifacts
+          path: staging
+
+      - name: Download CLI artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: cli-artifacts
           path: staging
 
       - name: Determine previous release tag
@@ -706,6 +799,21 @@ jobs:
           Add-AssetRow $portable "Windows portable build: extract and run snishaper.exe directly, no installation required"
           Add-AssetRow $unsigned "Unsigned MSIX for Microsoft Partner Center submission (re-signed by Microsoft on upload)"
           Add-AssetRow $linuxTgz "Linux portable build (amd64): extract and run ./SniShaper, requires GTK4/WebKitGTK runtime"
+
+          $cliPurpose = @{
+            'snishaper-cli-windows-amd64.7z'  = 'CLI (headless): Windows x64, extract and run snishaper.exe, includes config/ and rules/ seed files'
+            'snishaper-cli-windows-arm64.7z'  = 'CLI (headless): Windows ARM64, extract and run snishaper.exe, includes config/ and rules/ seed files'
+            'snishaper-cli-linux-amd64.7z'    = 'CLI (headless): Linux x64, extract and run ./snishaper, includes config/ and rules/ seed files'
+            'snishaper-cli-linux-arm64.7z'    = 'CLI (headless): Linux ARM64, extract and run ./snishaper, includes config/ and rules/ seed files'
+            'snishaper-cli-darwin-amd64.7z'   = 'CLI (headless): macOS x64, extract and run ./snishaper, includes config/ and rules/ seed files'
+            'snishaper-cli-darwin-arm64.7z'   = 'CLI (headless): macOS ARM64 (Apple Silicon), extract and run ./snishaper, includes config/ and rules/ seed files'
+          }
+          Get-ChildItem -Path $assetsDir -File | Where-Object {
+            $_.Name -match '^snishaper-cli-(windows|linux|darwin)-(amd64|arm64)\.7z$'
+          } | Sort-Object Name | ForEach-Object {
+            $p = if ($cliPurpose.ContainsKey($_.Name)) { $cliPurpose[$_.Name] } else { 'CLI portable build (7z)' }
+            Add-AssetRow $_ $p
+          }
           # Blank line so the following ## Contributors heading is separated.
           [void]$sb.AppendLine("")
 

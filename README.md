@@ -14,7 +14,7 @@
 
 本项目为 **Windows 与 Linux 双平台** 仓库，共用同一套代码与版本机制，平台相关逻辑通过 Go build tags 隔离。
 
-> 需要无图形界面的终端版本？本仓库内置 **SniShaper CLI**（`cli/` 目录）——跨平台（Windows / Linux / macOS）headless 版，内置 TUI 分屏界面（实时日志 + 命令面板），保留全部核心代理能力。构建与用法见 [CLI 说明](cli/README.md)。
+> 需要无图形界面的终端版本？本仓库内置 **SniShaper CLI**（`cli/` 目录）——跨平台（Windows / Linux / macOS）headless 版，内置 TUI 分屏界面（实时日志 + 命令面板），保留全部核心代理能力，与 GUI 共用 `Package.appxmanifest` 版本源。
 
 ---
 
@@ -54,7 +54,7 @@ sudo ./SniShaper
 
 ### CLI 版（无界面）
 
-不需要图形界面、或在服务器 / SSH 环境中使用？本仓库内置 **SniShaper CLI**（`cli/` 目录，详见 [CLI 说明](cli/README.md)）：
+不需要图形界面、或在服务器 / SSH 环境中使用？本仓库内置 **SniShaper CLI**（`cli/` 目录）：
 
 - **三平台支持**：Windows / Linux / macOS（amd64 + arm64）。
 - **TUI 界面**：上屏实时滚动代理日志，下屏输入命令（支持中文别名），日志刷新再快也不会淹没输入。
@@ -226,7 +226,7 @@ Windows 与 Linux 构建均从此文件读取版本信息，并通过 ldflags �
 
 Windows 与 Linux 由同一仓库构建，平台相关实现通过 Go build tags 隔离（如 `//go:build linux` / `windows`）。无需再访问独立的 Linux 仓库。
 
-CLI（headless）版本作为本仓库的 `cli/` 子目录维护，与 GUI 共用同一套核心代码与版本机制（`Package.appxmanifest`），构建方式见 [CLI 说明](cli/README.md)。
+CLI（headless）版本作为本仓库的 `cli/` 子目录维护，与 GUI 共用同一套核心代码与版本机制（`Package.appxmanifest`），由 `build.sh --cli` / `build_windows.ps1 -Cli` 构建，CI 与发布流水线同时产出 GUI 与 CLI 产物。
 
 ## 致谢
 
