@@ -3,7 +3,7 @@
 [中文](README.md) | [English](README_EN.md) | [Русский](README_RU.md)
 
 [![Go Version](https://img.shields.io/badge/Go-1.25+-00ADD8?style=flat-square&logo=go)](https://golang.org)
-[![License](https://img.shields.io/badge/License-MIT-blue?style=flat-square)]()
+[![License](https://img.shields.io/badge/License-AGPL--3.0-blue?style=flat-square)](LICENSE)
 [![Wiki](https://img.shields.io/badge/Docs-Wiki-orange?style=flat-square)](https://github.com/SniShaper/SniShaper/wiki)
 [![GitHub Release](https://img.shields.io/github/v/release/SniShaper/SniShaper?style=flat-square&logo=github)](https://github.com/SniShaper/SniShaper/releases)
 [![GitHub Downloads](https://img.shields.io/github/downloads/SniShaper/SniShaper/total?style=flat-square&logo=github)](https://github.com/SniShaper/SniShaper/releases)
@@ -13,6 +13,8 @@
 **SniShaper** 是一款专为复杂网络环境设计的本地代理软件，通过 **ECH 注入**、**TLS 分片**、**QUIC 转换**、**会话迁移** 等多种协议栈技术，配合 **TUN 虚拟网卡** 接管全局流量，在复杂网络环境下提供稳定灵活的访问体验。
 
 本项目为 **Windows 与 Linux 双平台** 仓库，共用同一套代码与版本机制，平台相关逻辑通过 Go build tags 隔离。
+
+> 需要无图形界面的终端版本？请使用 [**SniShaper CLI**](https://github.com/dongzheyu/SniShaper-CLI)——剥离 GUI 的跨平台（Windows / Linux / macOS）headless 版，内置 TUI 分屏界面（实时日志 + 命令面板），保留全部核心代理能力。
 
 ---
 
@@ -50,9 +52,26 @@ sudo ./SniShaper
 
 程序会自动申请 root 权限（TUN 模式需要），如提权失败则 TUN 功能不可用但代理等其他功能正常。当前提供 **amd64** 构建，基于 **GTK4 + WebKitGTK 6.0**（亦支持 GTK3）。
 
+### CLI 版（无界面）
+
+不需要图形界面、或在服务器 / SSH 环境中使用？请使用 **[SniShaper CLI](https://github.com/dongzheyu/SniShaper-CLI)**：
+
+- **三平台支持**：Windows / Linux / macOS（amd64 + arm64）。
+- **TUI 界面**：上屏实时滚动代理日志，下屏输入命令（支持中文别名），日志刷新再快也不会淹没输入。
+- **后台模式**：`snishaper start` 常驻运行，`status` / `stop` / `logs` / `proxy` / `sysproxy` / `tun` / `config` / `ca` 子命令远程管理。
+- **完整核心**：与 GUI 版共享同一套代理引擎（ECH 注入、TLS 分片、QUIC、TUN/gvisor、GFWList 分流、DoH、CF IP 池、NAT64、进化模式）。
+- **移除更新检测**：无自动更新，适合长期运行的服务器场景。
+
+```bash
+git clone https://github.com/dongzheyu/SniShaper-CLI.git
+cd SniShaper-CLI
+go build -tags with_gvisor -o snishaper .
+./snishaper        # 启动 TUI
+```
+
 ### 证书重新安装
 
-在主界面点击「证书管理」-> 「**重置根证书**」。
+在主界面点击「证书管理」-> 「**重置根证书**」。CLI 版使用 `snishaper ca regenerate` 后重新 `ca install`。
 
 ### 配置与启动
 
@@ -204,6 +223,8 @@ Windows 与 Linux 构建均从此文件读取版本信息，并通过 ldflags �
 
 Windows 与 Linux 由同一仓库构建，平台相关实现通过 Go build tags 隔离（如 `//go:build linux` / `windows`）。无需再访问独立的 Linux 仓库。
 
+CLI（headless）版本维护在独立仓库 [SniShaper CLI](https://github.com/dongzheyu/SniShaper-CLI)，支持 Windows / Linux / macOS，构建方式见其 README。
+
 ## 致谢
 
 本项目受益于以下优秀开源项目的启发：
@@ -263,4 +284,4 @@ Windows 与 Linux 由同一仓库构建，平台相关实现通过 Go build tags
 
 ## 许可
 
-[MIT License](LICENSE)
+[GNU Affero General Public License v3.0](LICENSE)（AGPL-3.0）。
