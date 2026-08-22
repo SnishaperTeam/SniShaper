@@ -398,7 +398,7 @@ jobs:
           retention-days: 3
 
   # ------------------------------------------------------------------
-  # Linux build (ubuntu-24.04): portable tar.gz via build_linux.sh.
+  # Linux build (ubuntu-24.04): portable tar.gz via build.sh.
   # ------------------------------------------------------------------
   build-linux:
     name: Build Linux (${{ inputs.channel }})
@@ -450,9 +450,9 @@ jobs:
       - name: Build Linux
         run: |
           set -euo pipefail
-          chmod +x build_linux.sh
-          echo "::group::build_linux.sh --with-frontend"
-          ./build_linux.sh --with-frontend
+          chmod +x build.sh
+          echo "::group::build.sh --with-frontend"
+          ./build.sh --with-frontend
           echo "::endgroup::"
           test -f build/bin/SniShaper && echo "::notice::build/bin/SniShaper ready"
 
