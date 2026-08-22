@@ -1,7 +1,6 @@
 package app
 
 import (
-	"encoding/json"
 	"encoding/xml"
 	"fmt"
 	"os"
@@ -10,42 +9,14 @@ import (
 )
 
 // buildVersion and buildChannel are injected via -ldflags by the CI
-// pipeline (see .github/workflows). When empty, the version is derived
-// from version.json next to the executable at runtime, then from the
-// Package.appxmanifest (legacy), and finally falls back to a default.
+// pipeline and build scripts. When empty, the version is derived from
+// the Package.appxmanifest next to the executable at runtime, and
+// finally falls back to a default. The manifest is the single version
+// source for every build, identical to the desktop app.
 var (
 	buildVersion string
 	buildChannel string
 )
-
-// versionFromJSON reads the version from version.json, searching up from
-// the executable directory. version.json is the single version source
-// for the headless edition, mirroring the Package.appxmanifest role of
-// the desktop app.
-func versionFromJSON() string {
-	dir := filepath.Dir(os.Args[0])
-	var lastErr error
-	for {
-		data, err := os.ReadFile(filepath.Join(dir, "version.json"))
-		if err == nil {
-			var vj struct {
-				Version string `json:"version"`
-			}
-			if err := json.Unmarshal(data, &vj); err == nil && strings.TrimSpace(vj.Version) != "" {
-				return strings.TrimSpace(vj.Version)
-			}
-		} else {
-			lastErr = err
-		}
-		parent := filepath.Dir(dir)
-		if parent == dir {
-			break
-		}
-		dir = parent
-	}
-	_ = lastErr
-	return ""
-}
 
 // normalizeReleaseChannel maps a raw channel token to a canonical value.
 func normalizeReleaseChannel(ch string) string {
@@ -87,9 +58,6 @@ func channelFromTag(tag string) string {
 func VersionString() string {
 	if strings.TrimSpace(buildVersion) != "" {
 		return buildVersion
-	}
-	if v := versionFromJSON(); v != "" {
-		return v
 	}
 	if v, err := manifestVersionFull(); err == nil && v != "" {
 		return v

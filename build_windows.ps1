@@ -38,10 +38,21 @@ function Get-RelVersion {
 
 # Build-Cli 交叉编译 CLI 版（Windows/Linux/macOS x amd64/arm64），
 # 纯 Go 无 GUI 依赖，输出到 build/bin/cli/（含 config/ rules/ 种子文件）。
+# 版本号与 GUI 相同，取自 Package.appxmanifest（唯一版本源）。
 function Build-Cli {
     param([string]$ProjectRoot)
     $OutDir = Join-Path $ProjectRoot "build\bin\cli"
     New-Item -ItemType Directory -Force -Path $OutDir | Out-Null
+    $ManifestPath = Join-Path $ProjectRoot "Package.appxmanifest"
+    $cliVersion = Get-RelVersion -ManifestPath $ManifestPath
+    $cliChannel = ""
+    $mContent = Get-Content -Raw $ManifestPath
+    if ($mContent -match '<rel:ReleaseChannel>([^<]+)</rel:ReleaseChannel>') { $cliChannel = $Matches[1].Trim() }
+    $ldflags = "-s -w"
+    if ($cliVersion) { $ldflags += " -X snishaper/cli/app.buildVersion=$cliVersion" }
+    if ($cliChannel) { $ldflags += " -X snishaper/cli/app.buildChannel=$cliChannel" }
+    Write-Host "[CLI] Build version: $cliVersion (manifest)" -ForegroundColor Green
+    if ($cliChannel) { Write-Host "[CLI] buildChannel=$cliChannel" -ForegroundColor Green }
     $platforms = @("windows", "linux", "darwin")
     $archs = @("amd64", "arm64")
     foreach ($goos in $platforms) {
@@ -53,7 +64,7 @@ function Build-Cli {
             $env:GOOS = $goos
             $env:GOARCH = $goarch
             $env:CGO_ENABLED = "0"
-            go build -tags with_gvisor -ldflags "-s -w" -o $out ./cli
+            go build -tags with_gvisor -ldflags="$ldflags" -o $out ./cli
             if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
         }
     }
@@ -139,6 +150,7 @@ $messages = @{
     "EN_BackSyncVer" = "[Backend] Syncing version resource from manifest: {0} ..."
     "EN_BackSyncVerDone" = "[Backend] Version resource synced: {0}"
     "EN_BackSyncVerFail" = "[WARNING] go-winres failed, keeping existing version resource"
+    "EN_CliPrompt" = "Build the headless CLI as well? (Y/N, default N)"
 
     "CN_MenuTitle" = "       项目构建菜单"
     "CN_DepPrompt" = "是否需要安装前端 npm 依赖？(Y/N，默认为 N)"
@@ -170,6 +182,7 @@ $messages = @{
     "CN_BackSyncVer" = "[后端] 正在从 manifest 同步版本资源：{0} ..."
     "CN_BackSyncVerDone" = "[后端] 版本资源已同步：{0}"
     "CN_BackSyncVerFail" = "[警告] go-winres 失败，保留现有版本资源"
+    "CN_CliPrompt" = "是否同时构建 CLI（headless 跨平台）？(Y/N，默认为 N)"
 
     "RU_MenuTitle" = "       Меню сборки проекта"
     "RU_DepPrompt" = "Установить npm зависимости фронтенда? (Y/N, по умолчанию N)"
@@ -201,6 +214,7 @@ $messages = @{
     "RU_BackSyncVer" = "[Бэкенд] Синхронизация ресурса версии из manifest: {0} ..."
     "RU_BackSyncVerDone" = "[Бэкенд] Ресурс версии синхронизирован: {0}"
     "RU_BackSyncVerFail" = "[ПРЕДУПРЕЖДЕНИЕ] go-winres не удался, сохраняем текущий ресурс версии"
+    "RU_CliPrompt" = "Также собрать headless CLI? (Y/N, по умолчанию N)"
 }
 
 # --- Silent mode defaults ---
@@ -316,6 +330,14 @@ if ($BuildMsix -and -not $Silent -and -not $PSBoundParameters.ContainsKey('SkipS
         $SkipSign = $true
     } else {
         $SkipSign = $false
+    }
+}
+
+# --- Resolve CLI build when interactive ---
+if (-not $Silent -and -not $PSBoundParameters.ContainsKey('Cli')) {
+    $cliInput = Read-Host $messages["$($lang)_CliPrompt"]
+    if ($cliInput -eq "Y" -or $cliInput -eq "y") {
+        $Cli = $true
     }
 }
 

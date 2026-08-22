@@ -14,7 +14,7 @@
 
 本项目为 **Windows 与 Linux 双平台** 仓库，共用同一套代码与版本机制，平台相关逻辑通过 Go build tags 隔离。
 
-> 需要无图形界面的终端版本？本仓库内置 **SniShaper CLI**（`cli/` 目录）——跨平台（Windows / Linux / macOS）headless 版，内置 TUI 分屏界面（实时日志 + 命令面板），保留全部核心代理能力。构建与用法见 [CLI 说明](cli/README.md)。独立镜像仓库：[SniShaper CLI](https://github.com/dongzheyu/SniShaper-CLI)。
+> 需要无图形界面的终端版本？本仓库内置 **SniShaper CLI**（`cli/` 目录）——跨平台（Windows / Linux / macOS）headless 版，内置 TUI 分屏界面（实时日志 + 命令面板），保留全部核心代理能力。构建与用法见 [CLI 说明](cli/README.md)。
 
 ---
 
@@ -54,19 +54,22 @@ sudo ./SniShaper
 
 ### CLI 版（无界面）
 
-不需要图形界面、或在服务器 / SSH 环境中使用？请使用 **[SniShaper CLI](https://github.com/dongzheyu/SniShaper-CLI)**：
+不需要图形界面、或在服务器 / SSH 环境中使用？本仓库内置 **SniShaper CLI**（`cli/` 目录，详见 [CLI 说明](cli/README.md)）：
 
 - **三平台支持**：Windows / Linux / macOS（amd64 + arm64）。
 - **TUI 界面**：上屏实时滚动代理日志，下屏输入命令（支持中文别名），日志刷新再快也不会淹没输入。
 - **后台模式**：`snishaper start` 常驻运行，`status` / `stop` / `logs` / `proxy` / `sysproxy` / `tun` / `config` / `ca` 子命令远程管理。
 - **完整核心**：与 GUI 版共享同一套代理引擎（ECH 注入、TLS 分片、QUIC、TUN/gvisor、GFWList 分流、DoH、CF IP 池、NAT64、进化模式）。
 - **移除更新检测**：无自动更新，适合长期运行的服务器场景。
+- **版本一致**：与 GUI 版共用 `Package.appxmanifest` 作为唯一版本源。
 
 ```bash
-git clone https://github.com/dongzheyu/SniShaper-CLI.git
-cd SniShaper-CLI
-go build -tags with_gvisor -o snishaper .
-./snishaper        # 启动 TUI
+# 仓库内构建 CLI（全平台：windows/linux/darwin x amd64/arm64）
+./build.sh --cli          # Unix / macOS
+.\build_windows.ps1 -Build backend -Cli -Silent   # Windows
+
+# 产物在 build/bin/cli/，直接运行 TUI
+./build/bin/cli/snishaper-cli-linux-amd64
 ```
 
 ### 证书重新安装
@@ -223,7 +226,7 @@ Windows 与 Linux 构建均从此文件读取版本信息，并通过 ldflags �
 
 Windows 与 Linux 由同一仓库构建，平台相关实现通过 Go build tags 隔离（如 `//go:build linux` / `windows`）。无需再访问独立的 Linux 仓库。
 
-CLI（headless）版本维护在独立仓库 [SniShaper CLI](https://github.com/dongzheyu/SniShaper-CLI)，支持 Windows / Linux / macOS，构建方式见其 README。
+CLI（headless）版本作为本仓库的 `cli/` 子目录维护，与 GUI 共用同一套核心代码与版本机制（`Package.appxmanifest`），构建方式见 [CLI 说明](cli/README.md)。
 
 ## 致谢
 

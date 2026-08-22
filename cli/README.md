@@ -139,18 +139,17 @@ build/bin/cli/
 
 ### 版本机制
 
-版本号单一来源为仓库根目录的 `version.json`：
+与 GUI 版完全一致：版本号单一来源为仓库根目录的 **`Package.appxmanifest`**：
 
-```json
-{
-  "version": "1.29.0"
-}
+```xml
+<rel:Version>1.29.0</rel:Version>
+<rel:ReleaseChannel>beta.1</rel:ReleaseChannel>
 ```
 
-与 GUI 版（Package.appxmanifest）相同的读取/注入逻辑，优先级从高到低：
+读取/注入逻辑与 GUI 版相同，优先级从高到低：
 
-1. **ldflags 注入**（CI 发布流水线）：`-X snishaper/app.buildVersion=<版本> -X snishaper/app.buildChannel=<频道>`，发布版以注入值为准；
-2. **运行时读取** `version.json`（可执行文件目录向上搜索）；
+1. **ldflags 注入**（构建脚本 / CI 发布流水线）：`-X snishaper/cli/app.buildVersion=<版本> -X snishaper/cli/app.buildChannel=<频道>`，发布版以注入值为准；
+2. **运行时读取** `Package.appxmanifest`（可执行文件目录向上搜索）；
 3. 兜底默认 `1.29`。
 
 软件内查看版本：CLI `snishaper version`、TUI 命令面板输入 `version`。

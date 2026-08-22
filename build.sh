@@ -3,7 +3,8 @@
 # build.sh — SniShaper 统一构建脚本（Unix / Linux / macOS）
 #
 # 用法:
-#   ./build.sh                       # GUI Linux（使用已有的 frontend/dist）
+#   ./build.sh                       # 交互模式（菜单选择 GUI / CLI / 全部）
+#   ./build.sh --gui                 # GUI Linux（使用已有的 frontend/dist）
 #   ./build.sh --with-frontend       # 先构建前端再编译 GUI 后端
 #   ./build.sh --gtk3                # GUI 使用 GTK3 + webkit2gtk-4.1（默认 GTK4）
 #   ./build.sh --cli                 # 仅构建 CLI 版（windows/linux/darwin x amd64/arm64）
@@ -31,6 +32,8 @@ fi
 BUILD_FRONTEND=0
 BUILD_CLI=0
 BUILD_ALL=0
+BUILD_GUI=0
+INTERACTIVE=0
 GTK_TAGS=()
 
 for arg in "$@"; do
@@ -38,6 +41,7 @@ for arg in "$@"; do
         --with-frontend) BUILD_FRONTEND=1 ;;
         --gtk3) GTK_TAGS+=("gtk3") ;;
         --cli) BUILD_CLI=1 ;;
+        --gui) BUILD_GUI=1 ;;
         --all) BUILD_ALL=1 ;;
         --help|-h)
             grep '^#' "$0" | sed 's/^# \{0,1\}//'
@@ -49,13 +53,55 @@ done
 
 command -v go >/dev/null 2>&1 || { echo "[build] 未找到 go，请先安装 Go 1.25+" >&2; exit 1; }
 
+# ---------- 交互模式 ----------
+if [ "$BUILD_CLI" = "0" ] && [ "$BUILD_ALL" = "0" ] && [ "$BUILD_GUI" = "0" ] && [ $# -eq 0 ]; then
+    INTERACTIVE=1
+    echo "=========================================="
+    echo " SniShaper 构建菜单"
+    echo "=========================================="
+    echo "1) GUI（Linux 桌面版）"
+    echo "2) CLI（headless，windows/linux/darwin x amd64/arm64）"
+    echo "3) GUI + CLI"
+    echo ""
+    read -r -p "请选择 [1-3]: " choice
+    case "$choice" in
+        1) BUILD_GUI=1 ;;
+        2) BUILD_CLI=1 ;;
+        3) BUILD_ALL=1 ;;
+        *) echo "[build] 无效选择: $choice" >&2; exit 1 ;;
+    esac
+fi
+
+# 无任何目标参数且非交互（CI 等）时，默认构建 GUI（与原 build_linux.sh 一致）
+if [ "$BUILD_CLI" = "0" ] && [ "$BUILD_ALL" = "0" ] && [ "$BUILD_GUI" = "0" ]; then
+    BUILD_GUI=1
+fi
+
+# ---------- 版本号（Package.appxmanifest 为唯一版本源，GUI/CLI 共用） ----------
+#   <rel:Version>1.29.0</rel:Version>
+#   <rel:ReleaseChannel>beta.1</rel:ReleaseChannel>
+MANIFEST_VERSION=""
+MANIFEST_CHANNEL=""
+if [ -f Package.appxmanifest ]; then
+    MANIFEST_VERSION="$(grep -oP '<rel:Version>\K[^<]+' Package.appxmanifest 2>/dev/null | head -1 || true)"
+    MANIFEST_CHANNEL="$(grep -oP '<rel:ReleaseChannel>\K[^<]+' Package.appxmanifest 2>/dev/null | head -1 || true)"
+fi
+
 # ---------- CLI Build（纯 Go，无 GUI 依赖，交叉编译全平台） ----------
 build_cli() {
     echo "=========================================="
     echo " SniShaper CLI 构建 (headless)"
+    echo "   Version=$MANIFEST_VERSION Channel=$MANIFEST_CHANNEL"
     echo "=========================================="
     OUT="build/bin/cli"
     mkdir -p "$OUT"
+    local LDFLAGS="-s -w"
+    if [ -n "$MANIFEST_VERSION" ]; then
+        LDFLAGS="$LDFLAGS -X snishaper/cli/app.buildVersion=$MANIFEST_VERSION"
+    fi
+    if [ -n "$MANIFEST_CHANNEL" ]; then
+        LDFLAGS="$LDFLAGS -X snishaper/cli/app.buildChannel=$MANIFEST_CHANNEL"
+    fi
     local platforms=(
         windows/amd64
         windows/arm64
@@ -70,7 +116,7 @@ build_cli() {
         [ "$goos" = "windows" ] && name="$name.exe"
         echo "[CLI] building $goos/$goarch -> $OUT/$name"
         GOOS="$goos" GOARCH="$goarch" CGO_ENABLED=0 \
-            go build -tags with_gvisor -ldflags "-s -w" -o "$OUT/$name" ./cli
+            go build -tags with_gvisor -ldflags "$LDFLAGS" -o "$OUT/$name" ./cli
     done
     cp -r config rules "$OUT"/
     echo "[CLI] 构建完成: $OUT"
@@ -84,6 +130,8 @@ if [ "$BUILD_CLI" = "1" ] || [ "$BUILD_ALL" = "1" ]; then
 fi
 
 # ---------- GUI Linux 构建 ----------
+if [ "$BUILD_GUI" = "1" ] || [ "$BUILD_ALL" = "1" ]; then
+
 CGO_ENABLED=1
 export CGO_ENABLED
 
@@ -127,22 +175,13 @@ fi
 echo "[backend] go mod download..."
 go mod download
 
-# ---------- 3. 版本号 ----------
-# Package.appxmanifest 是唯一版本源（与 Windows 共用）：
-#   <rel:Version>1.29.0</rel:Version>
-#   <rel:ReleaseChannel>beta.1</rel:ReleaseChannel>
-VERSION=""
-CHANNEL=""
-if [ -f Package.appxmanifest ]; then
-    VERSION="$(grep -oP '<rel:Version>\K[^<]+' Package.appxmanifest 2>/dev/null | head -1 || true)"
-    CHANNEL="$(grep -oP '<rel:ReleaseChannel>\K[^<]+' Package.appxmanifest 2>/dev/null | head -1 || true)"
-fi
+# ---------- 3. 版本号注入 ----------
 LDFLAGS="-s -w"
-if [ -n "$VERSION" ]; then
-    LDFLAGS="$LDFLAGS -X snishaper/app.buildVersion=$VERSION"
+if [ -n "$MANIFEST_VERSION" ]; then
+    LDFLAGS="$LDFLAGS -X snishaper/app.buildVersion=$MANIFEST_VERSION"
 fi
-if [ -n "$CHANNEL" ]; then
-    LDFLAGS="$LDFLAGS -X snishaper/app.buildChannel=$CHANNEL"
+if [ -n "$MANIFEST_CHANNEL" ]; then
+    LDFLAGS="$LDFLAGS -X snishaper/app.buildChannel=$MANIFEST_CHANNEL"
 fi
 
 # ---------- 4. 编译 ----------
@@ -179,3 +218,5 @@ echo "=========================================="
 echo " 构建成功: $OUT_BIN"
 echo " 运行: sudo $OUT_BIN  (TUN/系统代理需要 root)"
 echo "=========================================="
+
+fi

@@ -1114,9 +1114,6 @@ func (a *App) GetAppVersion() string {
 	if strings.TrimSpace(buildVersion) != "" {
 		return buildVersion
 	}
-	if v := versionFromJSON(); v != "" {
-		return v
-	}
 	if v, err := manifestVersionFull(); err == nil && v != "" {
 		return v
 	}
