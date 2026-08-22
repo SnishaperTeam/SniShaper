@@ -134,7 +134,7 @@ jobs:
               $env:GOOS = $goos
               $env:GOARCH = $goarch
               $env:CGO_ENABLED = "0"
-              go build -tags with_gvisor -ldflags "-s -w" -o $name ./cli
+              go build -tags "with_gvisor headless" -ldflags "-s -w" -o $name ./cli
               if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
             }
           }

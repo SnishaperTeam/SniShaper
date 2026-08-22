@@ -1,3 +1,5 @@
+//go:build headless
+
 package main
 
 import (
@@ -12,7 +14,7 @@ import (
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
 
-	"snishaper/cli/app"
+	"snishaper/app"
 )
 
 type tuiApp struct {
@@ -77,7 +79,7 @@ func (t *tuiApp) build() tview.Primitive {
 func (t *tuiApp) run() error {
 	t.app.SetCLIMode(true)
 	t.app.SetSilentStdout(true)
-	if err := t.app.Startup(); err != nil {
+	if err := t.app.StartupCLI(); err != nil {
 		return fmt.Errorf("启动失败: %w", err)
 	}
 	t.queueLog("TUI 已就绪，输入 help 查看命令")

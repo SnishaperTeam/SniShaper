@@ -49,8 +49,8 @@ function Build-Cli {
     $mContent = Get-Content -Raw $ManifestPath
     if ($mContent -match '<rel:ReleaseChannel>([^<]+)</rel:ReleaseChannel>') { $cliChannel = $Matches[1].Trim() }
     $ldflags = "-s -w"
-    if ($cliVersion) { $ldflags += " -X snishaper/cli/app.buildVersion=$cliVersion" }
-    if ($cliChannel) { $ldflags += " -X snishaper/cli/app.buildChannel=$cliChannel" }
+    if ($cliVersion) { $ldflags += " -X snishaper/app.buildVersion=$cliVersion" }
+    if ($cliChannel) { $ldflags += " -X snishaper/app.buildChannel=$cliChannel" }
     Write-Host "[CLI] Build version: $cliVersion (manifest)" -ForegroundColor Green
     if ($cliChannel) { Write-Host "[CLI] buildChannel=$cliChannel" -ForegroundColor Green }
     $platforms = @("windows", "linux", "darwin")
@@ -64,7 +64,7 @@ function Build-Cli {
             $env:GOOS = $goos
             $env:GOARCH = $goarch
             $env:CGO_ENABLED = "0"
-            go build -tags with_gvisor -ldflags="$ldflags" -o $out ./cli
+            go build -tags "with_gvisor headless" -ldflags="$ldflags" -o $out ./cli
             if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
         }
     }

@@ -504,9 +504,9 @@ jobs:
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
-          $LDFLAGS = "-s -w -X snishaper/cli/app.buildVersion=$env:DISPLAY_VERSION"
+          $LDFLAGS = "-s -w -X snishaper/app.buildVersion=$env:DISPLAY_VERSION"
           if ($env:RELEASE_CHANNEL -and $env:RELEASE_CHANNEL -ne 'release') {
-            $LDFLAGS += " -X snishaper/cli/app.buildChannel=$env:RELEASE_CHANNEL"
+            $LDFLAGS += " -X snishaper/app.buildChannel=$env:RELEASE_CHANNEL"
           }
           $platforms = @("windows", "linux", "darwin")
           $archs = @("amd64", "arm64")
@@ -521,7 +521,7 @@ jobs:
               $env:GOOS = $goos
               $env:GOARCH = $goarch
               $env:CGO_ENABLED = "0"
-              go build -tags with_gvisor -ldflags="$LDFLAGS" -o $bin ./cli
+              go build -tags "with_gvisor headless" -ldflags="$LDFLAGS" -o $bin ./cli
               if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
               Write-Host "::endgroup::"
 
@@ -544,7 +544,7 @@ jobs:
         run: |
           $ErrorActionPreference = 'Stop'
           $env:GOOS = 'windows'; $env:GOARCH = 'amd64'; $env:CGO_ENABLED = '0'
-          go build -tags with_gvisor -ldflags="-s -w" -o cli-smoke.exe ./cli
+          go build -tags "with_gvisor headless" -ldflags="-s -w" -o cli-smoke.exe ./cli
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           .\cli-smoke.exe version
           .\cli-smoke.exe help | Out-Null

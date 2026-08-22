@@ -8,6 +8,62 @@ import (
 	"strings"
 )
 
+// buildVersion and buildChannel are injected via -ldflags by the CI
+// pipeline and build scripts. When empty, the version is derived from
+// the Package.appxmanifest at runtime, then falls back to a default.
+// The manifest is the single version source for every build.
+var (
+	buildVersion string
+	buildChannel string
+)
+
+// VersionString returns the effective build version without an App
+// instance (used by the CLI entrypoint).
+func VersionString() string {
+	if strings.TrimSpace(buildVersion) != "" {
+		return buildVersion
+	}
+	if v, err := manifestVersionFull(); err == nil && v != "" {
+		return v
+	}
+	return "1.29"
+}
+
+// normalizeReleaseChannel maps a raw channel token to a canonical value.
+func normalizeReleaseChannel(ch string) string {
+	v := strings.ToLower(strings.TrimSpace(ch))
+	if i := strings.Index(v, "."); i > 0 {
+		v = v[:i]
+	}
+	switch v {
+	case "alpha":
+		return "alpha"
+	case "beta":
+		return "beta"
+	case "rc", "rc1", "releasecandidate", "release-candidate", "candidate":
+		return "rc"
+	case "stable", "release", "official", "final":
+		return "stable"
+	default:
+		return "stable"
+	}
+}
+
+// channelFromTag derives the release channel from a git tag name.
+func channelFromTag(tag string) string {
+	lower := strings.ToLower(tag)
+	switch {
+	case strings.Contains(lower, "-alpha"):
+		return "alpha"
+	case strings.Contains(lower, "-beta"):
+		return "beta"
+	case strings.Contains(lower, "-rc"):
+		return "rc"
+	default:
+		return "stable"
+	}
+}
+
 // manifestChannel returns the release channel encoded in the
 // Package.appxmanifest (e.g. "beta.1"), searching up from the executable
 // directory. It is the single version source for every platform; the

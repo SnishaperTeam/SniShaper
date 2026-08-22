@@ -287,15 +287,11 @@ func (a *App) SetCloseToTray(enabled bool) error {
 }
 
 func (a *App) WindowMinimise() {
-	if a.mainWindow != nil {
-		a.mainWindow.Minimise()
-	}
+	a.minimiseMainWindow()
 }
 
 func (a *App) WindowToggleMaximise() {
-	if a.mainWindow != nil {
-		a.mainWindow.ToggleMaximise()
-	}
+	a.toggleMaximiseMainWindow()
 }
 
 func (a *App) WindowClose() {
@@ -304,7 +300,7 @@ func (a *App) WindowClose() {
 
 func (a *App) HandleWindowClose() {
 	if a.GetCloseToTray() && !a.shouldQuit && a.mainWindow != nil {
-		a.mainWindow.Hide()
+		a.hideMainWindow()
 		return
 	}
 	a.QuitApp()

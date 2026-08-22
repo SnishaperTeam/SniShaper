@@ -18,13 +18,31 @@ import (
 	"snishaper/evolution"
 	"snishaper/pkg/certmanager"
 	"snishaper/proxy"
-
-	"github.com/wailsapp/wails/v3/pkg/application"
 )
 
+// UIAdapter is an optional event sink used by headless builds (the CLI /
+// TUI) to receive app-level state events without a wails runtime. The
+// desktop build ignores it entirely.
+type UIAdapter interface {
+	Emit(event string, payload interface{})
+}
+
 type App struct {
-	wailsApp            *application.App
-	mainWindow          *application.WebviewWindow
+	// GUI-only UI references. Kept as `any` so the headless build (with the
+	// `headless` build tag) never links the wails runtime; the GUI build
+	// accesses them through the typed helpers in app_ui_wails.go.
+	wailsApp     any // *application.App
+	mainWindow   any // *application.WebviewWindow
+	systemTray   any // *application.SystemTray
+	trayMenuV3   any // *application.Menu
+	proxyItemV3  any // *application.MenuItem
+	systemProxyItemV3 any // *application.MenuItem
+
+	// Headless-only event sink (set via SetUIAdapter in the CLI build).
+	ui          UIAdapter
+	cliMode     bool
+	silentStdout bool
+
 	proxyServer         *proxy.ProxyServer
 	certManager         *certmanager.CertManager
 	ruleManager         *proxy.RuleManager
@@ -40,10 +58,6 @@ type App struct {
 	logCaptureMu        sync.RWMutex
 	logCaptureEnabled   bool
 	shouldQuit          bool
-	systemTray          *application.SystemTray
-	trayMenuV3          *application.Menu
-	proxyItemV3         *application.MenuItem
-	systemProxyItemV3   *application.MenuItem
 	proxyOpMu           sync.Mutex // lock order: proxyOpMu → systemProxyOpMu (never reverse)
 	systemProxyOpMu     sync.Mutex
 	wg                  sync.WaitGroup
@@ -59,35 +73,6 @@ type App struct {
 	downloadConcurrency int
 	downloadChunkSize   int64
 }
-
-// SetWailsApp sets the wails application instance.
-func (a *App) SetWailsApp(w *application.App) { a.wailsApp = w }
-
-// SetMainWindow sets the main window reference.
-func (a *App) SetMainWindow(w *application.WebviewWindow) {
-	if w != nil {
-		a.mainWindow = w
-		if a.pendingShow {
-			a.mainWindow.Show()
-			a.mainWindow.Focus()
-			a.pendingShow = false
-		}
-	} else {
-		a.mainWindow = w
-	}
-}
-
-// SetSystemTray sets the system tray reference.
-func (a *App) SetSystemTray(t *application.SystemTray) { a.systemTray = t }
-
-// SetTrayMenu sets the tray menu reference.
-func (a *App) SetTrayMenu(m *application.Menu) { a.trayMenuV3 = m }
-
-// SetProxyMenuItem sets the proxy menu item reference.
-func (a *App) SetProxyMenuItem(i *application.MenuItem) { a.proxyItemV3 = i }
-
-// SetSystemProxyMenuItem sets the system proxy menu item reference.
-func (a *App) SetSystemProxyMenuItem(i *application.MenuItem) { a.systemProxyItemV3 = i }
 
 // ShouldQuit returns whether the app should quit.
 func (a *App) ShouldQuit() bool { return a.shouldQuit }
@@ -111,7 +96,11 @@ func (a *App) setupFileLogger() {
 		a.logBuffer = common.NewRingLogWriter(500)
 	}
 	log.SetFlags(log.LstdFlags | log.Lmicroseconds)
-	log.SetOutput(io.MultiWriter(&gatedLogWriter{app: a}, os.Stdout))
+	if a.silentStdout {
+		log.SetOutput(&gatedLogWriter{app: a})
+	} else {
+		log.SetOutput(io.MultiWriter(&gatedLogWriter{app: a}, os.Stdout))
+	}
 	a.openLogFile()
 }
 
@@ -249,16 +238,9 @@ func (a *App) StopLogCapture() error {
 	return nil
 }
 
-func (a *App) ServiceStartup(ctx context.Context, options application.ServiceOptions) error {
-	a.startupV3()
-	return nil
-}
-
-func (a *App) ServiceShutdown() error {
-	a.shutdown()
-	return nil
-}
-
+// startupV3 performs the shared service startup sequence; the wails
+// Service entry points (app_ui_wails.go) and the headless entry point
+// (StartupCLI, app_headless.go) both delegate here.
 func (a *App) startupV3() {
 	a.setupFileLogger()
 	log.Printf("[startup] SniShaper startup hook entered")
@@ -284,8 +266,10 @@ func (a *App) startupV3() {
 	if err := a.ruleManager.LoadConfig(); err != nil {
 		a.appendLog("[startup] Failed to load config: " + err.Error())
 	}
-	if err := a.syncAutoStartRegistration(); err != nil {
-		a.appendLog("[startup] Auto-start sync check failed: " + err.Error())
+	if !a.cliMode {
+		if err := a.syncAutoStartRegistration(); err != nil {
+			a.appendLog("[startup] Auto-start sync check failed: " + err.Error())
+		}
 	}
 
 	if a.core != nil {
@@ -329,7 +313,7 @@ func (a *App) autoEnableProxyAtStartup() {
 		if attempt >= len(delays) {
 			a.appendLog("[startup] AutoStart proxy enable failed after all retries; proxy left off")
 			if a.systemTray != nil {
-				a.systemTray.SetTooltip("SniShaper: 开机自启代理启动失败，请手动开启代理")
+				a.setTrayTooltip("SniShaper: 开机自启代理启动失败，请手动开启代理")
 			}
 			return
 		}
@@ -361,11 +345,11 @@ func (a *App) startRouteEventsPoller() {
 				continue
 			}
 			for _, e := range events {
-				application.InvokeAsync(func() {
+				a.invokeAsync(func() {
 					if a.mainWindow == nil || a.shouldQuit {
 						return
 					}
-					a.mainWindow.EmitEvent("app:route", map[string]interface{}{
+					a.emitEvent("app:route", map[string]interface{}{
 						"domain": e.Domain,
 						"mode":   e.Mode,
 					})
@@ -458,8 +442,7 @@ func (a *App) UpdateTrayMenu() {
 		proxyLabel = "代理: 开"
 	}
 	if a.proxyItemV3 != nil {
-		a.proxyItemV3.SetLabel(proxyLabel)
-		a.proxyItemV3.SetChecked(running)
+		a.updateTrayProxyItem(proxyLabel, running)
 	}
 
 	status := a.GetSystemProxyStatus()
@@ -468,7 +451,7 @@ func (a *App) UpdateTrayMenu() {
 		sysProxyLabel = "系统代理: 开"
 	}
 	if a.systemProxyItemV3 != nil {
-		a.systemProxyItemV3.SetLabel(sysProxyLabel)
+		a.updateTraySysProxyItem(sysProxyLabel)
 	}
 }
 
@@ -480,12 +463,12 @@ func (a *App) emitFrontendState() {
 	if a.mainWindow == nil {
 		return
 	}
-	application.InvokeAsync(func() {
+	a.invokeAsync(func() {
 		if a.mainWindow == nil || a.shouldQuit {
 			return
 		}
 		tunStatus := a.GetTUNStatus()
-		a.mainWindow.EmitEvent("app:state_changed", map[string]interface{}{
+		a.emitEvent("app:state_changed", map[string]interface{}{
 			"proxyRunning":      a.IsProxyRunning(),
 			"systemProxyActive": a.GetSystemProxyStatus().Enabled,
 			"proxyMode":         a.GetProxyMode(),

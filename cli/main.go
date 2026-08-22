@@ -1,3 +1,5 @@
+//go:build headless
+
 package main
 
 import (
@@ -11,7 +13,7 @@ import (
 	"syscall"
 	"time"
 
-	"snishaper/cli/app"
+	"snishaper/app"
 	"snishaper/common"
 	"snishaper/core"
 )
@@ -109,7 +111,7 @@ func runTUI() {
 func runService() {
 	a := app.NewApp()
 	a.SetCLIMode(true)
-	if err := a.Startup(); err != nil {
+	if err := a.StartupCLI(); err != nil {
 		log.Fatal(err)
 	}
 	writePid()

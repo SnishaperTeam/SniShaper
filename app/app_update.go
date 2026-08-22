@@ -1,3 +1,5 @@
+//go:build !headless
+
 package app
 
 import (
@@ -15,7 +17,6 @@ import (
 	"time"
 
 	"github.com/admpub/go-download/v2"
-	"github.com/wailsapp/wails/v3/pkg/application"
 )
 
 const (
@@ -47,9 +48,6 @@ var downloadSources = map[string]string{
 }
 
 const defaultDownloadSource = "down.mxw.qzz.io"
-
-var buildVersion string
-var buildChannel string
 
 type githubRelease struct {
 	TagName    string        `json:"tag_name"`
@@ -186,25 +184,6 @@ func (a *App) GetReleaseChannel() string {
 
 func (a *App) GetCurrentVersionFull() string {
 	return a.GetAppVersion()
-}
-
-func normalizeReleaseChannel(ch string) string {
-	v := strings.ToLower(strings.TrimSpace(ch))
-	if i := strings.Index(v, "."); i > 0 {
-		v = v[:i]
-	}
-	switch v {
-	case "alpha":
-		return "alpha"
-	case "beta":
-		return "beta"
-	case "rc", "rc1", "releasecandidate", "release-candidate", "candidate":
-		return "rc"
-	case "stable", "release", "official", "final":
-		return "stable"
-	default:
-		return "stable"
-	}
 }
 
 func (a *App) CheckUpdate() CheckUpdateResult {
@@ -442,20 +421,6 @@ func channelRank(ch string) int {
 		return 2
 	default:
 		return 3
-	}
-}
-
-func channelFromTag(tag string) string {
-	lower := strings.ToLower(tag)
-	switch {
-	case strings.Contains(lower, "-alpha"):
-		return "alpha"
-	case strings.Contains(lower, "-beta"):
-		return "beta"
-	case strings.Contains(lower, "-rc"):
-		return "rc"
-	default:
-		return "stable"
 	}
 }
 
@@ -716,11 +681,11 @@ func (a *App) emitDownloadProgress(name string, received, total int64, speed flo
 	if total > 0 {
 		percent = float64(received) / float64(total) * 100
 	}
-	application.InvokeAsync(func() {
+	a.invokeAsync(func() {
 		if a.mainWindow == nil || a.shouldQuit {
 			return
 		}
-		a.mainWindow.EmitEvent("update:download_progress", map[string]interface{}{
+		a.emitEvent("update:download_progress", map[string]interface{}{
 			"asset_name": name,
 			"received":   received,
 			"total":      total,

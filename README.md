@@ -154,12 +154,12 @@ pwsh -ExecutionPolicy Bypass -File .\build_windows.ps1
 
 ### Linux 构建
 
-Linux 构建使用 `build_linux.sh`，在 Linux 本机（或 Windows 上的 WSL2）执行。
+Linux 构建使用统一的 `build.sh`（交互式菜单：GUI / CLI / 全部），在 Linux 本机（或 Windows 上的 WSL2）执行；Windows 用户只需运行 `build_windows.ps1`，无需关心 GTK 依赖。
 
 #### 依赖（Ubuntu / Debian）
 
 ```bash
-# GTK4 + WebKitGTK 6.0（默认）
+# GTK4 + WebKitGTK 6.0（默认，仅 GUI 需要；CLI 构建无需 GTK）
 sudo apt-get update
 sudo apt-get install -y libgtk-4-dev libwebkitgtk-6.0-dev
 
@@ -174,17 +174,26 @@ sudo apt-get install -y libgtk-4-dev libwebkitgtk-6.0-dev
 git clone https://github.com/SniShaper/SniShaper.git
 cd SniShaper
 
-# 仅编译后端（使用已有的 frontend/dist）
-./build_linux.sh
+# 交互式菜单（1 GUI / 2 CLI / 3 GUI+CLI）
+./build.sh
 
-# 先构建前端再编译后端
-./build_linux.sh --with-frontend
+# GUI（使用已有的 frontend/dist）
+./build.sh --gui
+
+# 先构建前端再编译 GUI
+./build.sh --with-frontend
 
 # 使用 GTK3 + webkit2gtk-4.1
-./build_linux.sh --gtk3
+./build.sh --gtk3
+
+# 仅构建 CLI（headless，windows/linux/darwin x amd64/arm64）
+./build.sh --cli
+
+# GUI + CLI 一起构建
+./build.sh --all
 ```
 
-构建产物输出到 `build/bin/SniShaper`（含 `rules/`、`config/` 种子文件）。TUN / 系统代理需要 root，运行时 `sudo ./build/bin/SniShaper`。
+构建产物：GUI 输出 `build/bin/SniShaper`（含 `rules/`、`config/` 种子文件，TUN / 系统代理需要 root，运行时 `sudo ./build/bin/SniShaper`）；CLI 输出 `build/bin/cli/snishaper-cli-<os>-<arch>[.exe]`。
 
 ### 版本与发布渠道
 

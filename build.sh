@@ -97,10 +97,10 @@ build_cli() {
     mkdir -p "$OUT"
     local LDFLAGS="-s -w"
     if [ -n "$MANIFEST_VERSION" ]; then
-        LDFLAGS="$LDFLAGS -X snishaper/cli/app.buildVersion=$MANIFEST_VERSION"
+        LDFLAGS="$LDFLAGS -X snishaper/app.buildVersion=$MANIFEST_VERSION"
     fi
     if [ -n "$MANIFEST_CHANNEL" ]; then
-        LDFLAGS="$LDFLAGS -X snishaper/cli/app.buildChannel=$MANIFEST_CHANNEL"
+        LDFLAGS="$LDFLAGS -X snishaper/app.buildChannel=$MANIFEST_CHANNEL"
     fi
     local platforms=(
         windows/amd64
@@ -116,7 +116,7 @@ build_cli() {
         [ "$goos" = "windows" ] && name="$name.exe"
         echo "[CLI] building $goos/$goarch -> $OUT/$name"
         GOOS="$goos" GOARCH="$goarch" CGO_ENABLED=0 \
-            go build -tags with_gvisor -ldflags "$LDFLAGS" -o "$OUT/$name" ./cli
+            go build -tags "with_gvisor headless" -ldflags "$LDFLAGS" -o "$OUT/$name" ./cli
     done
     cp -r config rules "$OUT"/
     echo "[CLI] 构建完成: $OUT"

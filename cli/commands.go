@@ -1,3 +1,5 @@
+//go:build headless
+
 package main
 
 import (
@@ -8,7 +10,7 @@ import (
 	"strconv"
 	"strings"
 
-	"snishaper/cli/app"
+	"snishaper/app"
 	"snishaper/common"
 	"snishaper/core"
 	"snishaper/pkg/certmanager"

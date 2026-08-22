@@ -8,7 +8,6 @@ import (
 	"snishaper/evolution"
 	"snishaper/proxy"
 
-	"github.com/wailsapp/wails/v3/pkg/application"
 )
 
 // ensureEvolutionTester lazily creates the evolution tester on first use.
@@ -58,9 +57,9 @@ func (a *App) StartEvolutionTest(domains []string, enableIPv6 bool) (map[string]
 				break
 			}
 
-			application.InvokeAsync(func() {
+			a.invokeAsync(func() {
 				if a.mainWindow != nil {
-					a.mainWindow.EmitEvent("evolution:progress", map[string]interface{}{
+					a.emitEvent("evolution:progress", map[string]interface{}{
 						"progress":   currentTask.Progress,
 						"total":      currentTask.Total,
 						"status":     string(currentTask.Status),
@@ -73,9 +72,9 @@ func (a *App) StartEvolutionTest(domains []string, enableIPv6 bool) (map[string]
 
 		finalTask := tester.Snapshot()
 		if finalTask != nil {
-			application.InvokeAsync(func() {
+			a.invokeAsync(func() {
 				if a.mainWindow != nil {
-					a.mainWindow.EmitEvent("evolution:complete", map[string]interface{}{
+					a.emitEvent("evolution:complete", map[string]interface{}{
 						"id":         finalTask.ID,
 						"status":     string(finalTask.Status),
 						"progress":   finalTask.Progress,

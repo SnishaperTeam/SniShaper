@@ -322,8 +322,7 @@ func (a *App) SetListenPort(port int) error {
 
 func (a *App) RevealMainWindow() {
 	if a.mainWindow != nil {
-		a.mainWindow.Show()
-		a.mainWindow.Focus()
+		a.showMainWindow()
 		return
 	}
 	a.pendingShow = true
@@ -580,6 +579,36 @@ func (a *App) UninstallCert(thumbprint string) error {
 	}
 	a.appendLog("[cert] UninstallCert succeeded: " + thumbprint)
 	return nil
+}
+
+// GetCore returns the underlying core RPC client (headless/CLI use).
+func (a *App) GetCore() *core.CoreClient {
+	return a.core
+}
+
+// GetAppRecentLogs returns only the app-side in-memory log lines.
+func (a *App) GetAppRecentLogs(limit int) string {
+	if limit <= 0 {
+		limit = 200
+	}
+	if limit > 2000 {
+		limit = 2000
+	}
+	if a.logBuffer != nil {
+		lines := a.logBuffer.Snapshot(limit)
+		if len(lines) > 0 {
+			return strings.Join(lines, "\n")
+		}
+	}
+	return ""
+}
+
+// GetCoreRecentLogs returns only the core subprocess log lines.
+func (a *App) GetCoreRecentLogs(limit int) string {
+	if a.core != nil {
+		return a.core.GetRecentLogs(limit)
+	}
+	return ""
 }
 
 func (a *App) GetRecentLogs(limit int) string {
@@ -1150,12 +1179,8 @@ func (a *App) OpenURL(rawURL string) {
 func (a *App) QuitApp() {
 	a.shouldQuit = true
 	a.shutdown()
-	if a.mainWindow != nil {
-		a.mainWindow.Close()
-	}
-	if a.wailsApp != nil {
-		a.wailsApp.Quit()
-	}
+	a.closeMainWindow()
+	a.quitAppUI()
 }
 
 func (a *App) waitForProxyListen(addr string, timeout time.Duration) error {
