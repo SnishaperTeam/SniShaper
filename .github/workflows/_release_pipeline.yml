@@ -541,12 +541,24 @@ jobs:
 
       - name: Smoke test CLI binary
         shell: pwsh
+        env:
+          DISPLAY_VERSION: ${{ needs.check.outputs.display_version }}
+          RELEASE_CHANNEL: ${{ inputs.channel }}
         run: |
           $ErrorActionPreference = 'Stop'
+          $LDFLAGS = "-s -w -X snishaper/app.buildVersion=$env:DISPLAY_VERSION"
+          if ($env:RELEASE_CHANNEL -and $env:RELEASE_CHANNEL -ne 'release') {
+            $LDFLAGS += " -X snishaper/app.buildChannel=$env:RELEASE_CHANNEL"
+          }
           $env:GOOS = 'windows'; $env:GOARCH = 'amd64'; $env:CGO_ENABLED = '0'
-          go build -tags "with_gvisor headless" -ldflags="-s -w" -o cli-smoke.exe ./cli
+          go build -tags "with_gvisor headless" -ldflags="$LDFLAGS" -o cli-smoke.exe ./cli
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          .\cli-smoke.exe version
+          $v = .\cli-smoke.exe version
+          Write-Host "::notice::CLI smoke version: $v (expected $env:DISPLAY_VERSION)"
+          if ($v.Trim() -ne $env:DISPLAY_VERSION.Trim()) {
+            Write-Host "::error::CLI smoke version mismatch: got '$v', expected '$env:DISPLAY_VERSION'"
+            exit 1
+          }
           .\cli-smoke.exe help | Out-Null
           Remove-Item Env:GOOS, Env:GOARCH, Env:CGO_ENABLED -ErrorAction SilentlyContinue
           Remove-Item -Force cli-smoke.exe
