@@ -1,9 +1,11 @@
 param(
-    [ValidateSet("frontend", "backend", "all")]
-    [string]$Build,
+    [string[]]$Build,
 
     [ValidateSet("en", "cn", "ru")]
     [string]$Lang,
+
+    [ValidateSet("x64", "amd64", "arm64", "x86", "386")]
+    [string]$Arch,
 
     [switch]$InstallDeps,
 
@@ -13,8 +15,29 @@ param(
 
     [switch]$Cli,
 
+    [switch]$Gtk3,
+
     [switch]$Silent
 )
+
+# --- Normalize target architecture ---
+# x86 仅构建 Windows；Linux（含 CLI）与 Darwin 不构建 x86
+function Get-NormalizedArch {
+    param([string]$Value)
+    switch ($Value.ToLower()) {
+        "amd64" { "amd64" }
+        "arm64" { "arm64" }
+        "386"   { "386" }
+        "x64"   { "amd64" }
+        "x86"   { "386" }
+        default { "amd64" }
+    }
+}
+
+if (-not $Arch) {
+    $Arch = if ($env:PROCESSOR_ARCHITECTURE -eq "ARM64") { "arm64" } else { "x64" }
+}
+$GoArch = Get-NormalizedArch -Value $Arch
 
 function Get-RelVersion {
     param([string]$ManifestPath)
@@ -40,7 +63,7 @@ function Get-RelVersion {
 # 纯 Go 无 GUI 依赖，输出到 build/bin/cli/（含 config/ rules/ 种子文件）。
 # 版本号与 GUI 相同，取自 Package.appxmanifest（唯一版本源）。
 function Build-Cli {
-    param([string]$ProjectRoot)
+    param([string]$ProjectRoot, [string]$TargetArch)
     $OutDir = Join-Path $ProjectRoot "build\bin\cli"
     New-Item -ItemType Directory -Force -Path $OutDir | Out-Null
     $ManifestPath = Join-Path $ProjectRoot "Package.appxmanifest"
@@ -53,20 +76,23 @@ function Build-Cli {
     if ($cliChannel) { $ldflags += " -X snishaper/app.buildChannel=$cliChannel" }
     Write-Host "[CLI] Build version: $cliVersion (manifest)" -ForegroundColor Green
     if ($cliChannel) { Write-Host "[CLI] buildChannel=$cliChannel" -ForegroundColor Green }
+    # x86 仅构建 Windows；Linux 与 Darwin 不提供 x86 产物
     $platforms = @("windows", "linux", "darwin")
-    $archs = @("amd64", "arm64")
+    if ($TargetArch -eq "386") {
+        $platforms = @("windows")
+        Write-Host "[CLI] x86 target: only Windows binaries are built (Linux/Darwin skipped)" -ForegroundColor Yellow
+    }
     foreach ($goos in $platforms) {
-        foreach ($goarch in $archs) {
-            $name = "snishaper-cli-$goos-$goarch"
-            if ($goos -eq "windows") { $name += ".exe" }
-            $out = Join-Path $OutDir $name
-            Write-Host "[CLI] building $goos/$goarch -> build/bin/cli/$name" -ForegroundColor Green
-            $env:GOOS = $goos
-            $env:GOARCH = $goarch
-            $env:CGO_ENABLED = "0"
-            go build -tags "with_gvisor headless" -ldflags="$ldflags" -o $out ./cli
-            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-        }
+        $goarch = $TargetArch
+        $name = "snishaper-cli-$goos-$goarch"
+        if ($goos -eq "windows") { $name += ".exe" }
+        $out = Join-Path $OutDir $name
+        Write-Host "[CLI] building $goos/$goarch -> build/bin/cli/$name" -ForegroundColor Green
+        $env:GOOS = $goos
+        $env:GOARCH = $goarch
+        $env:CGO_ENABLED = "0"
+        go build -tags "with_gvisor headless" -ldflags="$ldflags" -o $out ./cli
+        if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
     }
     Remove-Item Env:GOOS, Env:GOARCH, Env:CGO_ENABLED -ErrorAction SilentlyContinue
     Copy-Item -Recurse -Force (Join-Path $ProjectRoot "config") $OutDir
@@ -82,10 +108,12 @@ if (-not $isAdmin) {
     $params = @()
     if ($Build)      { $params += "-Build";      $params += $Build }
     if ($Lang)       { $params += "-Lang";       $params += $Lang }
+    if ($Arch)       { $params += "-Arch";       $params += $Arch }
     if ($InstallDeps) { $params += "-InstallDeps" }
     if ($BuildMsix)  { $params += "-BuildMsix" }
     if ($SkipSign)   { $params += "-SkipSign" }
     if ($Cli)        { $params += "-Cli" }
+    if ($Gtk3)       { $params += "-Gtk3" }
     if ($Silent)     { $params += "-Silent" }
     $paramStr = $params -join ' '
     Start-Process powershell.exe -Verb RunAs -ArgumentList "-NoProfile -ExecutionPolicy Bypass -File `"$PSCommandPath`" $paramStr"
@@ -125,10 +153,11 @@ $messages = @{
     "EN_MsixPrompt" = "Do you want to build MSIX package? (Y/N, default N)"
     "EN_SignPrompt" = "Do you want to sign the MSIX package? (Y/N, default Y)"
     "EN_SelectTitle" = "Please select a build option:"
-    "EN_Opt1" = "1. Build Frontend only"
-    "EN_Opt2" = "2. Build Backend only"
-    "EN_Opt3" = "3. Build Both Frontend and Backend"
-    "EN_ChoicePrompt" = "Enter your choice (1, 2, or 3)"
+    "EN_Opt1" = "1. Windows GUI (frontend + backend)"
+    "EN_Opt2" = "2. Linux GUI via WSL (frontend + backend)"
+    "EN_Opt3" = "3. All platforms (Windows + Linux)"
+    "EN_Opt4" = "4. CLI only (headless, cross-platform)"
+    "EN_ChoicePrompt" = "Enter your choice (1, 2, 3, or 4)"
     "EN_Start" = "Starting build process..."
     "EN_FrontEnter" = "[Frontend] Entering frontend directory..."
     "EN_FrontErrDir" = "[Frontend] ERROR: Failed to enter 'frontend' directory!"
@@ -151,16 +180,18 @@ $messages = @{
     "EN_BackSyncVerDone" = "[Backend] Version resource synced: {0}"
     "EN_BackSyncVerFail" = "[WARNING] go-winres failed, keeping existing version resource"
     "EN_CliPrompt" = "Build the headless CLI as well? (Y/N, default N)"
+    "EN_ArchPrompt" = "Select target architecture (1=x64, 2=arm64, 3=x86 Windows-only)"
 
     "CN_MenuTitle" = "       项目构建菜单"
     "CN_DepPrompt" = "是否需要安装前端 npm 依赖？(Y/N，默认为 N)"
     "CN_MsixPrompt" = "是否需要构建 MSIX 安装包？(Y/N，默认为 N)"
     "CN_SignPrompt" = "是否对 MSIX 进行签名？(Y/N，默认为 Y)"
     "CN_SelectTitle" = "请选择构建选项："
-    "CN_Opt1" = "1. 仅构建前端"
-    "CN_Opt2" = "2. 仅构建后端"
-    "CN_Opt3" = "3. 同时构建前后端"
-    "CN_ChoicePrompt" = "请输入你的选择 (1, 2 或 3)"
+    "CN_Opt1" = "1. Windows GUI（前端 + 后端）"
+    "CN_Opt2" = "2. Linux GUI（通过 WSL，前端 + 后端）"
+    "CN_Opt3" = "3. 全部平台（Windows + Linux）"
+    "CN_Opt4" = "4. 仅 CLI（headless，跨平台）"
+    "CN_ChoicePrompt" = "请输入你的选择 (1, 2, 3 或 4)"
     "CN_Start" = "开始执行构建流程..."
     "CN_FrontEnter" = "[前端] 正在进入 frontend 目录..."
     "CN_FrontErrDir" = "[前端] 错误：无法进入 'frontend' 目录！"
@@ -183,16 +214,18 @@ $messages = @{
     "CN_BackSyncVerDone" = "[后端] 版本资源已同步：{0}"
     "CN_BackSyncVerFail" = "[警告] go-winres 失败，保留现有版本资源"
     "CN_CliPrompt" = "是否同时构建 CLI（headless 跨平台）？(Y/N，默认为 N)"
+    "CN_ArchPrompt" = "请选择目标架构 (1=x64（默认），2=arm64，3=x86 仅 Windows)"
 
     "RU_MenuTitle" = "       Меню сборки проекта"
     "RU_DepPrompt" = "Установить npm зависимости фронтенда? (Y/N, по умолчанию N)"
     "RU_MsixPrompt" = "Создать MSIX-пакет? (Y/N, по умолчанию N)"
     "RU_SignPrompt" = "Подписать MSIX-пакет? (Y/N, по умолчанию Y)"
     "RU_SelectTitle" = "Выберите вариант сборки:"
-    "RU_Opt1" = "1. Собрать только фронтенд"
-    "RU_Opt2" = "2. Собрать только бэкенд"
-    "RU_Opt3" = "3. Собрать фронтенд и бэкенд"
-    "RU_ChoicePrompt" = "Введите ваш выбор (1, 2 или 3)"
+    "RU_Opt1" = "1. Windows GUI (фронтенд + бэкенд)"
+    "RU_Opt2" = "2. Linux GUI через WSL (фронтенд + бэкенд)"
+    "RU_Opt3" = "3. Все платформы (Windows + Linux)"
+    "RU_Opt4" = "4. Только CLI (headless, кроссплатформенный)"
+    "RU_ChoicePrompt" = "Введите ваш выбор (1, 2, 3 или 4)"
     "RU_Start" = "Начало сборки..."
     "RU_FrontEnter" = "[Фронтенд] Переход в директорию frontend..."
     "RU_FrontErrDir" = "[Фронтенд] ОШИБКА: Не удалось войти в директорию 'frontend'!"
@@ -215,11 +248,68 @@ $messages = @{
     "RU_BackSyncVerDone" = "[Бэкенд] Ресурс версии синхронизирован: {0}"
     "RU_BackSyncVerFail" = "[ПРЕДУПРЕЖДЕНИЕ] go-winres не удался, сохраняем текущий ресурс версии"
     "RU_CliPrompt" = "Также собрать headless CLI? (Y/N, по умолчанию N)"
+    "RU_ArchPrompt" = "Выберите целевую архитектуру (1=x64 (по умолчанию), 2=arm64, 3=x86 только Windows)"
+}
+
+# --- Parse -Build into system / mode / scope ---
+# 格式: -Build <系统> <运行方式> <构建范围>
+#   系统: windows / linux / all
+#   运行方式: gui / cli / all
+#   构建范围: frontend / backend / all
+$BuildSystem = "Windows"
+$BuildMode   = "Gui"
+$BuildScope  = "All"
+
+if ($Build -and $Build.Count -gt 0) {
+    if ($Build.Count -eq 1) {
+        $val = $Build[0]
+        if ($val -in @("windows", "linux")) {
+            $BuildSystem = $val.Substring(0,1).ToUpper()+$val.Substring(1).ToLower()
+            $BuildMode = "Gui"
+            $BuildScope = "All"
+        } elseif ($val -eq "all") {
+            # 向后兼容: -Build all = 仅 Windows GUI all
+            $BuildSystem = "Windows"
+            $BuildMode = "Gui"
+            $BuildScope = "All"
+        } else {
+            # 向后兼容旧格式: -Build frontend / -Build backend
+            $BuildSystem = "Windows"
+            $BuildMode = "Gui"
+            $BuildScope = $val.Substring(0,1).ToUpper()+$val.Substring(1).ToLower()
+        }
+    } elseif ($Build.Count -eq 2) {
+        $BuildSystem = $Build[0].Substring(0,1).ToUpper()+$Build[0].Substring(1).ToLower()
+        $BuildMode   = $Build[1].Substring(0,1).ToUpper()+$Build[1].Substring(1).ToLower()
+        $BuildScope  = "All"
+    } else {
+        $BuildSystem = $Build[0].Substring(0,1).ToUpper()+$Build[0].Substring(1).ToLower()
+        $BuildMode   = $Build[1].Substring(0,1).ToUpper()+$Build[1].Substring(1).ToLower()
+        $BuildScope  = $Build[2].Substring(0,1).ToUpper()+$Build[2].Substring(1).ToLower()
+    }
+}
+
+# Validate
+if ($BuildSystem -notin @("Windows", "Linux", "All")) {
+    Write-Host "[ERROR] Invalid system: '$BuildSystem'. Valid: Windows, Linux, All" -ForegroundColor Red
+    exit 1
+}
+if ($BuildMode -notin @("Gui", "Cli", "All")) {
+    Write-Host "[ERROR] Invalid mode: '$BuildMode'. Valid: Gui, Cli, All" -ForegroundColor Red
+    exit 1
+}
+if ($BuildScope -notin @("Frontend", "Backend", "All")) {
+    Write-Host "[ERROR] Invalid scope: '$BuildScope'. Valid: Frontend, Backend, All" -ForegroundColor Red
+    exit 1
 }
 
 # --- Silent mode defaults ---
 if ($Silent) {
-    if (-not $Build) { $Build = "all" }
+    if (-not $Build -or $Build.Count -eq 0) {
+        $BuildSystem = "Windows"
+        $BuildMode = "Gui"
+        $BuildScope = "All"
+    }
     if (-not $Lang) { $Lang = "EN" }
 }
 
@@ -250,59 +340,61 @@ if ($Lang) {
     $lang = "EN"
 }
 
-# --- Resolve build target and MSIX/sign options ---
+# --- Resolve interactive build target + MSIX/sign options ---
 $installDepsInput = $null
 $msixInput = $null
 $signInput = $null
 
-if ($Build) {
-    switch ($Build) {
-        "frontend" { $choice = "1" }
-        "backend"  { $choice = "2" }
-        "all"      { $choice = "3" }
-    }
-} elseif (-not $Silent) {
-    Write-Host ""
-    Write-Host "==========================================" -ForegroundColor Cyan
-    Write-Host $messages["$($lang)_MenuTitle"] -ForegroundColor Cyan
-    Write-Host "==========================================" -ForegroundColor Cyan
-    Write-Host ""
+if (-not ($Build -and $Build.Count -gt 0)) {
+    if (-not $Silent) {
+        Write-Host ""
+        Write-Host "==========================================" -ForegroundColor Cyan
+        Write-Host $messages["$($lang)_MenuTitle"] -ForegroundColor Cyan
+        Write-Host "==========================================" -ForegroundColor Cyan
+        Write-Host ""
 
-    if (-not $PSBoundParameters.ContainsKey('InstallDeps')) {
-        $installDepsInput = Read-Host $messages["$($lang)_DepPrompt"]
-    }
-
-    if (-not $PSBoundParameters.ContainsKey('BuildMsix')) {
-        $msixInput = Read-Host $messages["$($lang)_MsixPrompt"]
-    }
-
-    if ($msixInput -eq "Y" -or $msixInput -eq "y" -or $BuildMsix) {
-        if (-not $PSBoundParameters.ContainsKey('SkipSign')) {
-            $signInput = Read-Host $messages["$($lang)_SignPrompt"]
+        if (-not $PSBoundParameters.ContainsKey('InstallDeps')) {
+            $installDepsInput = Read-Host $messages["$($lang)_DepPrompt"]
         }
+
+        if (-not $PSBoundParameters.ContainsKey('BuildMsix')) {
+            $msixInput = Read-Host $messages["$($lang)_MsixPrompt"]
+        }
+
+        if ($msixInput -eq "Y" -or $msixInput -eq "y" -or $BuildMsix) {
+            if (-not $PSBoundParameters.ContainsKey('SkipSign')) {
+                $signInput = Read-Host $messages["$($lang)_SignPrompt"]
+            }
+        }
+
+        Write-Host ""
+        Write-Host $messages["$($lang)_SelectTitle"] -ForegroundColor Yellow
+        Write-Host $messages["$($lang)_Opt1"]
+        Write-Host $messages["$($lang)_Opt2"]
+        Write-Host $messages["$($lang)_Opt3"]
+        Write-Host $messages["$($lang)_Opt4"]
+        Write-Host ""
+
+        $choice = Read-Host $messages["$($lang)_ChoicePrompt"]
+
+        switch ($choice) {
+            "1" { $BuildSystem = "Windows"; $BuildMode = "Gui";  $BuildScope = "All" }
+            "2" { $BuildSystem = "Linux";   $BuildMode = "Gui";  $BuildScope = "All" }
+            "3" { $BuildSystem = "All";     $BuildMode = "Gui";  $BuildScope = "All" }
+            "4" { $BuildSystem = "All";     $BuildMode = "Cli";  $BuildScope = "All" }
+            default {
+                Write-Host "[ERROR] Invalid choice: $choice. Please enter 1, 2, 3, or 4." -ForegroundColor Red
+                Read-Host $messages["$($lang)_Exit"]
+                exit 1
+            }
+        }
+    } else {
+        # Silent without -Build: already set to Windows/Gui/All above
     }
-
-    Write-Host ""
-    Write-Host $messages["$($lang)_SelectTitle"] -ForegroundColor Yellow
-    Write-Host $messages["$($lang)_Opt1"]
-    Write-Host $messages["$($lang)_Opt2"]
-    Write-Host $messages["$($lang)_Opt3"]
-    Write-Host ""
-
-    $choice = Read-Host $messages["$($lang)_ChoicePrompt"]
-} else {
-    $choice = "3"
-}
-
-# Validate choice
-if ($choice -ne "1" -and $choice -ne "2" -and $choice -ne "3") {
-    Write-Host "[ERROR] Invalid choice: $choice. Please enter 1, 2, or 3." -ForegroundColor Red
-    if (-not $Silent) { Read-Host $messages["$($lang)_Exit"] }
-    exit 1
 }
 
 # --- Resolve InstallDeps when interactive ---
-if (-not $Build -and -not $Silent -and -not $PSBoundParameters.ContainsKey('InstallDeps')) {
+if (-not ($Build -and $Build.Count -gt 0) -and -not $Silent -and -not $PSBoundParameters.ContainsKey('InstallDeps')) {
     if ([string]::IsNullOrWhiteSpace($installDepsInput)) {
         $installDepsInput = "N"
     }
@@ -312,7 +404,7 @@ if (-not $Build -and -not $Silent -and -not $PSBoundParameters.ContainsKey('Inst
 }
 
 # --- Resolve BuildMsix when interactive ---
-if (-not $Build -and -not $Silent -and -not $PSBoundParameters.ContainsKey('BuildMsix')) {
+if (-not ($Build -and $Build.Count -gt 0) -and -not $Silent -and -not $PSBoundParameters.ContainsKey('BuildMsix')) {
     if ([string]::IsNullOrWhiteSpace($msixInput)) {
         $msixInput = "N"
     }
@@ -341,13 +433,75 @@ if (-not $Silent -and -not $PSBoundParameters.ContainsKey('Cli')) {
     }
 }
 
+# --- Resolve Arch when interactive ---
+if (-not $Silent -and -not $PSBoundParameters.ContainsKey('Arch')) {
+    Write-Host ""
+    $archInput = Read-Host $messages["$($lang)_ArchPrompt"]
+    switch ($archInput) {
+        "2"     { $Arch = "arm64" }
+        "3"     { $Arch = "x86" }
+        default { $Arch = "x64" }
+    }
+    $GoArch = Get-NormalizedArch -Value $Arch
+}
+
+# --- Compute derived flags ---
+$buildGui  = ($BuildMode -in @("Gui", "All"))
+$buildCli  = ($BuildMode -in @("Cli", "All")) -or $Cli
+$buildFrontend = ($BuildScope -in @("Frontend", "All")) -and $buildGui
+$buildBackend  = ($BuildScope -in @("Backend", "All")) -and $buildGui
+
 Write-Host ""
 Write-Host "==========================================" -ForegroundColor Cyan
-Write-Host $messages["$($lang)_Start"] -ForegroundColor Cyan
+Write-Host " System=$BuildSystem  Mode=$BuildMode  Scope=$BuildScope  Arch=$Arch" -ForegroundColor Cyan
 Write-Host "==========================================" -ForegroundColor Cyan
 
+# ---------- Linux Build (delegated to build.sh via WSL) ----------
+if ($BuildSystem -in @("Linux", "All")) {
+    if (-not (Get-Command wsl.exe -ErrorAction SilentlyContinue)) {
+        Write-Host "[Linux] WARNING: WSL not found, skipping Linux build." -ForegroundColor Yellow
+        Write-Host "        Install WSL first: wsl --install" -ForegroundColor Yellow
+    } else {
+        $shArch = switch ($GoArch) { "amd64" { "x64" } "arm64" { "arm64" } "386" { "x86" } default { "x64" } }
+        $shArgs = @("--arch", $shArch)
+        if ($Gtk3) { $shArgs += "--gtk3" }
+
+        if ($BuildMode -eq "Cli") {
+            $shArgs += "--cli"
+        } elseif ($buildCli) {
+            $shArgs += "--all"
+        } elseif ($buildFrontend) {
+            $shArgs += "--with-frontend"
+        } else {
+            $shArgs += "--gui"
+        }
+
+        Write-Host ""
+        Write-Host "==========================================" -ForegroundColor Cyan
+        Write-Host "[Linux] Building via WSL -> ./build.sh $($shArgs -join ' ')" -ForegroundColor Cyan
+        Write-Host "==========================================" -ForegroundColor Cyan
+
+        & wsl.exe --cd $ProjectRoot bash -lc "./build.sh $($shArgs -join ' ')"
+        if ($LASTEXITCODE -ne 0) {
+            Write-Host "[ERROR] Linux build failed inside WSL!" -ForegroundColor Red
+            if (-not $Silent) { Read-Host $messages["$($lang)_Exit"] }
+            exit 1
+        }
+        Write-Host "[Linux] Linux build completed successfully!" -ForegroundColor Green
+    }
+    # If system is Linux-only, skip Windows build
+    if ($BuildSystem -eq "Linux") {
+        Write-Host ""
+        Write-Host "==========================================" -ForegroundColor Cyan
+        Write-Host $messages["$($lang)_AllDone"] -ForegroundColor Cyan
+        Write-Host "==========================================" -ForegroundColor Cyan
+        if (-not $Silent) { Read-Host $messages["$($lang)_Exit"] }
+        exit 0
+    }
+}
+
 # ---------- Frontend Build ----------
-if ($choice -eq "1" -or $choice -eq "3") {
+if ($buildFrontend) {
     Write-Host ""
     Write-Host $messages["$($lang)_FrontEnter"] -ForegroundColor Green
     
@@ -403,7 +557,7 @@ if ($choice -eq "1" -or $choice -eq "3") {
 }
 
 # ---------- Backend Build ----------
-if ($choice -eq "2" -or $choice -eq "3") {
+if ($buildBackend) {
     try {
         go version | Out-Null
         if ($LASTEXITCODE -ne 0) {
@@ -470,7 +624,10 @@ if ($choice -eq "2" -or $choice -eq "3") {
             if ($LASTEXITCODE -ne 0) {
                 Write-Host $messages["$($lang)_BackSyncVerFail"] -ForegroundColor Yellow
             } else {
-                $genSyso = Get-ChildItem -Path $WinResTmp -Filter "*_windows_amd64.syso" -ErrorAction SilentlyContinue | Select-Object -First 1
+                $genSyso = Get-ChildItem -Path $WinResTmp -Filter "*_windows_$GoArch.syso" -ErrorAction SilentlyContinue | Select-Object -First 1
+                if (-not $genSyso) {
+                    $genSyso = Get-ChildItem -Path $WinResTmp -Filter "*_windows_amd64.syso" -ErrorAction SilentlyContinue | Select-Object -First 1
+                }
                 if (-not $genSyso) {
                     $genSyso = Get-ChildItem -Path $WinResTmp -Filter "*.syso" -ErrorAction SilentlyContinue | Select-Object -First 1
                 }
@@ -484,6 +641,7 @@ if ($choice -eq "2" -or $choice -eq "3") {
             }
             Remove-Item -Path $WinResTmp -Recurse -Force -ErrorAction SilentlyContinue
         }
+        $env:GOARCH = $GoArch
         go build -tags with_gvisor -ldflags="$ldflags" -o "$BuildBinPath\snishaper.exe" .
         if ($LASTEXITCODE -ne 0) {
             Write-Host $messages["$($lang)_BackErrBuild"] -ForegroundColor Red
@@ -497,6 +655,7 @@ if ($choice -eq "2" -or $choice -eq "3") {
         if ($null -ne $SysoBackup) {
             [System.IO.File]::WriteAllBytes($SysoPath, $SysoBackup)
         }
+        Remove-Item Env:GOARCH -ErrorAction SilentlyContinue
     }
 
     # 复制 rules 文件夹到 build/bin
@@ -535,12 +694,12 @@ if ($choice -eq "2" -or $choice -eq "3") {
     Write-Host ""
 
     # ---------- CLI Build (optional, cross-platform headless) ----------
-    if ($Cli) {
+    if ($buildCli) {
         Write-Host ""
         Write-Host "==========================================" -ForegroundColor Cyan
-        Write-Host "[CLI] Building headless CLI (windows/linux/darwin x amd64/arm64)..." -ForegroundColor Cyan
+        Write-Host "[CLI] Building headless CLI (arch=$GoArch)..." -ForegroundColor Cyan
         Write-Host "==========================================" -ForegroundColor Cyan
-        Build-Cli -ProjectRoot $ProjectRoot
+        Build-Cli -ProjectRoot $ProjectRoot -TargetArch $GoArch
     }
 }
 
