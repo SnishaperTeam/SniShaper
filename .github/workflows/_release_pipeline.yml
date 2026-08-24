@@ -238,8 +238,8 @@ jobs:
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
-          Write-Host "::group::build_windows.ps1 -Build all -InstallDeps -BuildMsix -Silent"
-          ./build_windows.ps1 -Build all -InstallDeps -BuildMsix -Silent
+          Write-Host "::group::build_windows.ps1 -Build windows gui all -InstallDeps -BuildMsix -Silent"
+          ./build_windows.ps1 -Build windows gui all -InstallDeps -BuildMsix -Silent
           if ($LASTEXITCODE -ne 0) {
             Write-Host "::error::build_windows.ps1 failed"
             exit 1

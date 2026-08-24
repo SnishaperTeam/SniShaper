@@ -95,36 +95,54 @@ pwsh -ExecutionPolicy Bypass -File .\build_windows.ps1
 
 | Параметр | Значения | Описание |
 | ------------ | -------------------------------- | ------------------------------------------------------------------ |
-| `-Build` | `frontend` / `backend` / `all` | Цель сборки |
-| `-Lang` | `en` / `cn` / `ru` | Язык интерфейса |
-| `-InstallDeps` | без значений (флаг) | Установить npm зависимости |
-| `-BuildMsix` | без значений (флаг) | Собрать MSIX-пакет |
-| `-SkipSign` | без значений (флаг) | Пропустить подпись MSIX, выходной файл будет иметь префикс `unsigned_` (требуется `-BuildMsix`) |
-| `-Silent` | без значений (флаг) | Тихий режим, пропуск всех интерактивных запросов |
+| `-Build` | `<система> <режим> <объём>` | Трёхкомпонентная спецификация. **Система**: `windows` / `linux` / `all`; **Режим**: `gui` / `cli` / `all`; **Объём**: `frontend` / `backend` / `all`. Если не указано — интерактивное меню; старый формат `-Build frontend/backend/all` по-прежнему работает |
+| `-Lang` | `en` / `cn` / `ru` | Язык подсказок, по умолчанию английский |
+| `-Arch` | `x64` / `arm64` / `x86` | Целевая архитектура (принимает псевдонимы amd64/386), по умолчанию хост. `x86` собирает только Windows — Linux (вкл. CLI) и Darwin пропускаются |
+| `-InstallDeps` | без значений (флаг) | Выполнить `npm install` перед сборкой фронтенда |
+| `-BuildMsix` | без значений (флаг) | Собрать MSIX-пакет после компиляции (требуется WinApp CLI) |
+| `-SkipSign` | без значений (флаг) | Пропустить подпись MSIX, выходной файл получит префикс `unsigned_` (требуется `-BuildMsix`) |
+| `-Cli` | без значений (флаг) | Дополнительно собрать headless CLI (целевые платформы определяются `-Arch`) в `build/bin/cli/` |
+| `-Gtk3` | без значений (флаг) | Использовать GTK3 + webkit2gtk-4.1 для сборки Linux (WSL) (аналог `build.sh --gtk3`) |
+| `-Silent` | без значений (флаг) | Тихий режим без интерактивных запросов; по умолчанию `-Build windows gui all` и `-Lang en` |
+
+**Особенности поведения:**
+
+- **Автоповышение прав**: Скрипту требуются права администратора. При запуске от обычного пользователя он перезапускает себя через запрос UAC, передавая все параметры без изменений.
+- **Очистка перед сборкой**: Все запущенные процессы `snishaper` принудительно завершаются перед сборкой, чтобы избежать блокировки файлов.
+- **Синхронизация версии**: Перед компиляцией бэкенда версия и канал выпуска читаются из `Package.appxmanifest`, синхронизируются в ресурс версии через go-winres и внедряются через ldflags; при сбое go-winres сохраняется текущий ресурс версии и сборка продолжается. `go mod download` выполняется всегда.
+- **Упаковка MSIX**: Требуется WinApp CLI (`winget install Microsoft.WinAppCLI`); если сертификат `devcert.pfx` отсутствует, он автоматически генерируется из manifest и устанавливается. Результат сохраняется в каталоге `Apppackage/`.
+- **Сборка Linux (WSL)**: `-Build linux` делегирует `build.sh` через WSL (GTK4 по умолчанию, `-Gtk3` переключает на GTK3, `-Arch` передаётся как `--arch`); если WSL не найден, выводится предупреждение и сборка Linux пропускается.
 
 **Примеры использования:**
 
 ```powershell
-# Собрать только фронтенд (китайский интерфейс)
-.\build_windows.ps1 -Build frontend -Lang cn
+# Windows GUI, всё (фронтенд + бэкенд)
+.\build_windows.ps1 -Build windows gui all
 
-# Собрать только бэкенд (английский интерфейс)
-.\build_windows.ps1 -Build backend -Lang en
+# Windows GUI, только фронтенд
+.\build_windows.ps1 -Build windows gui frontend
 
-# Собрать всё и установить зависимости
-.\build_windows.ps1 -Build all -Lang cn -InstallDeps
+# Linux GUI через WSL, всё
+.\build_windows.ps1 -Build linux gui all
 
-# Собрать всё и создать MSIX-пакет (подписан по умолчанию)
-.\build_windows.ps1 -Build all -BuildMsix
+# Только CLI (headless, кроссплатформенный)
+.\build_windows.ps1 -Build windows cli all
 
-# Собрать всё и создать неподписанный MSIX (пропустить подпись)
-.\build_windows.ps1 -Build all -BuildMsix -SkipSign
+# Windows + Linux GUI
+.\build_windows.ps1 -Build all gui all
+
+# Всё: все платформы, GUI + CLI
+.\build_windows.ps1 -Build all all all
+
+# arm64 + упаковка MSIX
+.\build_windows.ps1 -Build windows gui all -Arch arm64 -BuildMsix
 
 # Тихий режим (для CI/CD, без взаимодействия)
 .\build_windows.ps1 -Silent
 
-# Тихий режим со сборкой и созданием пакета (пропуск подписи)
-.\build_windows.ps1 -Build all -Silent -BuildMsix -SkipSign
+# Старый формат по-прежнему работает
+.\build_windows.ps1 -Build frontend -Lang cn
+.\build_windows.ps1 -Build all -BuildMsix -SkipSign
 
 # Без параметров = интерактивный режим
 .\build_windows.ps1
@@ -152,14 +170,29 @@ sudo apt-get install -y libgtk-4-dev libwebkitgtk-6.0-dev
 git clone https://github.com/SniShaper/SniShaper.git
 cd SniShaper
 
-# Скомпилировать только бэкенд (использует существующий frontend/dist)
-./build_linux.sh
+# Интерактивное меню (1 GUI / 2 CLI / 3 GUI+CLI + выбор архитектуры)
+./build.sh
+
+# GUI (использует существующий frontend/dist)
+./build.sh --gui
 
 # Сначала собрать фронтенд, затем бэкенд
-./build_linux.sh --with-frontend
+./build.sh --with-frontend
 
 # Использовать GTK3 + webkit2gtk-4.1
-./build_linux.sh --gtk3
+./build.sh --gtk3
+
+# Только CLI (headless, кроссплатформенный)
+./build.sh --cli
+
+# GUI + CLI
+./build.sh --all
+
+# Указать архитектуру (для GUI и CLI)
+./build.sh --gui --arch arm64
+
+# x86: только Windows CLI (Linux/Darwin пропускаются)
+./build.sh --cli --arch x86
 ```
 
 Результат сборки записывается в `build/bin/SniShaper` (включая seed-файлы `rules/` и `config/`). TUN / системный прокси требуют root; запускайте с `sudo ./build/bin/SniShaper`.
