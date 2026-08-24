@@ -117,38 +117,56 @@ pwsh -ExecutionPolicy Bypass -File .\build_windows.ps1
 
 | 参数 | 可选值 | 说明 |
 | -------------- | ------------------------------ | ------------------------------------------------------------ |
-| `-Build` | `frontend` / `backend` / `all` | 指定构建目标 |
-| `-Lang` | `en` / `cn` / `ru` | 指定界面语言 |
-| `-InstallDeps` | 无值（开关） | 安装前端 npm 依赖 |
-| `-BuildMsix` | 无值（开关） | 构建 MSIX 安装包 |
+| `-Build` | `<系统> <运行方式> <构建范围>` | 三段式构建参数。**系统**：`windows` / `linux` / `all`；**运行方式**：`gui` / `cli` / `all`；**构建范围**：`frontend` / `backend` / `all`。省略时进入交互式菜单；旧格式 `-Build frontend/backend/all` 仍向后兼容 |
+| `-Lang` | `en` / `cn` / `ru` | 指定脚本界面提示语言，省略时默认英文 |
+| `-Arch` | `x64` / `arm64` / `x86` | 目标架构（接受 amd64/386 别名），默认跟随宿主系统。`x86` 仅构建 Windows——Linux（含 CLI）与 Darwin 不构建 |
+| `-InstallDeps` | 无值（开关） | 构建前端前执行 `npm install` 安装 npm 依赖 |
+| `-BuildMsix` | 无值（开关） | 编译完成后生成 MSIX 安装包（需要 WinApp CLI） |
 | `-SkipSign` | 无值（开关） | 跳过 MSIX 签名，生成的文件添加 `unsigned_` 前缀（需配合 `-BuildMsix`） |
-| `-Silent` | 无值（开关） | 静默模式，跳过所有交互提示 |
+| `-Cli` | 无值（开关） | 额外构建 headless CLI（`-Arch` 决定目标平台），输出到 `build/bin/cli/` |
+| `-Gtk3` | 无值（开关） | Linux（WSL）构建时改用 GTK3 + webkit2gtk-4.1（等价于 `build.sh --gtk3`） |
+| `-Silent` | 无值（开关） | 静默模式，跳过所有交互提示；省略 `-Build` 时默认 `windows gui all`，省略 `-Lang` 时默认 `en` |
+
+**行为说明：**
+
+- **自动提权**：脚本需要管理员权限。若以普通用户运行，会通过 UAC 弹窗自动提权重启自身，并以原样传递所有参数。
+- **预清理**：构建开始前会强制结束正在运行的 `snishaper` 进程，避免文件占用。
+- **版本同步**：后端编译前从 `Package.appxmanifest` 读取版本号与发布渠道，经 go-winres 同步到版本资源并通过 ldflags 注入；若 go-winres 失败则保留现有版本资源继续构建。后端始终执行 `go mod download`。
+- **MSIX 打包**：依赖 WinApp CLI（`winget install Microsoft.WinAppCLI`）；缺少 `devcert.pfx` 证书时会自动从 manifest 生成并安装证书。产物输出到 `Apppackage/` 目录。
+- **Linux 构建（WSL）**：`-Build linux` 通过 WSL 调用 `build.sh`（默认 GTK4，`-Gtk3` 切换 GTK3，`-Arch` 以 `--arch` 透传）；未检测到 WSL 时输出警告并跳过 Linux 构建。
 
 **用法示例：**
 
 ```powershell
-# 仅构建前端（中文界面）
-.\build_windows.ps1 -Build frontend -Lang cn
+# Windows GUI，构建全部（前端 + 后端）
+.\build_windows.ps1 -Build windows gui all
 
-# 仅构建后端（英文界面）
-.\build_windows.ps1 -Build backend -Lang en
+# Windows GUI，仅构建前端
+.\build_windows.ps1 -Build windows gui frontend
 
-# 同时构建前后端，并安装依赖
-.\build_windows.ps1 -Build all -Lang cn -InstallDeps
+# Linux GUI（通过 WSL），构建全部
+.\build_windows.ps1 -Build linux gui all
 
-# 构建前后端并生成 MSIX 安装包（默认签名）
-.\build_windows.ps1 -Build all -BuildMsix
+# 仅构建 CLI（跨平台 headless）
+.\build_windows.ps1 -Build windows cli all
 
-# 构建前后端并生成未签名的 MSIX（跳过签名）
-.\build_windows.ps1 -Build all -BuildMsix -SkipSign
+# 同时构建 Windows + Linux GUI
+.\build_windows.ps1 -Build all gui all
+
+# 构建全部平台 GUI + CLI
+.\build_windows.ps1 -Build all all all
+
+# arm64 构建 + MSIX 打包
+.\build_windows.ps1 -Build windows gui all -Arch arm64 -BuildMsix
 
 # 静默模式（CI/CD 适用，无交互）
 .\build_windows.ps1 -Silent
 
-# 静默模式构建并打包（跳过签名）
-.\build_windows.ps1 -Build all -Silent -BuildMsix -SkipSign
+# 旧格式仍向后兼容
+.\build_windows.ps1 -Build frontend -Lang cn
+.\build_windows.ps1 -Build all -BuildMsix -SkipSign
 
-# 无参数 = 交互模式（原有行为）
+# 无参数 = 交互模式
 .\build_windows.ps1
 ```
 
@@ -174,7 +192,7 @@ sudo apt-get install -y libgtk-4-dev libwebkitgtk-6.0-dev
 git clone https://github.com/SniShaper/SniShaper.git
 cd SniShaper
 
-# 交互式菜单（1 GUI / 2 CLI / 3 GUI+CLI）
+# 交互式菜单（1 GUI / 2 CLI / 3 GUI+CLI + 架构选择）
 ./build.sh
 
 # GUI（使用已有的 frontend/dist）
@@ -186,11 +204,17 @@ cd SniShaper
 # 使用 GTK3 + webkit2gtk-4.1
 ./build.sh --gtk3
 
-# 仅构建 CLI（headless，windows/linux/darwin x amd64/arm64）
+# 仅构建 CLI（headless，跨平台）
 ./build.sh --cli
 
 # GUI + CLI 一起构建
 ./build.sh --all
+
+# 指定架构（GUI/CLI 通用）
+./build.sh --gui --arch arm64
+
+# x86 仅构建 Windows CLI
+./build.sh --cli --arch x86
 ```
 
 构建产物：GUI 输出 `build/bin/SniShaper`（含 `rules/`、`config/` 种子文件，TUN / 系统代理需要 root，运行时 `sudo ./build/bin/SniShaper`）；CLI 输出 `build/bin/cli/snishaper-cli-<os>-<arch>[.exe]`。

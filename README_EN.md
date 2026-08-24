@@ -95,38 +95,56 @@ pwsh -ExecutionPolicy Bypass -File .\build_windows.ps1
 
 | Parameter | Values | Description |
 | ------------- | ------------------------------ | ---------------------------------------------------------------- |
-| `-Build` | `frontend` / `backend` / `all` | Specify build target |
-| `-Lang` | `en` / `cn` / `ru` | Specify interface language |
-| `-InstallDeps` | No value (switch) | Install frontend npm dependencies |
-| `-BuildMsix` | No value (switch) | Build MSIX installer package |
+| `-Build` | `<system> <mode> <scope>` | Three-part build spec. **System**: `windows` / `linux` / `all`; **Mode**: `gui` / `cli` / `all`; **Scope**: `frontend` / `backend` / `all`. Omit for interactive menu; legacy `-Build frontend/backend/all` still works |
+| `-Lang` | `en` / `cn` / `ru` | Prompt language, defaults to English |
+| `-Arch` | `x64` / `arm64` / `x86` | Target architecture (accepts amd64/386 aliases), defaults to host. `x86` only builds Windows — Linux (incl. CLI) and Darwin are skipped |
+| `-InstallDeps` | No value (switch) | Run `npm install` before the frontend build |
+| `-BuildMsix` | No value (switch) | Build an MSIX installer after compilation (requires WinApp CLI) |
 | `-SkipSign` | No value (switch) | Skip MSIX signing, output file gets `unsigned_` prefix (requires `-BuildMsix`) |
-| `-Silent` | No value (switch) | Silent mode, skip all interactive prompts |
+| `-Cli` | No value (switch) | Additionally build the headless CLI (target platforms determined by `-Arch`) into `build/bin/cli/` |
+| `-Gtk3` | No value (switch) | Use GTK3 + webkit2gtk-4.1 for Linux (WSL) builds (equivalent to `build.sh --gtk3`) |
+| `-Silent` | No value (switch) | Silent mode, skip all interactive prompts; defaults to `-Build windows gui all` and `-Lang en` when omitted |
+
+**Behavior notes:**
+
+- **Auto-elevation**: The script requires administrator privileges. When run as a regular user, it relaunches itself via a UAC prompt and passes all parameters through unchanged.
+- **Pre-build cleanup**: Any running `snishaper` processes are force-terminated before the build to avoid file locks.
+- **Version sync**: Before compiling the backend, the version and release channel are read from `Package.appxmanifest`, synced into the version resource via go-winres and injected via ldflags; if go-winres fails, the existing version resource is kept and the build continues. `go mod download` is always executed.
+- **MSIX packaging**: Requires the WinApp CLI (`winget install Microsoft.WinAppCLI`); if the `devcert.pfx` certificate is missing, one is generated from the manifest and installed automatically. Output goes to the `Apppackage/` directory.
+- **Linux build (WSL)**: `-Build linux` delegates to `build.sh` via WSL (GTK4 by default, `-Gtk3` switches to GTK3, `-Arch` forwarded as `--arch`); if WSL is not found, a warning is printed and the Linux build is skipped.
 
 **Usage examples:**
 
 ```powershell
-# Build frontend only (Chinese interface)
-.\build_windows.ps1 -Build frontend -Lang cn
+# Windows GUI, build everything (frontend + backend)
+.\build_windows.ps1 -Build windows gui all
 
-# Build backend only (English interface)
-.\build_windows.ps1 -Build backend -Lang en
+# Windows GUI, frontend only
+.\build_windows.ps1 -Build windows gui frontend
 
-# Build both frontend and backend with dependency install
-.\build_windows.ps1 -Build all -Lang cn -InstallDeps
+# Linux GUI via WSL, build everything
+.\build_windows.ps1 -Build linux gui all
 
-# Build both and generate MSIX package (signed by default)
-.\build_windows.ps1 -Build all -BuildMsix
+# CLI only (headless, cross-platform)
+.\build_windows.ps1 -Build windows cli all
 
-# Build both and generate unsigned MSIX (skip signing)
-.\build_windows.ps1 -Build all -BuildMsix -SkipSign
+# Both Windows + Linux GUI
+.\build_windows.ps1 -Build all gui all
+
+# Everything: all platforms, GUI + CLI
+.\build_windows.ps1 -Build all all all
+
+# arm64 build + MSIX packaging
+.\build_windows.ps1 -Build windows gui all -Arch arm64 -BuildMsix
 
 # Silent mode (for CI/CD, no interaction)
 .\build_windows.ps1 -Silent
 
-# Silent mode with build and packaging (skip signing)
-.\build_windows.ps1 -Build all -Silent -BuildMsix -SkipSign
+# Legacy format still works
+.\build_windows.ps1 -Build frontend -Lang cn
+.\build_windows.ps1 -Build all -BuildMsix -SkipSign
 
-# No parameters = interactive mode (original behavior)
+# No parameters = interactive mode
 .\build_windows.ps1
 ```
 
@@ -152,14 +170,29 @@ sudo apt-get install -y libgtk-4-dev libwebkitgtk-6.0-dev
 git clone https://github.com/SniShaper/SniShaper.git
 cd SniShaper
 
-# Compile backend only (uses existing frontend/dist)
-./build_linux.sh
+# Interactive menu (1 GUI / 2 CLI / 3 GUI+CLI + architecture selection)
+./build.sh
+
+# GUI (uses existing frontend/dist)
+./build.sh --gui
 
 # Build frontend first, then backend
-./build_linux.sh --with-frontend
+./build.sh --with-frontend
 
 # Use GTK3 + webkit2gtk-4.1
-./build_linux.sh --gtk3
+./build.sh --gtk3
+
+# CLI only (headless, cross-platform)
+./build.sh --cli
+
+# GUI + CLI
+./build.sh --all
+
+# Specify architecture (works for both GUI and CLI)
+./build.sh --gui --arch arm64
+
+# x86: Windows CLI only (Linux/Darwin skipped)
+./build.sh --cli --arch x86
 ```
 
 Build output is written to `build/bin/SniShaper` (including `rules/` and `config/` seed files). TUN / system proxy require root; run with `sudo ./build/bin/SniShaper`.
