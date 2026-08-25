@@ -139,25 +139,25 @@ pwsh -ExecutionPolicy Bypass -File .\build_windows.ps1
 
 ```powershell
 # Windows GUI，构建全部（前端 + 后端）
-.\build_windows.ps1 -Build windows gui all
+.\build_windows.ps1 -Build windows,gui,all
 
 # Windows GUI，仅构建前端
-.\build_windows.ps1 -Build windows gui frontend
+.\build_windows.ps1 -Build windows,gui,frontend
 
 # Linux GUI（通过 WSL），构建全部
-.\build_windows.ps1 -Build linux gui all
+.\build_windows.ps1 -Build linux,gui,all
 
 # 仅构建 CLI（跨平台 headless）
-.\build_windows.ps1 -Build windows cli all
+.\build_windows.ps1 -Build windows,cli,all
 
 # 同时构建 Windows + Linux GUI
-.\build_windows.ps1 -Build all gui all
+.\build_windows.ps1 -Build all,gui,all
 
 # 构建全部平台 GUI + CLI
-.\build_windows.ps1 -Build all all all
+.\build_windows.ps1 -Build all,all,all
 
 # arm64 构建 + MSIX 打包
-.\build_windows.ps1 -Build windows gui all -Arch arm64 -BuildMsix
+.\build_windows.ps1 -Build windows,gui,all -Arch arm64 -BuildMsix
 
 # 静默模式（CI/CD 适用，无交互）
 .\build_windows.ps1 -Silent
