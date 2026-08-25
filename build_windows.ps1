@@ -252,10 +252,11 @@ $messages = @{
 }
 
 # --- Parse -Build into system / mode / scope ---
-# 格式: -Build <系统> <运行方式> <构建范围>
-#   系统: windows / linux / all
-#   运行方式: gui / cli / all
-#   构建范围: frontend / backend / all
+# Format: -Build <system>,<mode>,<scope>   (comma-separated, safe for pwsh binding)
+# 系统/运行方式/构建范围: system: windows/linux/all, mode: gui/cli/all, scope: frontend/backend/all
+# NOTE: Do NOT pass the three values space-separated (e.g. -Build windows gui all):
+#       PowerShell binds them by position into -Lang/-Arch and fails Lang's
+#       ValidateSet. Use -Build windows,gui,all (or -Build windows -Build gui -Build all).
 $BuildSystem = "Windows"
 $BuildMode   = "Gui"
 $BuildScope  = "All"
