@@ -59,7 +59,7 @@ This project is built with **Wails v3**.
 
 ```powershell
 # Clone the repository
-git clone https://github.com/SniShaper/SniShaper.git
+git clone https://github.com/SnishaperTeam/SniShaper.git
 cd SniShaper
 
 # Install frontend dependencies
@@ -100,7 +100,7 @@ Build outputs:
 
 ## Documentation and Rules
 
-- Technical details and usage guides are mainly maintained in the [GitHub Wiki](https://github.com/SniShaper/SniShaper/wiki)
+- Technical details and usage guides are mainly maintained in the [GitHub Wiki](https://github.com/SnishaperTeam/SniShaper/wiki)
 - Improvements to rules can be submitted directly in the `rules` directory or via Issue/PR
 - Documentation improvements are also welcome
 
@@ -113,6 +113,6 @@ This project is licensed under the [MIT License](LICENSE). By contributing, you 
 If you have questions, you can:
 
 - Leave a comment on the relevant Issue or PR
-- Check existing [Issues](https://github.com/SniShaper/SniShaper/issues) and [Discussions](https://github.com/SniShaper/SniShaper/discussions) (if enabled)
+- Check existing [Issues](https://github.com/SnishaperTeam/SniShaper/issues) and [Discussions](https://github.com/SnishaperTeam/SniShaper/discussions) (if enabled)
 
 Thank you again for contributing!

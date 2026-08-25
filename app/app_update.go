@@ -20,7 +20,7 @@ import (
 )
 
 const (
-	githubRepo      = "SniShaper/SniShaper"
+	githubRepo      = "SnishaperTeam/SniShaper"
 	githubAPIBase   = "https://api.github.com/repos/" + githubRepo
 	githubProxyBase = "https://gh.llkk.cc/"
 	updateUserAgent = "SniShaper-Update/1.0"
@@ -145,7 +145,7 @@ func (a *App) MeasureDownloadSources() []DownloadSourceStatus {
 }
 
 func measureSourceLatency(name, prefix string) DownloadSourceStatus {
-	probe := "https://github.com/SniShaper/SniShaper/releases/latest"
+	probe := "https://github.com/SnishaperTeam/SniShaper/releases/latest"
 	if prefix != "" {
 		probe = prefix + probe
 	}

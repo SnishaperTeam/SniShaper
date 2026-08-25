@@ -4,11 +4,11 @@
 
 [![Go Version](https://img.shields.io/badge/Go-1.25+-00ADD8?style=flat-square&logo=go)](https://golang.org)
 [![License](https://img.shields.io/badge/License-AGPL--3.0-blue?style=flat-square)](LICENSE)
-[![Wiki](https://img.shields.io/badge/Docs-Wiki-orange?style=flat-square)](https://github.com/SniShaper/SniShaper/wiki)
-[![GitHub Release](https://img.shields.io/github/v/release/SniShaper/SniShaper?style=flat-square&logo=github)](https://github.com/SniShaper/SniShaper/releases)
-[![GitHub Downloads](https://img.shields.io/github/downloads/SniShaper/SniShaper/total?style=flat-square&logo=github)](https://github.com/SniShaper/SniShaper/releases)
-[![GitHub last commit](https://img.shields.io/github/last-commit/SniShaper/SniShaper?style=flat-square&logo=git)](https://github.com/SniShaper/SniShaper/commits/main)
-[![GitHub Actions Workflow Status](https://img.shields.io/github/actions/workflow/status/SniShaper/SniShaper/build.yml?style=flat-square&logo=githubactions&label=CI)](https://github.com/SniShaper/SniShaper/actions)
+[![Wiki](https://img.shields.io/badge/Docs-Wiki-orange?style=flat-square)](https://github.com/SnishaperTeam/SniShaper/wiki)
+[![GitHub Release](https://img.shields.io/github/v/release/SnishaperTeam/SniShaper?style=flat-square&logo=github)](https://github.com/SnishaperTeam/SniShaper/releases)
+[![GitHub Downloads](https://img.shields.io/github/downloads/SnishaperTeam/SniShaper/total?style=flat-square&logo=github)](https://github.com/SnishaperTeam/SniShaper/releases)
+[![GitHub last commit](https://img.shields.io/github/last-commit/SnishaperTeam/SniShaper?style=flat-square&logo=git)](https://github.com/SnishaperTeam/SniShaper/commits/main)
+[![GitHub Actions Workflow Status](https://img.shields.io/github/actions/workflow/status/SnishaperTeam/SniShaper/build.yml?style=flat-square&logo=githubactions&label=CI)](https://github.com/SnishaperTeam/SniShaper/actions)
 
 **SniShaper** 是一款专为复杂网络环境设计的本地代理软件，通过 **ECH 注入**、**TLS 分片**、**QUIC 转换**、**会话迁移** 等多种协议栈技术，配合 **TUN 虚拟网卡** 接管全局流量，在复杂网络环境下提供稳定灵活的访问体验。
 
@@ -35,7 +35,7 @@
 
 ### Windows
 
-下载 [最新版本](https://github.com/SniShaper/SniShaper/releases) 中的 `snishaper-windows-amd64.7z`（便携版）或 MSIX 安装包，解压 / 安装后运行 `snishaper.exe`。程序会自动请求管理员权限（TUN 模式需要），如提权失败则 TUN 功能不可用但其他功能正常。
+下载 [最新版本](https://github.com/SnishaperTeam/SniShaper/releases) 中的 `snishaper-windows-amd64.7z`（便携版）或 MSIX 安装包，解压 / 安装后运行 `snishaper.exe`。程序会自动请求管理员权限（TUN 模式需要），如提权失败则 TUN 功能不可用但其他功能正常。
 
 <a href="https://apps.microsoft.com/detail/9n11mrrsfs8n" target="_self">
 <img src="https://get.microsoft.com/images/zh-cn%20dark.svg" width="200"/>
@@ -43,7 +43,7 @@
 
 ### Linux
 
-从 [最新版本](https://github.com/SniShaper/SniShaper/releases) 下载 `snishaper-linux-amd64.tar.gz`，解压后运行：
+从 [最新版本](https://github.com/SnishaperTeam/SniShaper/releases) 下载 `snishaper-linux-amd64.tar.gz`，解压后运行：
 
 ```bash
 tar -xzf snishaper-linux-amd64.tar.gz
@@ -84,12 +84,12 @@ sudo ./SniShaper
 
 ## 文档
 
-想要了解更详细的技术原理、部署教程和自定义指南，请参阅 [**GitHub Wiki**](https://github.com/SniShaper/SniShaper/wiki)：
+想要了解更详细的技术原理、部署教程和自定义指南，请参阅 [**GitHub Wiki**](https://github.com/SnishaperTeam/SniShaper/wiki)：
 
-- **[核心模式介绍](https://github.com/SniShaper/SniShaper/wiki/Core-Proxy-Modes)**：了解 TLS-RF、QUIC 与 Server 模式的运行原理。
-- **[规则自定义指南](https://github.com/SniShaper/SniShaper/wiki/Custom-Rules-Guide)**：了解如何开发针对性的规则。
-- **[界面配置实操](https://github.com/SniShaper/SniShaper/wiki/GUI-Configuration)**：了解在 GUI 快速配置规则。
-- **[常见问题排除](https://github.com/SniShaper/SniShaper/wiki/FAQ)**：解决证书警告、规则不生效等常见问题。
+- **[核心模式介绍](https://github.com/SnishaperTeam/SniShaper/wiki/Core-Proxy-Modes)**：了解 TLS-RF、QUIC 与 Server 模式的运行原理。
+- **[规则自定义指南](https://github.com/SnishaperTeam/SniShaper/wiki/Custom-Rules-Guide)**：了解如何开发针对性的规则。
+- **[界面配置实操](https://github.com/SnishaperTeam/SniShaper/wiki/GUI-Configuration)**：了解在 GUI 快速配置规则。
+- **[常见问题排除](https://github.com/SnishaperTeam/SniShaper/wiki/FAQ)**：解决证书警告、规则不生效等常见问题。
 
 ---
 
@@ -101,7 +101,7 @@ sudo ./SniShaper
 
 ```powershell
 # 克隆仓库
-git clone https://github.com/SniShaper/SniShaper.git
+git clone https://github.com/SnishaperTeam/SniShaper.git
 cd SniShaper
 
 # 完整编译（交互模式，自动安装依赖、可选 MSIX 打包）
@@ -189,7 +189,7 @@ sudo apt-get install -y libgtk-4-dev libwebkitgtk-6.0-dev
 
 ```bash
 # 克隆仓库
-git clone https://github.com/SniShaper/SniShaper.git
+git clone https://github.com/SnishaperTeam/SniShaper.git
 cd SniShaper
 
 # 交互式菜单（1 GUI / 2 CLI / 3 GUI+CLI + 架构选择）
@@ -296,9 +296,9 @@ CLI（headless）版本作为本仓库的 `cli/` 子目录维护，与 GUI 共�
 
 ### 活跃度徽章
 
-[![GitHub contributors](https://img.shields.io/github/contributors/SniShaper/SniShaper?style=flat-square&label=总贡献者)](https://github.com/SniShaper/SniShaper/graphs/contributors)
-[![GitHub commit activity](https://img.shields.io/github/commit-activity/m/SniShaper/SniShaper?style=flat-square&label=月均提交)](https://github.com/SniShaper/SniShaper/graphs/contributors)
-[![GitHub last commit](https://img.shields.io/github/last-commit/SniShaper/SniShaper?style=flat-square&label=最近提交)](https://github.com/SniShaper/SniShaper/commits/main)
+[![GitHub contributors](https://img.shields.io/github/contributors/SnishaperTeam/SniShaper?style=flat-square&label=总贡献者)](https://github.com/SnishaperTeam/SniShaper/graphs/contributors)
+[![GitHub commit activity](https://img.shields.io/github/commit-activity/m/SnishaperTeam/SniShaper?style=flat-square&label=月均提交)](https://github.com/SnishaperTeam/SniShaper/graphs/contributors)
+[![GitHub last commit](https://img.shields.io/github/last-commit/SnishaperTeam/SniShaper?style=flat-square&label=最近提交)](https://github.com/SnishaperTeam/SniShaper/commits/main)
 
 ### 综合活跃度趋势
 
@@ -311,8 +311,8 @@ CLI（headless）版本作为本仓库的 `cli/` 子目录维护，与 GUI 共�
 ### 核心贡献者
 
 <div align="center">
-<a href="https://github.com/SniShaper/SniShaper/graphs/contributors" target="_blank">
-<img src="https://contrib.rocks/image?repo=SniShaper/SniShaper" alt="Contributors" />
+<a href="https://github.com/SnishaperTeam/SniShaper/graphs/contributors" target="_blank">
+<img src="https://contrib.rocks/image?repo=SnishaperTeam/SniShaper" alt="Contributors" />
 </a>
 </div>
 
