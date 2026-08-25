@@ -8,23 +8,23 @@
     "preview": "vite preview"
   },
   "devDependencies": {
-    "@emnapi/core": "^1.11.3",
-    "@emnapi/runtime": "^1.11.3",
-    "@types/node": "^26.2.0",
-    "@types/react": "^19.2.18",
-    "@types/react-dom": "^19.2.4",
+    "@emnapi/core": "^1.9.2",
+    "@emnapi/runtime": "^1.11.2",
+    "@types/node": "^26.1.0",
+    "@types/react": "^19.2.14",
+    "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react-swc": "^4.3.3",
     "typescript": "^7.0.2",
-    "vite": "^8.2.1"
+    "vite": "^8.1.3"
   },
   "dependencies": {
     "@emotion/react": "^11.14.0",
     "@emotion/styled": "^11.14.1",
     "@heroicons/react": "^2.2.0",
     "@mui/material": "^9.3.1",
-    "@wailsio/runtime": "^3.0.0-beta.9",
-    "react": "^19.2.8",
-    "react-dom": "^19.2.8",
-    "react-router-dom": "^7.18.2"
+    "@wailsio/runtime": "^3.0.0-alpha.95",
+    "react": "^19.2.4",
+    "react-dom": "^19.2.7",
+    "react-router-dom": "^7.18.1"
   }
 }
