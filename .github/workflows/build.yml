@@ -52,7 +52,7 @@ jobs:
 
       - name: Build, package & sign MSIX
         shell: pwsh
-        run: ./build_windows.ps1 -Build windows gui all -InstallDeps -BuildMsix -Silent
+        run: ./build_windows.ps1 -Build windows,gui,all -InstallDeps -BuildMsix -Silent
 
       - name: Create 7z archive
         run: 7z a -mx=9 snishaper-windows-amd64.7z .\build\bin\*

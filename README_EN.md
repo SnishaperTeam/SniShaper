@@ -117,25 +117,25 @@ pwsh -ExecutionPolicy Bypass -File .\build_windows.ps1
 
 ```powershell
 # Windows GUI, build everything (frontend + backend)
-.\build_windows.ps1 -Build windows gui all
+.\build_windows.ps1 -Build windows,gui,all
 
 # Windows GUI, frontend only
-.\build_windows.ps1 -Build windows gui frontend
+.\build_windows.ps1 -Build windows,gui,frontend
 
 # Linux GUI via WSL, build everything
-.\build_windows.ps1 -Build linux gui all
+.\build_windows.ps1 -Build linux,gui,all
 
 # CLI only (headless, cross-platform)
-.\build_windows.ps1 -Build windows cli all
+.\build_windows.ps1 -Build windows,cli,all
 
 # Both Windows + Linux GUI
-.\build_windows.ps1 -Build all gui all
+.\build_windows.ps1 -Build all,gui,all
 
 # Everything: all platforms, GUI + CLI
-.\build_windows.ps1 -Build all all all
+.\build_windows.ps1 -Build all,all,all
 
 # arm64 build + MSIX packaging
-.\build_windows.ps1 -Build windows gui all -Arch arm64 -BuildMsix
+.\build_windows.ps1 -Build windows,gui,all -Arch arm64 -BuildMsix
 
 # Silent mode (for CI/CD, no interaction)
 .\build_windows.ps1 -Silent
