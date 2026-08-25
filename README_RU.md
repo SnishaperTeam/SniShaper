@@ -4,11 +4,11 @@
 
 [![Go Version](https://img.shields.io/badge/Go-1.25+-00ADD8?style=flat-square&logo=go)](https://golang.org)
 [![License](https://img.shields.io/badge/License-MIT-blue?style=flat-square)]()
-[![Wiki](https://img.shields.io/badge/Docs-Wiki-orange?style=flat-square)](https://github.com/SniShaper/SniShaper/wiki)
-[![GitHub Release](https://img.shields.io/github/v/release/SniShaper/SniShaper?style=flat-square&logo=github)](https://github.com/SniShaper/SniShaper/releases)
-[![GitHub Downloads](https://img.shields.io/github/downloads/SniShaper/SniShaper/total?style=flat-square&logo=github)](https://github.com/SniShaper/SniShaper/releases)
-[![GitHub last commit](https://img.shields.io/github/last-commit/SniShaper/SniShaper?style=flat-square&logo=git)](https://github.com/SniShaper/SniShaper/commits/main)
-[![GitHub Actions Workflow Status](https://img.shields.io/github/actions/workflow/status/SniShaper/SniShaper/build.yml?style=flat-square&logo=githubactions&label=CI)](https://github.com/SniShaper/SniShaper/actions)
+[![Wiki](https://img.shields.io/badge/Docs-Wiki-orange?style=flat-square)](https://github.com/SnishaperTeam/SniShaper/wiki)
+[![GitHub Release](https://img.shields.io/github/v/release/SnishaperTeam/SniShaper?style=flat-square&logo=github)](https://github.com/SnishaperTeam/SniShaper/releases)
+[![GitHub Downloads](https://img.shields.io/github/downloads/SnishaperTeam/SniShaper/total?style=flat-square&logo=github)](https://github.com/SnishaperTeam/SniShaper/releases)
+[![GitHub last commit](https://img.shields.io/github/last-commit/SnishaperTeam/SniShaper?style=flat-square&logo=git)](https://github.com/SnishaperTeam/SniShaper/commits/main)
+[![GitHub Actions Workflow Status](https://img.shields.io/github/actions/workflow/status/SnishaperTeam/SniShaper/build.yml?style=flat-square&logo=githubactions&label=CI)](https://github.com/SnishaperTeam/SniShaper/actions)
 
 **SniShaper** -- это локальный прокси-инструмент, разработанный специально для сложных сетевых условий, интегрирующий **инъекцию ECH**, **фрагментацию TLS**, **маскировку QUIC**, **миграцию сессий** и другие технологии стека протоколов, в сочетании с **виртуальным TUN-интерфейсом** для полного перехвата трафика, обеспечивая стабильный и гибкий доступ в интернет.
 
@@ -33,7 +33,7 @@
 
 ### Windows
 
-Скачайте `snishaper-windows-amd64.7z` (портативная версия) или MSIX-установщик из [последнего релиза](https://github.com/SniShaper/SniShaper/releases), распакуйте / установите и запустите `snishaper.exe`. Приложение автоматически запрашивает права администратора (требуются для TUN). Если повышение прав не удалось, TUN недоступен, но остальные функции работают.
+Скачайте `snishaper-windows-amd64.7z` (портативная версия) или MSIX-установщик из [последнего релиза](https://github.com/SnishaperTeam/SniShaper/releases), распакуйте / установите и запустите `snishaper.exe`. Приложение автоматически запрашивает права администратора (требуются для TUN). Если повышение прав не удалось, TUN недоступен, но остальные функции работают.
 
 <a href="https://apps.microsoft.com/detail/9n11mrrsfs8n" target="_self">
 <img src="https://get.microsoft.com/images/ru-ru%20dark.svg" width="200"/>
@@ -41,7 +41,7 @@
 
 ### Linux
 
-Скачайте `snishaper-linux-amd64.tar.gz` из [последнего релиза](https://github.com/SniShaper/SniShaper/releases), распакуйте и запустите:
+Скачайте `snishaper-linux-amd64.tar.gz` из [последнего релиза](https://github.com/SnishaperTeam/SniShaper/releases), распакуйте и запустите:
 
 ```bash
 tar -xzf snishaper-linux-amd64.tar.gz
@@ -62,12 +62,12 @@ sudo ./SniShaper
 
 ## Документация
 
-Для получения подробных технических принципов, руководств по развертыванию и настройке, обратитесь к [**GitHub Wiki**](https://github.com/SniShaper/SniShaper/wiki):
+Для получения подробных технических принципов, руководств по развертыванию и настройке, обратитесь к [**GitHub Wiki**](https://github.com/SnishaperTeam/SniShaper/wiki):
 
-- **[Основные режимы прокси](https://github.com/SniShaper/SniShaper/wiki/Core-Proxy-Modes)**: понимание принципов работы TLS-RF, QUIC и серверного режима.
-- **[Руководство по правилам](https://github.com/SniShaper/SniShaper/wiki/Custom-Rules-Guide)**: как разрабатывать целевые правила.
-- **[Настройка GUI](https://github.com/SniShaper/SniShaper/wiki/GUI-Configuration)**: быстрая настройка правил в интерфейсе.
-- **[Устранение неполадок](https://github.com/SniShaper/SniShaper/wiki/FAQ)**: решение проблем с сертификатами, правилами и другим.
+- **[Основные режимы прокси](https://github.com/SnishaperTeam/SniShaper/wiki/Core-Proxy-Modes)**: понимание принципов работы TLS-RF, QUIC и серверного режима.
+- **[Руководство по правилам](https://github.com/SnishaperTeam/SniShaper/wiki/Custom-Rules-Guide)**: как разрабатывать целевые правила.
+- **[Настройка GUI](https://github.com/SnishaperTeam/SniShaper/wiki/GUI-Configuration)**: быстрая настройка правил в интерфейсе.
+- **[Устранение неполадок](https://github.com/SnishaperTeam/SniShaper/wiki/FAQ)**: решение проблем с сертификатами, правилами и другим.
 
 ---
 
@@ -79,7 +79,7 @@ sudo ./SniShaper
 
 ```powershell
 # Клонировать репозиторий
-git clone https://github.com/SniShaper/SniShaper.git
+git clone https://github.com/SnishaperTeam/SniShaper.git
 cd SniShaper
 
 # Полная компиляция (интерактивный режим, автоустановка зависимостей, опционально MSIX)
@@ -167,7 +167,7 @@ sudo apt-get install -y libgtk-4-dev libwebkitgtk-6.0-dev
 
 ```bash
 # Клонировать репозиторий
-git clone https://github.com/SniShaper/SniShaper.git
+git clone https://github.com/SnishaperTeam/SniShaper.git
 cd SniShaper
 
 # Интерактивное меню (1 GUI / 2 CLI / 3 GUI+CLI + выбор архитектуры)
@@ -272,9 +272,9 @@ Windows и Linux собираются из одного репозитория, 
 
 ### Значки активности
 
-[![GitHub contributors](https://img.shields.io/github/contributors/SniShaper/SniShaper?style=flat-square&label=Всего участников)](https://github.com/SniShaper/SniShaper/graphs/contributors)
-[![GitHub commit activity](https://img.shields.io/github/commit-activity/m/SniShaper/SniShaper?style=flat-square&label=Коммитов в месяц)](https://github.com/SniShaper/SniShaper/graphs/contributors)
-[![GitHub last commit](https://img.shields.io/github/last-commit/SniShaper/SniShaper?style=flat-square&label=Последний коммит)](https://github.com/SniShaper/SniShaper/commits/main)
+[![GitHub contributors](https://img.shields.io/github/contributors/SnishaperTeam/SniShaper?style=flat-square&label=Всего участников)](https://github.com/SnishaperTeam/SniShaper/graphs/contributors)
+[![GitHub commit activity](https://img.shields.io/github/commit-activity/m/SnishaperTeam/SniShaper?style=flat-square&label=Коммитов в месяц)](https://github.com/SnishaperTeam/SniShaper/graphs/contributors)
+[![GitHub last commit](https://img.shields.io/github/last-commit/SnishaperTeam/SniShaper?style=flat-square&label=Последний коммит)](https://github.com/SnishaperTeam/SniShaper/commits/main)
 
 ### Тренд активности
 
@@ -287,8 +287,8 @@ Windows и Linux собираются из одного репозитория, 
 ### Основные участники
 
 <div align="center">
-<a href="https://github.com/SniShaper/SniShaper/graphs/contributors" target="_blank">
-<img src="https://contrib.rocks/image?repo=SniShaper/SniShaper" alt="Contributors" />
+<a href="https://github.com/SnishaperTeam/SniShaper/graphs/contributors" target="_blank">
+<img src="https://contrib.rocks/image?repo=SnishaperTeam/SniShaper" alt="Contributors" />
 </a>
 </div>
 
