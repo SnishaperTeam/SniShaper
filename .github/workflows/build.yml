@@ -100,7 +100,7 @@ jobs:
         run: |
           set -euo pipefail
           chmod +x build.sh
-          ./build.sh --with-frontend
+          ./build.sh --build linux,gui,all --install-deps --silent
           test -f build/bin/SniShaper && echo "::notice::build/bin/SniShaper ready"
 
       - name: Smoke test binary

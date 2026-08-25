@@ -451,8 +451,8 @@ jobs:
         run: |
           set -euo pipefail
           chmod +x build.sh
-          echo "::group::build.sh --with-frontend"
-          ./build.sh --with-frontend
+          echo "::group::build.sh --build linux,gui,all --install-deps --silent"
+          ./build.sh --build linux,gui,all --install-deps --silent
           echo "::endgroup::"
           test -f build/bin/SniShaper && echo "::notice::build/bin/SniShaper ready"
 
