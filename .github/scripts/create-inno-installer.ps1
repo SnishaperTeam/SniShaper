@@ -32,7 +32,7 @@ $iss = @'
 #define MyAppName "Snishaper"
 #define MyAppVersion "__VERSION__"
 #define MyAppPublisher "SnishaperTeam And JetCPPTeam"
-#define MyAppURL "https://jetcpp.dpdns.org/snishaper/index.html"
+#define MyAppURL "https://jetcpp.ccwu.cc/"
 #define MyAppExeName "snishaper.exe"
 
 [Setup]
