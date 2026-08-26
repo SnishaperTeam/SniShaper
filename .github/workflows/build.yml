@@ -33,14 +33,14 @@ jobs:
           if (Get-Command winapp -ErrorAction SilentlyContinue) {
             Write-Host "winapp already available"
           } else {
-            winget install --id Microsoft.WinAppCLI --accept-source-agreements --accept-package-agreements
+            winget install --id Microsoft.WinAppCLI -e --source winget --disable-interactivity --accept-source-agreements --accept-package-agreements
             if ($LASTEXITCODE -ne 0) {
               Write-Host "winget failed, trying GitHub release..." -ForegroundColor Yellow
-              $url = "https://github.com/microsoft/WinAppCLI/releases/latest/download/Microsoft.WinAppCLI.msixbundle"
-              Invoke-WebRequest -Uri $url -OutFile "$env:TEMP\WinAppCLI.msixbundle" -ErrorAction Stop
-              Add-AppxPackage -Path "$env:TEMP\WinAppCLI.msixbundle" -ErrorAction Stop
+              $url = "https://github.com/microsoft/winappCli/releases/download/v0.6.0/winappcli_x64.msix"
+              Invoke-WebRequest -Uri $url -OutFile "$env:TEMP\winappcli_x64.msix" -ErrorAction Stop
+              Add-AppxPackage -Path "$env:TEMP\winappcli_x64.msix" -ErrorAction Stop
               # Add-AppxPackage doesn't add to PATH; find the installed location
-              $pkg = Get-AppxPackage -Name "Microsoft.WinAppCLI" | Select-Object -First 1
+              $pkg = Get-AppxPackage -Name "*WinApp*" | Select-Object -First 1
               $installPath = $pkg.InstallLocation
               Add-Content -Path $env:GITHUB_PATH -Value $installPath
             }
