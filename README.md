@@ -20,7 +20,7 @@
 
 ## 特性
 
-- **多模式代理**：MITM（中间人）、Transparent（透明）、TLS-RF（TLS 分片）、QUIC、Migration（会话迁移）、Direct（直连）等多种模式覆盖不同场景。
+- **多模式代理**：MITM（中间人）、Transparent（透传）、TLS-RF（TLS 分片）、QUIC、Migration（会话迁移）、Direct（直连）等多种模式覆盖不同场景。
 - **TUN 虚拟网卡**：Windows 走 WinTun、Linux 走 gvisor 网络栈，全局流量透明劫持，自动路由与 DNS 劫持。
 - **ECH 注入**：自动获取并注入 ECH Config，支持 DoH 发现与热更新。
 - **智能分流**：基于 GFWList 自动识别被屏蔽域名，自动路由引擎无需手动配置即可分流。
@@ -272,11 +272,11 @@ CLI（headless）版本作为本仓库的 `cli/` 子目录维护，与 GUI 共�
 
 感谢以下贡献者对本仓库的贡献：
 
-| <a href="https://github.com/mechrevo"><img src="https://avatars.githubusercontent.com/mechrevo" width="40" height="40" style="border-radius: 50%;" alt="mechrevo" /></a> | <a href="https://github.com/dongzheyu"><img src="https://avatars.githubusercontent.com/dongzheyu" width="40" height="40" style="border-radius: 50%;" alt="dongzheyu" /></a> | <a href="https://github.com/JetCPP-dongle"><img src="https://avatars.githubusercontent.com/JetCPP-dongle" width="40" height="40" style="border-radius: 50%;" alt="JetCPP-dongle" /></a> |
-| :----------------------------------------------------------: | :----------------------------------------------------------: | :----------------------------------------------------------: |
-| [mechrevo](https://github.com/mechrevo) | [dongzheyu](https://github.com/dongzheyu) | [JetCPP-dongle](https://github.com/JetCPP-dongle) |
-| <a href="https://github.com/lzpls"><img src="https://avatars.githubusercontent.com/lzpls" width="40" height="40" style="border-radius: 50%;" alt="lzpls" /></a> |
-| [lzpls](https://github.com/lzpls) |
+| <a href="https://github.com/mechrevo"><img src="https://avatars.githubusercontent.com/mechrevo" width="40" height="40" style="border-radius: 50%;" alt="mechrevo" /></a> | <a href="https://github.com/dongzheyu"><img src="https://avatars.githubusercontent.com/dongzheyu" width="40" height="40" style="border-radius: 50%;" alt="dongzheyu" /></a> |      |
+| :----------------------------------------------------------: | :----------------------------------------------------------: | :--: |
+|           [mechrevo](https://github.com/mechrevo)            |          [dongzheyu](https://github.com/dongzheyu)           |      |
+| <a href="https://github.com/lzpls"><img src="https://avatars.githubusercontent.com/lzpls" width="40" height="40" style="border-radius: 50%;" alt="lzpls" /></a> |                                                              |      |
+|              [lzpls](https://github.com/lzpls)               |                                                              |      |
 
 ## 星标历史
 
