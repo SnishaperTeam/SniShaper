@@ -1,19 +1,39 @@
 version: 2
-updates:
-  - package-ecosystem: "gomod"
-    directory: "/"
-    schedule:
-      interval: "daily"
-  - package-ecosystem: "gomod"
-    directory: "/utls"
-    schedule:
-      interval: "daily"
 
-  - package-ecosystem: "npm"
-    directory: "/frontend"
+updates:
+  # Go modules: all bumps in ONE PR, monthly, 14-day cooldown
+  - package-ecosystem: gomod
+    directory: /
     schedule:
-      interval: "daily"
-  - package-ecosystem: "github-actions"
-    directory: "/"
+      interval: monthly
+    open-pull-requests-limit: 5
+    cooldown:
+      default-days: 14
+    groups:
+      go-modules:
+        patterns:
+          - "*"
+
+  # Frontend npm: grouped, weekly, skip brand-new releases
+  - package-ecosystem: npm
+    directory: /frontend
     schedule:
-      interval: "daily"
+      interval: weekly
+    open-pull-requests-limit: 5
+    cooldown:
+      default-days: 7
+    groups:
+      frontend-deps:
+        patterns:
+          - "*"
+
+  # GitHub Actions: grouped into one PR
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly
+    open-pull-requests-limit: 3
+    groups:
+      actions:
+        patterns:
+          - "*"
