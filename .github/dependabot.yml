@@ -1,9 +1,16 @@
 version: 2
 
+registries:
+  snishaper:
+    type: git
+    url: https://github.com/SnishaperTeam/SniShaper.git
+
 updates:
   # Go modules: all bumps in ONE PR, monthly, 14-day cooldown
   - package-ecosystem: gomod
     directory: /
+    registries:
+      - snishaper
     schedule:
       interval: monthly
     open-pull-requests-limit: 5
@@ -17,6 +24,8 @@ updates:
   # Frontend npm: grouped, weekly, skip brand-new releases
   - package-ecosystem: npm
     directory: /frontend
+    registries:
+      - snishaper
     schedule:
       interval: weekly
     open-pull-requests-limit: 5
@@ -30,6 +39,9 @@ updates:
   # GitHub Actions: grouped into one PR
   - package-ecosystem: github-actions
     directory: /
+    source:
+      type: git
+      url: https://github.com/SnishaperTeam/SniShaper.git
     schedule:
       interval: monthly
     open-pull-requests-limit: 3
