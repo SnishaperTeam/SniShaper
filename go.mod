@@ -9,12 +9,12 @@ require (
 	github.com/quic-go/quic-go v0.61.0
 	github.com/refraction-networking/utls v1.8.2
 	github.com/rivo/tview v0.42.0
-	github.com/sagernet/sing v0.8.13
+	github.com/sagernet/sing v0.8.14
 	github.com/sagernet/sing-tun v0.8.13
 	github.com/things-go/go-socks5 v0.1.1
 	github.com/vishvananda/netlink v1.3.1
-	github.com/wailsapp/wails/v3 v3.0.0-beta.8
-	golang.org/x/sys v0.47.0
+	github.com/wailsapp/wails/v3 v3.0.0-alpha2.112
+	golang.org/x/sys v0.46.0
 )
 
 require (

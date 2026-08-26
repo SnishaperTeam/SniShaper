@@ -156,8 +156,8 @@ github.com/sagernet/netlink v0.0.0-20240612041022-b9a21c07ac6a h1:ObwtHN2VpqE0ZN
 github.com/sagernet/netlink v0.0.0-20240612041022-b9a21c07ac6a/go.mod h1:xLnfdiJbSp8rNqYEdIW/6eDO4mVoogml14Bh2hSiFpM=
 github.com/sagernet/nftables v0.3.0-mod.2 h1:ck2KMU02OxL1eDFgGaWYglMDpoOZ7OHzxje+vW5Q0OQ=
 github.com/sagernet/nftables v0.3.0-mod.2/go.mod h1:8kslHG4VvYNihcco+i6uxIX7qbT8A56T0y5q7U44ZaQ=
-github.com/sagernet/sing v0.8.13 h1:yVoXnx9nPxfjlwD4Tp+Wd9zuW2tfiSVrcRDBZNbKRCw=
-github.com/sagernet/sing v0.8.13/go.mod h1:olXxWQNqRW/l2Q6JI3b2Qmz8iQnIFlOeeH8bx6JhgUA=
+github.com/sagernet/sing v0.8.14 h1:S6Netv4F61uNAuD/sUbHnGuNUEPwtL08Ouk0//CVYgM=
+github.com/sagernet/sing v0.8.14/go.mod h1:olXxWQNqRW/l2Q6JI3b2Qmz8iQnIFlOeeH8bx6JhgUA=
 github.com/sagernet/sing-tun v0.8.13 h1:b3i2OrIoaN3913yRmLRamYqvWLJVNSAx9lXuNs6zBT0=
 github.com/sagernet/sing-tun v0.8.13/go.mod h1:QvarqUtHfj1ULaRR+6kZOS/OoCE+pYGq67A5tyIy+dQ=
 github.com/sergi/go-diff v1.0.0/go.mod h1:0CfEIISq7TuYL3j771MWULgwwjU+GofnZX9QAmXWZgo=
