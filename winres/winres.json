@@ -36,7 +36,7 @@
             "ProductVersion": "1.29.0.0"
           },
           "0804": {
-            "Comments": "SniShaper 是一款专为复杂网络环境设计的本地代理软件，通过 ECH 注入、TLS 分片、QUIC 转换、会话迁移等多种功能，在复杂网络环境下提升体验。",
+            "Comments": "SniShaper 是一款专为复杂网络环境设计的本地代理软件，通过 ECH 注入、TLS 分片、QUIC 混淆、会话迁移等多种功能，在复杂网络环境下提升体验。",
             "CompanyName": "Snishaper Team and JetCPP Team",
             "FileDescription": "SniShaper",
             "FileVersion": "1.29.0.0",
