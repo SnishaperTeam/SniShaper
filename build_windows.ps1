@@ -1,6 +1,4 @@
-param(
-    [string[]]$Build,
-
+﻿param(
     [ValidateSet("en", "cn", "ru")]
     [string]$Lang,
 
@@ -19,19 +17,8 @@ param(
 
     [switch]$Silent,
 
-    [switch]$Help
+    [string[]]$Build
 )
-
-# --- Show help and exit ---
-if ($Help) {
-    Get-Help $PSCommandPath -Detailed
-    exit 0
-}
-
-# --- Go module proxy (same default as build.sh, overridable via env) ---
-if (-not $env:GOPROXY) {
-    $env:GOPROXY = "https://goproxy.cn,direct"
-}
 
 # --- Normalize target architecture ---
 # x86 仅构建 Windows；Linux（含 CLI）与 Darwin 不构建 x86
@@ -113,41 +100,33 @@ function Build-Cli {
     Write-Host "[CLI] 构建完成: $OutDir" -ForegroundColor Green
 }
 
-# --- Admin elevation (Windows only; skipped on Linux/macOS for CI/testing) ---
-$onWindows = $PSVersionTable.Platform -eq 'Win32NT' -or "$($PSVersionTable.OS)" -match 'Windows'
-if ($onWindows) {
-    $currentPrincipal = New-Object Security.Principal.WindowsPrincipal([Security.Principal.WindowsIdentity]::GetCurrent())
-    $isAdmin = $currentPrincipal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+$currentPrincipal = New-Object Security.Principal.WindowsPrincipal([Security.Principal.WindowsIdentity]::GetCurrent())
+$isAdmin = $currentPrincipal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
 
-    if (-not $isAdmin) {
-        Write-Host "Requesting Administrator privileges..." -ForegroundColor Yellow
-        $params = @()
-        if ($Build)      { $params += "-Build";      $params += $Build }
-        if ($Lang)       { $params += "-Lang";       $params += $Lang }
-        if ($Arch)       { $params += "-Arch";       $params += $Arch }
-        if ($InstallDeps) { $params += "-InstallDeps" }
-        if ($BuildMsix)  { $params += "-BuildMsix" }
-        if ($SkipSign)   { $params += "-SkipSign" }
-        if ($Cli)        { $params += "-Cli" }
-        if ($Gtk3)       { $params += "-Gtk3" }
-        if ($Help)       { $params += "-Help" }
-        if ($Silent)     { $params += "-Silent" }
-        $paramStr = $params -join ' '
-        Start-Process powershell.exe -Verb RunAs -ArgumentList "-NoProfile -ExecutionPolicy Bypass -File `"$PSCommandPath`" $paramStr"
-        exit
-    } else {
-        Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser -Force -ErrorAction SilentlyContinue
-    }
+if (-not $isAdmin) {
+    Write-Host "Requesting Administrator privileges..." -ForegroundColor Yellow
+    $params = @()
+    if ($Build)      { $params += "-Build";      $params += $Build }
+    if ($Lang)       { $params += "-Lang";       $params += $Lang }
+    if ($Arch)       { $params += "-Arch";       $params += $Arch }
+    if ($InstallDeps) { $params += "-InstallDeps" }
+    if ($BuildMsix)  { $params += "-BuildMsix" }
+    if ($SkipSign)   { $params += "-SkipSign" }
+    if ($Cli)        { $params += "-Cli" }
+    if ($Gtk3)       { $params += "-Gtk3" }
+    if ($Silent)     { $params += "-Silent" }
+    $paramStr = $params -join ' '
+    Start-Process powershell.exe -Verb RunAs -ArgumentList "-NoProfile -ExecutionPolicy Bypass -File `"$PSCommandPath`" $paramStr"
+    exit
 } else {
-    # Non-Windows: skip admin elevation (CI/testing on Linux via pwsh)
-    Write-Host "[build] Non-Windows platform, skipping admin elevation" -ForegroundColor DarkGray
+    Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser -Force -ErrorAction SilentlyContinue
 }
 
 # Set console encoding to UTF-8 to properly display Chinese characters
 try {
     [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
     $OutputEncoding = [System.Text.Encoding]::UTF8
-    if ($onWindows) { chcp 65001 | Out-Null }
+    chcp 65001 | Out-Null
 } catch {
     # If setting encoding fails, continue anyway
 }
@@ -155,14 +134,12 @@ try {
 $ProjectRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
 Set-Location $ProjectRoot
 
-# Kill any running snishaper instances before build (Windows only)
-if ($onWindows) {
-    Get-Process -Name "snishaper" -ErrorAction SilentlyContinue | ForEach-Object {
-        Write-Host "[build] Killing snishaper process (PID: $($_.Id))..." -ForegroundColor Yellow
-        $_ | Stop-Process -Force
-    }
-    Start-Sleep -Milliseconds 500
+# Kill any running snishaper instances before build
+Get-Process -Name "snishaper" -ErrorAction SilentlyContinue | ForEach-Object {
+    Write-Host "[build] Killing snishaper process (PID: $($_.Id))..." -ForegroundColor Yellow
+    $_ | Stop-Process -Force
 }
+Start-Sleep -Milliseconds 500
 
 $messages = @{
     "LangTitle" = "Please select your language / 请选择语言 / Выберите язык"
@@ -178,10 +155,9 @@ $messages = @{
     "EN_SelectTitle" = "Please select a build option:"
     "EN_Opt1" = "1. Windows GUI (frontend + backend)"
     "EN_Opt2" = "2. Linux GUI via WSL (frontend + backend)"
-    "EN_Opt3" = "3. All platforms (Windows + Linux GUI)"
+    "EN_Opt3" = "3. All platforms (Windows + Linux)"
     "EN_Opt4" = "4. CLI only (headless, cross-platform)"
-    "EN_Opt5" = "5. Full build (GUI + CLI, all platforms, all architectures)"
-    "EN_ChoicePrompt" = "Enter your choice (1-5, default=5)"
+    "EN_ChoicePrompt" = "Enter your choice (1, 2, 3, or 4)"
     "EN_Start" = "Starting build process..."
     "EN_FrontEnter" = "[Frontend] Entering frontend directory..."
     "EN_FrontErrDir" = "[Frontend] ERROR: Failed to enter 'frontend' directory!"
@@ -213,10 +189,9 @@ $messages = @{
     "CN_SelectTitle" = "请选择构建选项："
     "CN_Opt1" = "1. Windows GUI（前端 + 后端）"
     "CN_Opt2" = "2. Linux GUI（通过 WSL，前端 + 后端）"
-    "CN_Opt3" = "3. 全部平台（Windows + Linux GUI）"
+    "CN_Opt3" = "3. 全部平台（Windows + Linux）"
     "CN_Opt4" = "4. 仅 CLI（headless，跨平台）"
-    "CN_Opt5" = "5. 全量构建（GUI + CLI，全平台，全架构）"
-    "CN_ChoicePrompt" = "请输入你的选择 (1-5，默认5)"
+    "CN_ChoicePrompt" = "请输入你的选择 (1, 2, 3 或 4)"
     "CN_Start" = "开始执行构建流程..."
     "CN_FrontEnter" = "[前端] 正在进入 frontend 目录..."
     "CN_FrontErrDir" = "[前端] 错误：无法进入 'frontend' 目录！"
@@ -248,10 +223,9 @@ $messages = @{
     "RU_SelectTitle" = "Выберите вариант сборки:"
     "RU_Opt1" = "1. Windows GUI (фронтенд + бэкенд)"
     "RU_Opt2" = "2. Linux GUI через WSL (фронтенд + бэкенд)"
-    "RU_Opt3" = "3. Все платформы (Windows + Linux GUI)"
+    "RU_Opt3" = "3. Все платформы (Windows + Linux)"
     "RU_Opt4" = "4. Только CLI (headless, кроссплатформенный)"
-    "RU_Opt5" = "5. Полная сборка (GUI + CLI, все платформы, все архитектуры)"
-    "RU_ChoicePrompt" = "Введите ваш выбор (1-5, по умолчанию 5)"
+    "RU_ChoicePrompt" = "Введите ваш выбор (1, 2, 3 или 4)"
     "RU_Start" = "Начало сборки..."
     "RU_FrontEnter" = "[Фронтенд] Переход в директорию frontend..."
     "RU_FrontErrDir" = "[Фронтенд] ОШИБКА: Не удалось войти в директорию 'frontend'!"
@@ -278,22 +252,15 @@ $messages = @{
 }
 
 # --- Parse -Build into system / mode / scope ---
-# Format: -Build <system>,<mode>,<scope>   (comma-separated, safe for pwsh binding)
-# system: windows/linux/all, mode: gui/cli/all, scope: frontend/backend/all
-# When -Build is not given: defaults to All,All,All (full build: GUI+CLI, all platforms).
-# NOTE: Do NOT pass the three values space-separated (e.g. -Build windows gui all):
-#       PowerShell binds them by position into -Lang/-Arch and fails Lang's
-#       ValidateSet. Use -Build windows,gui,all (or -Build windows -Build gui -Build all).
-$BuildSystem = "All"
-$BuildMode   = "All"
+# 格式: -Build <系统> <运行方式> <构建范围>
+#   系统: windows / linux / all
+#   运行方式: gui / cli / all
+#   构建范围: frontend / backend / all
+$BuildSystem = "Windows"
+$BuildMode   = "Gui"
 $BuildScope  = "All"
 
 if ($Build -and $Build.Count -gt 0) {
-    # If a single value contains commas, split it (handles -File mode where
-    # comma-separated values arrive as one string instead of an array)
-    if ($Build.Count -eq 1 -and $Build[0] -match ',') {
-        $Build = $Build[0] -split ','
-    }
     if ($Build.Count -eq 1) {
         $val = $Build[0]
         if ($val -in @("windows", "linux")) {
@@ -301,14 +268,14 @@ if ($Build -and $Build.Count -gt 0) {
             $BuildMode = "Gui"
             $BuildScope = "All"
         } elseif ($val -eq "all") {
-            # -Build all = full build (All,All,All)
-            $BuildSystem = "All"
-            $BuildMode = "All"
+            # 向后兼容: -Build all = 仅 Windows GUI all
+            $BuildSystem = "Windows"
+            $BuildMode = "Gui"
             $BuildScope = "All"
         } else {
-            # Backward compat: -Build frontend / -Build backend
-            $BuildSystem = "All"
-            $BuildMode = "All"
+            # 向后兼容旧格式: -Build frontend / -Build backend
+            $BuildSystem = "Windows"
+            $BuildMode = "Gui"
             $BuildScope = $val.Substring(0,1).ToUpper()+$val.Substring(1).ToLower()
         }
     } elseif ($Build.Count -eq 2) {
@@ -336,11 +303,11 @@ if ($BuildScope -notin @("Frontend", "Backend", "All")) {
     exit 1
 }
 
-# --- Silent mode defaults: full build (All,All,All) when -Build not given ---
+# --- Silent mode defaults ---
 if ($Silent) {
     if (-not $Build -or $Build.Count -eq 0) {
-        $BuildSystem = "All"
-        $BuildMode = "All"
+        $BuildSystem = "Windows"
+        $BuildMode = "Gui"
         $BuildScope = "All"
     }
     if (-not $Lang) { $Lang = "EN" }
@@ -406,7 +373,6 @@ if (-not ($Build -and $Build.Count -gt 0)) {
         Write-Host $messages["$($lang)_Opt2"]
         Write-Host $messages["$($lang)_Opt3"]
         Write-Host $messages["$($lang)_Opt4"]
-        Write-Host $messages["$($lang)_Opt5"]
         Write-Host ""
 
         $choice = Read-Host $messages["$($lang)_ChoicePrompt"]
@@ -416,14 +382,14 @@ if (-not ($Build -and $Build.Count -gt 0)) {
             "2" { $BuildSystem = "Linux";   $BuildMode = "Gui";  $BuildScope = "All" }
             "3" { $BuildSystem = "All";     $BuildMode = "Gui";  $BuildScope = "All" }
             "4" { $BuildSystem = "All";     $BuildMode = "Cli";  $BuildScope = "All" }
-            "5" { $BuildSystem = "All";     $BuildMode = "All";  $BuildScope = "All" }
             default {
-                # Default: full build (GUI + CLI, all platforms)
-                $BuildSystem = "All"; $BuildMode = "All"; $BuildScope = "All"
+                Write-Host "[ERROR] Invalid choice: $choice. Please enter 1, 2, 3, or 4." -ForegroundColor Red
+                Read-Host $messages["$($lang)_Exit"]
+                exit 1
             }
         }
     } else {
-        # Silent without -Build: already set to All/All/All above
+        # Silent without -Build: already set to Windows/Gui/All above
     }
 }
 
@@ -639,7 +605,7 @@ if ($buildBackend) {
     $winresOK = $false
     try {
         if (Test-Path $WinResPath) {
-            $WinResBackup = Get-Content -Raw $WinResPath
+            $WinResBackup = Get-Content -Raw $WinResPath -Encoding UTF8
             $winres = $WinResBackup | ConvertFrom-Json
             [xml]$wm = Get-Content $ManifestPath
             $mainVer = $wm.Package.Identity.Version
@@ -726,36 +692,15 @@ if ($buildBackend) {
 
     Write-Host $messages["$($lang)_BackDone"] -ForegroundColor Green
     Write-Host ""
-}
 
-# ---------- CLI Build (standalone, cross-platform headless) ----------
-# Runs when Mode=Cli or Mode=All (even if GUI backend was skipped)
-if ($buildCli) {
-    Write-Host ""
-    Write-Host "==========================================" -ForegroundColor Cyan
-    Write-Host "[CLI] Building headless CLI (arch=$GoArch)..." -ForegroundColor Cyan
-    Write-Host "==========================================" -ForegroundColor Cyan
-
-    # Ensure Go deps are downloaded (may already be done if backend was built)
-    if (-not $buildBackend) {
-        try {
-            go version | Out-Null
-            if ($LASTEXITCODE -ne 0) { throw "Go not found" }
-        } catch {
-            Write-Host "[ERROR] Go is not installed or not in PATH." -ForegroundColor Red
-            if (-not $Silent) { Read-Host $messages["$($lang)_Exit"] }
-            exit 1
-        }
-        Write-Host $messages["$($lang)_BackInstallDeps"] -ForegroundColor Green
-        go mod download
-        if ($LASTEXITCODE -ne 0) {
-            Write-Host $messages["$($lang)_BackErrInstallDeps"] -ForegroundColor Red
-            if (-not $Silent) { Read-Host $messages["$($lang)_Exit"] }
-            exit 1
-        }
+    # ---------- CLI Build (optional, cross-platform headless) ----------
+    if ($buildCli) {
+        Write-Host ""
+        Write-Host "==========================================" -ForegroundColor Cyan
+        Write-Host "[CLI] Building headless CLI (arch=$GoArch)..." -ForegroundColor Cyan
+        Write-Host "==========================================" -ForegroundColor Cyan
+        Build-Cli -ProjectRoot $ProjectRoot -TargetArch $GoArch
     }
-
-    Build-Cli -ProjectRoot $ProjectRoot -TargetArch $GoArch
 }
 
 # ---------- MSIX Package Build (optional) ----------
