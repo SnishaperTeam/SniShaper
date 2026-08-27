@@ -1,35 +1,28 @@
 version: 2
-
 updates:
-  # Go modules: all bumps in ONE PR, monthly, 14-day cooldown
   - package-ecosystem: gomod
     directory: /
     schedule:
       interval: monthly
-    open-pull-requests-limit: 5
+    open-pull-requests-limit: 0          # 改为 0
     groups:
       go-modules:
-        patterns:
-          - "*"
+        patterns: ["*"]
 
-  # Frontend npm: grouped, weekly
   - package-ecosystem: npm
     directory: /frontend
     schedule:
       interval: weekly
-    open-pull-requests-limit: 5
+    open-pull-requests-limit: 0          # 改为 0
     groups:
       frontend-deps:
-        patterns:
-          - "*"
+        patterns: ["*"]
 
-  # GitHub Actions: grouped into one PR
   - package-ecosystem: github-actions
     directory: /
     schedule:
       interval: monthly
-    open-pull-requests-limit: 3
+    open-pull-requests-limit: 0          # 改为 0
     groups:
       actions:
-        patterns:
-          - "*"
+        patterns: ["*"]
