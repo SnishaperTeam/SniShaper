@@ -8,8 +8,8 @@
 [![GitHub Release](https://img.shields.io/github/v/release/SnishaperTeam/SniShaper?style=flat-square&logo=github)](https://github.com/SnishaperTeam/SniShaper/releases)
 [![GitHub Downloads](https://img.shields.io/github/downloads/SnishaperTeam/SniShaper/total?style=flat-square&logo=github)](https://github.com/SnishaperTeam/SniShaper/releases)
 [![GitHub last commit](https://img.shields.io/github/last-commit/SnishaperTeam/SniShaper?style=flat-square&logo=git)](https://github.com/SnishaperTeam/SniShaper/commits/main)
-[![GitHub Actions Workflow Status](https://img.shields.io/github/actions/workflow/status/SnishaperTeam/SniShaper/build.yml?style=flat-square&logo=githubactions&label=CI)](https://github.com/SnishaperTeam/SniShaper/actions)  [![Quality gate](https://sonarcloud.io/api/project_badges/quality_gate?project=SnishaperTeam_SniShaper)](https://sonarcloud.io/summary/new_code?id=SnishaperTeam_SniShaper)
-[![SonarQube Cloud](https://sonarcloud.io/images/project_badges/sonarcloud-highlight.svg)](https://sonarcloud.io/summary/new_code?id=SnishaperTeam_SniShaper)
+[![GitHub Actions Workflow Status](https://img.shields.io/github/actions/workflow/status/SnishaperTeam/SniShaper/build.yml?style=flat-square&logo=githubactions&label=CI)](https://github.com/SnishaperTeam/SniShaper/actions)
+[![Quality gate](https://sonarcloud.io/api/project_badges/quality_gate?project=SnishaperTeam_SniShaper)](https://sonarcloud.io/summary/new_code?id=SnishaperTeam_SniShaper)  [![SonarQube Cloud](https://sonarcloud.io/images/project_badges/sonarcloud-highlight.svg)](https://sonarcloud.io/summary/new_code?id=SnishaperTeam_SniShaper)
 
 **SniShaper** 是一款专为复杂网络环境设计的本地代理软件，通过 **ECH 注入**、**TLS 分片**、**QUIC 转换**、**会话迁移** 等多种协议栈技术，配合 **TUN 虚拟网卡** 接管全局流量，在复杂网络环境下提供稳定灵活的访问体验。
 
