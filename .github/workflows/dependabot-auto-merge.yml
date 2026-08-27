@@ -9,7 +9,8 @@ permissions:
 jobs:
   automerge:
     runs-on: ubuntu-latest
-    if: github.event.pull_request.user.login == 'dependabot[bot]' && github.repository == 'SnishaperTeam/SniShaper'
+    # 显式排除 me 仓库（SniShaper-Fast），仅当仓库不是 me 且发起人为 dependabot[bot] 时运行
+    if: github.event.pull_request.user.login == 'dependabot[bot]' && github.repository != 'SnishaperTeam/SniShaper-Fast'
     steps:
       - name: Fetch Dependabot metadata
         id: metadata
