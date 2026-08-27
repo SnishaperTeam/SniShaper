@@ -6,7 +6,7 @@ updates:
     directory: /
     schedule:
       interval: monthly
-    open-pull-requests-limit: 0
+    open-pull-requests-limit: 5
     groups:
       go-modules:
         patterns:
@@ -17,7 +17,7 @@ updates:
     directory: /frontend
     schedule:
       interval: weekly
-    open-pull-requests-limit: 0
+    open-pull-requests-limit: 5
     groups:
       frontend-deps:
         patterns:
@@ -28,7 +28,7 @@ updates:
     directory: /
     schedule:
       interval: monthly
-    open-pull-requests-limit: 0
+    open-pull-requests-limit: 3
     groups:
       actions:
         patterns:
