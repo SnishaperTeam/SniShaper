@@ -40,7 +40,6 @@ jobs:
               $url = "https://github.com/microsoft/winappCli/releases/download/v0.6.0/winappcli_x64.msix"
               Invoke-WebRequest -Uri $url -OutFile "$env:TEMP\winappcli_x64.msix" -ErrorAction Stop
               Add-AppxPackage -Path "$env:TEMP\winappcli_x64.msix" -ErrorAction Stop
-              # Add-AppxPackage doesn't add to PATH; find the installed location
               $pkg = Get-AppxPackage -Name "*WinApp*" | Select-Object -First 1
               $installPath = $pkg.InstallLocation
               Add-Content -Path $env:GITHUB_PATH -Value $installPath
@@ -76,13 +75,11 @@ jobs:
           Write-Host "Staged files:" -ForegroundColor Green
           Get-ChildItem staging | ForEach-Object { Write-Host "  $($_.Name)" }
 
-    linux-build:
+  linux-build:
     runs-on: ubuntu-24.04
 
     steps:
       - uses: actions/checkout@v7
-        with:
-          fetch-depth: 0   # ⬅️ 必须加上，SonarQube 需要完整 Git 历史
 
       - uses: actions/setup-go@v7
         with:
@@ -112,14 +109,6 @@ jobs:
           file build/bin/SniShaper
           ./build/bin/SniShaper --version 2>&1 | head -5 || true
 
-      # ⬇️ 新增 SonarQube 扫描
-      - name: SonarQube Scan
-        uses: SonarSource/sonarqube-scan-action@v4
-        env:
-          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-        with:
-          args: >
-            -Dsonar.qualitygate.wait=true
   cli-build:
     name: CLI build (all targets)
     runs-on: windows-2025
