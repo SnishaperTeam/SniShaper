@@ -11,7 +11,7 @@ require (
 	github.com/rivo/tview v0.42.0
 	github.com/sagernet/sing v0.8.14
 	github.com/sagernet/sing-tun v0.8.13
-	github.com/things-go/go-socks5 v0.1.1
+	github.com/things-go/go-socks5 v0.1.3
 	github.com/vishvananda/netlink v1.3.1
 	github.com/wailsapp/wails/v3 v3.0.0-beta.12
 	golang.org/x/sys v0.47.0
