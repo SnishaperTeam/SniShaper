@@ -44,17 +44,14 @@ jobs:
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
-          $log = Join-Path $env:TEMP 'unit-test.log'
-          $cover = Join-Path $env:TEMP 'cover.out'
+          $log = Join-Path $env:RUNNER_TEMP 'unit-test.log'
+          $cover = Join-Path $env:RUNNER_TEMP 'cover.out'
           go test -tags with_gvisor -race -coverprofile="$cover" `
             ./proxy/... ./pkg/... ./common/... 2>&1 | Tee-Object -FilePath $log
-          # go test exits nonzero on failure; PowerShell does not abort on a
-          # native command's exit code, so check it explicitly.
           if ($LASTEXITCODE -ne 0) {
             Write-Error "go test failed with exit code ${LASTEXITCODE}"
             exit 1
           }
-          # Fail loudly if a test failed.
           if (Select-String -Path $log -Pattern '^(FAIL|--- FAIL)') {
             Write-Error "unit tests failed"
             exit 1
@@ -72,12 +69,14 @@ jobs:
         if: always()
         shell: pwsh
         run: |
-          $cover = Join-Path $env:TEMP 'cover.out'
-          $line = go tool cover -func=$cover 2>$null | Select-Object -Last 1
-          if (-not $line) { $line = "no coverage data" }
-          Write-Output "Coverage: $line"
-          Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value "## Unit-test coverage"
-          Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value ($line.Trim())
+          $cover = Join-Path $env:RUNNER_TEMP 'cover.out'
+          if (Test-Path $cover) {
+            $line = go tool cover -func=$cover 2>$null | Select-Object -Last 1
+            if ($line) { Write-Output "Coverage: $line" }
+            else { Write-Output "Coverage: (parse failed)" }
+          } else {
+            Write-Output "Coverage: (no cover.out found)"
+          }
 
       # On manual dispatch only, offer any newly generated test files back as a
       # pull request so a human can review them before merging. Skipped on push
