@@ -71,12 +71,13 @@ jobs:
         run: |
           $cover = Join-Path $env:RUNNER_TEMP 'cover.out'
           if (Test-Path $cover) {
-            $line = go tool cover -func=$cover 2>$null | Select-Object -Last 1
+            $line = go tool cover -func=$cover | Select-Object -Last 1
             if ($line) { Write-Output "Coverage: $line" }
             else { Write-Output "Coverage: (parse failed)" }
           } else {
             Write-Output "Coverage: (no cover.out found)"
           }
+          $LASTEXITCODE = 0
 
       # On manual dispatch only, offer any newly generated test files back as a
       # pull request so a human can review them before merging. Skipped on push
