@@ -50,7 +50,7 @@ This project is built with **Wails v3**.
 
 ### Recommended Environment
 
-- Go 1.25+
+- Go 1.27+
 - Node.js 24+
 - npm 11+
 - gVisor (required for TUN mode)

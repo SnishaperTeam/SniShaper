@@ -13,7 +13,7 @@
 
 # Project Overview
 
-SniShaper is a Windows local proxy tool using ECH Injection, TLS-RF Fragmentation, QUIC Connection Rebuilding, and Lightweight Server Mode Relay. Frontend: React 19 + Wails v3 + MUI + Vite 8. Backend: Go 1.25+ with Wails v3 bindings.
+SniShaper is a Windows local proxy tool using ECH Injection, TLS-RF Fragmentation, QUIC Connection Rebuilding, and Lightweight Server Mode Relay. Frontend: React 19 + Wails v3 + MUI + Vite 8. Backend: Go 1.27+ with Wails v3 bindings.
 
 # Architecture
 

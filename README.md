@@ -2,7 +2,7 @@
 
 [中文](README.md) | [English](README_EN.md) | [Русский](README_RU.md)
 
-[![Go Version](https://img.shields.io/badge/Go版本-1.25+-00ADD8?style=flat&logo=go)](https://golang.org) [![License](https://img.shields.io/badge/许可证-AGPL--3.0-blue?style=flat&logo=open-source-initiative)](LICENSE) [![Wiki](https://img.shields.io/badge/文档-Wiki-orange?style=flat&logo=readthedocs)](https://github.com/SnishaperTeam/SniShaper/wiki) [![GitHub Release](https://img.shields.io/github/v/release/SnishaperTeam/SniShaper?style=flat&logo=github&label=版本)](https://github.com/SnishaperTeam/SniShaper/releases) [![GitHub Downloads](https://img.shields.io/github/downloads/SnishaperTeam/SniShaper/total?style=flat&logo=github&label=下载量)](https://github.com/SnishaperTeam/SniShaper/releases) [![GitHub last commit](https://img.shields.io/github/last-commit/SnishaperTeam/SniShaper?style=flat&logo=git&label=最后提交)](https://github.com/SnishaperTeam/SniShaper/commits/main) [![GitHub Actions Workflow Status](https://img.shields.io/github/actions/workflow/status/SnishaperTeam/SniShaper/build.yml?style=flat&logo=githubactions&label=持续集成)](https://github.com/SnishaperTeam/SniShaper/actions)
+[![Go Version](https://img.shields.io/badge/Go版本-1.27+-00ADD8?style=flat&logo=go)](https://golang.org) [![License](https://img.shields.io/badge/许可证-AGPL--3.0-blue?style=flat&logo=open-source-initiative)](LICENSE) [![Wiki](https://img.shields.io/badge/文档-Wiki-orange?style=flat&logo=readthedocs)](https://github.com/SnishaperTeam/SniShaper/wiki) [![GitHub Release](https://img.shields.io/github/v/release/SnishaperTeam/SniShaper?style=flat&logo=github&label=版本)](https://github.com/SnishaperTeam/SniShaper/releases) [![GitHub Downloads](https://img.shields.io/github/downloads/SnishaperTeam/SniShaper/total?style=flat&logo=github&label=下载量)](https://github.com/SnishaperTeam/SniShaper/releases) [![GitHub last commit](https://img.shields.io/github/last-commit/SnishaperTeam/SniShaper?style=flat&logo=git&label=最后提交)](https://github.com/SnishaperTeam/SniShaper/commits/main) [![GitHub Actions Workflow Status](https://img.shields.io/github/actions/workflow/status/SnishaperTeam/SniShaper/build.yml?style=flat&logo=githubactions&label=持续集成)](https://github.com/SnishaperTeam/SniShaper/actions)
 
 **SniShaper** 是一款专为复杂网络环境设计的本地代理软件，通过 **ECH 注入**、**TLS 分片**、**QUIC 转换**、**会话迁移** 等多种协议栈技术，配合 **TUN 虚拟网卡** 接管全局流量，在复杂网络环境下提供稳定灵活的访问体验。
 
@@ -304,7 +304,7 @@ Windows 与 Linux 构建均从此文件读取版本信息，并通过 ldflags �
 
 ### 开发环境
 
-- `Go 1.25+`
+- `Go 1.27+`
 - `Node.js 24+` / `npm 11+`
 - Windows：MSVC 工具链（Wails v3）、WinApp CLI（MSIX 打包）
 - Linux：GTK4 / WebKitGTK 或 GTK3 开发包（见上）
