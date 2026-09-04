@@ -146,14 +146,15 @@ Windows 端 PowerShell 对同一个命名参数只绑定一次，重复取值请
 
 #### CI：ARM64 必须原生构建
 
-| 目标 | 运行器 | 说明 |
+普通 CI（build.yml，push/PR）只做**构建 + 冒烟**，不做打包/上传。GUI 矩阵按"每作业一个平台/架构"拆分，ARM64 GUI 只在原生 ARM 运行器上编译；CLI 是纯 Go（`CGO_ENABLED=0`），7 个目标统一由 `cli-build` 单作业交叉产出（不涉及任何工具链），因此没有重复构建。打包（MSIX/7z/tar.gz）只在发布流水线（tag/手动触发）里做。
+
+| GUI 目标 | 运行器 | 说明 |
 | --- | --- | --- |
 | `linux/arm64` | `ubuntu-24.04-arm` | 原生 ARM64 Linux 运行器 |
-| `darwin/arm64` | `macos-14` | Apple Silicon 原生运行器 |
-| `darwin/x64` | `macos-15-intel` | `macos-13` 已于 2025-12-04 下线 |
-| `windows/arm64` | `windows-latest` | Go 以 `CGO_ENABLED=0` 直接产出 `windows/arm64`，不涉及交叉工具链；GitHub 提供原生 Windows ARM64 运行器后可切换 |
+| `linux/x64` | `ubuntu-latest` | 原生 x64 Linux |
+| `windows/x64/x86/arm64` | `windows-latest` | Go 以 `CGO_ENABLED=0` 直接产出三个架构；GitHub 提供原生 Windows ARM64 运行器后可切换 |
 
-`--ci` / `-CI` 下脚本不会导出任何 `CC`/`CXX`，因此 ARM64 任务的日志中不会出现 `aarch64-linux-gnu-gcc` 或 `osxcross`；CI 会额外检索这两个关键字，命中即判定失败。
+`--ci` / `-CI` 下脚本不会导出任何 `CC`/`CXX`，因此 ARM64 任务的日志中不会出现 `aarch64-linux-gnu-gcc` 或 `osxcross`；CI 会额外检索这两个关键字，命中即判定失败。Windows GUI 的版本资源：仅 amd64 构建期由 go-winres 重新生成（发版/MSIX 路径），arm64/x86 复用仓库内架构无关的 `snishaper.syso`（x64 主机的 go-winres 无法生成 arm64 资源对象）。
 
 #### 交互式模式
 
