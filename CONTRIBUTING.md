@@ -89,7 +89,9 @@ For more parameter details, see the "Build & Development" section in [README.md]
 Build outputs:
 
 - Frontend assets: `frontend/dist`
-- Executable: `build/bin/snishaper.exe`
+- Windows GUI: `build/bin/gui/Windows/x64/snishaper.exe`
+- Linux GUI: `build/bin/gui/Linux/x64/SniShaper`
+- CLI: `build/bin/cli/{Windows,Linux,Darwin}/{x64,x86,arm64}/snishaper[.exe]`
 
 ## Code Style Guidelines
 
