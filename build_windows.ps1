@@ -843,60 +843,61 @@ function Invoke-FrontendBuild {
 function Sync-VersionResource {
     param([string]$TargetGoArch)
 
-    # go-winres runs as a host binary, so on an amd64 host it can only emit
-    # amd64/386 objects. Regenerating "for" arm64 either fails or falls back
-    # to the wrong architecture, which breaks the arm64 link with "unknown
-    # ARM64 relocation type". The committed snishaper.syso is arch-neutral
-    # and links fine on every Windows target, so it is reused for everything
-    # but amd64 (the MSIX/release path, which needs the fresh version).
-    if ($TargetGoArch -ne "amd64") {
-        if (Test-Path (Join-Path $ProjectRoot "snishaper.syso")) {
-            Write-Host "[Backend] $TargetGoArch target: reusing committed snishaper.syso (go-winres cannot emit $TargetGoArch on this host)" -ForegroundColor Yellow
-        }
-        return
-    }
-
+    # Regenerate the version resource for the exact target architecture right
+    # before linking. go-winres runs as a host binary but can emit any arch
+    # via --arch, so this works for amd64/386/arm64 on any host. The output is
+    # named rsrc_windows_<arch>.syso, which cmd/go only links for that
+    # specific Windows target; there is deliberately no bare .syso in the
+    # repository, so non-Windows builds never see a Windows resource object.
+    # The generated file is removed again after the build (see
+    # Invoke-BuildTarget) so the working tree stays clean.
     $utf8NoBom = New-Object System.Text.UTF8Encoding $false
     $WinResPath = Join-Path $ProjectRoot "winres\winres.json"
-    $SysoPath = Join-Path $ProjectRoot "snishaper.syso"
-    $WinResBackup = $null
+    $GenSyso = Join-Path $ProjectRoot ("rsrc_windows_" + $TargetGoArch + ".syso")
+    if (-not (Test-Path $WinResPath)) { return }
+
+    $WinResBackup = Get-Content -Raw $WinResPath -Encoding UTF8
     $SysoBackup = $null
+    if (Test-Path $GenSyso) { $SysoBackup = [System.IO.File]::ReadAllBytes($GenSyso) }
 
     try {
-        if (Test-Path $WinResPath) {
-            $WinResBackup = Get-Content -Raw $WinResPath -Encoding UTF8
-            $winres = $WinResBackup | ConvertFrom-Json
-            [xml]$wm = Get-Content $ManifestPath
-            $mainVer = $wm.Package.Identity.Version
-            $winres.RT_VERSION.'#1'.'0000'.fixed.file_version = $mainVer
-            $winres.RT_VERSION.'#1'.'0000'.fixed.product_version = $mainVer
-            foreach ($langKey in $winres.RT_VERSION.'#1'.'0000'.info.PSObject.Properties.Name) {
-                $winres.RT_VERSION.'#1'.'0000'.info.$langKey.FileVersion = $mainVer
-                $winres.RT_VERSION.'#1'.'0000'.info.$langKey.ProductVersion = $mainVer
-            }
-            [System.IO.File]::WriteAllText($WinResPath, ($winres | ConvertTo-Json -Depth 10), $utf8NoBom)
-            if (Test-Path $SysoPath) { $SysoBackup = [System.IO.File]::ReadAllBytes($SysoPath) }
-            Write-Host (msg -Key "BackSyncVer" -Arg0 $mainVer) -ForegroundColor Green
-
-            $WinResTmp = Join-Path $env:TEMP ("snishaper-winres-" + $PID + "-" + $TargetGoArch)
-            New-Item -ItemType Directory -Path $WinResTmp -Force | Out-Null
-            go run github.com/tc-hib/go-winres@latest make --in $WinResPath --out (Join-Path $WinResTmp "rsrc")
-            if ($LASTEXITCODE -ne 0) {
-                Write-Host (msg -Key "BackSyncVerFail") -ForegroundColor Yellow
-            } else {
-                $genSyso = Get-ChildItem -Path $WinResTmp -Filter "*_windows_$TargetGoArch.syso" -ErrorAction SilentlyContinue | Select-Object -First 1
-                if ($genSyso) {
-                    Copy-Item $genSyso.FullName $SysoPath -Force
-                    Write-Host (msg -Key "BackSyncVerDone" -Arg0 $mainVer) -ForegroundColor Green
-                } else {
-                    Write-Host (msg -Key "BackSyncVerFail") -ForegroundColor Yellow
-                }
-            }
-            Remove-Item -Path $WinResTmp -Recurse -Force -ErrorAction SilentlyContinue
+        $winres = $WinResBackup | ConvertFrom-Json
+        [xml]$wm = Get-Content $ManifestPath
+        $mainVer = $wm.Package.Identity.Version
+        $winres.RT_VERSION.'#1'.'0000'.fixed.file_version = $mainVer
+        $winres.RT_VERSION.'#1'.'0000'.fixed.product_version = $mainVer
+        foreach ($langKey in $winres.RT_VERSION.'#1'.'0000'.info.PSObject.Properties.Name) {
+            $winres.RT_VERSION.'#1'.'0000'.info.$langKey.FileVersion = $mainVer
+            $winres.RT_VERSION.'#1'.'0000'.info.$langKey.ProductVersion = $mainVer
         }
+        [System.IO.File]::WriteAllText($WinResPath, ($winres | ConvertTo-Json -Depth 10), $utf8NoBom)
+        Write-Host (msg -Key "BackSyncVer" -Arg0 $mainVer) -ForegroundColor Green
+
+        $WinResTmp = Join-Path $env:TEMP ("snishaper-winres-" + $PID + "-" + $TargetGoArch)
+        New-Item -ItemType Directory -Path $WinResTmp -Force | Out-Null
+        if (Get-Command go-winres -ErrorAction SilentlyContinue) {
+            go-winres make --in $WinResPath --arch $TargetGoArch --out (Join-Path $WinResTmp "rsrc")
+            $rc = $LASTEXITCODE
+        } else {
+            go run github.com/tc-hib/go-winres@latest make --in $WinResPath --arch $TargetGoArch --out (Join-Path $WinResTmp "rsrc")
+            $rc = $LASTEXITCODE
+        }
+        if ($rc -ne 0) {
+            Write-Host (msg -Key "BackSyncVerFail") -ForegroundColor Yellow
+        } else {
+            $gen = Get-ChildItem -Path $WinResTmp -Filter ("rsrc_windows_" + $TargetGoArch + ".syso") -ErrorAction SilentlyContinue | Select-Object -First 1
+            if ($gen) {
+                Copy-Item $gen.FullName $GenSyso -Force
+                $script:SysoTargetPath = $GenSyso
+                $script:SysoTargetBackup = $SysoBackup
+                Write-Host (msg -Key "BackSyncVerDone" -Arg0 $mainVer) -ForegroundColor Green
+            } else {
+                Write-Host (msg -Key "BackSyncVerFail") -ForegroundColor Yellow
+            }
+        }
+        Remove-Item -Path $WinResTmp -Recurse -Force -ErrorAction SilentlyContinue
     } finally {
         if ($null -ne $WinResBackup) { [System.IO.File]::WriteAllText($WinResPath, $WinResBackup, $utf8NoBom) }
-        if ($null -ne $SysoBackup) { [System.IO.File]::WriteAllBytes($SysoPath, $SysoBackup) }
     }
 }
 
@@ -985,6 +986,13 @@ function Invoke-BuildTarget {
         }
     } finally {
         Remove-Item Env:GOOS, Env:GOARCH, Env:CGO_ENABLED -ErrorAction SilentlyContinue
+        if ($script:SysoTargetBackup -and $script:SysoTargetPath) {
+            [System.IO.File]::WriteAllBytes($script:SysoTargetPath, $script:SysoTargetBackup)
+        } elseif ($script:SysoTargetPath -and (Test-Path $script:SysoTargetPath)) {
+            Remove-Item $script:SysoTargetPath -Force -ErrorAction SilentlyContinue
+        }
+        $script:SysoTargetPath = $null
+        $script:SysoTargetBackup = $null
     }
 
     if ($rc -ne 0) {

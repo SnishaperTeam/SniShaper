@@ -5,7 +5,6 @@ build/bin/
 *.dll
 *.msi
 *.syso
-!snishaper.syso
 
 # Go cache / temp
 .gocache/

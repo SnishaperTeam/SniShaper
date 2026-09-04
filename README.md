@@ -154,7 +154,7 @@ Windows 端 PowerShell 对同一个命名参数只绑定一次，重复取值请
 | `linux/x64` | `ubuntu-latest` | 原生 x64 Linux |
 | `windows/x64/x86/arm64` | `windows-latest` | Go 以 `CGO_ENABLED=0` 直接产出三个架构；GitHub 提供原生 Windows ARM64 运行器后可切换 |
 
-`--ci` / `-CI` 下脚本不会导出任何 `CC`/`CXX`，因此 ARM64 任务的日志中不会出现 `aarch64-linux-gnu-gcc` 或 `osxcross`；CI 会额外检索这两个关键字，命中即判定失败。Windows GUI 的版本资源：仅 amd64 构建期由 go-winres 重新生成（发版/MSIX 路径），arm64/x86 复用仓库内架构无关的 `snishaper.syso`（x64 主机的 go-winres 无法生成 arm64 资源对象）。
+`--ci` / `-CI` 下脚本不会导出任何 `CC`/`CXX`，因此 ARM64 任务的日志中不会出现 `aarch64-linux-gnu-gcc` 或 `osxcross`；CI 会额外检索这两个关键字，命中即判定失败。Windows GUI 的版本资源在每次链接前按目标架构用 go-winres 现场生成（`--arch amd64/386/arm64`，命名 `rsrc_windows_<arch>.syso`），仓库不保留任何裸 syso——因此 Linux/Darwin 构建永远不会链接 Windows 资源对象。
 
 #### 交互式模式
 
