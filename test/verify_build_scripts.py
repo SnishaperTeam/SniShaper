@@ -172,7 +172,7 @@ def main():
         results.append(check("artifact build/bin/cli/Windows/x64/snishaper.exe", os.path.isfile(path)))
 
     if args.scope in ("gui", "all"):
-        for arch in ("x64", "arm64"):
+        for arch in ("x64", "x86", "arm64"):
             code, out, err = powershell(["-CI", "-Platform", "windows", "-Arch", arch, "-Type", "gui"], args.timeout)
             show("ps1 -CI -Platform windows -Arch %s -Type gui (real build)" % arch, code, out, err)
             results.append(check("ps1 GUI windows/%s exit 0" % arch, code == 0, "exit=%d" % code))
