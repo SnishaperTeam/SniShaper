@@ -238,8 +238,8 @@ jobs:
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
-          Write-Host "::group::build_windows.ps1 -Build windows,gui,all -InstallDeps -BuildMsix -Silent"
-          ./build_windows.ps1 -Build windows,gui,all -InstallDeps -BuildMsix -Silent
+          Write-Host "::group::build_windows.ps1 -Platform windows -Arch x64 -Type gui -InstallDeps -BuildMsix -Silent"
+          ./build_windows.ps1 -Platform windows -Arch x64 -Type gui -InstallDeps -BuildMsix -Silent
           if ($LASTEXITCODE -ne 0) {
             Write-Host "::error::build_windows.ps1 failed"
             exit 1
@@ -261,9 +261,9 @@ jobs:
           # build_windows.ps1 -SkipSign (unsigned_ prefix).
           $ErrorActionPreference = 'Stop'
           $root = $env:GITHUB_WORKSPACE
-          $binDir = Join-Path $root 'build/bin'
+          $binDir = Join-Path $root 'build/bin/gui/Windows/x64'
           if (-not (Test-Path (Join-Path $binDir 'snishaper.exe'))) {
-            Write-Host "::error::build/bin/snishaper.exe not found"
+            Write-Host "::error::build/bin/gui/Windows/x64/snishaper.exe not found"
             exit 1
           }
           $msix = Get-ChildItem -Path (Join-Path $root 'Apppackage') -Filter '*.msix' | Select-Object -First 1
@@ -283,7 +283,7 @@ jobs:
           Write-Host "::notice::Unsigned MSIX ready: $unsignedPath"
 
       - name: Create 7z archive
-        run: 7z a -mx=9 snishaper-windows-amd64.7z .\build\bin\*
+        run: 7z a -mx=9 snishaper-windows-amd64.7z .\build\bin\gui\Windows\x64\*
 
       - name: Create cert install batch
         shell: pwsh
@@ -451,16 +451,16 @@ jobs:
         run: |
           set -euo pipefail
           chmod +x build.sh
-          echo "::group::build.sh --build linux,gui,all --install-deps --silent"
-          ./build.sh --build linux,gui,all --install-deps --silent
+          echo "::group::build.sh --ci --platform linux --arch x64 --type gui --install-deps"
+          ./build.sh --ci --platform linux --arch x64 --type gui --install-deps
           echo "::endgroup::"
-          test -f build/bin/SniShaper && echo "::notice::build/bin/SniShaper ready"
+          test -f build/bin/gui/Linux/x64/SniShaper && echo "::notice::build/bin/gui/Linux/x64/SniShaper ready"
 
       - name: Create tar.gz archive
         run: |
           set -euo pipefail
           ARCHIVE="snishaper-linux-amd64.tar.gz"
-          tar -czf "$ARCHIVE" -C build/bin .
+          tar -czf "$ARCHIVE" -C build/bin/gui/Linux/x64 .
           ls -lh "$ARCHIVE"
           echo "::notice::$ARCHIVE ready"
 
@@ -500,44 +500,51 @@ jobs:
       - name: Install 7-Zip
         run: choco install 7zip -y --no-progress
 
-      - name: Build and package CLI (6 targets, one 7z each)
+      - name: Inject release channel into manifest
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
-          $LDFLAGS = "-s -w -X snishaper/app.buildVersion=$env:DISPLAY_VERSION"
-          if ($env:RELEASE_CHANNEL -and $env:RELEASE_CHANNEL -ne 'release') {
-            $LDFLAGS += " -X snishaper/app.buildChannel=$env:RELEASE_CHANNEL"
-          }
-          $platforms = @("windows", "linux", "darwin")
-          $archs = @("amd64", "arm64")
-          $work = Join-Path $env:RUNNER_TEMP 'cliwork'
-          New-Item -ItemType Directory -Force -Path $work | Out-Null
-          foreach ($goos in $platforms) {
-            foreach ($goarch in $archs) {
-              $bin = "snishaper-cli-$goos-$goarch"
-              if ($goos -eq "windows") { $bin += ".exe" }
-              Write-Host "::group::build $goos/$goarch"
-              Write-Host "building $goos/$goarch -> $bin"
-              $env:GOOS = $goos
-              $env:GOARCH = $goarch
-              $env:CGO_ENABLED = "0"
-              go build -tags "with_gvisor headless" -ldflags="$LDFLAGS" -o $bin ./cli
-              if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-              Write-Host "::endgroup::"
+          $channel = "${{ inputs.channel }}"
+          $suffix = "${{ needs.check.outputs.suffix }}"
+          $relChannel = if ($channel -eq 'release') { 'stable' } else { $channel }
+          if ($suffix) { $relChannel = $suffix }
+          $relVersion = "${{ needs.check.outputs.version }}"
+          if ([string]::IsNullOrWhiteSpace($relVersion)) { $relVersion = '0.0.0' }
+          $manifest = Join-Path $env:GITHUB_WORKSPACE 'Package.appxmanifest'
+          $content = Get-Content -Raw $manifest
+          $content = $content -replace '<rel:ReleaseChannel>[^<]*</rel:ReleaseChannel>', "<rel:ReleaseChannel>$relChannel</rel:ReleaseChannel>"
+          $content = $content -replace '<rel:Version>[^<]*</rel:Version>', "<rel:Version>$relVersion</rel:Version>"
+          Set-Content -Path $manifest -Value $content -Encoding UTF8
+          Write-Host "::notice::Manifest ReleaseChannel=$relChannel ReleaseVersion=$relVersion"
 
-              $pkgDir = Join-Path $work $bin
-              New-Item -ItemType Directory -Force -Path $pkgDir | Out-Null
-              Move-Item -Force $bin (Join-Path $pkgDir (Split-Path $bin -Leaf))
-              Copy-Item -Recurse -Force "config" $pkgDir
-              Copy-Item -Recurse -Force "rules" $pkgDir
-
-              $archive = "snishaper-cli-$goos-$goarch.7z"
-              Write-Host "packaging $archive"
-              7z a -mx=9 $archive (Join-Path $pkgDir '*')
-              if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Build and package CLI (7 targets, one 7z each)
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          Write-Host "::group::build_windows.ps1 -CI -Type cli -All -Silent"
+          ./build_windows.ps1 -CI -Type cli -All -Silent
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          Write-Host "::endgroup::"
+          $targets = @(
+            @{ dir = 'build\bin\cli\Windows\x64';   name = 'snishaper-cli-windows-amd64' }
+            @{ dir = 'build\bin\cli\Windows\x86';   name = 'snishaper-cli-windows-386' }
+            @{ dir = 'build\bin\cli\Windows\arm64'; name = 'snishaper-cli-windows-arm64' }
+            @{ dir = 'build\bin\cli\Linux\x64';     name = 'snishaper-cli-linux-amd64' }
+            @{ dir = 'build\bin\cli\Linux\arm64';   name = 'snishaper-cli-linux-arm64' }
+            @{ dir = 'build\bin\cli\Darwin\x64';    name = 'snishaper-cli-darwin-amd64' }
+            @{ dir = 'build\bin\cli\Darwin\arm64';  name = 'snishaper-cli-darwin-arm64' }
+          )
+          foreach ($t in $targets) {
+            if (-not (Test-Path $t.dir)) {
+              Write-Host "::error::missing CLI output directory $($t.dir)"
+              exit 1
             }
+            $archive = "$($t.name).7z"
+            Write-Host "::group::packaging $archive"
+            7z a -mx=9 $archive (Join-Path $t.dir '*')
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+            Write-Host "::endgroup::"
           }
-          Remove-Item Env:GOOS, Env:GOARCH, Env:CGO_ENABLED -ErrorAction SilentlyContinue
 
       - name: Smoke test CLI binary
         shell: pwsh
@@ -814,6 +821,7 @@ jobs:
 
           $cliPurpose = @{
             'snishaper-cli-windows-amd64.7z'  = 'CLI (headless): Windows x64, extract and run snishaper.exe, includes config/ and rules/ seed files'
+            'snishaper-cli-windows-386.7z'      = 'CLI (headless): Windows x86 (32-bit), extract and run snishaper.exe, includes config/ and rules/ seed files'
             'snishaper-cli-windows-arm64.7z'  = 'CLI (headless): Windows ARM64, extract and run snishaper.exe, includes config/ and rules/ seed files'
             'snishaper-cli-linux-amd64.7z'    = 'CLI (headless): Linux x64, extract and run ./snishaper, includes config/ and rules/ seed files'
             'snishaper-cli-linux-arm64.7z'    = 'CLI (headless): Linux ARM64, extract and run ./snishaper, includes config/ and rules/ seed files'
@@ -821,7 +829,7 @@ jobs:
             'snishaper-cli-darwin-arm64.7z'   = 'CLI (headless): macOS ARM64 (Apple Silicon), extract and run ./snishaper, includes config/ and rules/ seed files'
           }
           Get-ChildItem -Path $assetsDir -File | Where-Object {
-            $_.Name -match '^snishaper-cli-(windows|linux|darwin)-(amd64|arm64)\.7z$'
+            $_.Name -match '^snishaper-cli-(windows|linux|darwin)-(amd64|arm64|386)\.7z$'
           } | Sort-Object Name | ForEach-Object {
             $p = if ($cliPurpose.ContainsKey($_.Name)) { $cliPurpose[$_.Name] } else { 'CLI portable build (7z)' }
             Add-AssetRow $_ $p

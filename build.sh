@@ -1,592 +1,1015 @@
 #!/usr/bin/env bash
 #
-# build.sh — SniShaper unified build script (Unix / Linux / macOS)
+# build.sh — SniShaper multi-platform / multi-architecture build script
+#            (Linux, macOS, WSL). PowerShell twin: build_windows.ps1
 #
-# Feature-equivalent with build_windows.ps1 — same parameters, same
-# interactive flow, same i18n (EN/CN/RU), same default-to-full-build.
+# ---------------------------------------------------------------------------
+# OUTPUT LAYOUT
+# ---------------------------------------------------------------------------
+#   build/bin/cli/Windows/{x64,x86,arm64}/snishaper.exe
+#   build/bin/cli/Linux/{x64,arm64}/snishaper
+#   build/bin/cli/Darwin/{x64,arm64}/snishaper
+#   build/bin/gui/Windows/{x64,x86,arm64}/snishaper.exe
+#   build/bin/gui/Linux/{x64,arm64}/SniShaper
 #
-# Usage:
-#   ./build.sh                              # Interactive mode (menu)
-#   ./build.sh --build linux,gui,all         # Linux GUI (frontend + backend)
-#   ./build.sh --build all,all,all           # Full build (GUI + CLI, all platforms)
-#   ./build.sh --build all,cli,all           # CLI only (cross-platform, all archs)
-#   ./build.sh --build linux,gui,frontend    # Frontend only
-#   ./build.sh --build linux,gui,backend     # Backend only
-#   ./build.sh --lang en                     # Set language (en|cn|ru)
-#   ./build.sh --arch x64                    # x64 / arm64 / x86 / all (default=all)
-#   ./build.sh --install-deps               # Install npm deps before build
-#   ./build.sh --gtk3                       # Use GTK3 instead of GTK4
-#   ./build.sh --silent                     # No prompts, full build default
-#   ./build.sh --help                       # Show this help
+#   Every target directory also receives the runtime seed folders config/ and
+#   rules/. The GUI is never built for Darwin (Wails desktop shell supports
+#   Windows and Linux only); x86 exists on Windows only.
 #
-# Legacy shortcuts (still work, map to --build):
-#   ./build.sh --with-frontend              # = --build linux,gui,all --install-deps
-#   ./build.sh --gui                        # = --build linux,gui,all
-#   ./build.sh --cli                        # = --build all,cli,all
-#   ./build.sh --all                        # = --build all,all,all
+# ---------------------------------------------------------------------------
+# TARGET MATRIX — 12 artifacts
+# ---------------------------------------------------------------------------
+#   CLI : Windows x64/x86/arm64, Linux x64/arm64, Darwin x64/arm64  = 7
+#   GUI : Windows x64/x86/arm64, Linux x64/arm64                    = 5
 #
-# Default (no --build): full build (All,All,All = GUI+CLI, all platforms, all archs)
+# ---------------------------------------------------------------------------
+# USAGE
+# ---------------------------------------------------------------------------
+#   ./build.sh                                    interactive wizard
+#   ./build.sh --help                             this help
+#   ./build.sh --all                              all 12 targets
+#   ./build.sh --type cli --all                   all 7 CLI targets
+#   ./build.sh --platform linux --arch arm64 --type cli --type gui
+#   ./build.sh --ci --platform linux --arch arm64 --type cli --type gui
+#   ./build.sh --dry-run --all                    resolve + print, build nothing
 #
-# Output:
-#   GUI: build/bin/SniShaper (with rules/ config/ seed files)
-#   CLI: build/bin/cli/snishaper-cli-<os>-<arch>[.exe]
+# PARAMETERS
+#   -p, --platform <name>   windows|linux|darwin|all   (repeatable)
+#   -a, --arch <name>       x64|x86|arm64|all          (repeatable)
+#   -t, --type <name>       cli|gui|all                (repeatable)
+#       --all               every valid combination (highest priority)
+#       --dry-run           resolve the target list and exit without building
+#       --ci                CI mode. Native compilation only: never export a
+#                           cross CC/CXX, never prompt. GUI ARM64 must run on
+#                           a native ARM64 runner (ubuntu-24.04-arm, macos-14).
+#       --strict-native     CI mode + restrict every target (including CLI) to
+#                           the host architecture. Opt-in; by default the CLI
+#                           cross-compiles because it is pure Go with
+#                           CGO_ENABLED=0, so no toolchain is involved.
+#       --cross             local development only: allow cross toolchains for
+#                           the Linux GUI (aarch64-linux-gnu-gcc). Refused
+#                           under --ci / --strict-native.
+#       --install-deps      run npm install before the frontend build
+#       --gtk3              build the Linux GUI against GTK3/WebKit2GTK-4.1
+#       --wails             use the Wails CLI ("wails build -platform os/arch")
+#                           instead of plain "go build"
+#       --silent            never prompt
+#   -h, --help
+#
+# LEGACY PARAMETERS (kept working for existing pipelines)
+#   --build <system>,<mode>,<scope>   e.g. --build linux,gui,all
+#   --cli  --gui  --with-frontend  --arch <arch>  --lang en|cn|ru  --silent
+#
+# ---------------------------------------------------------------------------
+# CI: NATIVE ARM64 POLICY
+# ---------------------------------------------------------------------------
+#   linux/arm64   -> ubuntu-24.04-arm   (native ARM64 runner)
+#   darwin/arm64  -> macos-14           (Apple Silicon runner)
+#   windows/arm64 -> windows-latest     (Go emits windows/arm64 without cgo;
+#                                        no cross toolchain is involved)
+#   In --ci / --strict-native mode the script never exports CC or CXX, so a
+#   build log can never contain "aarch64-linux-gnu-gcc" or "osxcross".
+#
+#   Example (native ARM64 Linux runner, CLI + GUI):
+#     ./build.sh --ci --platform linux --arch arm64 --type cli --type gui
+#
+# ---------------------------------------------------------------------------
+# VERIFICATION
+# ---------------------------------------------------------------------------
+#   file build/bin/cli/Linux/arm64/snishaper     -> ELF aarch64
+#   file build/bin/gui/Linux/arm64/SniShaper     -> ELF aarch64
+#   file build/bin/cli/Darwin/arm64/snishaper    -> Mach-O arm64
 #
 set -euo pipefail
 
 cd "$(dirname "$0")"
 
-# ---------- Go module proxy (same as before, overridable via env) ----------
+# ---------- Go module proxy (overridable via env) ----------
 if [ -z "${GOPROXY:-}" ]; then
     export GOPROXY="https://goproxy.cn,direct"
 fi
 
-# ---------- i18n messages (EN/CN/RU) — identical keys to build_windows.ps1 ----------
-declare -A MSG
-MSG=(
-    ["LangTitle"]="Please select your language / 请选择语言 / Выберите язык"
-    ["LangOpt1"]="English"
-    ["LangOpt2"]="中文"
-    ["LangOpt3"]="Русский"
-    ["LangPrompt"]="Enter your choice (1, 2 or 3)"
-
-    ["EN_MenuTitle"]="       Project Build Menu"
-    ["EN_DepPrompt"]="Do you want to install frontend npm dependencies? (Y/N, default is N)"
-    ["EN_SelectTitle"]="Please select a build option:"
-    ["EN_Opt1"]="1. Linux GUI (frontend + backend)"
-    ["EN_Opt2"]="2. CLI only (headless, cross-platform)"
-    ["EN_Opt3"]="3. Full build (GUI + CLI, all platforms)"
-    ["EN_Opt4"]="4. Full cross-platform CLI (all architectures)"
-    ["EN_ChoicePrompt"]="Enter your choice (1-4, default=3)"
-    ["EN_Start"]="Starting build process..."
-    ["EN_FrontEnter"]="[Frontend] Entering frontend directory..."
-    ["EN_FrontErrDir"]="[Frontend] ERROR: Failed to enter 'frontend' directory!"
-    ["EN_FrontInstall"]="[Frontend] Installing npm dependencies..."
-    ["EN_FrontErrInstall"]="[Frontend] ERROR: npm install failed!"
-    ["EN_FrontBuild"]="[Frontend] Running command: npm run build..."
-    ["EN_FrontErrBuild"]="[Frontend] ERROR: 'npm run build' failed!"
-    ["EN_FrontDone"]="[Frontend] Frontend build completed successfully!"
-    ["EN_BackStart"]="[Backend] Starting Go build..."
-    ["EN_BackInstallDeps"]="[Backend] Installing Go dependencies..."
-    ["EN_BackErrInstallDeps"]="[Backend] ERROR: go mod download failed!"
-    ["EN_BackErrBuild"]="[Backend] ERROR: Go build failed!"
-    ["EN_BackCopyCore"]="[Backend] Copying 'rules' folder..."
-    ["EN_BackCopyProxy"]="[Backend] Copying 'config' folder..."
-    ["EN_BackDone"]="[Backend] Backend build and file copy completed!"
-    ["EN_AllDone"]="All selected tasks finished successfully!"
-    ["EN_Exit"]="Press Enter to exit"
-    ["EN_BackBuildVersion"]="[Backend] Build version: {0}"
-    ["EN_CliPrompt"]="Build the headless CLI as well? (Y/N, default N)"
-    ["EN_ArchPrompt"]="Select target architecture (1=x64, 2=arm64, 3=x86 Windows-only, default=1)"
-
-    ["CN_MenuTitle"]="       项目构建菜单"
-    ["CN_DepPrompt"]="是否需要安装前端 npm 依赖？(Y/N，默认为 N)"
-    ["CN_SelectTitle"]="请选择构建选项："
-    ["CN_Opt1"]="1. Linux GUI（前端 + 后端）"
-    ["CN_Opt2"]="2. 仅 CLI（headless，跨平台）"
-    ["CN_Opt3"]="3. 全量构建（GUI + CLI，全平台）"
-    ["CN_Opt4"]="4. 全架构 CLI（跨平台，amd64+arm64）"
-    ["CN_ChoicePrompt"]="请输入你的选择 (1-4，默认3)"
-    ["CN_Start"]="开始执行构建流程..."
-    ["CN_FrontEnter"]="[前端] 正在进入 frontend 目录..."
-    ["CN_FrontErrDir"]="[前端] 错误：无法进入 'frontend' 目录！"
-    ["CN_FrontInstall"]="[前端] 正在安装 npm 依赖..."
-    ["CN_FrontErrInstall"]="[前端] 错误：npm install 安装失败！"
-    ["CN_FrontBuild"]="[前端] 正在执行命令：npm run build..."
-    ["CN_FrontErrBuild"]="[前端] 错误：'npm run build' 构建失败！"
-    ["CN_FrontDone"]="[前端] 前端构建成功完成！"
-    ["CN_BackStart"]="[后端] 正在开始 Go 编译..."
-    ["CN_BackInstallDeps"]="[后端] 正在安装 Go 依赖..."
-    ["CN_BackErrInstallDeps"]="[后端] 错误：go mod download 失败！"
-    ["CN_BackErrBuild"]="[后端] 错误：Go 编译失败！"
-    ["CN_BackCopyCore"]="[后端] 正在复制 'rules' 文件夹..."
-    ["CN_BackCopyProxy"]="[后端] 正在复制 'config' 文件夹..."
-    ["CN_BackDone"]="[后端] 后端编译与文件复制完成！"
-    ["CN_AllDone"]="所有选定的任务已成功完成！"
-    ["CN_Exit"]="按回车键退出"
-    ["CN_BackBuildVersion"]="[后端] 构建版本：{0}"
-    ["CN_CliPrompt"]="是否同时构建 CLI（headless 跨平台）？(Y/N，默认为 N)"
-    ["CN_ArchPrompt"]="请选择目标架构 (1=x64（默认），2=arm64，3=x86 仅 Windows)"
-
-    ["RU_MenuTitle"]="       Меню сборки проекта"
-    ["RU_DepPrompt"]="Установить npm зависимости фронтенда? (Y/N, по умолчанию N)"
-    ["RU_SelectTitle"]="Выберите вариант сборки:"
-    ["RU_Opt1"]="1. Linux GUI (фронтенд + бэкенд)"
-    ["RU_Opt2"]="2. Только CLI (headless, кроссплатформенный)"
-    ["RU_Opt3"]="3. Полная сборка (GUI + CLI, все платформы)"
-    ["RU_Opt4"]="4. CLI для всех архитектур (amd64+arm64)"
-    ["RU_ChoicePrompt"]="Введите ваш выбор (1-4, по умолчанию 3)"
-    ["RU_Start"]="Начало сборки..."
-    ["RU_FrontEnter"]="[Фронтенд] Переход в директорию frontend..."
-    ["RU_FrontErrDir"]="[Фронтенд] ОШИБКА: Не удалось войти в директорию 'frontend'!"
-    ["RU_FrontInstall"]="[Фронтенд] Установка npm зависимостей..."
-    ["RU_FrontErrInstall"]="[Фронтенд] ОШИБКА: npm install не удался!"
-    ["RU_FrontBuild"]="[Фронтенд] Запуск команды: npm run build..."
-    ["RU_FrontErrBuild"]="[Фронтенд] ОШИБКА: 'npm run build' не удался!"
-    ["RU_FrontDone"]="[Фронтенд] Сборка фронтенда завершена успешно!"
-    ["RU_BackStart"]="[Бэкенд] Начало сборки Go..."
-    ["RU_BackInstallDeps"]="[Бэкенд] Установка Go зависимостей..."
-    ["RU_BackErrInstallDeps"]="[Бэкенд] ОШИБКА: go mod download не удался!"
-    ["RU_BackErrBuild"]="[Бэкенд] ОШИБКА: Сборка Go не удалась!"
-    ["RU_BackCopyCore"]="[Бэкенд] Копирование папки 'rules'..."
-    ["RU_BackCopyProxy"]="[Бэкенд] Копирование папки 'config'..."
-    ["RU_BackDone"]="[Бэкенд] Сборка бэкенда и копирование файлов завершены!"
-    ["RU_AllDone"]="Все выбранные задачи успешно завершены!"
-    ["RU_Exit"]="Нажмите Enter для выхода"
-    ["RU_BackBuildVersion"]="[Бэкенд] Версия сборки: {0}"
-    ["RU_CliPrompt"]="Также собрать headless CLI? (Y/N, по умолчанию N)"
-    ["RU_ArchPrompt"]="Выберите целевую архитектуру (1=x64 (по умолчанию), 2=arm64, 3=x86 только Windows)"
-)
-
-# Helper: get message for current language
-# Usage: m "KEY" [params...]
-m() {
-    local key="$1"
-    shift
-    local val="${MSG["${LANG_CODE}_${key}"]:-${MSG["$key"]:-$key}}"
-    # Simple {0} placeholder replacement
-    if [ "$#" -gt 0 ]; then
-        val="${val//\{0\}/$1}"
-    fi
-    printf '%s' "$val"
+# ===========================================================================
+# i18n — plain functions (no associative arrays: /bin/bash on macOS is 3.2)
+# ===========================================================================
+msg_en() {
+    case "$1" in
+        LangTitle)      printf '%s' 'Please select your language / Выберите язык' ;;
+        LangPrompt)     printf '%s' 'Enter your choice (1=English, 2=Chinese, 3=Russian)' ;;
+        MenuTitle)      printf '%s' '       SniShaper Build Menu' ;;
+        DepPrompt)      printf '%s' 'Install frontend npm dependencies? [y/N]' ;;
+        TypeTitle)      printf '%s' 'Build type (comma separated, empty = all):' ;;
+        TypeOpt1)       printf '%s' '  1) CLI  (headless, cross-platform)' ;;
+        TypeOpt2)       printf '%s' '  2) GUI  (Windows + Linux desktop shell)' ;;
+        TypeOpt3)       printf '%s' '  3) All' ;;
+        PlatformTitle)  printf '%s' 'Platform (comma separated, empty = all):' ;;
+        PlatformOpt1)   printf '%s' '  1) Windows' ;;
+        PlatformOpt2)   printf '%s' '  2) Linux' ;;
+        PlatformOpt3)   printf '%s' '  3) Darwin / macOS (CLI only)' ;;
+        PlatformOpt4)   printf '%s' '  4) All' ;;
+        ArchTitle)      printf '%s' 'Architecture (comma separated, empty = all):' ;;
+        ArchOpt1)       printf '%s' '  1) x64' ;;
+        ArchOpt2)       printf '%s' '  2) x86 (Windows only)' ;;
+        ArchOpt3)       printf '%s' '  3) arm64' ;;
+        ArchOpt4)       printf '%s' '  4) All' ;;
+        CrossPrompt)    printf '%s' 'Allow cross-compilation toolchains for the Linux GUI? [y/N]' ;;
+        ConfirmPrompt)  printf '%s' 'Start the build? [Y/n]' ;;
+        NoTargets)      printf '%s' 'No valid target matched the selection.' ;;
+        PlanTitle)      printf '%s' 'Build plan' ;;
+        ColTarget)      printf '%s' 'TARGET' ;;
+        ColState)       printf '%s' 'STATE' ;;
+        ColNote)        printf '%s' 'NOTE' ;;
+        DryRunNote)     printf '%s' '--dry-run: nothing was built.' ;;
+        HostInfo)       printf '%s' 'Host: {0}/{1}   CI={2}   cross={3}' ;;
+        VersionInfo)    printf '%s' 'Version: {0} (channel: {1})' ;;
+        FrontEnter)     printf '%s' '[Frontend] Entering frontend directory...' ;;
+        FrontErrDir)    printf '%s' '[Frontend] ERROR: failed to enter the frontend directory!' ;;
+        FrontInstall)   printf '%s' '[Frontend] Installing npm dependencies...' ;;
+        FrontErrInstall) printf '%s' '[Frontend] ERROR: npm install failed!' ;;
+        FrontBuild)     printf '%s' '[Frontend] Running npm run build...' ;;
+        FrontErrBuild)  printf '%s' '[Frontend] ERROR: npm run build failed!' ;;
+        FrontDone)      printf '%s' '[Frontend] Frontend build completed successfully!' ;;
+        FrontMissing)   printf '%s' '[Frontend] frontend/dist not found: pass --install-deps or run npm run build' ;;
+        BackStart)      printf '%s' '[Backend] Starting Go build...' ;;
+        BackInstallDeps) printf '%s' '[Backend] Installing Go dependencies...' ;;
+        BackErrInstallDeps) printf '%s' '[Backend] ERROR: go mod download failed!' ;;
+        BackBuildVersion) printf '%s' '[Backend] Build version: {0} (channel: {1})' ;;
+        Start)          printf '%s' 'Starting build process...' ;;
+        Done)           printf '%s' 'All selected tasks finished.' ;;
+        Exit)           printf '%s' 'Press Enter to exit' ;;
+        SummaryTitle)   printf '%s' 'Summary' ;;
+        SummaryBuilt)   printf '%s' 'built  : {0}' ;;
+        SummaryFailed)  printf '%s' 'failed : {0}' ;;
+        SummarySkipped) printf '%s' 'skipped: {0}' ;;
+    esac
 }
 
-# ---------- Default parameters (match ps1: All,All,All when missing) ----------
-BUILD_SYSTEM="All"
-BUILD_MODE="All"
-BUILD_SCOPE="All"
+msg_cn() {
+    case "$1" in
+        LangTitle)      printf '%s' '请选择语言' ;;
+        LangPrompt)     printf '%s' '请输入选择 (1=English, 2=中文, 3=Русский)' ;;
+        MenuTitle)      printf '%s' '       SniShaper 构建菜单' ;;
+        DepPrompt)      printf '%s' '是否安装前端 npm 依赖？[y/N]' ;;
+        TypeTitle)      printf '%s' '请选择构建类型（逗号分隔，留空=全部）：' ;;
+        TypeOpt1)       printf '%s' '  1) CLI（headless，跨平台）' ;;
+        TypeOpt2)       printf '%s' '  2) GUI（Windows + Linux 桌面端）' ;;
+        TypeOpt3)       printf '%s' '  3) 全部' ;;
+        PlatformTitle)  printf '%s' '请选择平台（逗号分隔，留空=全部）：' ;;
+        PlatformOpt1)   printf '%s' '  1) Windows' ;;
+        PlatformOpt2)   printf '%s' '  2) Linux' ;;
+        PlatformOpt3)   printf '%s' '  3) Darwin / macOS（仅 CLI）' ;;
+        PlatformOpt4)   printf '%s' '  4) 全部' ;;
+        ArchTitle)      printf '%s' '请选择架构（逗号分隔，留空=全部）：' ;;
+        ArchOpt1)       printf '%s' '  1) x64' ;;
+        ArchOpt2)       printf '%s' '  2) x86（仅 Windows）' ;;
+        ArchOpt3)       printf '%s' '  3) arm64' ;;
+        ArchOpt4)       printf '%s' '  4) 全部' ;;
+        CrossPrompt)    printf '%s' '是否允许 Linux GUI 使用交叉编译工具链？[y/N]' ;;
+        ConfirmPrompt)  printf '%s' '确认开始构建？[Y/n]' ;;
+        NoTargets)      printf '%s' '没有匹配到任何有效构建目标。' ;;
+        PlanTitle)      printf '%s' '构建计划' ;;
+        ColTarget)      printf '%s' '目标' ;;
+        ColState)       printf '%s' '状态' ;;
+        ColNote)        printf '%s' '说明' ;;
+        DryRunNote)     printf '%s' '--dry-run：未执行任何构建。' ;;
+        HostInfo)       printf '%s' '宿主机: {0}/{1}   CI={2}   cross={3}' ;;
+        VersionInfo)    printf '%s' '版本：{0}（通道：{1}）' ;;
+        FrontEnter)     printf '%s' '[前端] 正在进入 frontend 目录...' ;;
+        FrontErrDir)    printf '%s' '[前端] 错误：无法进入 frontend 目录！' ;;
+        FrontInstall)   printf '%s' '[前端] 正在安装 npm 依赖...' ;;
+        FrontErrInstall) printf '%s' '[前端] 错误：npm install 失败！' ;;
+        FrontBuild)     printf '%s' '[前端] 正在执行 npm run build...' ;;
+        FrontErrBuild)  printf '%s' '[前端] 错误：npm run build 失败！' ;;
+        FrontDone)      printf '%s' '[前端] 前端构建成功完成！' ;;
+        FrontMissing)   printf '%s' '[前端] 未找到 frontend/dist：请加 --install-deps 或先执行 npm run build' ;;
+        BackStart)      printf '%s' '[后端] 正在开始 Go 编译...' ;;
+        BackInstallDeps) printf '%s' '[后端] 正在安装 Go 依赖...' ;;
+        BackErrInstallDeps) printf '%s' '[后端] 错误：go mod download 失败！' ;;
+        BackBuildVersion) printf '%s' '[后端] 构建版本：{0}（通道：{1}）' ;;
+        Start)          printf '%s' '开始执行构建流程...' ;;
+        Done)           printf '%s' '所有选定的任务已执行完毕。' ;;
+        Exit)           printf '%s' '按回车键退出' ;;
+        SummaryTitle)   printf '%s' '结果汇总' ;;
+        SummaryBuilt)   printf '%s' '成功：{0}' ;;
+        SummaryFailed)  printf '%s' '失败：{0}' ;;
+        SummarySkipped) printf '%s' '跳过：{0}' ;;
+    esac
+}
+
+msg_ru() {
+    case "$1" in
+        LangTitle)      printf '%s' 'Выберите язык' ;;
+        LangPrompt)     printf '%s' 'Введите выбор (1=English, 2=中文, 3=Русский)' ;;
+        MenuTitle)      printf '%s' '       Меню сборки SniShaper' ;;
+        DepPrompt)      printf '%s' 'Установить npm зависимости фронтенда? [y/N]' ;;
+        TypeTitle)      printf '%s' 'Тип сборки (через запятую, пусто = все):' ;;
+        TypeOpt1)       printf '%s' '  1) CLI  (headless, кроссплатформенный)' ;;
+        TypeOpt2)       printf '%s' '  2) GUI  (Windows + Linux)' ;;
+        TypeOpt3)       printf '%s' '  3) Все' ;;
+        PlatformTitle)  printf '%s' 'Платформа (через запятую, пусто = все):' ;;
+        PlatformOpt1)   printf '%s' '  1) Windows' ;;
+        PlatformOpt2)   printf '%s' '  2) Linux' ;;
+        PlatformOpt3)   printf '%s' '  3) Darwin / macOS (только CLI)' ;;
+        PlatformOpt4)   printf '%s' '  4) Все' ;;
+        ArchTitle)      printf '%s' 'Архитектура (через запятую, пусто = все):' ;;
+        ArchOpt1)       printf '%s' '  1) x64' ;;
+        ArchOpt2)       printf '%s' '  2) x86 (только Windows)' ;;
+        ArchOpt3)       printf '%s' '  3) arm64' ;;
+        ArchOpt4)       printf '%s' '  4) Все' ;;
+        CrossPrompt)    printf '%s' 'Разрешить кросс-тулчейн для Linux GUI? [y/N]' ;;
+        ConfirmPrompt)  printf '%s' 'Начать сборку? [Y/n]' ;;
+        NoTargets)      printf '%s' 'Не найдено ни одной подходящей цели сборки.' ;;
+        PlanTitle)      printf '%s' 'План сборки' ;;
+        ColTarget)      printf '%s' 'ЦЕЛЬ' ;;
+        ColState)       printf '%s' 'СТАТУС' ;;
+        ColNote)        printf '%s' 'ПРИМЕЧАНИЕ' ;;
+        DryRunNote)     printf '%s' '--dry-run: сборка не выполнялась.' ;;
+        HostInfo)       printf '%s' 'Хост: {0}/{1}   CI={2}   cross={3}' ;;
+        VersionInfo)    printf '%s' 'Версия: {0} (канал: {1})' ;;
+        FrontEnter)     printf '%s' '[Фронтенд] Переход в директорию frontend...' ;;
+        FrontErrDir)    printf '%s' '[Фронтенд] ОШИБКА: не удалось войти в директорию frontend!' ;;
+        FrontInstall)   printf '%s' '[Фронтенд] Установка npm зависимостей...' ;;
+        FrontErrInstall) printf '%s' '[Фронтенд] ОШИБКА: npm install не удался!' ;;
+        FrontBuild)     printf '%s' '[Фронтенд] Запуск npm run build...' ;;
+        FrontErrBuild)  printf '%s' '[Фронтенд] ОШИБКА: npm run build не удался!' ;;
+        FrontDone)      printf '%s' '[Фронтенд] Сборка фронтенда завершена успешно!' ;;
+        FrontMissing)   printf '%s' '[Фронтенд] frontend/dist не найден: укажите --install-deps или выполните npm run build' ;;
+        BackStart)      printf '%s' '[Бэкенд] Начало сборки Go...' ;;
+        BackInstallDeps) printf '%s' '[Бэкенд] Установка Go зависимостей...' ;;
+        BackErrInstallDeps) printf '%s' '[Бэкенд] ОШИБКА: go mod download не удался!' ;;
+        BackBuildVersion) printf '%s' '[Бэкенд] Версия сборки: {0} (канал: {1})' ;;
+        Start)          printf '%s' 'Начало сборки...' ;;
+        Done)           printf '%s' 'Все выбранные задачи завершены.' ;;
+        Exit)           printf '%s' 'Нажмите Enter для выхода' ;;
+        SummaryTitle)   printf '%s' 'Итог' ;;
+        SummaryBuilt)   printf '%s' 'успешно  : {0}' ;;
+        SummaryFailed)  printf '%s' 'ошибки   : {0}' ;;
+        SummarySkipped) printf '%s' 'пропущено: {0}' ;;
+    esac
+}
+
+# m KEY [arg0] [arg1] [arg2] [arg3] — resolve a message for the active language
+m() {
+    _key="$1"
+    _val=""
+    case "${LANG_CODE:-EN}" in
+        CN) _val="$(msg_cn "$_key")" ;;
+        RU) _val="$(msg_ru "$_key")" ;;
+        *)  _val="$(msg_en "$_key")" ;;
+    esac
+    if [ -z "$_val" ]; then
+        _val="$_key"
+    fi
+    if [ "$#" -ge 2 ]; then
+        _val="${_val//\{0\}/$2}"
+    fi
+    if [ "$#" -ge 3 ]; then
+        _val="${_val//\{1\}/$3}"
+    fi
+    if [ "$#" -ge 4 ]; then
+        _val="${_val//\{2\}/$4}"
+    fi
+    if [ "$#" -ge 5 ]; then
+        _val="${_val//\{3\}/$5}"
+    fi
+    printf '%s' "$_val"
+}
+
+# ===========================================================================
+# Target matrix helpers
+# ===========================================================================
+ALL_PLATFORMS="windows linux darwin"
+ALL_TYPES="cli gui"
+
+archs_for_platform() {
+    case "$1" in
+        windows) printf '%s' "x64 x86 arm64" ;;
+        linux)   printf '%s' "x64 arm64" ;;
+        darwin)  printf '%s' "x64 arm64" ;;
+    esac
+}
+
+gui_platform_supported() {
+    case "$1" in
+        windows|linux) return 0 ;;
+        *)             return 1 ;;
+    esac
+}
+
+goarch_of() {
+    case "$1" in
+        x64)   printf '%s' "amd64" ;;
+        arm64) printf '%s' "arm64" ;;
+        x86)   printf '%s' "386" ;;
+        *)     printf '%s' "$1" ;;
+    esac
+}
+
+platform_dir() {
+    case "$1" in
+        windows) printf '%s' "Windows" ;;
+        linux)   printf '%s' "Linux" ;;
+        darwin)  printf '%s' "Darwin" ;;
+        *)       printf '%s' "$1" ;;
+    esac
+}
+
+is_valid_combo() {
+    _t="$1"; _p="$2"; _a="$3"
+    case " $(archs_for_platform "$_p") " in
+        *" $_a "*) ;;
+        *) return 1 ;;
+    esac
+    if [ "$_t" = "gui" ] && ! gui_platform_supported "$_p"; then
+        return 1
+    fi
+    return 0
+}
+
+# get_valid_combinations — prints "type platform arch" for every valid target
+get_valid_combinations() {
+    for _t in $ALL_TYPES; do
+        for _p in $ALL_PLATFORMS; do
+            for _a in $(archs_for_platform "$_p"); do
+                if is_valid_combo "$_t" "$_p" "$_a"; then
+                    printf '%s %s %s\n' "$_t" "$_p" "$_a"
+                fi
+            done
+        done
+    done
+}
+
+# ===========================================================================
+# Defaults
+# ===========================================================================
 LANG_CODE=""
-ARCH_PARAM=""
+PLATFORM_SEL=""
+ARCH_SEL=""
+TYPE_SEL=""
+ALL_FLAG=0
+DRY_RUN=0
+CI_MODE=0
+STRICT_NATIVE=0
+CROSS_GUI=0
 INSTALL_DEPS=0
 GTK3=0
 SILENT=0
-CLI_FLAG=0
-ALL_FLAG=0
-GUI_FLAG=0
-WITH_FRONTEND=0
-BUILD_PARAM_SET=0
+WAILS_MODE=0
+BUILD_FRONTEND=1
+BUILD_BACKEND=1
+SELECTION_GIVEN=0
+LEGACY_BUILD=""
+LEGACY_CLI=0
+LEGACY_GUI=0
+LEGACY_WF=0
 
-# ---------- Helper: capitalize first letter ----------
-cap_first() {
-    local s
-    s="$(printf '%s' "$1" | tr '[:upper:]' '[:lower:]')"
-    local first
-    first="$(printf '%s' "${s:0:1}" | tr '[:lower:]' '[:upper:]')"
-    printf '%s%s' "$first" "${s:1}"
+# ===========================================================================
+# Helpers
+# ===========================================================================
+usage() {
+    awk 'NR>1 && /^set -euo pipefail$/ { exit } NR>1 { sub(/^# ?/, ""); print }' "$0"
 }
 
-# ---------- Parameter parsing ----------
-ARGS=("$@")
-_i=0
-while [ "$_i" -lt "${#ARGS[@]}" ]; do
-    case "${ARGS[$_i]}" in
-        --build)
-            _i=$((_i+1))
-            if [ "$_i" -ge "${#ARGS[@]}" ]; then
-                echo "[build] --build requires a value (e.g. --build all,all,all)" >&2
-                exit 1
-            fi
-            # Parse comma-separated: system,mode,scope
-            IFS=',' read -r _sys _mode _scope <<<"${ARGS[$_i]}"
-            [ -n "${_sys:-}" ]   && BUILD_SYSTEM="$(cap_first "$_sys")"
-            [ -n "${_mode:-}" ]  && BUILD_MODE="$(cap_first "$_mode")"
-            [ -n "${_scope:-}" ] && BUILD_SCOPE="$(cap_first "$_scope")"
-            BUILD_PARAM_SET=1
-            ;;
-        --lang)
-            _i=$((_i+1))
-            if [ "$_i" -ge "${#ARGS[@]}" ]; then
-                echo "[build] --lang requires a value (en|cn|ru)" >&2
-                exit 1
-            fi
-            LANG_CODE="$(printf '%s' "${ARGS[$_i]}" | tr '[:lower:]' '[:upper:]')"
-            case "$LANG_CODE" in
-                EN|CN|RU) ;;
-                *) echo "[build] --lang must be en, cn, or ru" >&2; exit 1 ;;
-            esac
-            ;;
-        --arch)
-            _i=$((_i+1))
-            if [ "$_i" -ge "${#ARGS[@]}" ]; then
-                echo "[build] --arch requires a value (x64|arm64|x86|all)" >&2
-                exit 1
-            fi
-            ARCH_PARAM="${ARGS[$_i]}"
-            ;;
-        --install-deps) INSTALL_DEPS=1 ;;
-        --gtk3)          GTK3=1 ;;
-        --silent)        SILENT=1 ;;
-        --cli)           CLI_FLAG=1; BUILD_PARAM_SET=1 ;;
-        --all)           ALL_FLAG=1; BUILD_PARAM_SET=1 ;;
-        --gui)           GUI_FLAG=1; BUILD_PARAM_SET=1 ;;
-        --with-frontend) WITH_FRONTEND=1; INSTALL_DEPS=1; BUILD_PARAM_SET=1 ;;
-        --help|-h)
-            grep '^#' "$0" | sed 's/^# \{0,1\}//'
-            exit 0
-            ;;
-        *) echo "[build] unknown parameter: ${ARGS[$_i]} (--help for usage)" >&2; exit 1 ;;
+die() {
+    printf '[build] %s\n' "$1" >&2
+    exit 1
+}
+
+append_unique() {
+    _cur="$1"; _val="$2"
+    case " $_cur " in
+        *" $_val "*) printf '%s' "$_cur" ;;
+        *)           printf '%s' "${_cur:+$_cur }$_val" ;;
     esac
-    _i=$((_i+1))
+}
+
+normalize_platform() {
+    case "$(printf '%s' "$1" | tr '[:upper:]' '[:lower:]')" in
+        windows|win)      printf '%s' "windows" ;;
+        linux)            printf '%s' "linux" ;;
+        darwin|macos|mac) printf '%s' "darwin" ;;
+        all)              printf '%s' "all" ;;
+    esac
+}
+
+normalize_arch() {
+    case "$(printf '%s' "$1" | tr '[:upper:]' '[:lower:]')" in
+        x64|amd64|x86_64)  printf '%s' "x64" ;;
+        arm64|aarch64)     printf '%s' "arm64" ;;
+        x86|386|i386|i686) printf '%s' "x86" ;;
+        all)               printf '%s' "all" ;;
+    esac
+}
+
+normalize_type() {
+    case "$(printf '%s' "$1" | tr '[:upper:]' '[:lower:]')" in
+        cli|headless) printf '%s' "cli" ;;
+        gui|desktop)  printf '%s' "gui" ;;
+        all)          printf '%s' "all" ;;
+    esac
+}
+
+log()  { printf '%s\n' "$1"; }
+warn() { printf '%s\n' "$1" >&2; }
+
+# ===========================================================================
+# Parameter parsing
+# ===========================================================================
+while [ "$#" -gt 0 ]; do
+    case "$1" in
+        -p|--platform)
+            [ "$#" -ge 2 ] || die "--platform requires a value (windows|linux|darwin|all)"
+            _v="$(normalize_platform "$2")"
+            [ -n "$_v" ] || die "unknown platform: $2"
+            PLATFORM_SEL="$(append_unique "$PLATFORM_SEL" "$_v")"
+            SELECTION_GIVEN=1
+            shift 2
+            ;;
+        -a|--arch)
+            [ "$#" -ge 2 ] || die "--arch requires a value (x64|x86|arm64|all)"
+            _v="$(normalize_arch "$2")"
+            [ -n "$_v" ] || die "unknown architecture: $2"
+            ARCH_SEL="$(append_unique "$ARCH_SEL" "$_v")"
+            SELECTION_GIVEN=1
+            shift 2
+            ;;
+        -t|--type)
+            [ "$#" -ge 2 ] || die "--type requires a value (cli|gui|all)"
+            _v="$(normalize_type "$2")"
+            [ -n "$_v" ] || die "unknown type: $2"
+            TYPE_SEL="$(append_unique "$TYPE_SEL" "$_v")"
+            SELECTION_GIVEN=1
+            shift 2
+            ;;
+        --all)           ALL_FLAG=1; SELECTION_GIVEN=1; shift ;;
+        --dry-run)       DRY_RUN=1; shift ;;
+        --ci)            CI_MODE=1; SILENT=1; shift ;;
+        --strict-native) CI_MODE=1; STRICT_NATIVE=1; SILENT=1; shift ;;
+        --cross)         CROSS_GUI=1; shift ;;
+        --install-deps)  INSTALL_DEPS=1; shift ;;
+        --gtk3)          GTK3=1; shift ;;
+        --wails)         WAILS_MODE=1; shift ;;
+        --silent)        SILENT=1; shift ;;
+        --lang)
+            [ "$#" -ge 2 ] || die "--lang requires a value (en|cn|ru)"
+            case "$(printf '%s' "$2" | tr '[:lower:]' '[:upper:]')" in
+                EN) LANG_CODE="EN" ;;
+                CN) LANG_CODE="CN" ;;
+                RU) LANG_CODE="RU" ;;
+                *)  die "--lang must be en, cn or ru" ;;
+            esac
+            shift 2
+            ;;
+        --build)
+            [ "$#" -ge 2 ] || die "--build requires a value (e.g. --build linux,gui,all)"
+            LEGACY_BUILD="$2"
+            SELECTION_GIVEN=1
+            shift 2
+            ;;
+        --cli)           LEGACY_CLI=1; SELECTION_GIVEN=1; shift ;;
+        --gui)           LEGACY_GUI=1; SELECTION_GIVEN=1; shift ;;
+        --with-frontend) LEGACY_WF=1; INSTALL_DEPS=1; SELECTION_GIVEN=1; shift ;;
+        -h|--help)       usage; exit 0 ;;
+        *) die "unknown parameter: $1 (--help for usage)" ;;
+    esac
 done
 
-# ---------- Resolve legacy shortcuts → --build equivalents ----------
-if [ "$WITH_FRONTEND" = "1" ]; then
-    BUILD_SYSTEM="Linux"; BUILD_MODE="Gui"; BUILD_SCOPE="All"
+# ---------- Legacy --build <system>,<mode>,<scope> mapping ----------
+if [ -n "$LEGACY_BUILD" ]; then
+    IFS=',' read -r _lsys _lmode _lscope <<EOF || true
+$LEGACY_BUILD
+EOF
+    _lsys="$(printf '%s' "${_lsys:-}" | tr -d '[:space:]' | tr '[:upper:]' '[:lower:]')"
+    _lmode="$(printf '%s' "${_lmode:-}" | tr -d '[:space:]' | tr '[:upper:]' '[:lower:]')"
+    _lscope="$(printf '%s' "${_lscope:-}" | tr -d '[:space:]' | tr '[:upper:]' '[:lower:]')"
+    case "$_lsys" in
+        windows) PLATFORM_SEL="windows" ;;
+        linux)   PLATFORM_SEL="linux" ;;
+        all|"")  PLATFORM_SEL="all" ;;
+        *)       die "invalid --build system: $_lsys" ;;
+    esac
+    case "$_lmode" in
+        gui)    TYPE_SEL="gui" ;;
+        cli)    TYPE_SEL="cli" ;;
+        all|"") TYPE_SEL="all" ;;
+        *)      die "invalid --build mode: $_lmode" ;;
+    esac
+    case "$_lscope" in
+        frontend) BUILD_FRONTEND=1; BUILD_BACKEND=0 ;;
+        backend)  BUILD_FRONTEND=0; BUILD_BACKEND=1 ;;
+        all|"")   BUILD_FRONTEND=1; BUILD_BACKEND=1 ;;
+        *)        die "invalid --build scope: $_lscope" ;;
+    esac
 fi
-if [ "$GUI_FLAG" = "1" ]; then
-    BUILD_SYSTEM="Linux"; BUILD_MODE="Gui"; BUILD_SCOPE="All"
+
+if [ "$LEGACY_CLI" = "1" ]; then
+    TYPE_SEL="cli"
+    if [ -z "$PLATFORM_SEL" ]; then
+        PLATFORM_SEL="all"
+    fi
 fi
-if [ "$CLI_FLAG" = "1" ] && [ "$ALL_FLAG" = "0" ]; then
-    BUILD_SYSTEM="All"; BUILD_MODE="Cli"; BUILD_SCOPE="All"
+if [ "$LEGACY_GUI" = "1" ] || [ "$LEGACY_WF" = "1" ]; then
+    TYPE_SEL="gui"
+    PLATFORM_SEL="linux"
 fi
+
 if [ "$ALL_FLAG" = "1" ]; then
-    BUILD_SYSTEM="All"; BUILD_MODE="All"; BUILD_SCOPE="All"
-fi
-
-# ---------- Validate build parameters ----------
-case "$BUILD_SYSTEM" in
-    Windows|Linux|All) ;;
-    *) echo "[build] Invalid system: '$BUILD_SYSTEM'. Valid: Windows, Linux, All" >&2; exit 1 ;;
-esac
-case "$BUILD_MODE" in
-    Gui|Cli|All) ;;
-    *) echo "[build] Invalid mode: '$BUILD_MODE'. Valid: Gui, Cli, All" >&2; exit 1 ;;
-esac
-case "$BUILD_SCOPE" in
-    Frontend|Backend|All) ;;
-    *) echo "[build] Invalid scope: '$BUILD_SCOPE'. Valid: Frontend, Backend, All" >&2; exit 1 ;;
-esac
-
-# ---------- Silent mode: default to full build when --build not given ----------
-if [ "$SILENT" = "1" ]; then
-    if [ "$BUILD_PARAM_SET" = "0" ]; then
-        BUILD_SYSTEM="All"; BUILD_MODE="All"; BUILD_SCOPE="All"
-    fi
-    [ -z "$LANG_CODE" ] && LANG_CODE="EN"
-fi
-
-# ---------- Resolve language (interactive if not --silent and not --lang) ----------
-if [ -z "$LANG_CODE" ]; then
-    if [ "$SILENT" = "0" ] && [ "$BUILD_PARAM_SET" = "0" ]; then
-        echo "=========================================="
-        echo "$(m "LangTitle")"
-        echo "=========================================="
-        echo "1. ${MSG[LangOpt1]}"
-        echo "2. ${MSG[LangOpt2]}"
-        echo "3. ${MSG[LangOpt3]}"
-        echo ""
-        read -r -p "$(m "LangPrompt") " lang_choice
-        case "$lang_choice" in
-            2) LANG_CODE="CN" ;;
-            3) LANG_CODE="RU" ;;
-            *) echo "Defaulting to English..." ; LANG_CODE="EN" ;;
-        esac
-    else
-        LANG_CODE="EN"
+    # --all means "every platform and every architecture"; an explicit --type
+    # still narrows the matrix (e.g. "--type cli --all" = all 7 CLI targets).
+    PLATFORM_SEL="all"
+    ARCH_SEL="all"
+    if [ -z "$TYPE_SEL" ]; then
+        TYPE_SEL="all"
     fi
 fi
 
-# ---------- Interactive build menu (when no --build and not --silent) ----------
-if [ "$BUILD_PARAM_SET" = "0" ] && [ "$SILENT" = "0" ]; then
-    echo ""
-    echo "=========================================="
-    echo "$(m "MenuTitle")"
-    echo "=========================================="
-    echo ""
+# ---------- CI never uses cross toolchains ----------
+if [ "$CI_MODE" = "1" ] && [ "$CROSS_GUI" = "1" ]; then
+    CROSS_GUI=0
+fi
 
-    # Install deps prompt
+# ---------- Toolchain presence ----------
+command -v go >/dev/null 2>&1 || die "Go not found, install Go 1.25+ (see go.mod)"
+
+# ---------- Host detection ----------
+HOST_OS="$(go env GOOS 2>/dev/null || true)"
+if [ -z "$HOST_OS" ]; then
+    case "$(uname -s)" in
+        Linux*)               HOST_OS="linux" ;;
+        Darwin*)              HOST_OS="darwin" ;;
+        MINGW*|MSYS*|CYGWIN*) HOST_OS="windows" ;;
+        *)                    HOST_OS="unknown" ;;
+    esac
+fi
+HOST_GOARCH="$(go env GOARCH 2>/dev/null || true)"
+if [ -z "$HOST_GOARCH" ]; then
+    HOST_GOARCH="$(uname -m)"
+fi
+case "$HOST_GOARCH" in
+    x86_64|amd64)  HOST_ARCH="x64" ;;
+    aarch64|arm64) HOST_ARCH="arm64" ;;
+    i386|i686|x86) HOST_ARCH="x86" ;;
+    *)             HOST_ARCH="x64" ;;
+esac
+
+# ---------- Version from manifest (single source of truth) ----------
+# portable sed: macOS ships BSD grep without -P, so no grep -oP here
+manifest_tag() {
+    if [ ! -f Package.appxmanifest ]; then
+        return 0
+    fi
+    sed -n "s/.*<rel:$1>\([^<]*\)<\/rel:$1>.*/\1/p" Package.appxmanifest 2>/dev/null | head -1
+}
+MANIFEST_VERSION="$(manifest_tag Version)"
+MANIFEST_CHANNEL="$(manifest_tag ReleaseChannel)"
+
+# ===========================================================================
+# Target resolution — lines of "type|platform|arch|state|note"
+# ===========================================================================
+target_state() {
+    _t="$1"; _p="$2"; _a="$3"
+
+    if ! is_valid_combo "$_t" "$_p" "$_a"; then
+        printf '%s' "skip|not part of the 12-target matrix (GUI is Windows/Linux only)"
+        return 0
+    fi
+
+    if [ "$_t" = "gui" ]; then
+        if [ "$_p" = "darwin" ]; then
+            printf '%s' "skip|GUI is not built for Darwin (Windows/Linux only)"
+            return 0
+        fi
+        if [ "$HOST_OS" != "$_p" ]; then
+            printf '%s' "skip|GUI needs a native $_p host (current host: $HOST_OS)"
+            return 0
+        fi
+        if [ "$_p" = "linux" ] && [ "$HOST_ARCH" != "$_a" ]; then
+            if [ "$CI_MODE" = "1" ]; then
+                printf '%s' "skip|Linux GUI $_a needs a native $_a runner in CI"
+                return 0
+            fi
+            if [ "$CROSS_GUI" != "1" ]; then
+                printf '%s' "skip|Linux GUI $_a needs cgo/GTK: native only (--cross to override)"
+                return 0
+            fi
+            if ! command -v aarch64-linux-gnu-gcc >/dev/null 2>&1; then
+                printf '%s' "skip|aarch64-linux-gnu-gcc not installed"
+                return 0
+            fi
+        fi
+    fi
+
+    if [ "$STRICT_NATIVE" = "1" ]; then
+        if [ "$HOST_OS" != "$_p" ] || [ "$HOST_ARCH" != "$_a" ]; then
+            printf '%s' "skip|--strict-native: $_p/$_a does not match host $HOST_OS/$HOST_ARCH"
+            return 0
+        fi
+    fi
+
+    if [ "$HOST_OS" = "$_p" ] && [ "$HOST_ARCH" = "$_a" ]; then
+        printf '%s' "build|native host build"
+        return 0
+    fi
+    printf '%s' "build|go cross build, CGO_ENABLED=0, no cross toolchain"
+    return 0
+}
+
+list_matches() {
+    # $1 = selected list, $2 = value, $3 = "all" allowance flag (unused)
+    case " $1 " in
+        *" $2 "*) return 0 ;;
+        *" all "*) return 0 ;;
+    esac
+    if [ -z "$1" ]; then
+        return 0
+    fi
+    return 1
+}
+
+resolve_targets() {
+    RESOLVED=""
+    for _t in $ALL_TYPES; do
+        if ! list_matches "$TYPE_SEL" "$_t"; then
+            continue
+        fi
+        for _p in $ALL_PLATFORMS; do
+            if ! list_matches "$PLATFORM_SEL" "$_p"; then
+                continue
+            fi
+            for _a in $(archs_for_platform "$_p"); do
+                if ! list_matches "$ARCH_SEL" "$_a"; then
+                    continue
+                fi
+                _st="$(target_state "$_t" "$_p" "$_a")"
+                RESOLVED="${RESOLVED}${_t}|${_p}|${_a}|${_st}
+"
+            done
+        done
+    done
+    printf '%s' "$RESOLVED"
+}
+
+print_plan() {
+    printf '\n'
+    printf '%s\n' "$(m PlanTitle)"
+    printf '%s\n' '=============================================================================='
+    printf '%-32s %-8s %s\n' "$(m ColTarget)" "$(m ColState)" "$(m ColNote)"
+    printf '%s\n' '------------------------------------------------------------------------------'
+    printf '%s\n' "$1" | while IFS='|' read -r _t _p _a _st _note; do
+        if [ -z "${_t:-}" ]; then
+            continue
+        fi
+        _label="$(printf '%s %s/%s' "$(printf '%s' "$_t" | tr '[:lower:]' '[:upper:]')" "$(platform_dir "$_p")" "$_a")"
+        printf '%-32s %-8s %s\n' "$_label" "$_st" "$_note"
+    done
+    printf '%s\n' '=============================================================================='
+}
+
+# ===========================================================================
+# Interactive wizard
+# ===========================================================================
+pick_from() {
+    _title="$1"; shift
+    printf '\n%s\n' "$_title"
+    for _opt in "$@"; do
+        printf '%s\n' "$_opt"
+    done
+    printf '> '
+    read -r _answer || true
+    printf '%s' "$_answer"
+}
+
+interactive_wizard() {
+    printf '\n'
+    printf '%s\n' '=========================================================='
+    printf '%s\n' "$(m MenuTitle)"
+    printf '%s\n' '=========================================================='
+
     if [ "$INSTALL_DEPS" = "0" ]; then
-        read -r -p "$(m "DepPrompt") " deps_input
-        case "$deps_input" in
+        printf '%s ' "$(m DepPrompt)"
+        read -r _d || true
+        case "$_d" in
             Y|y) INSTALL_DEPS=1 ;;
         esac
     fi
 
-    echo ""
-    echo "$(m "SelectTitle")"
-    echo "$(m "Opt1")"
-    echo "$(m "Opt2")"
-    echo "$(m "Opt3")"
-    echo "$(m "Opt4")"
-    echo ""
-    read -r -p "$(m "ChoicePrompt") " choice
-    case "$choice" in
-        1) BUILD_SYSTEM="Linux"; BUILD_MODE="Gui";  BUILD_SCOPE="All" ;;
-        2) BUILD_SYSTEM="All";   BUILD_MODE="Cli";  BUILD_SCOPE="All" ;;
-        3) BUILD_SYSTEM="All";   BUILD_MODE="All";  BUILD_SCOPE="All" ;;
-        4) BUILD_SYSTEM="All";   BUILD_MODE="Cli";  BUILD_SCOPE="All"; ARCH_PARAM="all" ;;
-        *) echo "$(m "Opt3") (default)"; BUILD_SYSTEM="All"; BUILD_MODE="All"; BUILD_SCOPE="All" ;;
+    _ans="$(pick_from "$(m TypeTitle)" "$(m TypeOpt1)" "$(m TypeOpt2)" "$(m TypeOpt3)")"
+    case "$_ans" in
+        1) TYPE_SEL="cli" ;;
+        2) TYPE_SEL="gui" ;;
+        *) TYPE_SEL="cli gui" ;;
     esac
 
-    # CLI prompt (if GUI selected, ask whether to also build CLI)
-    if [ "$BUILD_MODE" = "Gui" ]; then
-        read -r -p "$(m "CliPrompt") " cli_input
-        case "$cli_input" in
-            Y|y) BUILD_MODE="All" ;;
-        esac
-    fi
+    _ans="$(pick_from "$(m PlatformTitle)" "$(m PlatformOpt1)" "$(m PlatformOpt2)" "$(m PlatformOpt3)" "$(m PlatformOpt4)")"
+    case "$_ans" in
+        1) PLATFORM_SEL="windows" ;;
+        2) PLATFORM_SEL="linux" ;;
+        3) PLATFORM_SEL="darwin" ;;
+        *) PLATFORM_SEL="windows linux darwin" ;;
+    esac
 
-    # Arch prompt
-    if [ -z "$ARCH_PARAM" ]; then
-        echo ""
-        read -r -p "$(m "ArchPrompt") " arch_input
-        case "$arch_input" in
-            2) ARCH_PARAM="arm64" ;;
-            3) ARCH_PARAM="x86" ;;
-            *) ARCH_PARAM="x64" ;;
-        esac
-    fi
-fi
+    _ans="$(pick_from "$(m ArchTitle)" "$(m ArchOpt1)" "$(m ArchOpt2)" "$(m ArchOpt3)" "$(m ArchOpt4)")"
+    case "$_ans" in
+        1) ARCH_SEL="x64" ;;
+        2) ARCH_SEL="x86" ;;
+        3) ARCH_SEL="arm64" ;;
+        *) ARCH_SEL="x64 x86 arm64" ;;
+    esac
 
-# ---------- Normalize architecture ----------
-# x86 only builds Windows CLI; Linux GUI and Darwin do not build x86
-normalize_arch() {
-    case "$(printf '%s' "$1" | tr '[:upper:]' '[:lower:]')" in
-        x64|amd64)         printf 'x64' ;;
-        arm64|arm)         printf 'arm64' ;;
-        x86|386|i386|i686) printf 'x86' ;;
-        all)               printf 'all' ;;
-        *)
-            echo "[build] Unknown architecture: $1 (supported: x64/amd64, arm64/arm, x86/386, all)" >&2
+    printf '%s ' "$(m CrossPrompt)"
+    read -r _c || true
+    case "$_c" in
+        Y|y) CROSS_GUI=1 ;;
+        *)   CROSS_GUI=0 ;;
+    esac
+
+    print_plan "$(resolve_targets)"
+
+    printf '%s ' "$(m ConfirmPrompt)"
+    read -r _ok || true
+    case "$_ok" in
+        N|n) printf '%s\n' 'aborted.'; exit 0 ;;
+    esac
+}
+
+# ===========================================================================
+# Build engine
+# ===========================================================================
+GTK_CHECKED=0
+check_gtk() {
+    if [ "$GTK_CHECKED" = "1" ]; then
+        return 0
+    fi
+    GTK_CHECKED=1
+    command -v pkg-config >/dev/null 2>&1 || die "pkg-config not found (install libgtk-4-dev libwebkitgtk-6.0-dev)"
+    if [ "$GTK3" = "1" ]; then
+        pkg-config --exists gtk+-3.0 webkit2gtk-4.1 || die "missing GTK3 deps: libgtk-3-dev libwebkit2gtk-4.1-dev"
+    else
+        pkg-config --exists gtk4 webkitgtk-6.0 || die "missing GTK4 deps: libgtk-4-dev libwebkitgtk-6.0-dev"
+    fi
+}
+
+ensure_frontend() {
+    if [ "$BUILD_FRONTEND" = "0" ]; then
+        if [ ! -f frontend/dist/index.html ]; then
+            warn "$(m FrontMissing)"
             exit 1
-            ;;
-    esac
-}
-
-arch_to_goarch() {
-    case "$1" in
-        x64)   printf 'amd64' ;;
-        arm64) printf 'arm64' ;;
-        x86)   printf '386' ;;
-    esac
-}
-
-# Default arch: "all" (amd64 + arm64 for CLI; current platform for GUI)
-if [ -z "$ARCH_PARAM" ]; then
-    ARCH_PARAM="all"
-fi
-BUILD_ARCH="$(normalize_arch "$ARCH_PARAM")"
-
-# ---------- x86 restriction ----------
-if [ "$BUILD_ARCH" = "x86" ]; then
-    if [ "$BUILD_MODE" = "Gui" ] || [ "$BUILD_MODE" = "All" ]; then
-        echo "[GUI] Warning: Linux GUI does not support x86, skipping GUI build" >&2
-        if [ "$BUILD_MODE" = "All" ]; then
-            BUILD_MODE="Cli"
-        else
-            BUILD_MODE="Cli"
         fi
+        return 0
     fi
-    if [ "$BUILD_SYSTEM" = "Linux" ]; then
-        echo "[build] Error: x86 only supports Windows CLI (--cli --arch x86)" >&2
+
+    log "$(m FrontEnter)"
+    if [ ! -d frontend ]; then
+        warn "$(m FrontErrDir)"
         exit 1
     fi
-fi
+    ( cd frontend
+      if [ "$INSTALL_DEPS" = "1" ]; then
+          log "$(m FrontInstall)"
+          npm install || { warn "$(m FrontErrInstall)"; exit 1; }
+      fi
+      log "$(m FrontBuild)"
+      npm run build || { warn "$(m FrontErrBuild)"; exit 1; }
+    ) || exit 1
+    log "$(m FrontDone)"
+}
 
-# ---------- Check Go is available ----------
-command -v go >/dev/null 2>&1 || { echo "[build] Go not found, please install Go 1.25+" >&2; exit 1; }
+copy_seed_folders() {
+    if [ -d config ]; then
+        mkdir -p "$1/config"
+        cp -R config/. "$1/config/"
+    fi
+    if [ -d rules ]; then
+        mkdir -p "$1/rules"
+        cp -R rules/. "$1/rules/"
+    fi
+}
 
-# ---------- Compute derived flags (same logic as ps1) ----------
-if [ "$BUILD_MODE" = "Gui" ] || [ "$BUILD_MODE" = "All" ]; then build_gui=1; else build_gui=0; fi
-if [ "$BUILD_MODE" = "Cli" ] || [ "$BUILD_MODE" = "All" ]; then build_cli=1; else build_cli=0; fi
-if { [ "$BUILD_SCOPE" = "Frontend" ] || [ "$BUILD_SCOPE" = "All" ]; } && [ "$build_gui" = "1" ]; then build_frontend=1; else build_frontend=0; fi
-if { [ "$BUILD_SCOPE" = "Backend" ] || [ "$BUILD_SCOPE" = "All" ]; } && [ "$build_gui" = "1" ]; then build_backend=1; else build_backend=0; fi
+build_target() {
+    _type="$1"; _plat="$2"; _arch="$3"
+    _goos="$_plat"
+    _goarch="$(goarch_of "$_arch")"
+    _dir="build/bin/${_type}/$(platform_dir "$_plat")/${_arch}"
+    _bin="snishaper"
+    if [ "$_goos" = "windows" ]; then
+        _bin="snishaper.exe"
+    fi
+    if [ "$_type" = "gui" ] && [ "$_goos" = "linux" ]; then
+        _bin="SniShaper"
+    fi
+    _out="${_dir}/${_bin}"
 
-# On Linux, "Windows" system means: only build CLI (can't build Windows GUI on Linux)
-# "All" system means: build Linux GUI + cross-compile CLI for all platforms
-if [ "$BUILD_SYSTEM" = "Windows" ]; then
-    build_gui=0
-    build_frontend=0
-    build_backend=0
-    build_cli=1
-fi
+    log ""
+    log "[BUILD] $(printf '%s' "$_type" | tr '[:lower:]' '[:upper:]') $(platform_dir "$_plat") $_arch ($_goos/$_goarch) -> $_out"
 
-echo ""
-echo "=========================================="
-echo " System=$BUILD_SYSTEM  Mode=$BUILD_MODE  Scope=$BUILD_SCOPE  Arch=$ARCH_PARAM"
-echo "=========================================="
+    mkdir -p "$_dir"
 
-# ---------- Version from manifest (single source, shared GUI/CLI) ----------
-MANIFEST_VERSION=""
-MANIFEST_CHANNEL=""
-if [ -f Package.appxmanifest ]; then
-    MANIFEST_VERSION="$(grep -oP '<rel:Version>\K[^<]+' Package.appxmanifest 2>/dev/null | head -1 || true)"
-    MANIFEST_CHANNEL="$(grep -oP '<rel:ReleaseChannel>\K[^<]+' Package.appxmanifest 2>/dev/null | head -1 || true)"
-fi
+    if [ "$_type" = "gui" ] && [ "$_goos" = "linux" ]; then
+        check_gtk
+    fi
 
-# ---------- CLI Build (pure Go, no GUI deps, cross-compile all platforms) ----------
-build_cli() {
-    echo "=========================================="
-    echo " SniShaper CLI Build (headless)"
-    echo "   Version=$MANIFEST_VERSION Channel=$MANIFEST_CHANNEL"
-    echo "=========================================="
-    local OUT="build/bin/cli"
-    mkdir -p "$OUT"
-    local LDFLAGS="-s -w"
+    # ---- compiler selection -------------------------------------------------
+    # The CLI is pure Go (CGO_ENABLED=0) and never needs a C toolchain.
+    # The Linux GUI needs cgo + GTK/WebKit, so it builds with CGO_ENABLED=1
+    # using the system compiler. A cross CC/CXX is exported only when the
+    # operator explicitly passes --cross on a local machine; --ci and
+    # --strict-native clear that flag, keeping ARM64 CI jobs toolchain-free.
+    _cgo=0
+    if [ "$_type" = "gui" ] && [ "$_goos" = "linux" ]; then
+        _cgo=1
+    fi
+
+    _cc_args=""
+    if [ "$_cgo" = "1" ] && [ "$HOST_ARCH" != "$_arch" ] && [ "$CROSS_GUI" = "1" ]; then
+        _cc_args="CC=aarch64-linux-gnu-gcc CXX=aarch64-linux-gnu-g++"
+        log "[BUILD] cross toolchain: $_cc_args"
+    fi
+
+    # ---- tags / ldflags -----------------------------------------------------
+    _tags="with_gvisor"
+    if [ "$_type" = "cli" ]; then
+        _tags="with_gvisor headless"
+    fi
+    if [ "$_type" = "gui" ] && [ "$_goos" = "linux" ] && [ "$GTK3" = "1" ]; then
+        _tags="$_tags gtk3"
+    fi
+
+    _ldflags="-s -w"
+    if [ "$_type" = "gui" ] && [ "$_goos" = "windows" ]; then
+        _ldflags="$_ldflags -H windowsgui"
+    fi
     if [ -n "$MANIFEST_VERSION" ]; then
-        LDFLAGS="$LDFLAGS -X snishaper/app.buildVersion=$MANIFEST_VERSION"
+        _ldflags="$_ldflags -X snishaper/app.buildVersion=$MANIFEST_VERSION"
     fi
     if [ -n "$MANIFEST_CHANNEL" ]; then
-        LDFLAGS="$LDFLAGS -X snishaper/app.buildChannel=$MANIFEST_CHANNEL"
+        _ldflags="$_ldflags -X snishaper/app.buildChannel=$MANIFEST_CHANNEL"
     fi
 
-    # Determine platform list based on arch
-    local platforms=()
-    case "$BUILD_ARCH" in
-        x64)   platforms=(windows/amd64 linux/amd64 darwin/amd64) ;;
-        arm64) platforms=(windows/arm64 linux/arm64 darwin/arm64) ;;
-        x86)   platforms=(windows/386)
-               echo "[CLI] x86: only Windows binary built (Linux/Darwin skip x86)" ;;
-        all)   platforms=(
-                   windows/amd64 windows/arm64
-                   linux/amd64   linux/arm64
-                   darwin/amd64  darwin/arm64
-               ) ;;
-    esac
+    # ---- compile ------------------------------------------------------------
+    set +e
+    if [ "$_type" = "cli" ]; then
+        env GOOS="$_goos" GOARCH="$_goarch" CGO_ENABLED="$_cgo" $_cc_args \
+            go build -tags "$_tags" -ldflags "$_ldflags" -o "$_out" ./cli
+        _rc=$?
+    else
+        if [ "$WAILS_MODE" = "1" ]; then
+            GOOS="$_goos" GOARCH="$_goarch" CGO_ENABLED="$_cgo" \
+                wails build -platform "$_goos/$_goarch" -o "$_out"
+            _rc=$?
+        else
+            env GOOS="$_goos" GOARCH="$_goarch" CGO_ENABLED="$_cgo" $_cc_args \
+                go build -tags "$_tags" -ldflags "$_ldflags" -o "$_out" .
+            _rc=$?
+        fi
+    fi
+    set -e
 
-    for p in "${platforms[@]}"; do
-        local goos="${p%/*}" goarch="${p#*/}"
-        local name="snishaper-cli-$goos-$goarch"
-        [ "$goos" = "windows" ] && name="$name.exe"
-        echo "[CLI] building $goos/$goarch -> $OUT/$name"
-        GOOS="$goos" GOARCH="$goarch" CGO_ENABLED=0 \
-            go build -tags "with_gvisor headless" -ldflags "$LDFLAGS" -o "$OUT/$name" ./cli
-    done
-    cp -r config rules "$OUT"/ 2>/dev/null || true
-    echo "[CLI] Build complete: $OUT"
+    if [ "$_rc" -ne 0 ]; then
+        warn "[BUILD] FAILED: $_type $(platform_dir "$_plat") $_arch (exit $_rc)"
+        return 1
+    fi
+
+    copy_seed_folders "$_dir"
+    log "[BUILD] OK: $_out"
+    return 0
 }
 
-if [ "$build_cli" = "1" ]; then
-    build_cli
-    # If CLI-only, exit after CLI build
-    if [ "$build_gui" = "0" ]; then
-        echo ""
-        echo "=========================================="
-        echo " $(m "AllDone")"
-        echo "=========================================="
-        [ "$SILENT" = "0" ] && read -r -p "$(m "Exit") " || true
-        exit 0
+# ===========================================================================
+# Main
+# ===========================================================================
+if [ "$SELECTION_GIVEN" = "0" ] && [ "$SILENT" = "0" ]; then
+    if [ -z "$LANG_CODE" ]; then
+        printf '%s\n' '=========================================================='
+        printf '%s\n' "$(m LangTitle)"
+        printf '%s\n' '=========================================================='
+        printf '%s\n' '1. English'
+        printf '%s\n' '2. Chinese'
+        printf '%s\n' '3. Russian'
+        printf '\n%s ' "$(m LangPrompt)"
+        read -r _lc || true
+        case "$_lc" in
+            2) LANG_CODE="CN" ;;
+            3) LANG_CODE="RU" ;;
+            *) LANG_CODE="EN" ;;
+        esac
     fi
-fi
-
-# ---------- GUI Linux Build ----------
-if [ "$build_gui" = "1" ]; then
-
-export CGO_ENABLED=1
-export GOOS="${GOOS:-linux}"
-
-# ---------- GTK dependency check ----------
-GTK_TAGS=()
-if [ "$GTK3" = "1" ]; then
-    GTK_TAGS+=("gtk3")
-    command -v pkg-config >/dev/null 2>&1 || { echo "[build] pkg-config not found" >&2; exit 1; }
-    pkg-config --exists gtk+-3.0 webkit2gtk-4.1 || {
-        echo "[build] Missing GTK3 deps, install: libgtk-3-dev libwebkit2gtk-4.1-dev" >&2
-        exit 1
-    }
+    interactive_wizard
 else
-    command -v pkg-config >/dev/null 2>&1 || { echo "[build] pkg-config not found" >&2; exit 1; }
-    pkg-config --exists gtk4 webkitgtk-6.0 || {
-        echo "[build] Missing GTK4 deps, install: libgtk-4-dev libwebkitgtk-6.0-dev" >&2
-        exit 1
-    }
+    if [ -z "$LANG_CODE" ]; then
+        LANG_CODE="EN"
+    fi
 fi
 
-# For GUI, use current platform arch (CGO required, can't cross-compile easily)
-GUI_GOARCH="$(arch_to_goarch "$BUILD_ARCH")"
-if [ "$BUILD_ARCH" = "all" ]; then
-    GUI_GOARCH="$(go env GOARCH 2>/dev/null || echo amd64)"
+if [ "$ALL_FLAG" = "1" ]; then
+    PLATFORM_SEL="all"
+    ARCH_SEL="all"
+    if [ -z "$TYPE_SEL" ]; then
+        TYPE_SEL="all"
+    fi
 fi
-export GOARCH="$GUI_GOARCH"
 
-echo "=========================================="
-echo " SniShaper Linux GUI Build"
-echo "   GOOS=$GOOS GOARCH=$GOARCH CGO_ENABLED=1"
-echo "   GTK: $([ ${#GTK_TAGS[@]} -gt 0 ] && echo "${GTK_TAGS[*]}" || echo "gtk4 (default)")"
-echo "=========================================="
-
-# ---------- 1. Frontend build (optional) ----------
-if [ "$build_frontend" = "1" ]; then
-    echo "$(m "FrontEnter")"
-    if [ ! -d frontend ]; then
-        echo "$(m "FrontErrDir")" >&2
-        [ "$SILENT" = "0" ] && read -r -p "$(m "Exit") " || true
-        exit 1
-    fi
-    cd frontend
-    if [ "$INSTALL_DEPS" = "1" ]; then
-        echo "$(m "FrontInstall")"
-        npm install || { echo "$(m "FrontErrInstall")" >&2; exit 1; }
-    fi
-    echo "$(m "FrontBuild")"
-    npm run build || { echo "$(m "FrontErrBuild")" >&2; exit 1; }
-    echo "$(m "FrontDone")"
-    cd ..
-elif [ ! -f frontend/dist/index.html ]; then
-    echo "[build] Warning: frontend/dist not found, run with --install-deps or --with-frontend" >&2
-    [ "$SILENT" = "0" ] && read -r -p "$(m "Exit") " || true
+PLAN="$(resolve_targets)"
+TARGET_COUNT="$(printf '%s' "$PLAN" | grep -c '|' || true)"
+if [ "$TARGET_COUNT" -eq 0 ]; then
+    warn "$(m NoTargets)"
     exit 1
 fi
 
-# ---------- 2. Go dependencies ----------
-echo "$(m "BackStart")"
-echo "$(m "BackInstallDeps")"
-go mod download || { echo "$(m "BackErrInstallDeps")" >&2; exit 1; }
+log ""
+log "=========================================================="
+log " SniShaper build"
+log " $(m HostInfo "$HOST_OS" "$HOST_ARCH" "$CI_MODE" "$CROSS_GUI")"
+log " $(m VersionInfo "$MANIFEST_VERSION" "$MANIFEST_CHANNEL")"
+log "=========================================================="
 
-# ---------- 3. Version injection ----------
-LDFLAGS="-s -w"
-if [ -n "$MANIFEST_VERSION" ]; then
-    LDFLAGS="$LDFLAGS -X snishaper/app.buildVersion=$MANIFEST_VERSION"
-fi
-if [ -n "$MANIFEST_CHANNEL" ]; then
-    LDFLAGS="$LDFLAGS -X snishaper/app.buildChannel=$MANIFEST_CHANNEL"
-fi
-echo "$(m "BackBuildVersion" "$MANIFEST_VERSION")"
+print_plan "$PLAN"
 
-# ---------- 4. Compile ----------
-OUT_DIR="build/bin"
-OUT_BIN="$OUT_DIR/SniShaper"
-mkdir -p "$OUT_DIR"
-
-GOFLAGS=""
-if [ ${#GTK_TAGS[@]} -gt 0 ]; then
-    GOFLAGS="-tags ${GTK_TAGS[*]}"
+if [ "$DRY_RUN" = "1" ]; then
+    log ""
+    log "$(m DryRunNote)"
+    exit 0
 fi
-echo "[backend] go build (tags: ${GTK_TAGS[*]:-gtk4})..."
-# shellcheck disable=SC2086
-go build $GOFLAGS -ldflags "$LDFLAGS" -o "$OUT_BIN" . || {
-    echo "$(m "BackErrBuild")" >&2
-    [ "$SILENT" = "0" ] && read -r -p "$(m "Exit") " || true
+
+NEED_FRONTEND=0
+if printf '%s' "$PLAN" | grep -q '^gui|.*|.*|build|'; then
+    NEED_FRONTEND=1
+fi
+
+if [ "$BUILD_BACKEND" = "0" ]; then
+    ensure_frontend
+    log ""
+    log "$(m Done)"
+    exit 0
+fi
+
+log ""
+log "$(m Start)"
+
+if [ "$NEED_FRONTEND" = "1" ]; then
+    ensure_frontend
+fi
+
+log ""
+log "$(m BackStart)"
+log "$(m BackInstallDeps)"
+go mod download || { warn "$(m BackErrInstallDeps)"; exit 1; }
+log "$(m BackBuildVersion "$MANIFEST_VERSION" "$MANIFEST_CHANNEL")"
+
+BUILT_OK=0
+BUILT_FAIL=0
+BUILT_SKIP=0
+FAILED_LIST=""
+
+OLD_IFS="$IFS"
+IFS='
+'
+for _line in $PLAN; do
+    IFS="$OLD_IFS"
+    if [ -z "$_line" ]; then
+        IFS='
+'
+        continue
+    fi
+    _t="$(printf '%s' "$_line" | cut -d'|' -f1)"
+    _p="$(printf '%s' "$_line" | cut -d'|' -f2)"
+    _a="$(printf '%s' "$_line" | cut -d'|' -f3)"
+    _st="$(printf '%s' "$_line" | cut -d'|' -f4)"
+    _note="$(printf '%s' "$_line" | cut -d'|' -f5)"
+
+    if [ "$_st" != "build" ]; then
+        log "[SKIP]  $(printf '%s' "$_t" | tr '[:lower:]' '[:upper:]') $(platform_dir "$_p") $_a - $_note"
+        BUILT_SKIP=$((BUILT_SKIP + 1))
+    else
+        if build_target "$_t" "$_p" "$_a"; then
+            BUILT_OK=$((BUILT_OK + 1))
+        else
+            BUILT_FAIL=$((BUILT_FAIL + 1))
+            FAILED_LIST="${FAILED_LIST}${_t} $(platform_dir "$_p") $_a
+"
+        fi
+    fi
+    IFS='
+'
+done
+IFS="$OLD_IFS"
+
+log ""
+log "=========================================================="
+log " $(m SummaryTitle)"
+log " $(m SummaryBuilt "$BUILT_OK")"
+log " $(m SummaryFailed "$BUILT_FAIL")"
+log " $(m SummarySkipped "$BUILT_SKIP")"
+log "=========================================================="
+
+if [ -n "$FAILED_LIST" ]; then
+    printf '%s' "$FAILED_LIST" >&2
+fi
+
+if [ "$BUILT_FAIL" -ne 0 ]; then
     exit 1
-}
-echo "[backend] Build complete: $OUT_BIN"
-
-# ---------- 5. Copy seed files ----------
-echo "$(m "BackCopyCore")"
-if [ -d rules ]; then
-    mkdir -p "$OUT_DIR/rules"
-    cp -r rules/* "$OUT_DIR/rules/" 2>/dev/null || true
 fi
-echo "$(m "BackCopyProxy")"
-if [ -d config ]; then
-    mkdir -p "$OUT_DIR/config"
-    cp -r config/* "$OUT_DIR/config/" 2>/dev/null || true
-fi
-echo "$(m "BackDone")"
 
-echo ""
-echo "=========================================="
-echo " Build OK: $OUT_BIN"
-echo " Run: sudo $OUT_BIN  (TUN/system proxy needs root)"
-echo "=========================================="
-
-fi  # end GUI build
-
-# ---------- Done ----------
-echo ""
-echo "=========================================="
-echo " $(m "AllDone")"
-echo "=========================================="
-
+log "$(m Done)"
 if [ "$SILENT" = "0" ]; then
-    read -r -p "$(m "Exit") " || true
+    read -r -p "$(m Exit) " || true
 fi

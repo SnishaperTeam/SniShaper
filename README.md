@@ -58,12 +58,12 @@ sudo ./SniShaper
 - **版本一致**：与 GUI 版共用 `Package.appxmanifest` 作为唯一版本源。
 
 ```bash
-# 仓库内构建 CLI（全平台：windows/linux/darwin x amd64/arm64）
-./build.sh --cli          # Unix / macOS
-.\build_windows.ps1 -Build backend -Cli -Silent   # Windows
+# 仓库内构建 CLI（全平台：windows/linux/darwin × x64/x86/arm64，共 7 目标）
+./build.sh --type cli --all   # Unix / macOS / WSL
+.\build_windows.ps1 -Type cli -All -Silent   # Windows
 
-# 产物在 build/bin/cli/，直接运行 TUI
-./build/bin/cli/snishaper-cli-linux-amd64
+# 产物按 build/bin/cli/<Platform>/<Arch>/ 组织，直接运行 TUI
+./build/bin/cli/Linux/x64/snishaper
 ```
 
 ### 证书重新安装
@@ -89,7 +89,84 @@ sudo ./SniShaper
 
 ## 构建与开发
 
-本项目基于 **Wails v3 + React 19 + MUI** 构建，后端使用 **Go**。同一仓库同时产出 Windows 与 Linux 可执行文件。
+本项目基于 **Wails v3 + React 19 + MUI** 构建，后端使用 **Go**。`build.sh`（Linux / macOS / WSL）与 `build_windows.ps1`（Windows）共用同一套目标矩阵、参数语义与输出目录。
+
+### 构建产物矩阵（12 个目标）
+
+| 类型 | 平台 | 架构 | 产物 |
+| --- | --- | --- | --- |
+| CLI | Windows | `x64` / `x86` / `arm64` | `build/bin/cli/Windows/<arch>/snishaper.exe` |
+| CLI | Linux | `x64` / `arm64` | `build/bin/cli/Linux/<arch>/snishaper` |
+| CLI | Darwin | `x64` / `arm64` | `build/bin/cli/Darwin/<arch>/snishaper` |
+| GUI | Windows | `x64` / `x86` / `arm64` | `build/bin/gui/Windows/<arch>/snishaper.exe` |
+| GUI | Linux | `x64` / `arm64` | `build/bin/gui/Linux/<arch>/SniShaper` |
+
+- 7 个 CLI + 5 个 GUI = **12 个目标**；每个目标目录都附带 `config/` 与 `rules/` 种子文件。
+- GUI 不构建 Darwin（Wails 桌面端仅支持 Windows / Linux）；`x86` 仅存在于 Windows。
+- GUI 依赖 GTK/WebKit（Linux）与前端产物，**只在同平台的原生环境构建**；CLI 是纯 Go（`CGO_ENABLED=0`），可在一个运行器上交叉产出全部 7 个目标。
+
+#### 静默参数
+
+| build.sh | build_windows.ps1 | 说明 |
+| --- | --- | --- |
+| `--platform` / `-p` | `-Platform`（数组：`windows,linux`） | 平台：`windows` / `linux` / `darwin` / `all` |
+| `--arch` / `-a` | `-Arch`（数组：`x64,arm64`） | 架构：`x64` / `x86` / `arm64` / `all` |
+| `--type` / `-t` | `-Type`（数组：`cli,gui`） | 类型：`cli` / `gui` / `all` |
+| `--all` | `-All` | 全部平台 + 全部架构（`--type` / `-Type` 仍可收窄） |
+| `--dry-run` | `-DryRun` | 只解析并打印构建计划，不执行构建 |
+| `--ci` | `-CI` | CI 模式：禁止交互、禁止导出交叉 `CC`/`CXX` |
+| `--cross` | `-Cross` | 本地开发：允许 Linux GUI 使用交叉工具链（`-CI` 下失效） |
+| `--install-deps` | `-InstallDeps` | 构建前端前执行 `npm install` |
+| `--gtk3` | `-Gtk3` | Linux GUI 改用 GTK3 + webkit2gtk-4.1 |
+| `--wails` | `-Wails` | 用 Wails CLI 构建 GUI（默认 `go build`） |
+| `--silent` | `-Silent` | 不交互 |
+| `--help` / `-h` | `-Help` | 显示帮助 |
+
+Windows 端 PowerShell 对同一个命名参数只绑定一次，重复取值请用数组语法（`-Type cli,gui`）；`build.sh` 支持 POSIX 重复写法（`--type cli --type gui`）。未指定的维度默认取全部。
+
+#### 示例
+
+```bash
+# Linux / macOS / WSL
+./build.sh --all                                              # 全部 12 个目标
+./build.sh --type cli --all                                   # 全部 7 个 CLI
+./build.sh --platform windows --arch arm64 --type cli --type gui
+./build.sh --ci --platform linux --arch arm64 --type cli --type gui
+./build.sh --dry-run --all                                    # 只看计划
+```
+
+```powershell
+# Windows
+.\build_windows.ps1 -All
+.\build_windows.ps1 -Type cli -All
+.\build_windows.ps1 -CI -Platform windows -Arch arm64 -Type cli,gui
+.\build_windows.ps1 -Platform windows -Arch x64 -Type gui -InstallDeps -BuildMsix
+.\build_windows.ps1 -DryRun -All
+```
+
+#### CI：ARM64 必须原生构建
+
+| 目标 | 运行器 | 说明 |
+| --- | --- | --- |
+| `linux/arm64` | `ubuntu-24.04-arm` | 原生 ARM64 Linux 运行器 |
+| `darwin/arm64` | `macos-14` | Apple Silicon 原生运行器 |
+| `darwin/x64` | `macos-15-intel` | `macos-13` 已于 2025-12-04 下线 |
+| `windows/arm64` | `windows-latest` | Go 以 `CGO_ENABLED=0` 直接产出 `windows/arm64`，不涉及交叉工具链；GitHub 提供原生 Windows ARM64 运行器后可切换 |
+
+`--ci` / `-CI` 下脚本不会导出任何 `CC`/`CXX`，因此 ARM64 任务的日志中不会出现 `aarch64-linux-gnu-gcc` 或 `osxcross`；CI 会额外检索这两个关键字，命中即判定失败。
+
+#### 交互式模式
+
+不带任何选择参数（且未加 `--silent` / `--ci`）运行时进入向导：选择语言 → 是否安装依赖 → 构建类型 → 平台 → 架构 → 是否允许交叉编译 → 确认构建计划。
+
+#### 产物校验
+
+```bash
+file build/bin/cli/Linux/arm64/snishaper      # ELF aarch64
+file build/bin/gui/Linux/arm64/SniShaper      # ELF aarch64
+```
+
+Windows 上可用 `dumpbin /headers build\bin\cli\Windows\arm64\snishaper.exe`，或读取 PE 头 machine 字段（`0x8664`=x64、`0xAA64`=arm64、`0x014C`=x86）。
 
 ### Windows 构建
 
@@ -117,7 +194,7 @@ pwsh -ExecutionPolicy Bypass -File .\build_windows.ps1
 | `-InstallDeps` | 无值（开关） | 构建前端前执行 `npm install` 安装 npm 依赖 |
 | `-BuildMsix` | 无值（开关） | 编译完成后生成 MSIX 安装包（需要 WinApp CLI） |
 | `-SkipSign` | 无值（开关） | 跳过 MSIX 签名，生成的文件添加 `unsigned_` 前缀（需配合 `-BuildMsix`） |
-| `-Cli` | 无值（开关） | 额外构建 headless CLI（`-Arch` 决定目标平台），输出到 `build/bin/cli/` |
+| `-Cli` | 无值（开关） | 额外构建 headless CLI（`-Arch` 决定目标平台），输出到 `build/bin/cli/<Platform>/<Arch>/` |
 | `-Gtk3` | 无值（开关） | Linux（WSL）构建时改用 GTK3 + webkit2gtk-4.1（等价于 `build.sh --gtk3`） |
 | `-Silent` | 无值（开关） | 静默模式，跳过所有交互提示；省略 `-Build` 时默认 `windows gui all`，省略 `-Lang` 时默认 `en` |
 
@@ -211,7 +288,7 @@ cd SniShaper
 ./build.sh --cli --arch x86
 ```
 
-构建产物：GUI 输出 `build/bin/SniShaper`（含 `rules/`、`config/` 种子文件，TUN / 系统代理需要 root，运行时 `sudo ./build/bin/SniShaper`）；CLI 输出 `build/bin/cli/snishaper-cli-<os>-<arch>[.exe]`。
+构建产物：GUI 输出 `build/bin/gui/Linux/<arch>/SniShaper`（含 `rules/`、`config/` 种子文件，TUN / 系统代理需要 root，运行时 `sudo ./build/bin/gui/Linux/x64/SniShaper`）；CLI 输出 `build/bin/cli/<Platform>/<arch>/snishaper[.exe]`。
 
 ### 版本与发布渠道
 
@@ -235,8 +312,9 @@ Windows 与 Linux 构建均从此文件读取版本信息，并通过 ldflags �
 构建产物：
 
 - 前端资源位于 `frontend/dist`
-- Windows 可执行文件位于 `build/bin/snishaper.exe`
-- Linux 可执行文件位于 `build/bin/SniShaper`
+- Windows GUI 位于 `build/bin/gui/Windows/<arch>/snishaper.exe`（默认 x64）
+- Linux GUI 位于 `build/bin/gui/Linux/<arch>/SniShaper`
+- CLI 位于 `build/bin/cli/{Windows,Linux,Darwin}/<arch>/snishaper[.exe]`
 
 ---
 

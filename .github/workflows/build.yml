@@ -12,8 +12,191 @@ permissions:
   pull-requests: write
 
 jobs:
-  windows-build:
-    runs-on: windows-2025
+  # ------------------------------------------------------------------
+  # Multi-platform / multi-architecture matrix.
+  #
+  # Every job builds exactly one (platform, arch) pair on the runner that
+  # matches it. ARM64 targets therefore never use a cross toolchain:
+  #   linux/arm64   -> ubuntu-24.04-arm   (native ARM64 Linux runner)
+  #   darwin/arm64  -> macos-14           (Apple Silicon)
+  #   windows/arm64 -> windows-latest     (Go emits windows/arm64 with
+  #                                        CGO_ENABLED=0: no cross toolchain;
+  #                                        switch to a native Windows ARM64
+  #                                        runner once GitHub offers one)
+  #   darwin/x64    -> macos-15-intel     (macos-13 was retired 2025-12-04)
+  #
+  # Both build scripts are invoked with the CI flag, which disables prompts
+  # and forbids exporting a cross CC/CXX. Every step additionally greps the
+  # build log for aarch64-linux-gnu / osxcross and fails if one appears.
+  # ------------------------------------------------------------------
+  matrix-build:
+    name: ${{ matrix.platform }}/${{ matrix.arch }} on ${{ matrix.runner }}
+    runs-on: ${{ matrix.runner }}
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: windows-latest
+            platform: windows
+            arch: x64
+            script: ps1
+          - runner: windows-latest
+            platform: windows
+            arch: x86
+            script: ps1
+          - runner: windows-latest
+            platform: windows
+            arch: arm64
+            script: ps1
+          - runner: ubuntu-latest
+            platform: linux
+            arch: x64
+            script: sh
+          - runner: ubuntu-24.04-arm
+            platform: linux
+            arch: arm64
+            script: sh
+          - runner: macos-15-intel
+            platform: darwin
+            arch: x64
+            script: sh
+          - runner: macos-14
+            platform: darwin
+            arch: arm64
+            script: sh
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install Linux GUI dependencies (GTK4 / WebKitGTK)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgtk-4-dev libwebkitgtk-6.0-dev
+
+      - name: Build (build.sh --ci)
+        if: matrix.script == 'sh'
+        shell: bash
+        run: |
+          set -o pipefail
+          chmod +x build.sh
+          ./build.sh --ci --platform "${{ matrix.platform }}" --arch "${{ matrix.arch }}" --type cli --type gui 2>&1 | tee build.log
+          if grep -Eqi 'aarch64-linux-gnu|osxcross' build.log; then
+            echo "::error::cross toolchain detected in a CI build"
+            exit 1
+          fi
+
+      - name: Build (build_windows.ps1 -CI)
+        if: matrix.script == 'ps1'
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          ./build_windows.ps1 -CI -Platform "${{ matrix.platform }}" -Arch "${{ matrix.arch }}" -Type cli,gui *>&1 | Tee-Object -FilePath build.log
+          if ($LASTEXITCODE -ne 0) {
+            Write-Host "::error::build_windows.ps1 failed"
+            exit $LASTEXITCODE
+          }
+          $bad = Select-String -Path build.log -Pattern 'aarch64-linux-gnu|osxcross' -ErrorAction SilentlyContinue
+          if ($bad) {
+            Write-Host "::error::cross toolchain detected in a CI build"
+            exit 1
+          }
+
+      - name: Verify artifacts (Unix)
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          find build/bin -type f \( -name 'snishaper' -o -name 'SniShaper' -o -name 'snishaper.exe' \) -print -exec file {} \;
+
+      - name: Verify artifacts (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $machines = @{ 0x8664 = 'x64'; 0xAA64 = 'arm64'; 0x014C = 'x86' }
+          $bins = Get-ChildItem -Path build\bin -Recurse -Include 'snishaper.exe'
+          if (-not $bins) { Write-Host "::error::no binary produced"; exit 1 }
+          $bins | ForEach-Object {
+            $fs = [System.IO.File]::OpenRead($_.FullName)
+            $fs.Seek(0x3C, 'Begin') | Out-Null
+            $buf = New-Object byte[] 4
+            $fs.Read($buf, 0, 4) | Out-Null
+            $pe = [BitConverter]::ToUInt32($buf, 0)
+            $fs.Seek($pe + 4, 'Begin') | Out-Null
+            $m = New-Object byte[] 2
+            $fs.Read($m, 0, 2) | Out-Null
+            $fs.Close()
+            $id = [BitConverter]::ToUInt16($m, 0)
+            Write-Host ("{0} -> {1}" -f $_.FullName, $machines[$id])
+          }
+
+      - name: Upload build output
+        uses: actions/upload-artifact@v7
+        with:
+          name: snishaper-${{ matrix.platform }}-${{ matrix.arch }}
+          path: build/bin/**
+          if-no-files-found: error
+          retention-days: 7
+
+  # ------------------------------------------------------------------
+  # CLI matrix in a single job: the CLI is pure Go with CGO_ENABLED=0, so
+  # one runner emits all seven targets without any cross toolchain.
+  # ------------------------------------------------------------------
+  cli-build:
+    name: CLI (all 7 targets)
+    runs-on: windows-latest
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+
+      - name: Build every CLI target
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          ./build_windows.ps1 -CI -Type cli -All -Silent
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Smoke test
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          Get-ChildItem -Path build\bin\cli -Recurse -File |
+            Where-Object { $_.Name -eq 'snishaper' -or $_.Name -eq 'snishaper.exe' } |
+            ForEach-Object { Write-Host "built: $($_.FullName)" }
+          $v = (& .\build\bin\cli\Windows\x64\snishaper.exe version).Trim()
+          Write-Host "::notice::CLI version: $v"
+          if (-not $v) { Write-Host "::error::empty CLI version"; exit 1 }
+          & .\build\bin\cli\Windows\x64\snishaper.exe help | Out-Null
+          if ($LASTEXITCODE -ne 0) { Write-Host "::error::CLI help failed"; exit 1 }
+
+      - name: Upload CLI output
+        uses: actions/upload-artifact@v7
+        with:
+          name: cli-all-targets
+          path: build/bin/cli/**
+          if-no-files-found: error
+          retention-days: 7
+
+  # ------------------------------------------------------------------
+  # Windows packaging: MSIX (signed + unsigned) plus the portable 7z.
+  # ------------------------------------------------------------------
+  windows-package:
+    name: Windows MSIX + 7z
+    runs-on: windows-latest
 
     steps:
       - uses: actions/checkout@v7
@@ -41,8 +224,7 @@ jobs:
               Invoke-WebRequest -Uri $url -OutFile "$env:TEMP\winappcli_x64.msix" -ErrorAction Stop
               Add-AppxPackage -Path "$env:TEMP\winappcli_x64.msix" -ErrorAction Stop
               $pkg = Get-AppxPackage -Name "*WinApp*" | Select-Object -First 1
-              $installPath = $pkg.InstallLocation
-              Add-Content -Path $env:GITHUB_PATH -Value $installPath
+              Add-Content -Path $env:GITHUB_PATH -Value $pkg.InstallLocation
             }
           }
           winapp --version
@@ -52,97 +234,47 @@ jobs:
 
       - name: Build, package & sign MSIX
         shell: pwsh
-        run: ./build_windows.ps1 -Build windows,gui,all -InstallDeps -BuildMsix -Silent
+        run: |
+          $ErrorActionPreference = 'Stop'
+          ./build_windows.ps1 -Platform windows -Arch x64 -Type gui -InstallDeps -BuildMsix -Silent
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - name: Create 7z archive
-        run: 7z a -mx=9 snishaper-windows-amd64.7z .\build\bin\*
+        run: 7z a -mx=9 snishaper-windows-x64.7z .\build\bin\gui\Windows\x64\*
 
       - name: Create cert install batch
         shell: pwsh
         run: |
-          $msix = Get-ChildItem -Path Apppackage -Filter "*.msix" | Select-Object -First 1
-          $bat = '@echo off', 'chcp 65001 > nul', "echo Installing certificate to Trusted Root Certification Authorities...", "certutil -f -importpfx `"%~dp0devcert.pfx`" password", "echo Installing MSIX package...", "powershell -Command `"Add-AppxPackage -Path '%~dp0$($msix.Name)'`"", "echo Done!", "pause"
-          $bat -join "`r`n" | Set-Content -Path install.bat
+          $ErrorActionPreference = 'Stop'
+          $msix = Get-ChildItem -Path Apppackage -Filter "*.msix" | Where-Object { $_.Name -notlike 'unsigned_*' } | Select-Object -First 1
+          if (-not $msix) { Write-Host "::error::no signed msix for install.bat"; exit 1 }
+          $bat = @(
+            '@echo off'
+            'chcp 65001 > nul'
+            'echo Installing certificate to Trusted Root Certification Authorities...'
+            'certutil -f -importpfx "%~dp0devcert.pfx" password'
+            'echo Installing MSIX package...'
+            "powershell -Command `"Add-AppxPackage -Path '%~dp0$($msix.Name)'`""
+            'echo Done!'
+            'pause'
+          )
+          ($bat -join "`r`n") | Set-Content -Path install.bat -Encoding ASCII
 
       - name: Stage artifacts
         shell: pwsh
         run: |
+          $ErrorActionPreference = 'Stop'
           New-Item -ItemType Directory -Path staging -Force | Out-Null
-          Copy-Item (Get-Item Apppackage\*.msix).FullName staging\ -ErrorAction Stop
-          Copy-Item (Get-Item snishaper-windows-amd64.7z).FullName staging\ -ErrorAction Stop
+          Copy-Item (Get-Item Apppackage\*.msix).FullName staging\
+          Copy-Item (Get-Item snishaper-windows-x64.7z).FullName staging\
           if (Test-Path devcert.pfx) { Copy-Item devcert.pfx staging\ }
           if (Test-Path install.bat) { Copy-Item install.bat staging\ }
-          Write-Host "Staged files:" -ForegroundColor Green
           Get-ChildItem staging | ForEach-Object { Write-Host "  $($_.Name)" }
 
-  linux-build:
-    runs-on: ubuntu-24.04
-
-    steps:
-      - uses: actions/checkout@v7
-
-      - uses: actions/setup-go@v7
+      - name: Upload Windows package
+        uses: actions/upload-artifact@v7
         with:
-          go-version-file: go.mod
-
-      - uses: actions/setup-node@v7
-        with:
-          node-version: 24
-          cache: npm
-          cache-dependency-path: frontend/package-lock.json
-
-      - name: Install GTK4/WebKitGTK dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y libgtk-4-dev libwebkitgtk-6.0-dev
-
-      - name: Build Linux
-        run: |
-          set -euo pipefail
-          chmod +x build.sh
-          ./build.sh --build linux,gui,all --install-deps --silent
-          test -f build/bin/SniShaper && echo "::notice::build/bin/SniShaper ready"
-
-      - name: Smoke test binary
-        run: |
-          set -euo pipefail
-          file build/bin/SniShaper
-          ./build/bin/SniShaper --version 2>&1 | head -5 || true
-
-  cli-build:
-    name: CLI build (all targets)
-    runs-on: windows-2025
-
-    steps:
-      - uses: actions/checkout@v7
-
-      - uses: actions/setup-go@v7
-        with:
-          go-version-file: go.mod
-
-      - name: Build CLI (6 targets)
-        shell: pwsh
-        run: |
-          $ErrorActionPreference = 'Stop'
-          $platforms = @("windows", "linux", "darwin")
-          $archs = @("amd64", "arm64")
-          foreach ($goos in $platforms) {
-            foreach ($goarch in $archs) {
-              $name = "snishaper-cli-$goos-$goarch"
-              if ($goos -eq "windows") { $name += ".exe" }
-              Write-Host "building $goos/$goarch -> $name"
-              $env:GOOS = $goos
-              $env:GOARCH = $goarch
-              $env:CGO_ENABLED = "0"
-              go build -tags "with_gvisor headless" -ldflags "-s -w" -o $name ./cli
-              if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-            }
-          }
-          Remove-Item Env:GOOS, Env:GOARCH, Env:CGO_ENABLED -ErrorAction SilentlyContinue
-
-      - name: Smoke test
-        shell: pwsh
-        run: |
-          .\snishaper-cli-windows-amd64.exe version
-          .\snishaper-cli-windows-amd64.exe help | Out-Null
-          Write-Host "CLI 6-target build OK" -ForegroundColor Green
+          name: windows-package
+          path: staging/**
+          if-no-files-found: error
+          retention-days: 7

@@ -67,7 +67,41 @@ sudo ./SniShaper
 
 ## Сборка и разработка
 
-Проект построен с использованием **Wails v3 + React 19 + MUI** с бэкендом на **Go**. Один и тот же репозиторий производит исполняемые файлы для Windows и Linux.
+Проект построен с использованием **Wails v3 + React 19 + MUI** с бэкендом на **Go**. Скрипты `build.sh` (Linux / macOS / WSL) и `build_windows.ps1` (Windows) используют общую матрицу целей и структуру выходных каталогов.
+
+### Матрица артефактов (12 целей)
+
+| Тип | Платформа | Архитектура | Артефакт |
+| --- | --- | --- | --- |
+| CLI | Windows | `x64` / `x86` / `arm64` | `build/bin/cli/Windows/<arch>/snishaper.exe` |
+| CLI | Linux | `x64` / `arm64` | `build/bin/cli/Linux/<arch>/snishaper` |
+| CLI | Darwin | `x64` / `arm64` | `build/bin/cli/Darwin/<arch>/snishaper` |
+| GUI | Windows | `x64` / `x86` / `arm64` | `build/bin/gui/Windows/<arch>/snishaper.exe` |
+| GUI | Linux | `x64` / `arm64` | `build/bin/gui/Linux/<arch>/SniShaper` |
+
+7 CLI + 5 GUI = **12 целей**; каждая папка цели также содержит seed-каталоги `config/` и `rules/`. GUI не собирается для Darwin, а `x86` существует только для Windows. GUI требует GTK/WebKit (Linux) и сборку фронтенда, поэтому собирается только на нативном хосте той же ОС; CLI — чистый Go (`CGO_ENABLED=0`), все семь целей можно собрать на одном раннере без кросс-тулчейна.
+
+Флаги (`build.sh` / `build_windows.ps1`): `--platform` / `-Platform`, `--arch` / `-Arch`, `--type` / `-Type` (повторяемые; в PowerShell используется форма со списком через запятую, например `-Type cli,gui`), `--all` / `-All`, `--dry-run` / `-DryRun`, `--ci` / `-CI` (без запросов, никогда не экспортирует кросс `CC`/`CXX`), `--cross` / `-Cross` (только локально), `--install-deps` / `-InstallDeps`, `--gtk3` / `-Gtk3`, `--wails` / `-Wails`, `--silent` / `-Silent`, `--help` / `-Help`.
+
+```bash
+# Linux / macOS / WSL
+./build.sh --all                                            # все 12 целей
+./build.sh --type cli --all                                 # все 7 CLI-целей
+./build.sh --ci --platform linux --arch arm64 --type cli --type gui
+./build.sh --dry-run --all                                  # только план
+```
+
+```powershell
+# Windows
+.\build_windows.ps1 -All
+.\build_windows.ps1 -Type cli -All
+.\build_windows.ps1 -CI -Platform windows -Arch arm64 -Type cli,gui
+.\build_windows.ps1 -Platform windows -Arch x64 -Type gui -InstallDeps -BuildMsix
+```
+
+**CI: ARM64 собирается только нативно.** `linux/arm64` — на `ubuntu-24.04-arm`, `darwin/arm64` — на `macos-14` (Apple Silicon), `darwin/x64` — на `macos-15-intel` (`macos-13` снят 2025-12-04); `windows/arm64` формируется Go с `CGO_ENABLED=0` на `windows-latest` (кросс-тулчейн не используется). В режиме `--ci` скрипты не экспортируют `CC`/`CXX`, поэтому в журналах ARM64 не может появиться `aarch64-linux-gnu-gcc` или `osxcross`; задание CI дополнительно проверяет журнал и падает при обнаружении.
+
+Запуск без флагов выбора открывает интерактивный мастер (язык, тип, платформа, архитектура, опциональный кросс-тулчейн, подтверждение плана). Проверка артефактов: `file build/bin/gui/Linux/arm64/SniShaper` (ELF aarch64) либо на Windows `dumpbin /headers ...` / поле machine в PE-заголовке.
 
 ### Сборка Windows
 
@@ -95,7 +129,7 @@ pwsh -ExecutionPolicy Bypass -File .\build_windows.ps1
 | `-InstallDeps` | без значений (флаг) | Выполнить `npm install` перед сборкой фронтенда |
 | `-BuildMsix` | без значений (флаг) | Собрать MSIX-пакет после компиляции (требуется WinApp CLI) |
 | `-SkipSign` | без значений (флаг) | Пропустить подпись MSIX, выходной файл получит префикс `unsigned_` (требуется `-BuildMsix`) |
-| `-Cli` | без значений (флаг) | Дополнительно собрать headless CLI (целевые платформы определяются `-Arch`) в `build/bin/cli/` |
+| `-Cli` | без значений (флаг) | Дополнительно собрать headless CLI (целевые платформы определяются `-Arch`) в `build/bin/cli/<Platform>/<Arch>/` |
 | `-Gtk3` | без значений (флаг) | Использовать GTK3 + webkit2gtk-4.1 для сборки Linux (WSL) (аналог `build.sh --gtk3`) |
 | `-Silent` | без значений (флаг) | Тихий режим без интерактивных запросов; по умолчанию `-Build windows gui all` и `-Lang en` |
 
@@ -189,7 +223,7 @@ cd SniShaper
 ./build.sh --cli --arch x86
 ```
 
-Результат сборки записывается в `build/bin/SniShaper` (включая seed-файлы `rules/` и `config/`). TUN / системный прокси требуют root; запускайте с `sudo ./build/bin/SniShaper`.
+Результат сборки записывается в `build/bin/gui/Linux/<arch>/SniShaper` (включая seed-файлы `rules/` и `config/`). TUN / системный прокси требуют root; запускайте с `sudo ./build/bin/gui/Linux/x64/SniShaper`. CLI-бинарники находятся в `build/bin/cli/<Platform>/<Arch>/`.
 
 ### Версия и канал выпуска
 
@@ -213,8 +247,9 @@ cd SniShaper
 Результаты сборки:
 
 - Ресурсы фронтенда находятся в `frontend/dist`
-- Исполняемый файл Windows: `build/bin/snishaper.exe`
-- Исполняемый файл Linux: `build/bin/SniShaper`
+- GUI Windows: `build/bin/gui/Windows/<arch>/snishaper.exe` (по умолчанию x64)
+- GUI Linux: `build/bin/gui/Linux/<arch>/SniShaper`
+- CLI: `build/bin/cli/{Windows,Linux,Darwin}/<arch>/snishaper[.exe]`
 
 ---
 

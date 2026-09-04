@@ -67,7 +67,41 @@ For detailed technical principles, deployment tutorials, and customization guide
 
 ## Build and Development
 
-This project is built with **Wails v3 + React 19 + MUI**, with a **Go** backend. The same repository produces both the Windows and Linux executables.
+This project is built with **Wails v3 + React 19 + MUI**, with a **Go** backend. `build.sh` (Linux / macOS / WSL) and `build_windows.ps1` (Windows) share one target matrix and output layout.
+
+### Artifact matrix (12 targets)
+
+| Type | Platform | Arch | Output |
+| --- | --- | --- | --- |
+| CLI | Windows | `x64` / `x86` / `arm64` | `build/bin/cli/Windows/<arch>/snishaper.exe` |
+| CLI | Linux | `x64` / `arm64` | `build/bin/cli/Linux/<arch>/snishaper` |
+| CLI | Darwin | `x64` / `arm64` | `build/bin/cli/Darwin/<arch>/snishaper` |
+| GUI | Windows | `x64` / `x86` / `arm64` | `build/bin/gui/Windows/<arch>/snishaper.exe` |
+| GUI | Linux | `x64` / `arm64` | `build/bin/gui/Linux/<arch>/SniShaper` |
+
+7 CLI + 5 GUI = **12 targets**; every target directory also carries the `config/` and `rules/` seed folders. GUI is never built for Darwin, and `x86` exists on Windows only. The GUI needs GTK/WebKit (Linux) and the frontend build, so it only builds on a same-OS native host; the CLI is pure Go (`CGO_ENABLED=0`) and all seven targets can be emitted from one runner without any cross toolchain.
+
+Flags (`build.sh` / `build_windows.ps1`): `--platform` / `-Platform`, `--arch` / `-Arch`, `--type` / `-Type` (repeatable; PowerShell uses the comma-array form, e.g. `-Type cli,gui`), `--all` / `-All`, `--dry-run` / `-DryRun`, `--ci` / `-CI` (no prompts, never exports cross `CC`/`CXX`), `--cross` / `-Cross` (local only), `--install-deps` / `-InstallDeps`, `--gtk3` / `-Gtk3`, `--wails` / `-Wails`, `--silent` / `-Silent`, `--help` / `-Help`.
+
+```bash
+# Linux / macOS / WSL
+./build.sh --all                                            # all 12 targets
+./build.sh --type cli --all                                 # all 7 CLI targets
+./build.sh --ci --platform linux --arch arm64 --type cli --type gui
+./build.sh --dry-run --all                                  # plan only
+```
+
+```powershell
+# Windows
+.\build_windows.ps1 -All
+.\build_windows.ps1 -Type cli -All
+.\build_windows.ps1 -CI -Platform windows -Arch arm64 -Type cli,gui
+.\build_windows.ps1 -Platform windows -Arch x64 -Type gui -InstallDeps -BuildMsix
+```
+
+**CI: ARM64 must be built natively.** `linux/arm64` runs on `ubuntu-24.04-arm`, `darwin/arm64` on `macos-14` (Apple Silicon), `darwin/x64` on `macos-15-intel` (`macos-13` was retired 2025-12-04); `windows/arm64` is emitted by Go with `CGO_ENABLED=0` on `windows-latest` (no cross toolchain involved). Under `--ci` the scripts never export `CC`/`CXX`, so ARM64 logs cannot contain `aarch64-linux-gnu-gcc` or `osxcross`; the CI job greps the log and fails if either appears.
+
+Running with no selection flags opens the interactive wizard (language, type, platform, arch, optional cross toolchain, then confirmation of the plan). Verify artifacts with `file build/bin/gui/Linux/arm64/SniShaper` (ELF aarch64) or, on Windows, `dumpbin /headers ...` / the PE machine field.
 
 ### Windows Build
 
@@ -95,7 +129,7 @@ pwsh -ExecutionPolicy Bypass -File .\build_windows.ps1
 | `-InstallDeps` | No value (switch) | Run `npm install` before the frontend build |
 | `-BuildMsix` | No value (switch) | Build an MSIX installer after compilation (requires WinApp CLI) |
 | `-SkipSign` | No value (switch) | Skip MSIX signing, output file gets `unsigned_` prefix (requires `-BuildMsix`) |
-| `-Cli` | No value (switch) | Additionally build the headless CLI (target platforms determined by `-Arch`) into `build/bin/cli/` |
+| `-Cli` | No value (switch) | Additionally build the headless CLI (target platforms determined by `-Arch`) into `build/bin/cli/<Platform>/<Arch>/` |
 | `-Gtk3` | No value (switch) | Use GTK3 + webkit2gtk-4.1 for Linux (WSL) builds (equivalent to `build.sh --gtk3`) |
 | `-Silent` | No value (switch) | Silent mode, skip all interactive prompts; defaults to `-Build windows gui all` and `-Lang en` when omitted |
 
@@ -189,7 +223,7 @@ cd SniShaper
 ./build.sh --cli --arch x86
 ```
 
-Build output is written to `build/bin/SniShaper` (including `rules/` and `config/` seed files). TUN / system proxy require root; run with `sudo ./build/bin/SniShaper`.
+Build output is written to `build/bin/gui/Linux/<arch>/SniShaper` (including `rules/` and `config/` seed files). TUN / system proxy require root; run with `sudo ./build/bin/gui/Linux/x64/SniShaper`. CLI binaries land in `build/bin/cli/<Platform>/<Arch>/`.
 
 ### Version & Release Channel
 
@@ -213,8 +247,9 @@ Both the Windows and Linux builds read from this file and inject the values via 
 Build outputs:
 
 - Frontend assets at `frontend/dist`
-- Windows executable at `build/bin/snishaper.exe`
-- Linux executable at `build/bin/SniShaper`
+- Windows GUI at `build/bin/gui/Windows/<arch>/snishaper.exe` (x64 by default)
+- Linux GUI at `build/bin/gui/Linux/<arch>/SniShaper`
+- CLI at `build/bin/cli/{Windows,Linux,Darwin}/<arch>/snishaper[.exe]`
 
 ---
 
