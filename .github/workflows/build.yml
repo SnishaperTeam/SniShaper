@@ -41,22 +41,27 @@ jobs:
             platform: windows
             arch: x64
             script: ps1
+            npm: true
           - runner: windows-latest
             platform: windows
             arch: x86
             script: ps1
+            npm: true
           - runner: windows-latest
             platform: windows
             arch: arm64
             script: ps1
+            npm: true
           - runner: ubuntu-latest
             platform: linux
             arch: x64
             script: sh
+            npm: true
           - runner: ubuntu-24.04-arm
             platform: linux
             arch: arm64
             script: sh
+            npm: true
           - runner: macos-15-intel
             platform: darwin
             arch: x64
@@ -78,6 +83,11 @@ jobs:
           node-version: 24
           cache: npm
           cache-dependency-path: frontend/package-lock.json
+
+      - name: Install frontend npm dependencies
+        if: matrix.npm == true
+        working-directory: frontend
+        run: npm ci
 
       - name: Install Linux GUI dependencies (GTK4 / WebKitGTK)
         if: runner.os == 'Linux'
