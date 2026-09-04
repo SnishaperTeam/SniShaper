@@ -529,7 +529,7 @@ if [ "$CI_MODE" = "1" ] && [ "$CROSS_GUI" = "1" ]; then
 fi
 
 # ---------- Toolchain presence ----------
-command -v go >/dev/null 2>&1 || die "Go not found, install Go 1.25+ (see go.mod)"
+command -v go >/dev/null 2>&1 || die "Go not found, install Go 1.27+ (see go.mod)"
 
 # ---------- Host detection ----------
 HOST_OS="$(go env GOOS 2>/dev/null || true)"

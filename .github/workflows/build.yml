@@ -14,10 +14,9 @@ permissions:
 jobs:
   # ------------------------------------------------------------------
   # GUI matrix — one (platform, arch) pair per job, GUI builds only.
-  #
-  # The CLI is pure Go with CGO_ENABLED=0, so all seven CLI targets are
-  # produced once by the dedicated cli-build job below instead of being
-  # rebuilt inside every matrix job.
+  # The CLI is pure Go with CGO_ENABLED=0 and is produced by the dedicated
+  # CLI jobs below (windows/linux cross-built once on windows-latest,
+  # darwin built natively on macOS runners), so nothing is built twice.
   #
   # ARM64 GUI targets never use a cross toolchain:
   #   linux/arm64  -> ubuntu-24.04-arm   (native ARM64 Linux runner)
@@ -137,11 +136,11 @@ jobs:
           }
 
   # ------------------------------------------------------------------
-  # CLI matrix in a single job: seven targets, CGO_ENABLED=0, no cross
-  # toolchain required. This is the only place the CLI is built.
+  # CLI: Windows + Linux, cross-built once on a Windows runner. Pure Go,
+  # CGO_ENABLED=0, no cross toolchain. Darwin is handled natively below.
   # ------------------------------------------------------------------
   cli-build:
-    name: CLI (all 7 targets)
+    name: CLI (windows + linux, 5 targets)
     runs-on: windows-latest
 
     steps:
@@ -151,14 +150,14 @@ jobs:
         with:
           go-version-file: go.mod
 
-      - name: Build every CLI target
+      - name: Build CLI targets
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
-          ./build_windows.ps1 -CI -Type cli -All -Silent
+          ./build_windows.ps1 -CI -Platform windows,linux -Type cli -Silent
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
-      - name: Verify all seven targets exist
+      - name: Verify all five targets exist
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
@@ -167,9 +166,7 @@ jobs:
             'build\bin\cli\Windows\x86\snishaper.exe',
             'build\bin\cli\Windows\arm64\snishaper.exe',
             'build\bin\cli\Linux\x64\snishaper',
-            'build\bin\cli\Linux\arm64\snishaper',
-            'build\bin\cli\Darwin\x64\snishaper',
-            'build\bin\cli\Darwin\arm64\snishaper'
+            'build\bin\cli\Linux\arm64\snishaper'
           )
           foreach ($f in $expected) {
             if (-not (Test-Path $f)) { Write-Host "::error::missing $f"; exit 1 }
@@ -185,3 +182,53 @@ jobs:
           if (-not $v) { Write-Host "::error::empty CLI version"; exit 1 }
           & .\build\bin\cli\Windows\x64\snishaper.exe help | Out-Null
           if ($LASTEXITCODE -ne 0) { Write-Host "::error::CLI help failed"; exit 1 }
+
+  # ------------------------------------------------------------------
+  # CLI: Darwin, built natively and smoke-tested on real macOS runners.
+  #   darwin/x64  -> macos-15-intel (macos-13 was retired 2025-12-04)
+  #   darwin/arm64-> macos-14      (Apple Silicon)
+  # ------------------------------------------------------------------
+  darwin-cli:
+    name: CLI ${{ matrix.platform }}/${{ matrix.arch }} on ${{ matrix.runner }}
+    runs-on: ${{ matrix.runner }}
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-15-intel
+            platform: darwin
+            arch: x64
+          - runner: macos-14
+            platform: darwin
+            arch: arm64
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+
+      - name: Build CLI (build.sh --ci)
+        shell: bash
+        run: |
+          set -o pipefail
+          chmod +x build.sh
+          ./build.sh --ci --platform "${{ matrix.platform }}" --arch "${{ matrix.arch }}" --type cli 2>&1 | tee build.log
+          if grep -Eqi 'aarch64-linux-gnu|osxcross' build.log; then
+            echo "::error::cross toolchain detected in a CI build"
+            exit 1
+          fi
+
+      - name: Verify and smoke test
+        shell: bash
+        run: |
+          set -euo pipefail
+          BIN="build/bin/cli/Darwin/${{ matrix.arch }}/snishaper"
+          file "$BIN"
+          chmod +x "$BIN"
+          V="$("$BIN" version)"
+          echo "::notice::CLI (${{ matrix.platform }}/${{ matrix.arch }}) version: $V"
+          if [ -z "$V" ]; then echo "::error::empty CLI version"; exit 1; fi
+          "$BIN" help >/dev/null
