@@ -172,12 +172,12 @@ def main():
         results.append(check("artifact build/bin/cli/Windows/x64/snishaper.exe", os.path.isfile(path)))
 
     if args.scope in ("gui", "all"):
-        code, out, err = powershell(["-CI", "-Platform", "windows", "-Arch", "x64", "-Type", "gui"], args.timeout)
-        show("ps1 -CI -Platform windows -Arch x64 -Type gui (real build)", code, out, err)
-        results.append(check("ps1 GUI windows/x64 exit 0", code == 0, "exit=%d" % code))
-        for platform, arch, name in [("Windows", "x64", "snishaper.exe")]:
-            path = os.path.join(ROOT, "build", "bin", "gui", platform, arch, name)
-            results.append(check("artifact gui/%s/%s/%s" % (platform, arch, name), os.path.isfile(path)))
+        for arch in ("x64", "arm64"):
+            code, out, err = powershell(["-CI", "-Platform", "windows", "-Arch", arch, "-Type", "gui"], args.timeout)
+            show("ps1 -CI -Platform windows -Arch %s -Type gui (real build)" % arch, code, out, err)
+            results.append(check("ps1 GUI windows/%s exit 0" % arch, code == 0, "exit=%d" % code))
+            path = os.path.join(ROOT, "build", "bin", "gui", "Windows", arch, "snishaper.exe")
+            results.append(check("artifact gui/Windows/%s/snishaper.exe" % arch, os.path.isfile(path)))
 
     print("")
     print("=" * 78)

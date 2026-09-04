@@ -843,6 +843,19 @@ function Invoke-FrontendBuild {
 function Sync-VersionResource {
     param([string]$TargetGoArch)
 
+    # go-winres runs as a host binary, so on an amd64 host it can only emit
+    # amd64/386 objects. Regenerating "for" arm64 either fails or falls back
+    # to the wrong architecture, which breaks the arm64 link with "unknown
+    # ARM64 relocation type". The committed snishaper.syso is arch-neutral
+    # and links fine on every Windows target, so it is reused for everything
+    # but amd64 (the MSIX/release path, which needs the fresh version).
+    if ($TargetGoArch -ne "amd64") {
+        if (Test-Path (Join-Path $ProjectRoot "snishaper.syso")) {
+            Write-Host "[Backend] $TargetGoArch target: reusing committed snishaper.syso (go-winres cannot emit $TargetGoArch on this host)" -ForegroundColor Yellow
+        }
+        return
+    }
+
     $utf8NoBom = New-Object System.Text.UTF8Encoding $false
     $WinResPath = Join-Path $ProjectRoot "winres\winres.json"
     $SysoPath = Join-Path $ProjectRoot "snishaper.syso"
@@ -872,12 +885,6 @@ function Sync-VersionResource {
                 Write-Host (msg -Key "BackSyncVerFail") -ForegroundColor Yellow
             } else {
                 $genSyso = Get-ChildItem -Path $WinResTmp -Filter "*_windows_$TargetGoArch.syso" -ErrorAction SilentlyContinue | Select-Object -First 1
-                if (-not $genSyso) {
-                    $genSyso = Get-ChildItem -Path $WinResTmp -Filter "*_windows_amd64.syso" -ErrorAction SilentlyContinue | Select-Object -First 1
-                }
-                if (-not $genSyso) {
-                    $genSyso = Get-ChildItem -Path $WinResTmp -Filter "*.syso" -ErrorAction SilentlyContinue | Select-Object -First 1
-                }
                 if ($genSyso) {
                     Copy-Item $genSyso.FullName $SysoPath -Force
                     Write-Host (msg -Key "BackSyncVerDone" -Arg0 $mainVer) -ForegroundColor Green
