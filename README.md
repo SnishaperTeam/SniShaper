@@ -10,6 +10,8 @@
 
 > 需要无图形界面的终端版本？本仓库内置 **SniShaper CLI**（`cli/` 目录）——跨平台（Windows / Linux / macOS）headless 版，内置 TUI 分屏界面（实时日志 + 命令面板），保留全部核心代理能力，与 GUI 共用 `Package.appxmanifest` 版本源。
 
+> 需要 Android 移动端？请参见 **Lumine for Android**（<https://github.com/SniShaper/lumine-for-android>）——基于相同路由理念的移动端配套版本：Kotlin + Jetpack Compose（Material Design 3）原生界面，Go（enimul）核心经 gomobile 绑定为单个 AAR，无 WebView 内嵌；支持订阅管理、规则编辑、实时日志与后台保活，也可通过 F-Droid（`com.moi.lumine`）获取。
+
 ---
 
 ## 特性
