@@ -8,6 +8,8 @@
 
 This is a **dual-platform (Windows & Linux)** repository. Both platforms share the same codebase and versioning mechanism; platform-specific logic is isolated with Go build tags.
 
+> Need an Android client? See **Lumine for Android** (<https://github.com/SniShaper/lumine-for-android>) -- the mobile companion sharing the same routing concepts: a native Kotlin + Jetpack Compose (Material Design 3) UI with the Go (enimul) core bound via gomobile into a single AAR and no embedded WebView. It supports subscription management, rule editing, real-time logs and background keep-alive, and is also available on F-Droid (`com.moi.lumine`).
+
 ---
 
 ## Features
