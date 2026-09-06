@@ -396,16 +396,12 @@ jobs:
               activity_match = re.search(config["old_activity"], text, re.S)
               if activity_match:
                   activity_body = activity_match.group(0).split("\n", 1)[1].strip()
+                  marker_match = re.search(r"<!-- CONTRIBUTORS:START -->.*?<!-- CONTRIBUTORS:END -->", activity_body, re.S)
+                  if marker_match:
+                      activity_body = activity_body[marker_match.end():].strip()
                   text = text[:activity_match.start()] + text[activity_match.end():]
               else:
-                  section_re = re.compile(r"## " + re.escape(config["section"]) + r"\n.*?(?=\n---\n\n## " + re.escape(config["license"]) + r")", re.S)
-                  merged_match = section_re.search(text)
-                  if not merged_match:
-                      raise SystemExit(f"merged activity section not found in {config['path']}")
-                  body = merged_match.group(0).split("\n", 1)[1].strip()
-                  marker_match = re.search(r"<!-- CONTRIBUTORS:START -->.*?<!-- CONTRIBUTORS:END -->", body, re.S)
-                  activity_body = body[marker_match.end():].strip() if marker_match else body
-                  text = text[:merged_match.start()] + text[merged_match.end():]
+                  raise SystemExit(f"activity section not found in {config['path']}")
 
               text = re.sub(config["old_contributor"], "", text, count=1, flags=re.S)
               if config["graph"]:
