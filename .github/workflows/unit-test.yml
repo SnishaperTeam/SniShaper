@@ -59,7 +59,7 @@ jobs:
 
       - name: Upload test log
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: unit-test-log
           path: ${{ runner.temp }}/unit-test.log
@@ -84,7 +84,7 @@ jobs:
       # and pull_request to avoid self-triggering loops.
       - name: Open PR for newly generated tests
         if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'
-        uses: peter-evans/create-pull-request@v6
+        uses: peter-evans/create-pull-request@v8
         with:
           branch: gen-tests/update
           title: "chore: update generated unit tests"
