@@ -277,15 +277,6 @@ Windows и Linux собираются из одного репозитория, 
 - [DoH-ECH-Demo](https://github.com/0xCaner/DoH-ECH-Demo)
 - [lumine](https://github.com/moi-si/lumine)
 
-## Участники
-
-Благодарим следующих участников за их вклад в этот репозиторий:
-
-| <a href="https://github.com/mechrevo"><img src="https://avatars.githubusercontent.com/mechrevo" width="40" height="40" style="border-radius: 50%;" alt="mechrevo" /></a> | <a href="https://github.com/dongzheyu"><img src="https://avatars.githubusercontent.com/dongzheyu" width="40" height="40" style="border-radius: 50%;" alt="dongzheyu" /></a> | <a href="https://github.com/JetCPP-dongle"><img src="https://avatars.githubusercontent.com/JetCPP-dongle" width="40" height="40" style="border-radius: 50%;" alt="JetCPP-dongle" /></a> |
-| :----------------------------------------------------------: | :----------------------------------------------------------: | :----------------------------------------------------------: |
-| [mechrevo](https://github.com/mechrevo) | [dongzheyu](https://github.com/dongzheyu) | [JetCPP-dongle](https://github.com/JetCPP-dongle) |
-| <a href="https://github.com/lzpls"><img src="https://avatars.githubusercontent.com/lzpls" width="40" height="40" style="border-radius: 50%;" alt="lzpls" /></a> |
-| [lzpls](https://github.com/lzpls) |
 
 ## История звёзд
 
@@ -301,7 +292,28 @@ Windows и Linux собираются из одного репозитория, 
 
 ---
 
+
+---
+
 ## Активность проекта и участники
+
+<!-- CONTRIBUTORS:START -->
+Этот раздел автоматически обновляется GitHub Actions. Участники определяются по статистике коммитов GitHub; аккаунты-боты исключаются, а три участника с наибольшим числом коммитов считаются основными участниками.
+
+### Основные участники
+
+| Место | Основной участник | Коммиты |
+| ---: | --- | ---: |
+| 1 | <a href="https://github.com/dongzheyu">dongzheyu</a> | 180 |
+| 2 | <a href="https://github.com/SniShaper">SniShaper</a> | 36 |
+| 3 | <a href="https://github.com/lzpls">lzpls</a> | 5 |
+
+### Все участники
+
+<div align="center">
+<a href="https://github.com/dongzheyu" title="dongzheyu"><img src="https://avatars.githubusercontent.com/u/169264339?v=4" width="48" height="48" alt="dongzheyu" /></a> <a href="https://github.com/SniShaper" title="SniShaper"><img src="https://avatars.githubusercontent.com/u/281507783?v=4" width="48" height="48" alt="SniShaper" /></a> <a href="https://github.com/lzpls" title="lzpls"><img src="https://avatars.githubusercontent.com/u/220288222?v=4" width="48" height="48" alt="lzpls" /></a> <a href="https://github.com/Calvin1-tech" title="Calvin1-tech"><img src="https://avatars.githubusercontent.com/u/181093099?v=4" width="48" height="48" alt="Calvin1-tech" /></a>
+</div>
+<!-- CONTRIBUTORS:END -->
 
 ### Значки активности
 
@@ -317,14 +329,13 @@ Windows и Linux собираются из одного репозитория, 
 </a>
 </div>
 
-### Основные участники
+### Граф участников
 
 <div align="center">
 <a href="https://github.com/SnishaperTeam/SniShaper/graphs/contributors" target="_blank">
 <img src="https://contrib.rocks/image?repo=SnishaperTeam/SniShaper" alt="Contributors" />
 </a>
 </div>
-
 ---
 
 ## Лицензия

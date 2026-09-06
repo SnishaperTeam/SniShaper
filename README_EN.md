@@ -277,15 +277,6 @@ This project has benefited from the inspiration of the following excellent open-
 - [DoH-ECH-Demo](https://github.com/0xCaner/DoH-ECH-Demo)
 - [lumine](https://github.com/moi-si/lumine)
 
-## Contributors
-
-Thanks to the following contributors for their contributions to this repository:
-
-| <a href="https://github.com/mechrevo"><img src="https://avatars.githubusercontent.com/mechrevo" width="40" height="40" style="border-radius: 50%;" alt="mechrevo" /></a> | <a href="https://github.com/dongzheyu"><img src="https://avatars.githubusercontent.com/dongzheyu" width="40" height="40" style="border-radius: 50%;" alt="dongzheyu" /></a> | <a href="https://github.com/JetCPP-dongle"><img src="https://avatars.githubusercontent.com/JetCPP-dongle" width="40" height="40" style="border-radius: 50%;" alt="JetCPP-dongle" /></a> |
-| :----------------------------------------------------------: | :----------------------------------------------------------: | :----------------------------------------------------------: |
-| [mechrevo](https://github.com/mechrevo) | [dongzheyu](https://github.com/dongzheyu) | [JetCPP-dongle](https://github.com/JetCPP-dongle) |
-| <a href="https://github.com/lzpls"><img src="https://avatars.githubusercontent.com/lzpls" width="40" height="40" style="border-radius: 50%;" alt="lzpls" /></a> |
-| [lzpls](https://github.com/lzpls) |
 
 ## Star History
 
@@ -301,7 +292,28 @@ Thanks to the following contributors for their contributions to this repository:
 
 ---
 
+
+---
+
 ## Project Activity & Contributors
+
+<!-- CONTRIBUTORS:START -->
+This section is maintained automatically by GitHub Actions. Contributors are based on GitHub commit statistics; bot accounts are excluded, and the top three contributors by commit count are listed as core contributors.
+
+### Core Contributors
+
+| Rank | Core Contributor | Commits |
+| ---: | --- | ---: |
+| 1 | <a href="https://github.com/dongzheyu">dongzheyu</a> | 180 |
+| 2 | <a href="https://github.com/SniShaper">SniShaper</a> | 36 |
+| 3 | <a href="https://github.com/lzpls">lzpls</a> | 5 |
+
+### All Contributors
+
+<div align="center">
+<a href="https://github.com/dongzheyu" title="dongzheyu"><img src="https://avatars.githubusercontent.com/u/169264339?v=4" width="48" height="48" alt="dongzheyu" /></a> <a href="https://github.com/SniShaper" title="SniShaper"><img src="https://avatars.githubusercontent.com/u/281507783?v=4" width="48" height="48" alt="SniShaper" /></a> <a href="https://github.com/lzpls" title="lzpls"><img src="https://avatars.githubusercontent.com/u/220288222?v=4" width="48" height="48" alt="lzpls" /></a> <a href="https://github.com/Calvin1-tech" title="Calvin1-tech"><img src="https://avatars.githubusercontent.com/u/181093099?v=4" width="48" height="48" alt="Calvin1-tech" /></a>
+</div>
+<!-- CONTRIBUTORS:END -->
 
 ### Activity Badges
 
@@ -317,14 +329,13 @@ Thanks to the following contributors for their contributions to this repository:
 </a>
 </div>
 
-### Core Contributors
+### Contributors Graph
 
 <div align="center">
 <a href="https://github.com/SnishaperTeam/SniShaper/graphs/contributors" target="_blank">
 <img src="https://contrib.rocks/image?repo=SnishaperTeam/SniShaper" alt="Contributors" />
 </a>
 </div>
-
 ---
 
 ## License
