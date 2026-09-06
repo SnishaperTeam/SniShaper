@@ -9,7 +9,6 @@ permissions:
 jobs:
   automerge:
     runs-on: ubuntu-latest
-    # 显式排除 me 仓库（SniShaper-Fast），仅当仓库不是 me 且发起人为 dependabot[bot] 时运行
     if: github.event.pull_request.user.login == 'dependabot[bot]' && github.repository != 'SnishaperTeam/SniShaper-Fast'
     steps:
       - name: Fetch Dependabot metadata
@@ -18,8 +17,8 @@ jobs:
         with:
           github-token: "${{ secrets.GITHUB_TOKEN }}"
 
-      - name: Auto-rebase and merge patch and security updates
-        if: steps.metadata.outputs.update-type == 'version-update:semver-patch' || steps.metadata.outputs.security-update == 'true'
+      - name: Enable auto-merge for patch, security, and GitHub Actions updates
+        if: steps.metadata.outputs.update-type == 'version-update:semver-patch' || steps.metadata.outputs.security-update == 'true' || steps.metadata.outputs.package-ecosystem == 'github-actions'
         run: gh pr merge --auto --rebase "$PR_URL"
         env:
           PR_URL: ${{ github.event.pull_request.html_url }}
