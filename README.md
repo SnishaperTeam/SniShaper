@@ -354,14 +354,14 @@ CLI（headless）版本作为本仓库的 `cli/` 子目录维护，与 GUI 共�
 
 | 排名 | 核心贡献者 | 提交数 |
 | ---: | --- | ---: |
-| 1 | <a href="https://github.com/dongzheyu">dongzheyu</a> | 171 |
+| 1 | <a href="https://github.com/dongzheyu">dongzheyu</a> | 166 |
 | 2 | <a href="https://github.com/SniShaper">SniShaper</a> | 36 |
 | 3 | <a href="https://github.com/lzpls">lzpls</a> | 5 |
 
 ### 全部贡献者
 
 <div align="center">
-<a href="https://github.com/dongzheyu" title="dongzheyu"><img src="https://avatars.githubusercontent.com/u/169264339?v=4" width="48" height="48" alt="dongzheyu" /></a> <a href="https://github.com/SniShaper" title="SniShaper"><img src="https://avatars.githubusercontent.com/u/281507783?v=4" width="48" height="48" alt="SniShaper" /></a> <a href="https://github.com/lzpls" title="lzpls"><img src="https://avatars.githubusercontent.com/u/220288222?v=4" width="48" height="48" alt="lzpls" /></a> <a href="https://github.com/Calvin1-tech" title="Calvin1-tech"><img src="https://avatars.githubusercontent.com/u/181093099?v=4" width="48" height="48" alt="Calvin1-tech" /></a>
+<a href="https://github.com/dongzheyu" title="dongzheyu"><img src="https://avatars.githubusercontent.com/u/169264339?v=4" width="48" height="48" alt="dongzheyu" /></a> <a href="https://github.com/SniShaper" title="SniShaper"><img src="https://avatars.githubusercontent.com/u/281507783?v=4" width="48" height="48" alt="SniShaper" /></a> <a href="https://github.com/lzpls" title="lzpls"><img src="https://avatars.githubusercontent.com/u/220288222?v=4" width="48" height="48" alt="lzpls" /></a>
 </div>
 <!-- CONTRIBUTORS:END -->
 
