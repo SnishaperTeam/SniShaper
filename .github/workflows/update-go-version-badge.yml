@@ -4,6 +4,9 @@ on:
   push:
     branches:
       - main
+  pull_request:
+    branches:
+      - main
   schedule:
     - cron: "37 3 * * 1"
   workflow_dispatch:
@@ -214,11 +217,11 @@ jobs:
 ''', encoding="utf-8")
           PY
 
-      - name: Commit migration
+      - name: Commit migration workflow changes
         shell: bash
         run: |
           set -euo pipefail
-          git add README.md README_EN.md README_RU.md .github/workflows/update-contributors.yml .github/workflows/update-go-version-badge.yml
+          git add README.md README_EN.md README_RU.md .github/workflows/update-contributors.yml
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git commit -m "docs: merge contributor and activity sections"
