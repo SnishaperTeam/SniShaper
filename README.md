@@ -89,6 +89,8 @@ sudo ./SniShaper
 
 ---
 
+> **Darwin / macOS CLI 注意：** 当前 Darwin CLI 由于缺少可用于持续实机测试的 macOS 测试设备，实际使用中可能存在我们尚未预见的问题。若你在 Darwin / macOS 上发现任何异常，请及时提交 [Issue](https://github.com/SnishaperTeam/SniShaper/issues) 或 [Pull Request](https://github.com/SnishaperTeam/SniShaper/pulls)，帮助我们尽快定位和修复问题。
+
 ## 构建与开发
 
 本项目基于 **Wails v3 + React 19 + MUI** 构建，后端使用 **Go**。`build.sh`（Linux / macOS / WSL）与 `build_windows.ps1`（Windows）共用同一套目标矩阵、参数语义与输出目录。

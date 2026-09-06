@@ -2,7 +2,7 @@
 
 [中文](README.md) | [English](README_EN.md) | [Русский](README_RU.md)
 
-[![Go Version](https://img.shields.io/badge/Go-1.27+-00ADD8?style=flat&logo=go)](https://golang.org) [![License](https://img.shields.io/badge/Лицензия-MIT-blue?style=flat&logo=open-source-initiative)]() [![Wiki](https://img.shields.io/badge/Документация-Wiki-orange?style=flat&logo=readthedocs)](https://github.com/SnishaperTeam/SniShaper/wiki) [![GitHub Release](https://img.shields.io/github/v/release/SnishaperTeam/SniShaper?style=flat&logo=github&label=Релиз)](https://github.com/SnishaperTeam/SniShaper/releases) [![GitHub Downloads](https://img.shields.io/github/downloads/SnishaperTeam/SniShaper/total?style=flat&logo=github&label=Загрузки)](https://github.com/SnishaperTeam/SniShaper/releases) [![GitHub last commit](https://img.shields.io/github/last-commit/SnishaperTeam/SniShaper?style=flat&logo=git&label=Последний%20коммит)](https://github.com/SnishaperTeam/SniShaper/commits/main) [![GitHub Actions Workflow Status](https://img.shields.io/github/actions/workflow/status/SnishaperTeam/SniShaper/build.yml?style=flat&logo=githubactions&label=CI)](https://github.com/SnishaperTeam/SniShaper/actions)
+[![Go Version](https://img.shields.io/badge/Go-1.27%2B-00ADD8?style=flat&logo=go)](https://golang.org) [![License](https://img.shields.io/badge/Лицензия-MIT-blue?style=flat&logo=open-source-initiative)]() [![Wiki](https://img.shields.io/badge/Документация-Wiki-orange?style=flat&logo=readthedocs)](https://github.com/SnishaperTeam/SniShaper/wiki) [![GitHub Release](https://img.shields.io/github/v/release/SnishaperTeam/SniShaper?style=flat&logo=github&label=Релиз)](https://github.com/SnishaperTeam/SniShaper/releases) [![GitHub Downloads](https://img.shields.io/github/downloads/SnishaperTeam/SniShaper/total?style=flat&logo=github&label=Загрузки)](https://github.com/SnishaperTeam/SniShaper/releases) [![GitHub last commit](https://img.shields.io/github/last-commit/SnishaperTeam/SniShaper?style=flat&logo=git&label=Последний%20коммит)](https://github.com/SnishaperTeam/SniShaper/commits/main) [![GitHub Actions Workflow Status](https://img.shields.io/github/actions/workflow/status/SnishaperTeam/SniShaper/build.yml?style=flat&logo=githubactions&label=CI)](https://github.com/SnishaperTeam/SniShaper/actions)
 
 **SniShaper** -- это локальный прокси-инструмент, разработанный специально для сложных сетевых условий, интегрирующий **инъекцию ECH**, **фрагментацию TLS**, **маскировку QUIC**, **миграцию сессий** и другие технологии стека протоколов, в сочетании с **виртуальным TUN-интерфейсом** для полного перехвата трафика, обеспечивая стабильный и гибкий доступ в интернет.
 
@@ -66,6 +66,8 @@ sudo ./SniShaper
 - **[Устранение неполадок](https://github.com/SnishaperTeam/SniShaper/wiki/FAQ)**: решение проблем с сертификатами, правилами и другим.
 
 ---
+
+> **Примечание для CLI Darwin / macOS:** В настоящее время у Darwin CLI нет отдельного устройства macOS для постоянного тестирования в реальных условиях, поэтому при использовании могут возникать непредвиденные или пока неизвестные проблемы. Если вы обнаружите какие-либо проблемы на Darwin / macOS, пожалуйста, своевременно создайте [Issue](https://github.com/SnishaperTeam/SniShaper/issues) или [Pull Request](https://github.com/SnishaperTeam/SniShaper/pulls), чтобы мы могли быстрее их изучить и исправить.
 
 ## Сборка и разработка
 
