@@ -12,7 +12,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
   pull-requests: write
 
 concurrency:
@@ -26,6 +26,18 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v7
+
+      - name: Migrate README structure
+        if: github.event_name == 'pull_request' && github.actor != 'github-actions[bot]'
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          python ./.github/scripts/merge_contributor_activity.py
+          git add README.md README_EN.md README_RU.md .github/workflows/update-contributors.yml .github/workflows/unit-test.yml .github/scripts/merge_contributor_activity.py
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "docs: merge contributor and activity sections"
+          git push
 
       - name: Set up Go
         uses: actions/setup-go@v7
