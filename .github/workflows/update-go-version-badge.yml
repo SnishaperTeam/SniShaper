@@ -23,7 +23,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v7
 
-      - name: Update Go version badge
+      - name: Update Go version badge and Darwin CLI notices
         shell: bash
         run: |
           set -euo pipefail
@@ -38,15 +38,45 @@ jobs:
           import re
           from pathlib import Path
 
-          path = Path("README.md")
-          text = path.read_text(encoding="utf-8")
           minimum = os.environ["MIN_GO"]
-          old = r"https://img.shields.io/badge/Go(?:最低版本|版本)-[0-9]+\.[0-9]+(?:%2B|\+)-00ADD8"
-          new = f"https://img.shields.io/badge/Go最低版本-{minimum}%2B-00ADD8"
-          updated, count = re.subn(old, new, text, count=1)
-          if count != 1:
-              raise SystemExit("Go version badge not found")
-          path.write_text(updated, encoding="utf-8")
+          readmes = {
+              "README.md": {
+                  "badge": r"https://img.shields.io/badge/Go(?:最低版本|版本)-[0-9]+\.[0-9]+(?:%2B|\+)-00ADD8",
+                  "badge_new": f"https://img.shields.io/badge/Go最低版本-{minimum}%2B-00ADD8",
+                  "heading": "## 构建与开发",
+                  "notice": "> **Darwin / macOS CLI 注意：** 当前 Darwin CLI 由于缺少可用于持续实机测试的 macOS 测试设备，实际使用中可能存在我们尚未预见的问题。若你在 Darwin / macOS 上发现任何异常，请及时提交 [Issue](https://github.com/SnishaperTeam/SniShaper/issues) 或 [Pull Request](https://github.com/SnishaperTeam/SniShaper/pulls)，帮助我们尽快定位和修复问题。",
+              },
+              "README_EN.md": {
+                  "badge": r"https://img.shields.io/badge/Go-[0-9]+\.[0-9]+(?:%2B|\+)-00ADD8",
+                  "badge_new": f"https://img.shields.io/badge/Go-{minimum}%2B-00ADD8",
+                  "heading": "## Build and Development",
+                  "notice": "> **Darwin / macOS CLI Notice:** The Darwin CLI currently does not have a dedicated macOS test machine for continuous real-world testing, so unexpected or currently unknown issues may occur. If you encounter any problems on Darwin / macOS, please report them promptly by opening an [Issue](https://github.com/SnishaperTeam/SniShaper/issues) or a [Pull Request](https://github.com/SnishaperTeam/SniShaper/pulls), so we can investigate and fix them.",
+              },
+              "README_RU.md": {
+                  "badge": r"https://img.shields.io/badge/Go-[0-9]+\.[0-9]+(?:%2B|\+)-00ADD8",
+                  "badge_new": f"https://img.shields.io/badge/Go-{minimum}%2B-00ADD8",
+                  "heading": "## Сборка и разработка",
+                  "notice": "> **Примечание для CLI Darwin / macOS:** В настоящее время у Darwin CLI нет отдельного устройства macOS для постоянного тестирования в реальных условиях, поэтому при использовании могут возникать непредвиденные или пока неизвестные проблемы. Если вы обнаружите какие-либо проблемы на Darwin / macOS, пожалуйста, своевременно создайте [Issue](https://github.com/SnishaperTeam/SniShaper/issues) или [Pull Request](https://github.com/SnishaperTeam/SniShaper/pulls), чтобы мы могли быстрее их изучить и исправить.",
+              },
+          }
+
+          for filename, config in readmes.items():
+              path = Path(filename)
+              text = path.read_text(encoding="utf-8")
+
+              updated, count = re.subn(config["badge"], config["badge_new"], text, count=1)
+              if count != 1:
+                  raise SystemExit(f"Go version badge not found in {filename}")
+              text = updated
+
+              if "Darwin / macOS CLI Notice" not in text and "Darwin / macOS CLI 注意" not in text and "Примечание для CLI Darwin / macOS" not in text:
+                  heading = config["heading"]
+                  marker = f"{config['notice']}\n\n{heading}"
+                  if heading not in text:
+                      raise SystemExit(f"Build and development heading not found in {filename}")
+                  text = text.replace(heading, marker, 1)
+
+              path.write_text(text, encoding="utf-8")
           PY
 
       - name: Commit README changes
@@ -55,9 +85,9 @@ jobs:
           set -euo pipefail
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add README.md
+          git add README.md README_EN.md README_RU.md
           if git diff --cached --quiet; then
             exit 0
           fi
-          git commit -m "docs: sync minimum Go version badge"
+          git commit -m "docs: add Darwin CLI notice"
           git push
