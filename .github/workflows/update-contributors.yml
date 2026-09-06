@@ -1,0 +1,149 @@
+name: update-contributors
+
+on:
+  push:
+    branches:
+      - main
+  schedule:
+    - cron: "17 3 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: update-contributors
+  cancel-in-progress: true
+
+jobs:
+  update:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Collect contributors
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh api --paginate --slurp "repos/${GITHUB_REPOSITORY}/contributors?anon=1&per_page=100" > "$RUNNER_TEMP/contributors.json"
+
+      - name: Update README
+        env:
+          CONTRIBUTORS_JSON: ${{ runner.temp }}/contributors.json
+        run: |
+          python3 - <<'PY'
+          import html
+          import json
+          import os
+          import re
+          from pathlib import Path
+
+          readme_path = Path("README.md")
+          data = json.loads(Path(os.environ["CONTRIBUTORS_JSON"]).read_text(encoding="utf-8"))
+          contributors = [item for page in data for item in page]
+
+          humans = []
+          for contributor in contributors:
+              login = str(contributor.get("login") or "").strip()
+              name = str(contributor.get("name") or "").strip()
+              contributor_type = str(contributor.get("type") or "").strip().lower()
+              if contributor_type == "bot" or login.lower().endswith("[bot]"):
+                  continue
+              contributions = int(contributor.get("contributions") or 0)
+              if not login and not name:
+                  name = "Anonymous contributor"
+              humans.append({
+                  "login": login,
+                  "name": name or login,
+                  "contributions": contributions,
+                  "url": str(contributor.get("html_url") or "").strip(),
+                  "avatar": str(contributor.get("avatar_url") or "").strip(),
+              })
+
+          humans.sort(key=lambda item: (-item["contributions"], item["name"].lower()))
+          core = humans[:3]
+
+          core_rows = [
+              "| 排名 | 核心贡献者 | 提交数 |",
+              "| ---: | --- | ---: |",
+          ]
+          for index, contributor in enumerate(core, 1):
+              display_name = html.escape(contributor["name"])
+              if contributor["url"]:
+                  display = f'<a href="{html.escape(contributor["url"], quote=True)}">{display_name}</a>'
+              else:
+                  display = display_name
+              core_rows.append(f"| {index} | {display} | {contributor['contributions']} |")
+          if not core_rows or len(core_rows) == 2:
+              core_rows.append("| — | 暂无数据 | 0 |")
+
+          avatar_items = []
+          for contributor in humans:
+              if contributor["url"] and contributor["avatar"]:
+                  label = html.escape(contributor["login"] or contributor["name"])
+                  avatar_items.append(
+                      f'<a href="{html.escape(contributor["url"], quote=True)}" title="{label}">'
+                      f'<img src="{html.escape(contributor["avatar"], quote=True)}" width="48" height="48" alt="{label}" />'
+                      f'</a>'
+                  )
+              else:
+                  avatar_items.append(f'<span title="{html.escape(contributor["name"])}">{html.escape(contributor["name"])}</span>')
+
+          avatar_lines = []
+          for index in range(0, len(avatar_items), 8):
+              avatar_lines.append(" ".join(avatar_items[index:index + 8]))
+          avatars = "\n".join(avatar_lines) if avatar_lines else "暂无贡献者数据。"
+
+          generated = f"""<!-- CONTRIBUTORS:START -->
+          ## 贡献者
+
+          本节由 GitHub Actions 自动维护。贡献者来自 GitHub 的提交统计，机器人账号会被排除；核心贡献者按提交数从高到低取前三名。
+
+          ### 核心贡献者
+
+          {'\n'.join(core_rows)}
+
+          ### 全部贡献者
+
+          <div align="center">
+          {avatars}
+          </div>
+          <!-- CONTRIBUTORS:END -->"""
+          generated = re.sub(r"(?m)^          ?", "", generated)
+
+          readme = readme_path.read_text(encoding="utf-8")
+          start_marker = "<!-- CONTRIBUTORS:START -->"
+          end_marker = "<!-- CONTRIBUTORS:END -->"
+
+          if start_marker in readme and end_marker in readme:
+              start = readme.index(start_marker)
+              end = readme.index(end_marker, start) + len(end_marker)
+              readme = readme[:start] + generated + readme[end:]
+          else:
+              start = readme.find("## 贡献者")
+              end = readme.find("## 星标历史", start if start >= 0 else 0)
+              if start >= 0 and end > start:
+                  readme = readme[:start] + generated + "\n\n" + readme[end:]
+              else:
+                  activity = readme.find("\n## 项目活跃度与贡献者")
+                  if activity >= 0:
+                      readme = readme[:activity] + "\n\n" + generated + readme[activity:]
+                  else:
+                      readme = readme.rstrip() + "\n\n" + generated + "\n"
+
+          readme = readme.replace("### 核心贡献者\n\n<div align=\"center\">", "### 贡献者图谱\n\n<div align=\"center\">", 1)
+          readme_path.write_text(readme.rstrip() + "\n", encoding="utf-8")
+          PY
+
+      - name: Commit README changes
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add README.md
+          if git diff --cached --quiet; then
+            exit 0
+          fi
+          git commit -m "docs: update contributors"
+          git push
