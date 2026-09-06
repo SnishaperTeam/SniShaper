@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/netip"
+	"runtime"
 	"sync"
 	"time"
 
@@ -115,10 +116,30 @@ func (m *Manager) Start(cfg proxy.TUNConfig, proxyAddr string) error {
 	}
 
 	// 2. 创建 TUN 接口
+	// macOS 仅接受 utunN 形式的接口名（sing-tun darwin 实现以 Sscanf("utun%d")
+	// 解析名称，且不支持序号自动分配），固定名 "SniShaper" 会直接报
+	// "bad tun name"。因此在 darwin 上循环探测空闲序号；其他平台沿用原名。
 	var err error
-	m.tun, err = tun.New(m.options)
-	if err != nil {
-		return fmt.Errorf("create tun failed: %w", err)
+	if runtime.GOOS == "darwin" {
+		var lastErr error
+		for i := 0; i < 128; i++ {
+			m.options.Name = fmt.Sprintf("utun%d", i)
+			t, e := tun.New(m.options)
+			if e == nil {
+				m.tun = t
+				m.logf("[sing-tun] created macOS TUN interface: " + m.options.Name)
+				break
+			}
+			lastErr = e
+		}
+		if m.tun == nil {
+			return fmt.Errorf("create tun failed (tried utun0..utun127): %w", lastErr)
+		}
+	} else {
+		m.tun, err = tun.New(m.options)
+		if err != nil {
+			return fmt.Errorf("create tun failed: %w", err)
+		}
 	}
 
 	// 3. 创建 Handler
