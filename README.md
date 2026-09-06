@@ -343,15 +343,25 @@ CLI（headless）版本作为本仓库的 `cli/` 子目录维护，与 GUI 共�
 - [DoH-ECH-Demo](https://github.com/0xCaner/DoH-ECH-Demo)
 - [lumine](https://github.com/moi-si/lumine)
 
+<!-- CONTRIBUTORS:START -->
 ## 贡献者
 
-感谢以下贡献者对本仓库的贡献：
+本节由 GitHub Actions 自动维护。贡献者来自 GitHub 的提交统计，机器人账号会被排除；核心贡献者按提交数从高到低取前三名。
 
-| <a href="https://github.com/mechrevo"><img src="https://avatars.githubusercontent.com/mechrevo" width="40" height="40" style="border-radius: 50%;" alt="mechrevo" /></a> | <a href="https://github.com/dongzheyu"><img src="https://avatars.githubusercontent.com/dongzheyu" width="40" height="40" style="border-radius: 50%;" alt="dongzheyu" /></a> |      |
-| :----------------------------------------------------------: | :----------------------------------------------------------: | :--: |
-|           [mechrevo](https://github.com/mechrevo)            |          [dongzheyu](https://github.com/dongzheyu)           |      |
-| <a href="https://github.com/lzpls"><img src="https://avatars.githubusercontent.com/lzpls" width="40" height="40" style="border-radius: 50%;" alt="lzpls" /></a> |                                                              |      |
-|              [lzpls](https://github.com/lzpls)               |                                                              |      |
+### 核心贡献者
+
+| 排名 | 核心贡献者 | 提交数 |
+| ---: | --- | ---: |
+| 1 | <a href="https://github.com/dongzheyu">dongzheyu</a> | 167 |
+| 2 | <a href="https://github.com/SniShaper">SniShaper</a> | 36 |
+| 3 | <a href="https://github.com/lzpls">lzpls</a> | 5 |
+
+### 全部贡献者
+
+<div align="center">
+<a href="https://github.com/dongzheyu" title="dongzheyu"><img src="https://avatars.githubusercontent.com/u/169264339?v=4" width="48" height="48" alt="dongzheyu" /></a> <a href="https://github.com/SniShaper" title="SniShaper"><img src="https://avatars.githubusercontent.com/u/281507783?v=4" width="48" height="48" alt="SniShaper" /></a> <a href="https://github.com/lzpls" title="lzpls"><img src="https://avatars.githubusercontent.com/u/220288222?v=4" width="48" height="48" alt="lzpls" /></a> <a href="https://github.com/Calvin1-tech" title="Calvin1-tech"><img src="https://avatars.githubusercontent.com/u/181093099?v=4" width="48" height="48" alt="Calvin1-tech" /></a>
+</div>
+<!-- CONTRIBUTORS:END -->
 
 ## 星标历史
 
@@ -383,7 +393,7 @@ CLI（headless）版本作为本仓库的 `cli/` 子目录维护，与 GUI 共�
 </a>
 </div>
 
-### 核心贡献者
+### 贡献者图谱
 
 <div align="center">
 <a href="https://github.com/SnishaperTeam/SniShaper/graphs/contributors" target="_blank">
