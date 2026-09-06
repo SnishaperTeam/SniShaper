@@ -1,33 +1,39 @@
 version: 2
 
 updates:
-  # Go modules: weekly, grouped into one PR
+  # Go modules: check once every 7 days, grouped into one PR.
   - package-ecosystem: gomod
     directory: /
     schedule:
       interval: weekly
+    cooldown:
+      default-days: 3
     open-pull-requests-limit: 10
     groups:
       go-modules:
         patterns:
           - "*"
 
-  # Frontend npm: weekly, grouped into one PR
+  # Frontend npm: check once every 7 days, grouped into one PR.
   - package-ecosystem: npm
     directory: /frontend
     schedule:
       interval: weekly
+    cooldown:
+      default-days: 3
     open-pull-requests-limit: 10
     groups:
       frontend-deps:
         patterns:
           - "*"
 
-  # GitHub Actions: weekly (even though updates are rare), grouped
+  # GitHub Actions: check once every 7 days, grouped into one PR.
   - package-ecosystem: github-actions
     directory: /
     schedule:
-      interval: weekly          # 从 monthly 改为 weekly
+      interval: weekly
+    cooldown:
+      default-days: 3
     open-pull-requests-limit: 10
     groups:
       actions:
