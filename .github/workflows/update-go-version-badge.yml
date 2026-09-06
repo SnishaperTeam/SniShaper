@@ -4,9 +4,6 @@ on:
   push:
     branches:
       - main
-  pull_request:
-    branches:
-      - main
   schedule:
     - cron: "37 3 * * 1"
   workflow_dispatch:
@@ -26,281 +23,55 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v7
 
-      - name: Migrate README sections and sync badges
+      - name: Update minimum Go version badge
         shell: bash
         run: |
           set -euo pipefail
+          min_go="$(sed -nE 's/^go[[:space:]]+([0-9]+\.[0-9]+).*$/\1/p' go.mod | head -n1)"
+          if [[ -z "$min_go" ]]; then
+            echo "::error::Unable to determine minimum Go version from go.mod"
+            exit 1
+          fi
+          export MIN_GO="$min_go"
           python3 - <<'PY'
           import os
           import re
           from pathlib import Path
 
-          minimum = os.popen("sed -nE 's/^go[[:space:]]+([0-9]+\\.[0-9]+).*$/\\1/p' go.mod | head -n1").read().strip()
-          if not minimum:
-              raise SystemExit("Unable to determine minimum Go version from go.mod")
+          minimum = os.environ["MIN_GO"]
+          readmes = {
+              "README.md": {
+                  "badge": r"https://img.shields.io/badge/Go(?:最低版本|版本)-[0-9]+\.[0-9]+(?:%2B|\+)-00ADD8",
+                  "badge_new": f"https://img.shields.io/badge/Go最低版本-{minimum}%2B-00ADD8",
+              },
+              "README_EN.md": {
+                  "badge": r"https://img.shields.io/badge/Go-[0-9]+\.[0-9]+(?:%2B|\+)-00ADD8",
+                  "badge_new": f"https://img.shields.io/badge/Go-{minimum}%2B-00ADD8",
+              },
+              "README_RU.md": {
+                  "badge": r"https://img.shields.io/badge/Go-[0-9]+\.[0-9]+(?:%2B|\+)-00ADD8",
+                  "badge_new": f"https://img.shields.io/badge/Go-{minimum}%2B-00ADD8",
+              },
+          }
 
-          def merge_chinese():
-              path = Path("README.md")
-              text = path.read_text(encoding="utf-8")
-              activity_match = re.search(r"## 项目活跃度与贡献者\n.*?(?=\n---\n\n## 许可)", text, re.S)
-              contributor_match = re.search(r"<!-- CONTRIBUTORS:START -->.*?<!-- CONTRIBUTORS:END -->", text, re.S)
-              if not activity_match or not contributor_match:
-                  raise SystemExit("README.md merge sections not found")
-              activity_body = re.sub(r"^## 项目活跃度与贡献者\n\n", "", activity_match.group(0))
-              text = text[:activity_match.start()] + text[activity_match.end():]
-              contributor_match = re.search(r"<!-- CONTRIBUTORS:START -->.*?<!-- CONTRIBUTORS:END -->", text, re.S)
-              contributor_block = contributor_match.group(0)
-              contributor_block = contributor_block.replace("<!-- CONTRIBUTORS:START -->\n## 贡献者\n\n", "<!-- CONTRIBUTORS:START -->\n", 1)
-              merged = "## 项目活跃度与贡献者\n\n" + contributor_block + "\n\n" + activity_body
-              text = text[:contributor_match.start()] + merged + text[contributor_match.end():]
-              path.write_text(text, encoding="utf-8")
-
-          def merge_static(filename, contributor_heading, next_heading, activity_heading, license_heading, contributor_label):
+          for filename, config in readmes.items():
               path = Path(filename)
               text = path.read_text(encoding="utf-8")
-              contributor_match = re.search(re.escape(contributor_heading) + r"\n.*?(?=\n" + re.escape(next_heading) + r")", text, re.S)
-              activity_match = re.search(re.escape(activity_heading) + r"\n.*?(?=\n" + re.escape(license_heading) + r")", text, re.S)
-              if not contributor_match or not activity_match:
-                  raise SystemExit(f"{filename} merge sections not found")
-              contributor_body = contributor_match.group(0)[len(contributor_heading):].strip()
-              activity_body = activity_match.group(0)[len(activity_heading):].strip()
-              merged = f"{activity_heading}\n\n### {contributor_label}\n\n{contributor_body}\n\n{activity_body}"
-              first_start = contributor_match.start()
-              text = text[:first_start] + merged + text[contributor_match.end():]
-              activity_match = re.search(re.escape(activity_heading) + r"\n.*?(?=\n" + re.escape(license_heading) + r")", text, re.S)
-              if activity_match and activity_match.start() != first_start:
-                  text = text[:activity_match.start()] + text[activity_match.end():]
-              path.write_text(text, encoding="utf-8")
-
-          merge_chinese()
-          merge_static("README_EN.md", "## Contributors", "## Star History", "## Project Activity & Contributors", "---\n\n## License", "Contributors")
-          merge_static("README_RU.md", "## Участники", "## История звёзд", "## Активность проекта и участники", "---\n\n## Лицензия", "Участники")
-
-          for filename, badge in {
-              "README.md": r"https://img.shields.io/badge/Go(?:最低版本|版本)-[0-9]+\\.[0-9]+(?:%2B|\\+)-00ADD8",
-              "README_EN.md": r"https://img.shields.io/badge/Go-[0-9]+\\.[0-9]+(?:%2B|\\+)-00ADD8",
-              "README_RU.md": r"https://img.shields.io/badge/Go-[0-9]+\\.[0-9]+(?:%2B|\\+)-00ADD8",
-          }.items():
-              path = Path(filename)
-              text = path.read_text(encoding="utf-8")
-              replacement = f"https://img.shields.io/badge/Go{'最低版本-' if filename == 'README.md' else '-'}{minimum}%2B-00ADD8"
-              updated, count = re.subn(badge, replacement, text, count=1)
+              updated, count = re.subn(config["badge"], config["badge_new"], text, count=1)
               if count != 1:
                   raise SystemExit(f"Go version badge not found in {filename}")
               path.write_text(updated, encoding="utf-8")
-
-          Path(".github/workflows/update-contributors.yml").write_text('''name: update-contributors
-
-on:
-  push:
-    branches:
-      - main
-  schedule:
-    - cron: "17 3 * * 1"
-  workflow_dispatch:
-
-permissions:
-  contents: write
-
-concurrency:
-  group: update-contributors
-  cancel-in-progress: true
-
-jobs:
-  update:
-    if: github.actor != 'github-actions[bot]'
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v7
-
-      - name: Collect contributors
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          gh api --paginate --slurp "repos/${GITHUB_REPOSITORY}/contributors?anon=1&per_page=100" > "$RUNNER_TEMP/contributors.json"
-
-      - name: Update contributor section
-        env:
-          CONTRIBUTORS_JSON: ${{ runner.temp }}/contributors.json
-        shell: bash
-        run: |
-          set -euo pipefail
-          python3 - <<'PY'
-          import html
-          import json
-          import os
-          import re
-          from pathlib import Path
-
-          data = json.loads(Path(os.environ["CONTRIBUTORS_JSON"]).read_text(encoding="utf-8"))
-          contributors = [item for page in data for item in page]
-          humans = []
-          for contributor in contributors:
-              login = str(contributor.get("login") or "").strip()
-              name = str(contributor.get("name") or "").strip()
-              kind = str(contributor.get("type") or "").strip().lower()
-              if kind == "bot" or login.lower().endswith("[bot]"):
-                  continue
-              humans.append({
-                  "login": login,
-                  "name": name or login or "Anonymous contributor",
-                  "contributions": int(contributor.get("contributions") or 0),
-                  "url": str(contributor.get("html_url") or "").strip(),
-                  "avatar": str(contributor.get("avatar_url") or "").strip(),
-              })
-
-          humans.sort(key=lambda item: (-item["contributions"], item["name"].lower()))
-          core = humans[:3]
-          core_rows = ["| 排名 | 核心贡献者 | 提交数 |", "| ---: | --- | ---: |"]
-          for index, contributor in enumerate(core, 1):
-              display_name = html.escape(contributor["name"])
-              display = f'<a href="{html.escape(contributor["url"], quote=True)}">{display_name}</a>' if contributor["url"] else display_name
-              core_rows.append(f"| {index} | {display} | {contributor['contributions']} |")
-
-          avatar_items = []
-          for contributor in humans:
-              if contributor["url"] and contributor["avatar"]:
-                  label = html.escape(contributor["login"] or contributor["name"])
-                  avatar_items.append(
-                      f'<a href="{html.escape(contributor["url"], quote=True)}" title="{label}">'
-                      f'<img src="{html.escape(contributor["avatar"], quote=True)}" width="48" height="48" alt="{label}" />'
-                      f'</a>'
-                  )
-
-          avatar_lines = [" ".join(avatar_items[i:i + 8]) for i in range(0, len(avatar_items), 8)]
-          avatars = "\\n".join(avatar_lines) if avatar_lines else "暂无贡献者数据。"
-          generated = f"""<!-- CONTRIBUTORS:START -->
-          ### 核心贡献者
-
-          {'\\n'.join(core_rows)}
-
-          ### 全部贡献者
-
-          <div align="center">
-          {avatars}
-          </div>
-          <!-- CONTRIBUTORS:END -->"""
-          generated = re.sub(r"(?m)^          ?", "", generated)
-
-          path = Path("README.md")
-          readme = path.read_text(encoding="utf-8")
-          start_marker = "<!-- CONTRIBUTORS:START -->"
-          end_marker = "<!-- CONTRIBUTORS:END -->"
-          if start_marker in readme and end_marker in readme:
-              start = readme.index(start_marker)
-              end = readme.index(end_marker, start) + len(end_marker)
-              readme = readme[:start] + generated + readme[end:]
-          else:
-              heading = "## 项目活跃度与贡献者"
-              position = readme.find(heading)
-              if position >= 0:
-                  position += len(heading)
-                  readme = readme[:position] + "\\n\\n" + generated + readme[position:]
-              else:
-                  readme = readme.rstrip() + "\\n\\n## 项目活跃度与贡献者\\n\\n" + generated + "\\n"
-          path.write_text(readme.rstrip() + "\\n", encoding="utf-8")
           PY
 
-      - name: Commit README changes
+      - name: Commit README badge changes
         shell: bash
         run: |
           set -euo pipefail
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add README.md
+          git add README.md README_EN.md README_RU.md
           if git diff --cached --quiet; then
             exit 0
           fi
-          git commit -m "docs: update contributors"
-          git push
-''', encoding="utf-8")
-          PY
-
-      - name: Restore badge-only workflow
-        shell: bash
-        run: |
-          cat > .github/workflows/update-go-version-badge.yml <<'EOF'
-          name: update-go-version-badge
-
-          on:
-            push:
-              branches:
-                - main
-            schedule:
-              - cron: "37 3 * * 1"
-            workflow_dispatch:
-
-          permissions:
-            contents: write
-
-          concurrency:
-            group: update-go-version-badge
-            cancel-in-progress: true
-
-          jobs:
-            update:
-              if: github.actor != 'github-actions[bot]'
-              runs-on: ubuntu-latest
-              steps:
-                - name: Checkout
-                  uses: actions/checkout@v7
-
-                - name: Update minimum Go version badge
-                  shell: bash
-                  run: |
-                    set -euo pipefail
-                    min_go="$(sed -nE 's/^go[[:space:]]+([0-9]+\.[0-9]+).*$/\1/p' go.mod | head -n1)"
-                    if [[ -z "$min_go" ]]; then
-                      echo "::error::Unable to determine minimum Go version from go.mod"
-                      exit 1
-                    fi
-                    export MIN_GO="$min_go"
-                    python3 - <<'PY'
-                    import os
-                    import re
-                    from pathlib import Path
-
-                    minimum = os.environ["MIN_GO"]
-                    readmes = {
-                        "README.md": {
-                            "badge": r"https://img.shields.io/badge/Go(?:最低版本|版本)-[0-9]+\.[0-9]+(?:%2B|\+)-00ADD8",
-                            "badge_new": f"https://img.shields.io/badge/Go最低版本-{minimum}%2B-00ADD8",
-                        },
-                        "README_EN.md": {
-                            "badge": r"https://img.shields.io/badge/Go-[0-9]+\.[0-9]+(?:%2B|\+)-00ADD8",
-                            "badge_new": f"https://img.shields.io/badge/Go-{minimum}%2B-00ADD8",
-                        },
-                        "README_RU.md": {
-                            "badge": r"https://img.shields.io/badge/Go-[0-9]+\.[0-9]+(?:%2B|\+)-00ADD8",
-                            "badge_new": f"https://img.shields.io/badge/Go-{minimum}%2B-00ADD8",
-                        },
-                    }
-
-                    for filename, config in readmes.items():
-                        path = Path(filename)
-                        text = path.read_text(encoding="utf-8")
-                        updated, count = re.subn(config["badge"], config["badge_new"], text, count=1)
-                        if count != 1:
-                            raise SystemExit(f"Go version badge not found in {filename}")
-                        path.write_text(updated, encoding="utf-8")
-                    PY
-
-                - name: Commit README badge changes
-                  shell: bash
-                  run: |
-                    set -euo pipefail
-                    git config user.name "github-actions[bot]"
-                    git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-                    git add README.md README_EN.md README_RU.md
-                    if git diff --cached --quiet; then
-                      exit 0
-                    fi
-                    git commit -m "docs: sync minimum Go version badges"
-                    git push
-          EOF
-          git add README.md README_EN.md README_RU.md .github/workflows/update-contributors.yml .github/workflows/update-go-version-badge.yml
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git commit -m "docs: merge contributor and activity sections"
+          git commit -m "docs: sync minimum Go version badges"
           git push
