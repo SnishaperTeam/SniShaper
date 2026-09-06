@@ -389,6 +389,13 @@ func (p *ProxyServer) getPhysicalLocalAddr(targetAddr string) *net.TCPAddr {
 				if ipNet.IP.To4() != nil {
 					continue
 				}
+				// 跳过链路本地地址：绑定 fe80::（无 zone）在 macOS 上会报
+				// "bind: can't assign requested address"（曾导致 TUN 模式下
+				// 所有 IPv6 目标 502）；且链路本地源地址无法路由到全局目标。
+				// 应选用接口上的全局 IPv6 地址（SLAAC/2409:: 等）。
+				if ipNet.IP.IsLinkLocalUnicast() || ipNet.IP.IsLoopback() {
+					continue
+				}
 				return &net.TCPAddr{IP: ipNet.IP}
 			}
 			// IPv4 目标：跳过 IPv6 地址
