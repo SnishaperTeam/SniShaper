@@ -232,3 +232,208 @@ jobs:
           echo "::notice::CLI (${{ matrix.platform }}/${{ matrix.arch }}) version: $V"
           if [ -z "$V" ]; then echo "::error::empty CLI version"; exit 1; fi
           "$BIN" help >/dev/null
+
+  # ------------------------------------------------------------------
+  # README maintenance runs only after every build target succeeds on a
+  # push to main. It updates contributor data in all three README files and
+  # keeps the activity and contributor sections merged.
+  # ------------------------------------------------------------------
+  maintain-readme:
+    name: Maintain README contributors
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && github.actor != 'github-actions[bot]'
+    needs:
+      - matrix-build
+      - cli-build
+      - darwin-cli
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Collect contributors
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh api --paginate --slurp "repos/${GITHUB_REPOSITORY}/contributors?anon=1&per_page=100" > "$RUNNER_TEMP/contributors.json"
+
+      - name: Merge activity and contributor sections
+        env:
+          CONTRIBUTORS_JSON: ${{ runner.temp }}/contributors.json
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import html
+          import json
+          import os
+          import re
+          from pathlib import Path
+
+          contributors_data = json.loads(Path(os.environ["CONTRIBUTORS_JSON"]).read_text(encoding="utf-8"))
+          contributors = [item for page in contributors_data for item in page]
+
+          humans = []
+          for contributor in contributors:
+              login = str(contributor.get("login") or "").strip()
+              name = str(contributor.get("name") or "").strip()
+              contributor_type = str(contributor.get("type") or "").strip().lower()
+              if contributor_type == "bot" or login.lower().endswith("[bot]"):
+                  continue
+              humans.append({
+                  "login": login,
+                  "name": name or login or "Anonymous contributor",
+                  "contributions": int(contributor.get("contributions") or 0),
+                  "url": str(contributor.get("html_url") or "").strip(),
+                  "avatar": str(contributor.get("avatar_url") or "").strip(),
+              })
+
+          humans.sort(key=lambda item: (-item["contributions"], item["name"].lower()))
+
+          def contributor_block(language):
+              if language == "zh":
+                  intro = "本节由 GitHub Actions 自动维护。贡献者来自 GitHub 的提交统计，机器人账号会被排除；核心贡献者按提交数从高到低取前三名。"
+                  core_title = "核心贡献者"
+                  all_title = "全部贡献者"
+                  rank = "排名"
+                  core_name = "核心贡献者"
+                  commits = "提交数"
+                  empty = "暂无贡献者数据。"
+              elif language == "en":
+                  intro = "This section is maintained automatically by GitHub Actions. Contributors are based on GitHub commit statistics; bot accounts are excluded, and the top three contributors by commit count are listed as core contributors."
+                  core_title = "Core Contributors"
+                  all_title = "All Contributors"
+                  rank = "Rank"
+                  core_name = "Core Contributor"
+                  commits = "Commits"
+                  empty = "No contributor data available."
+              else:
+                  intro = "Этот раздел автоматически обновляется GitHub Actions. Участники определяются по статистике коммитов GitHub; аккаунты-боты исключаются, а три участника с наибольшим числом коммитов считаются основными участниками."
+                  core_title = "Основные участники"
+                  all_title = "Все участники"
+                  rank = "Место"
+                  core_name = "Основной участник"
+                  commits = "Коммиты"
+                  empty = "Данные об участниках отсутствуют."
+
+              rows = [f"| {rank} | {core_name} | {commits} |", "| ---: | --- | ---: |"]
+              for index, contributor in enumerate(humans[:3], 1):
+                  display_name = html.escape(contributor["name"])
+                  if contributor["url"]:
+                      display = f'<a href="{html.escape(contributor["url"], quote=True)}">{display_name}</a>'
+                  else:
+                      display = display_name
+                  rows.append(f"| {index} | {display} | {contributor['contributions']} |")
+              if len(rows) == 2:
+                  rows.append(f"| — | {empty} | 0 |")
+
+              avatar_items = []
+              for contributor in humans:
+                  if contributor["url"] and contributor["avatar"]:
+                      label = html.escape(contributor["login"] or contributor["name"])
+                      avatar_items.append(
+                          f'<a href="{html.escape(contributor["url"], quote=True)}" title="{label}">'
+                          f'<img src="{html.escape(contributor["avatar"], quote=True)}" width="48" height="48" alt="{label}" />'
+                          f'</a>'
+                      )
+                  else:
+                      avatar_items.append(html.escape(contributor["name"]))
+
+              avatar_lines = [" ".join(avatar_items[i:i + 8]) for i in range(0, len(avatar_items), 8)]
+              avatars = "\n".join(avatar_lines) if avatar_lines else empty
+
+              return "\n".join([
+                  "<!-- CONTRIBUTORS:START -->",
+                  intro,
+                  "",
+                  f"### {core_title}",
+                  "",
+                  *rows,
+                  "",
+                  f"### {all_title}",
+                  "",
+                  '<div align="center">',
+                  avatars,
+                  "</div>",
+                  "<!-- CONTRIBUTORS:END -->",
+              ])
+
+          configurations = [
+              {
+                  "path": "README.md",
+                  "language": "zh",
+                  "section": "项目活跃度与贡献者",
+                  "license": "许可",
+                  "old_contributor": r"## 贡献者\n.*?(?=\n## 星标历史|\n## Star History)",
+                  "old_activity": r"## 项目活跃度与贡献者\n.*?(?=\n---\n\n## 许可)",
+                  "graph": None,
+              },
+              {
+                  "path": "README_EN.md",
+                  "language": "en",
+                  "section": "Project Activity & Contributors",
+                  "license": "License",
+                  "old_contributor": r"## Contributors\n.*?(?=\n## Star History)",
+                  "old_activity": r"## Project Activity & Contributors\n.*?(?=\n---\n\n## License)",
+                  "graph": ("### Core Contributors", "### Contributors Graph"),
+              },
+              {
+                  "path": "README_RU.md",
+                  "language": "ru",
+                  "section": "Активность проекта и участники",
+                  "license": "Лицензия",
+                  "old_contributor": r"## Участники\n.*?(?=\n## История звёзд|\n## Star History)",
+                  "old_activity": r"## Активность проекта и участники\n.*?(?=\n---\n\n## Лицензия)",
+                  "graph": ("### Основные участники", "### Граф участников"),
+              },
+          ]
+
+          for config in configurations:
+              path = Path(config["path"])
+              text = path.read_text(encoding="utf-8")
+
+              activity_match = re.search(config["old_activity"], text, re.S)
+              if activity_match:
+                  activity_body = activity_match.group(0).split("\n", 1)[1].strip()
+                  text = text[:activity_match.start()] + text[activity_match.end():]
+              else:
+                  section_re = re.compile(r"## " + re.escape(config["section"]) + r"\n.*?(?=\n---\n\n## " + re.escape(config["license"]) + r")", re.S)
+                  merged_match = section_re.search(text)
+                  if not merged_match:
+                      raise SystemExit(f"merged activity section not found in {config['path']}")
+                  body = merged_match.group(0).split("\n", 1)[1].strip()
+                  marker_match = re.search(r"<!-- CONTRIBUTORS:START -->.*?<!-- CONTRIBUTORS:END -->", body, re.S)
+                  activity_body = body[marker_match.end():].strip() if marker_match else body
+                  text = text[:merged_match.start()] + text[merged_match.end():]
+
+              text = re.sub(config["old_contributor"], "", text, count=1, flags=re.S)
+              if config["graph"]:
+                  activity_body = activity_body.replace(config["graph"][0], config["graph"][1], 1)
+
+              merged_section = (
+                  f"## {config['section']}\n\n"
+                  + contributor_block(config["language"])
+                  + "\n\n"
+                  + activity_body.strip()
+              )
+
+              license_marker = f"\n---\n\n## {config['license']}"
+              if license_marker not in text:
+                  raise SystemExit(f"license marker not found in {config['path']}")
+              text = text.replace(license_marker, "\n---\n\n" + merged_section + license_marker, 1)
+              path.write_text(text.rstrip() + "\n", encoding="utf-8")
+          PY
+
+      - name: Commit README maintenance
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add README.md README_EN.md README_RU.md
+          if git diff --cached --quiet; then
+            exit 0
+          fi
+          git commit -m "docs: update contributors [skip ci]"
+          git push
