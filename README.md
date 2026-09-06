@@ -354,7 +354,7 @@ CLI（headless）版本作为本仓库的 `cli/` 子目录维护，与 GUI 共�
 
 | 排名 | 核心贡献者 | 提交数 |
 | ---: | --- | ---: |
-| 1 | <a href="https://github.com/dongzheyu">dongzheyu</a> | 167 |
+| 1 | <a href="https://github.com/dongzheyu">dongzheyu</a> | 171 |
 | 2 | <a href="https://github.com/SniShaper">SniShaper</a> | 36 |
 | 3 | <a href="https://github.com/lzpls">lzpls</a> | 5 |
 
