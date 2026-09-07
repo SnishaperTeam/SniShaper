@@ -775,13 +775,16 @@ ensure_frontend() {
 }
 
 copy_seed_folders() {
-    if [ -d config ]; then
-        mkdir -p "$1/config"
-        cp -R config/. "$1/config/"
-    fi
+    # rules: force-overwrite contents on every build so rule updates land.
+    # config: seed only when missing; the runtime settings.json next to the
+    # binary belongs to the user and must survive rebuilds.
     if [ -d rules ]; then
         mkdir -p "$1/rules"
         cp -R rules/. "$1/rules/"
+    fi
+    if [ -d config ] && [ ! -d "$1/config" ]; then
+        mkdir -p "$1/config"
+        cp -R config/. "$1/config/"
     fi
 }
 
