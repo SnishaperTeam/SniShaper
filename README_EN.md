@@ -298,6 +298,9 @@ This project has benefited from the inspiration of the following excellent open-
 
 ---
 
+
+---
+
 ## Project Activity & Contributors
 
 <!-- CONTRIBUTORS:START -->
