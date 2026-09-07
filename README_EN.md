@@ -298,6 +298,9 @@ This project has benefited from the inspiration of the following excellent open-
 
 ---
 
+
+---
+
 ## Project Activity & Contributors
 
 <!-- CONTRIBUTORS:START -->
@@ -307,7 +310,7 @@ This section is maintained automatically by GitHub Actions. Contributors are bas
 
 | Rank | Core Contributor | Commits |
 | ---: | --- | ---: |
-| 1 | <a href="https://github.com/dongzheyu">dongzheyu</a> | 181 |
+| 1 | <a href="https://github.com/dongzheyu">dongzheyu</a> | 182 |
 | 2 | <a href="https://github.com/SniShaper">SniShaper</a> | 36 |
 | 3 | <a href="https://github.com/lzpls">lzpls</a> | 5 |
 
