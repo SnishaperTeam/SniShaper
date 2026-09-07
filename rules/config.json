@@ -3717,40 +3717,6 @@
       "website": "X",
       "enabled": true,
       "nat64_enabled": false
-    }
-  ],
-  "upstreams": [],
-  "dns_nodes": [
-    {
-      "id": "cf-gateway",
-      "name": "Cloudflare Gateway",
-      "url": "https://xwfpeb16ii.cloudflare-gateway.com/dns-query",
-      "ech_enabled": false,
-      "ech_auto_update": false,
-      "quic": false,
-      "enabled": true,
-      "cert_verify": {
-        "mode": "strict_real"
-      }
-    },
-    {
-      "id": "1776998630568972800",
-      "name": "IIJ",
-      "url": "https://public.dns.iij.jp/dns-query",
-      "sni": "iij.jp",
-      "ips": [
-        "103.2.57.5"
-      ],
-      "ech_enabled": false,
-      "ech_auto_update": false,
-      "quic": true,
-      "enabled": true,
-      "cert_verify": {
-        "mode": "allow_names",
-        "names": [
-          "*.dns.iij.jp"
-        ]
-      }
     },
     {
       "id": "sg-spotify-1",
@@ -3807,6 +3773,40 @@
       "website": "spotify",
       "enabled": true,
       "nat64_enabled": false
+    }
+  ],
+  "upstreams": [],
+  "dns_nodes": [
+    {
+      "id": "cf-gateway",
+      "name": "Cloudflare Gateway",
+      "url": "https://xwfpeb16ii.cloudflare-gateway.com/dns-query",
+      "ech_enabled": false,
+      "ech_auto_update": false,
+      "quic": false,
+      "enabled": true,
+      "cert_verify": {
+        "mode": "strict_real"
+      }
+    },
+    {
+      "id": "1776998630568972800",
+      "name": "IIJ",
+      "url": "https://public.dns.iij.jp/dns-query",
+      "sni": "iij.jp",
+      "ips": [
+        "103.2.57.5"
+      ],
+      "ech_enabled": false,
+      "ech_auto_update": false,
+      "quic": true,
+      "enabled": true,
+      "cert_verify": {
+        "mode": "allow_names",
+        "names": [
+          "*.dns.iij.jp"
+        ]
+      }
     }
   ],
   "ech_profiles": [
