@@ -107,3 +107,7 @@ devcert.pfx
 
 # refactor backups
 reference/
+
+# IP scanner logs
+tools/logs/*
+!tools/logs/.gitkeep

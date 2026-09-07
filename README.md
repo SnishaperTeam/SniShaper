@@ -338,6 +338,47 @@ Windows 与 Linux 由同一仓库构建，平台相关实现通过 Go build tags
 
 CLI（headless）版本作为本仓库的 `cli/` 子目录维护，与 GUI 共用同一套核心代码与版本机制（`Package.appxmanifest`），由 `build.sh --cli` / `build_windows.ps1 -Cli` 构建，CI 与发布流水线同时产出 GUI 与 CLI 产物。
 
+## 工具
+
+### IP 扫描器 (tools/scanner.py)
+
+通用 IP 扫描工具，用于扫描目标域名的可用代理 IP。
+
+**用法：**
+
+```bash
+python tools/scanner.py <域名:端口> <IP段CIDR> [最大线程数]
+```
+
+**参数说明：**
+
+| 参数 | 说明 | 示例 |
+|------|------|------|
+| 域名:端口 | 扫描目标 | `open.spotify.com:443` |
+| IP段CIDR | 要扫描的 IP 段 | `35.186.224.0/24` |
+| 最大线程数 | 并发线程数（默认64） | `128` |
+
+**示例：**
+
+```bash
+# 扫描 Spotify 可用 IP
+python tools/scanner.py open.spotify.com:443 35.186.224.0/24 128
+
+# 扫描 Google 可用 IP
+python tools/scanner.py google.com:443 34.0.0.0/8 256
+
+# 扫描任意域名
+python tools/scanner.py example.com:80 1.0.0.0/16 64
+```
+
+**输出：**
+
+- 结果按响应速度从快到慢排列
+- 日志保存在 `tools/logs/` 目录
+- 有效 IP 保存为 `tools/logs/scan_*_valid.txt`
+
+---
+
 ## 致谢
 
 本项目受益于以下优秀开源项目的启发：
