@@ -258,7 +258,7 @@ jobs:
         run: |
           gh api --paginate --slurp "repos/${GITHUB_REPOSITORY}/contributors?anon=1&per_page=100" > "$RUNNER_TEMP/contributors.json"
 
-      - name: Merge activity and contributor sections
+      - name: Update contributor section
         env:
           CONTRIBUTORS_JSON: ${{ runner.temp }}/contributors.json
         shell: bash
@@ -360,64 +360,22 @@ jobs:
               ])
 
           configurations = [
-              {
-                  "path": "README.md",
-                  "language": "zh",
-                  "section": "项目活跃度与贡献者",
-                  "license": "许可",
-                  "old_contributor": r"## 贡献者\n.*?(?=\n## 星标历史|\n## Star History)",
-                  "old_activity": r"## 项目活跃度与贡献者\n.*?(?=\n---\n\n## 许可)",
-                  "graph": None,
-              },
-              {
-                  "path": "README_EN.md",
-                  "language": "en",
-                  "section": "Project Activity & Contributors",
-                  "license": "License",
-                  "old_contributor": r"## Contributors\n.*?(?=\n## Star History)",
-                  "old_activity": r"## Project Activity & Contributors\n.*?(?=\n---\n\n## License)",
-                  "graph": ("### Core Contributors", "### Contributors Graph"),
-              },
-              {
-                  "path": "README_RU.md",
-                  "language": "ru",
-                  "section": "Активность проекта и участники",
-                  "license": "Лицензия",
-                  "old_contributor": r"## Участники\n.*?(?=\n## История звёзд|\n## Star History)",
-                  "old_activity": r"## Активность проекта и участники\n.*?(?=\n---\n\n## Лицензия)",
-                  "graph": ("### Основные участники", "### Граф участников"),
-              },
+              {"path": "README.md", "language": "zh"},
+              {"path": "README_EN.md", "language": "en"},
+              {"path": "README_RU.md", "language": "ru"},
           ]
 
           for config in configurations:
               path = Path(config["path"])
               text = path.read_text(encoding="utf-8")
-
-              activity_match = re.search(config["old_activity"], text, re.S)
-              if activity_match:
-                  activity_body = activity_match.group(0).split("\n", 1)[1].strip()
-                  marker_match = re.search(r"<!-- CONTRIBUTORS:START -->.*?<!-- CONTRIBUTORS:END -->", activity_body, re.S)
-                  if marker_match:
-                      activity_body = activity_body[marker_match.end():].strip()
-                  text = text[:activity_match.start()] + text[activity_match.end():]
-              else:
-                  raise SystemExit(f"activity section not found in {config['path']}")
-
-              text = re.sub(config["old_contributor"], "", text, count=1, flags=re.S)
-              if config["graph"]:
-                  activity_body = activity_body.replace(config["graph"][0], config["graph"][1], 1)
-
-              merged_section = (
-                  f"## {config['section']}\n\n"
-                  + contributor_block(config["language"])
-                  + "\n\n"
-                  + activity_body.strip()
+              pattern = re.compile(
+                  r"<!-- CONTRIBUTORS:START -->.*?<!-- CONTRIBUTORS:END -->",
+                  re.S,
               )
-
-              license_marker = f"\n---\n\n## {config['license']}"
-              if license_marker not in text:
-                  raise SystemExit(f"license marker not found in {config['path']}")
-              text = text.replace(license_marker, "\n---\n\n" + merged_section + license_marker, 1)
+              new_block = contributor_block(config["language"])
+              text, count = pattern.subn(new_block, text, count=1)
+              if count == 0:
+                  raise SystemExit(f"<!-- CONTRIBUTORS:START -->..<!-- CONTRIBUTORS:END --> markers not found in {config['path']}")
               path.write_text(text.rstrip() + "\n", encoding="utf-8")
           PY
 
