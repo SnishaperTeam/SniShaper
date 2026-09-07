@@ -1000,15 +1000,23 @@ function Invoke-BuildTarget {
         return $false
     }
 
-    # Seed folders: copy CONTENTS into the target dir and force-overwrite.
-    # Copy-Item -Recurse on an existing destination would nest the source
-    # folder (rules\rules\...) and leave stale top-level files behind.
-    foreach ($seed in @("config", "rules")) {
-        $src = Join-Path $ProjectRoot $seed
-        if (Test-Path $src) {
-            $dst = Join-Path $outDir $seed
-            New-Item -ItemType Directory -Force -Path $dst | Out-Null
-            Copy-Item -Path (Join-Path $src "*") -Destination $dst -Recurse -Force
+    # Seed folders:
+    # - rules: force-overwrite CONTENTS on every build so rule updates land.
+    #   Copy-Item -Recurse against an existing destination would nest the
+    #   source folder (rules\rules\...) and leave stale top-level files.
+    # - config: seed only when missing; the runtime settings.json next to the
+    #   binary belongs to the user and must survive rebuilds.
+    $rulesSrc = Join-Path $ProjectRoot "rules"
+    if (Test-Path $rulesSrc) {
+        $rulesDst = Join-Path $outDir "rules"
+        New-Item -ItemType Directory -Force -Path $rulesDst | Out-Null
+        Copy-Item -Path (Join-Path $rulesSrc "*") -Destination $rulesDst -Recurse -Force
+    }
+    $configDst = Join-Path $outDir "config"
+    if (-not (Test-Path $configDst)) {
+        $configSrc = Join-Path $ProjectRoot "config"
+        if (Test-Path $configSrc) {
+            Copy-Item -Path $configSrc -Destination $configDst -Recurse -Force
         }
     }
 
