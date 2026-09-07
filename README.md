@@ -386,23 +386,7 @@ python tools/scanner.py example.com:80 1.0.0.0/16 64
 - [DoH-ECH-Demo](https://github.com/0xCaner/DoH-ECH-Demo)
 - [lumine](https://github.com/moi-si/lumine)
 
-<!-- CONTRIBUTORS:START -->
-本节由 GitHub Actions 自动维护。贡献者来自 GitHub 的提交统计，机器人账号会被排除；核心贡献者按提交数从高到低取前三名。
-
-### 核心贡献者
-
-| 排名 | 核心贡献者 | 提交数 |
-| ---: | --- | ---: |
-| 1 | <a href="https://github.com/dongzheyu">dongzheyu</a> | 190 |
-| 2 | <a href="https://github.com/SniShaper">SniShaper</a> | 36 |
-| 3 | <a href="https://github.com/lzpls">lzpls</a> | 5 |
-
-### 全部贡献者
-
-<div align="center">
-<a href="https://github.com/dongzheyu" title="dongzheyu"><img src="https://avatars.githubusercontent.com/u/169264339?v=4" width="48" height="48" alt="dongzheyu" /></a> <a href="https://github.com/SniShaper" title="SniShaper"><img src="https://avatars.githubusercontent.com/u/281507783?v=4" width="48" height="48" alt="SniShaper" /></a> <a href="https://github.com/lzpls" title="lzpls"><img src="https://avatars.githubusercontent.com/u/220288222?v=4" width="48" height="48" alt="lzpls" /></a> <a href="https://github.com/Calvin1-tech" title="Calvin1-tech"><img src="https://avatars.githubusercontent.com/u/181093099?v=4" width="48" height="48" alt="Calvin1-tech" /></a>
-</div>
-<!-- CONTRIBUTORS:END -->
+## 项目活跃度与贡献者
 
 ### 活跃度徽章
 
