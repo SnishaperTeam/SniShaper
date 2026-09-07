@@ -310,7 +310,7 @@ Windows и Linux собираются из одного репозитория, 
 
 | Место | Основной участник | Коммиты |
 | ---: | --- | ---: |
-| 1 | <a href="https://github.com/dongzheyu">dongzheyu</a> | 182 |
+| 1 | <a href="https://github.com/dongzheyu">dongzheyu</a> | 190 |
 | 2 | <a href="https://github.com/SniShaper">SniShaper</a> | 36 |
 | 3 | <a href="https://github.com/lzpls">lzpls</a> | 5 |
 
