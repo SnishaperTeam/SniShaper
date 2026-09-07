@@ -303,24 +303,6 @@ This project has benefited from the inspiration of the following excellent open-
 
 ## Project Activity & Contributors
 
-<!-- CONTRIBUTORS:START -->
-This section is maintained automatically by GitHub Actions. Contributors are based on GitHub commit statistics; bot accounts are excluded, and the top three contributors by commit count are listed as core contributors.
-
-### Core Contributors
-
-| Rank | Core Contributor | Commits |
-| ---: | --- | ---: |
-| 1 | <a href="https://github.com/dongzheyu">dongzheyu</a> | 190 |
-| 2 | <a href="https://github.com/SniShaper">SniShaper</a> | 36 |
-| 3 | <a href="https://github.com/lzpls">lzpls</a> | 5 |
-
-### All Contributors
-
-<div align="center">
-<a href="https://github.com/dongzheyu" title="dongzheyu"><img src="https://avatars.githubusercontent.com/u/169264339?v=4" width="48" height="48" alt="dongzheyu" /></a> <a href="https://github.com/SniShaper" title="SniShaper"><img src="https://avatars.githubusercontent.com/u/281507783?v=4" width="48" height="48" alt="SniShaper" /></a> <a href="https://github.com/lzpls" title="lzpls"><img src="https://avatars.githubusercontent.com/u/220288222?v=4" width="48" height="48" alt="lzpls" /></a> <a href="https://github.com/Calvin1-tech" title="Calvin1-tech"><img src="https://avatars.githubusercontent.com/u/181093099?v=4" width="48" height="48" alt="Calvin1-tech" /></a>
-</div>
-<!-- CONTRIBUTORS:END -->
-
 ### Activity Badges
 
 [![GitHub contributors](https://img.shields.io/github/contributors/SnishaperTeam/SniShaper?style=flat&label=Total Contributors)](https://github.com/SnishaperTeam/SniShaper/graphs/contributors)

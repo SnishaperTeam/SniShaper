@@ -303,24 +303,6 @@ Windows и Linux собираются из одного репозитория, 
 
 ## Активность проекта и участники
 
-<!-- CONTRIBUTORS:START -->
-Этот раздел автоматически обновляется GitHub Actions. Участники определяются по статистике коммитов GitHub; аккаунты-боты исключаются, а три участника с наибольшим числом коммитов считаются основными участниками.
-
-### Основные участники
-
-| Место | Основной участник | Коммиты |
-| ---: | --- | ---: |
-| 1 | <a href="https://github.com/dongzheyu">dongzheyu</a> | 190 |
-| 2 | <a href="https://github.com/SniShaper">SniShaper</a> | 36 |
-| 3 | <a href="https://github.com/lzpls">lzpls</a> | 5 |
-
-### Все участники
-
-<div align="center">
-<a href="https://github.com/dongzheyu" title="dongzheyu"><img src="https://avatars.githubusercontent.com/u/169264339?v=4" width="48" height="48" alt="dongzheyu" /></a> <a href="https://github.com/SniShaper" title="SniShaper"><img src="https://avatars.githubusercontent.com/u/281507783?v=4" width="48" height="48" alt="SniShaper" /></a> <a href="https://github.com/lzpls" title="lzpls"><img src="https://avatars.githubusercontent.com/u/220288222?v=4" width="48" height="48" alt="lzpls" /></a> <a href="https://github.com/Calvin1-tech" title="Calvin1-tech"><img src="https://avatars.githubusercontent.com/u/181093099?v=4" width="48" height="48" alt="Calvin1-tech" /></a>
-</div>
-<!-- CONTRIBUTORS:END -->
-
 ### Значки активности
 
 [![GitHub contributors](https://img.shields.io/github/contributors/SnishaperTeam/SniShaper?style=flat&label=Всего участников)](https://github.com/SnishaperTeam/SniShaper/graphs/contributors)
