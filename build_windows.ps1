@@ -1000,11 +1000,16 @@ function Invoke-BuildTarget {
         return $false
     }
 
-    if (Test-Path (Join-Path $ProjectRoot "config")) {
-        Copy-Item -Path (Join-Path $ProjectRoot "config") -Destination (Join-Path $outDir "config") -Recurse -Force
-    }
-    if (Test-Path (Join-Path $ProjectRoot "rules")) {
-        Copy-Item -Path (Join-Path $ProjectRoot "rules") -Destination (Join-Path $outDir "rules") -Recurse -Force
+    # Seed folders: copy CONTENTS into the target dir and force-overwrite.
+    # Copy-Item -Recurse on an existing destination would nest the source
+    # folder (rules\rules\...) and leave stale top-level files behind.
+    foreach ($seed in @("config", "rules")) {
+        $src = Join-Path $ProjectRoot $seed
+        if (Test-Path $src) {
+            $dst = Join-Path $outDir $seed
+            New-Item -ItemType Directory -Force -Path $dst | Out-Null
+            Copy-Item -Path (Join-Path $src "*") -Destination $dst -Recurse -Force
+        }
     }
 
     Write-Host "[BUILD] OK: $($Target.OutDir)\$($Target.OutFile)" -ForegroundColor Green
