@@ -387,33 +387,6 @@ python tools/scanner.py example.com:80 1.0.0.0/16 64
 - [lumine](https://github.com/moi-si/lumine)
 
 <!-- CONTRIBUTORS:START -->
-
-## 星标历史
-
-## Star History
-
-<a href="https://www.star-history.com/?repos=snishaper%2Fsnishaper&type=date&legend=top-left">
- <picture>
-   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/chart?repos=snishaper/snishaper&type=date&theme=dark&legend=top-left&sealed_token=8Q__19KTE6g7OqVIseB0o2elHwSh9GjE93LPnbu5UWeQ-0vS0Qpt7BzQIUgKqNYIObs96Y6oFUbTB98qvun_ivkhW1TG1AEr701tG403fsGTcLcbLITh7Q" />
-   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/chart?repos=snishaper/snishaper&type=date&legend=top-left&sealed_token=8Q__19KTE6g7OqVIseB0o2elHwSh9GjE93LPnbu5UWeQ-0vS0Qpt7BzQIUgKqNYIObs96Y6oFUbTB98qvun_ivkhW1TG1AEr701tG403fsGTcLcbLITh7Q" />
-   <img alt="Star History Chart" src="https://api.star-history.com/chart?repos=snishaper/snishaper&type=date&legend=top-left&sealed_token=8Q__19KTE6g7OqVIseB0o2elHwSh9GjE93LPnbu5UWeQ-0vS0Qpt7BzQIUgKqNYIObs96Y6oFUbTB98qvun_ivkhW1TG1AEr701tG403fsGTcLcbLITh7Q" />
- </picture>
-</a>
-
----
-
-
----
-
-
----
-
-
----
-
-## 项目活跃度与贡献者
-
-<!-- CONTRIBUTORS:START -->
 本节由 GitHub Actions 自动维护。贡献者来自 GitHub 的提交统计，机器人账号会被排除；核心贡献者按提交数从高到低取前三名。
 
 ### 核心贡献者
