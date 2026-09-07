@@ -324,6 +324,7 @@ Windows и Linux собираются из одного репозитория, 
 <img src="https://contrib.rocks/image?repo=SnishaperTeam/SniShaper" alt="Contributors" />
 </a>
 </div>
+
 ---
 
 ## Лицензия
