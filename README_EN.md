@@ -324,6 +324,7 @@ This project has benefited from the inspiration of the following excellent open-
 <img src="https://contrib.rocks/image?repo=SnishaperTeam/SniShaper" alt="Contributors" />
 </a>
 </div>
+
 ---
 
 ## License
