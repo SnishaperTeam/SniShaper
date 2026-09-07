@@ -3772,7 +3772,6 @@
       "cert_verify": {},
       "website": "spotify",
       "enabled": true,
-      "upstream": "35.186.224.206:443",
       "nat64_enabled": false
     },
     {
@@ -3784,15 +3783,13 @@
         "*.scdn.co",
         "i.scdn.co",
         "audio-ak-spotify-com.akamaized.net",
-        "audio-ak.spotify.com",
-        "*.akamaized.net"
+        "audio-ak.spotify.com"
       ],
       "ech_enabled": false,
       "use_cf_pool": false,
       "cert_verify": {},
       "website": "spotify",
       "enabled": true,
-      "upstream": "35.186.224.206:443",
       "nat64_enabled": false
     },
     {
@@ -3809,7 +3806,6 @@
       "cert_verify": {},
       "website": "spotify",
       "enabled": true,
-      "upstream": "35.186.224.206:443",
       "nat64_enabled": false
     }
   ],
