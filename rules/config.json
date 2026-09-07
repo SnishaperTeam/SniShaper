@@ -3751,6 +3751,66 @@
           "*.dns.iij.jp"
         ]
       }
+    },
+    {
+      "id": "sg-spotify-1",
+      "name": "spotify.com",
+      "mode": "tls-rf",
+      "domains": [
+        "spotify.com",
+        "open.spotify.com",
+        "api.spotify.com",
+        "login.spotify.com",
+        "accounts.spotify.com",
+        "auth2.spotify.com",
+        "partner.spotify.com",
+        "support.spotify.com",
+        "www.spotify.com"
+      ],
+      "ech_enabled": false,
+      "use_cf_pool": false,
+      "cert_verify": {},
+      "website": "spotify",
+      "enabled": true,
+      "upstream": "35.186.224.206:443",
+      "nat64_enabled": false
+    },
+    {
+      "id": "sg-spotify-2",
+      "name": "scdn.co",
+      "mode": "tls-rf",
+      "domains": [
+        "scdn.co",
+        "*.scdn.co",
+        "i.scdn.co",
+        "audio-ak-spotify-com.akamaized.net",
+        "audio-ak.spotify.com",
+        "*.akamaized.net"
+      ],
+      "ech_enabled": false,
+      "use_cf_pool": false,
+      "cert_verify": {},
+      "website": "spotify",
+      "enabled": true,
+      "upstream": "35.186.224.206:443",
+      "nat64_enabled": false
+    },
+    {
+      "id": "sg-spotify-3",
+      "name": "spotifycdn.com",
+      "mode": "tls-rf",
+      "domains": [
+        "spotifycdn.com",
+        "*.spotifycdn.com",
+        "spoti.fi"
+      ],
+      "ech_enabled": false,
+      "use_cf_pool": false,
+      "cert_verify": {},
+      "website": "spotify",
+      "enabled": true,
+      "upstream": "35.186.224.206:443",
+      "nat64_enabled": false
     }
   ],
   "ech_profiles": [
