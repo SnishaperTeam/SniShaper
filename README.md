@@ -12,6 +12,8 @@
 
 > 需要 Android 移动端？请参见 **Lumine for Android**（<https://github.com/SniShaper/lumine-for-android>）——基于相同路由理念的移动端配套版本：Kotlin + Jetpack Compose（Material Design 3）原生界面，Go（enimul）核心经 gomobile 绑定为单个 AAR，无 WebView 内嵌；支持订阅管理、规则编辑、实时日志与后台保活，也可通过 F-Droid（`com.moi.lumine`）获取。
 
+> 需要 HarmonyOS 移动端？请参见 **Lumine for HarmonyOS**（<https://github.com/SnishaperTeam/lumine-for-harmonyos>）——同一移动端理念的鸿蒙配套版本：ArkTS + ArkUI 原生界面（深浅色），便携 C++17 核心经 NAPI 接入为单个 `liblumine_napi.so`，无 WebView 内嵌；支持 VpnExtensionAbility（TUN）隧道、本地代理监听（SOCKS5 / HTTP 回环入站）、订阅管理、规则编辑、实时日志与运行状态通知。
+
 ---
 
 ## 特性
