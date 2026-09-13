@@ -100,6 +100,7 @@ type SettingsConfig struct {
 	ListenPort                 string            `json:"listen_port"`
 	Socks5Port                 string            `json:"socks5_port,omitempty"`
 	CloseToTray                *bool             `json:"close_to_tray,omitempty"`
+	HibernateOnClose           *bool             `json:"hibernate_on_close,omitempty"`
 	AutoStart                  *bool             `json:"auto_start,omitempty"`
 	ShowMainWindowOnAutoStart  *bool             `json:"show_main_window_on_auto_start,omitempty"`
 	AutoEnableProxyOnAutoStart *bool             `json:"auto_enable_proxy_on_auto_start,omitempty"`

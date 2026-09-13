@@ -4,8 +4,12 @@ package app
 
 import (
 	"context"
+	"runtime"
+	"runtime/debug"
+	"time"
 
 	"github.com/wailsapp/wails/v3/pkg/application"
+	"github.com/wailsapp/wails/v3/pkg/events"
 )
 
 // Typed accessors for the GUI-only UI references (stored as `any` on App
@@ -72,7 +76,75 @@ func (a *App) SetMainWindow(w *application.WebviewWindow) {
 			a.pendingShow = false
 		}
 	} else {
-		a.mainWindow = w
+		a.mainWindow = nil
+		go func() {
+			runtime.GC()
+			debug.FreeOSMemory()
+		}()
+	}
+}
+
+func (a *App) IsHibernated() bool { return a.mainWindow == nil && !a.shouldQuit }
+
+func (a *App) IsMainWindowVisible() bool {
+	if a.mainWindow == nil {
+		return false
+	}
+	return a.mainWindowInstance().IsVisible()
+}
+
+func (a *App) HibernateMainWindow() {
+	if a.mainWindow == nil {
+		return
+	}
+	w := a.mainWindowInstance()
+	a.mainWindow = nil
+	go func() {
+		w.Close()
+		time.Sleep(200 * time.Millisecond)
+		runtime.GC()
+		debug.FreeOSMemory()
+		a.setTrayTooltip("SniShaper - 前端已休眠，点击托盘恢复")
+	}()
+}
+
+func (a *App) ensureMainWindow() *application.WebviewWindow {
+	if a.mainWindow != nil {
+		return a.mainWindowInstance()
+	}
+	wailsApp := a.wailsAppInstance()
+	if wailsApp == nil {
+		a.pendingShow = true
+		return nil
+	}
+	w := wailsApp.Window.NewWithOptions(application.WebviewWindowOptions{
+		Name:             "main",
+		Title:            "snishaper",
+		Width:            1024,
+		Height:           768,
+		URL:              "/",
+		Frameless:        true,
+		Hidden:           false,
+		BackgroundColour: application.NewRGB(27, 38, 54),
+	})
+	w.OnWindowEvent(events.Common.WindowClosing, func(event *application.WindowEvent) {
+		a.handleWindowClosing(event, w)
+	})
+	a.SetMainWindow(w)
+	return w
+}
+
+func (a *App) handleWindowClosing(event *application.WindowEvent, w *application.WebviewWindow) {
+	if a.shouldQuit {
+		return
+	}
+	if a.GetHibernateOnClose() {
+		a.SetMainWindow(nil)
+		return
+	}
+	if a.GetCloseToTray() {
+		event.Cancel()
+		w.Hide()
 	}
 }
 
@@ -114,6 +186,11 @@ func (a *App) showMainWindow() {
 	if a.mainWindow != nil {
 		a.mainWindowInstance().Show()
 		a.mainWindowInstance().Focus()
+		return
+	}
+	if w := a.ensureMainWindow(); w != nil {
+		w.Show()
+		w.Focus()
 	}
 }
 

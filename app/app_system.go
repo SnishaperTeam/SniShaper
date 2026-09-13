@@ -144,6 +144,11 @@ func (a *App) applySystemProxySync(enabled bool, port int, sync bool) error {
 func (a *App) EnableSystemProxy() error {
 	a.appendLog("[action] EnableSystemProxy called")
 
+	if a.GetTUNStatus().Running {
+		a.appendLog("[warn] EnableSystemProxy blocked: TUN is running")
+		return fmt.Errorf("TUN is running, disable TUN before enabling system proxy")
+	}
+
 	if !a.IsProxyRunning() {
 		a.appendLog("[action] Proxy not running, starting proxy before enabling system proxy...")
 		if err := a.StartProxy(); err != nil {
@@ -286,6 +291,15 @@ func (a *App) SetCloseToTray(enabled bool) error {
 	return a.ruleManager.SetCloseToTray(enabled)
 }
 
+func (a *App) GetHibernateOnClose() bool {
+	return a.ruleManager.GetHibernateOnClose()
+}
+
+func (a *App) SetHibernateOnClose(enabled bool) error {
+	a.appendLog(fmt.Sprintf("[action] SetHibernateOnClose: %v", enabled))
+	return a.ruleManager.SetHibernateOnClose(enabled)
+}
+
 func (a *App) WindowMinimise() {
 	a.minimiseMainWindow()
 }
@@ -299,9 +313,15 @@ func (a *App) WindowClose() {
 }
 
 func (a *App) HandleWindowClose() {
-	if a.GetCloseToTray() && !a.shouldQuit && a.mainWindow != nil {
-		a.hideMainWindow()
-		return
+	if !a.shouldQuit && a.mainWindow != nil {
+		if a.GetHibernateOnClose() {
+			a.HibernateMainWindow()
+			return
+		}
+		if a.GetCloseToTray() {
+			a.hideMainWindow()
+			return
+		}
 	}
 	a.QuitApp()
 }

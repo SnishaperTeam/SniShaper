@@ -202,6 +202,9 @@ func (a *App) StopProxy() error {
 	defer a.proxyOpMu.Unlock()
 
 	if a.core != nil {
+		if a.core.GetTUNStatus().Running {
+			_ = a.core.StopTUN()
+		}
 		err := a.core.StopProxy()
 		a.UpdateTrayMenu()
 		a.emitFrontendState()
@@ -322,6 +325,11 @@ func (a *App) SetListenPort(port int) error {
 
 func (a *App) RevealMainWindow() {
 	if a.mainWindow != nil {
+		a.showMainWindow()
+		return
+	}
+	// hibernated: recreate window
+	if a.wailsApp != nil {
 		a.showMainWindow()
 		return
 	}

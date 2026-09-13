@@ -440,9 +440,10 @@ func (p *ProxyServer) NewQUICRoundTripper(host string, rule Rule) (*http3.Transp
 		}
 	}
 
-	// H3 上游必须用真实域名作为 SNI：QUIC 服务器按 SNI 路由请求，
-	// sni_fake（如 g.cn）只用于 TCP MITM 链路，H3 上 SNI 与 Host 不一致会挂起。
-	sniHost := host
+	sniHost := chooseUpstreamSNI(host, rule)
+	if sniHost == "" {
+		sniHost = host
+	}
 	var echConfig []byte
 	if rule.ECHEnabled {
 		echConfig = p.resolveRuleECHConfig(host, rule)
@@ -529,9 +530,7 @@ func (p *ProxyServer) handleQUICMITM(clientConn net.Conn, host string, rule Rule
 	caCert := p.certGenerator.GetCACert()
 	caKey := p.certGenerator.GetCAKey()
 
-	// TLS: offer h2 + http/1.1. Go's http.Server automatically switches
-	// to HTTP/2 when ALPN selects "h2" — no extra config needed.
-	tlsConfig := p.makeMITMTLSConfig(host, caCert, caKey, []string{"h2", "http/1.1"}, "[QUICMode]")
+	tlsConfig := p.makeMITMTLSConfig(host, caCert, caKey, []string{"http/1.1"}, "[QUICMode]")
 	clientTLS := tls.Server(clientConn, tlsConfig)
 	if err := clientTLS.Handshake(); err != nil {
 		log.Printf("[QUICMode] Client TLS handshake failed: %v", err)
@@ -603,7 +602,7 @@ func (p *ProxyServer) handleQUICMITM(clientConn net.Conn, host string, rule Rule
 		}),
 	}
 
-	_ = srv.Serve(&singleConnListener{conn: clientTLS, done: make(chan struct{})})
+	_ = srv.Serve(newSingleConnListener(clientTLS))
 }
 
 // isHopByHopHeader reports headers that must not be forwarded across hops
@@ -721,35 +720,55 @@ func (c *closeNotifyConn) Close() error {
 }
 
 type singleConnListener struct {
-	conn     *tls.Conn
-	accepted sync.Once
-	done     chan struct{}
-	doneOnce sync.Once
+	addr      net.Addr
+	ch        chan net.Conn
+	closed    chan struct{}
+	closeOnce sync.Once
+}
+
+func newSingleConnListener(conn net.Conn) *singleConnListener {
+	l := &singleConnListener{
+		addr:   conn.LocalAddr(),
+		ch:     make(chan net.Conn, 1),
+		closed: make(chan struct{}),
+	}
+	l.ch <- &closeNotifyConn{
+		Conn: conn,
+		onClose: func() {
+			l.closeOnce.Do(func() { close(l.closed) })
+		},
+	}
+	return l
 }
 
 func (l *singleConnListener) Accept() (net.Conn, error) {
-	var accepted bool
-	l.accepted.Do(func() { accepted = true })
-	if accepted {
-		go func() {
-			buf := make([]byte, 32*1024)
-			for {
-				if _, err := l.conn.Read(buf); err != nil {
-					l.doneOnce.Do(func() { close(l.done) })
-					return
-				}
-			}
-		}()
-		return l.conn, nil
+	select {
+	case c, ok := <-l.ch:
+		if !ok {
+			return nil, net.ErrClosed
+		}
+		return c, nil
+	case <-l.closed:
+		return nil, net.ErrClosed
 	}
-	<-l.done
-	return nil, io.EOF
 }
 func (l *singleConnListener) Close() error {
-	l.doneOnce.Do(func() { close(l.done) })
+	l.closeOnce.Do(func() {
+		close(l.closed)
+		select {
+		case c := <-l.ch:
+			_ = c.Close()
+		default:
+		}
+	})
 	return nil
 }
-func (l *singleConnListener) Addr() net.Addr { return l.conn.LocalAddr() }
+func (l *singleConnListener) Addr() net.Addr {
+	if l.addr != nil {
+		return l.addr
+	}
+	return &net.TCPAddr{}
+}
 
 func (p *ProxyServer) ClearCertCache() {
 	p.certCacheMu.Lock()
