@@ -215,15 +215,22 @@ func (cm *CertManager) GetCAInstallStatus() CAInstallStatus {
 
 	sum := sha1.Sum(cm.caCert.Raw)
 	thumb := strings.ToUpper(hex.EncodeToString(sum[:]))
+	clean := func(s string) string {
+		s = strings.ToLower(s)
+		s = strings.ReplaceAll(s, " ", "")
+		s = strings.ReplaceAll(s, ":", "")
+		return s
+	}
+	cleanThumb := clean(thumb)
 
 	// Run native certutil to check if cert thumbprint exists in User Root or CA store.
 	// This avoids any PowerShell ExecutionPolicy restriction issues and does not require temp files.
 	outputRoot, _ := outputHiddenCommand("certutil", "-user", "-store", "root", thumb)
-	if strings.Contains(strings.ToLower(string(outputRoot)), strings.ToLower(thumb)) {
+	if strings.Contains(clean(string(outputRoot)), cleanThumb) {
 		status.Installed = true
 	} else {
 		outputCA, _ := outputHiddenCommand("certutil", "-user", "-store", "ca", thumb)
-		if strings.Contains(strings.ToLower(string(outputCA)), strings.ToLower(thumb)) {
+		if strings.Contains(clean(string(outputCA)), cleanThumb) {
 			status.Installed = true
 		}
 	}

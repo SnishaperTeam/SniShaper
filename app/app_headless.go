@@ -46,7 +46,17 @@ func (a *App) hideMainWindow()                {}
 func (a *App) minimiseMainWindow()            {}
 func (a *App) toggleMaximiseMainWindow()      {}
 func (a *App) closeMainWindow()               {}
+func (a *App) HibernateMainWindow()           {}
 func (a *App) quitAppUI()                     {}
 func (a *App) setTrayTooltip(text string)     {}
 func (a *App) updateTrayProxyItem(label string, checked bool) {}
 func (a *App) updateTraySysProxyItem(label string)            {}
+
+func (a *App) SetWailsApp(w any)              {}
+func (a *App) SetMainWindow(w any)            {}
+func (a *App) SetSystemTray(t any)            {}
+func (a *App) SetTrayMenu(m any)              {}
+func (a *App) SetProxyMenuItem(i any)         {}
+func (a *App) SetSystemProxyMenuItem(i any)   {}
+func (a *App) IsHibernated() bool             { return false }
+func (a *App) IsMainWindowVisible() bool      { return false }

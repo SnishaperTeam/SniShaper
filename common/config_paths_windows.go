@@ -3,6 +3,7 @@
 package common
 
 import (
+	"os"
 	"path/filepath"
 )
 
@@ -18,7 +19,21 @@ func ConfigRulesPath(execDir string) string {
 
 // ConfigCertDir resolves the certificate directory for the current platform.
 func ConfigCertDir(execDir string) string {
-	return filepath.Join(execDir, "cert")
+	stable := UserConfigPath("cert")
+	legacy := filepath.Join(execDir, "cert")
+	if _, err := os.Stat(stable); os.IsNotExist(err) {
+		if _, err2 := os.Stat(legacy); err2 == nil {
+			if err := os.MkdirAll(stable, 0755); err == nil {
+				if data, err := os.ReadFile(filepath.Join(legacy, "ca.crt")); err == nil {
+					_ = os.WriteFile(filepath.Join(stable, "ca.crt"), data, 0644)
+				}
+				if data, err := os.ReadFile(filepath.Join(legacy, "ca.key")); err == nil {
+					_ = os.WriteFile(filepath.Join(stable, "ca.key"), data, 0600)
+				}
+			}
+		}
+	}
+	return stable
 }
 
 // ConfigProxyMarker resolves the managed system proxy marker path.

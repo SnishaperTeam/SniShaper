@@ -23,6 +23,7 @@ type RuleManager struct {
 	cloudflareConfig           CloudflareConfig
 	tunConfig                  TUNConfig
 	closeToTray                bool
+	hibernateOnClose           bool
 	autoStart                  bool
 	showMainOnAutoStart        bool
 	autoEnableProxyOnAutoStart bool
@@ -289,6 +290,7 @@ func (rm *RuleManager) loadSettingsConfig() error {
 
 	// 1. Set internal defaults first
 	rm.closeToTray = true
+	rm.hibernateOnClose = false
 	rm.autoStart = false
 	rm.showMainOnAutoStart = true
 	rm.autoEnableProxyOnAutoStart = false
@@ -313,6 +315,9 @@ func (rm *RuleManager) loadSettingsConfig() error {
 
 	if config.CloseToTray != nil {
 		rm.closeToTray = *config.CloseToTray
+	}
+	if config.HibernateOnClose != nil {
+		rm.hibernateOnClose = *config.HibernateOnClose
 	}
 	if config.AutoStart != nil {
 		rm.autoStart = *config.AutoStart
@@ -551,6 +556,25 @@ func (rm *RuleManager) GetCloseToTray() bool {
 func (rm *RuleManager) SetCloseToTray(enabled bool) error {
 	rm.mu.Lock()
 	rm.closeToTray = enabled
+	if !enabled {
+		rm.hibernateOnClose = false
+	}
+	rm.mu.Unlock()
+	return rm.saveSettingsConfig()
+}
+
+func (rm *RuleManager) GetHibernateOnClose() bool {
+	rm.mu.RLock()
+	defer rm.mu.RUnlock()
+	return rm.hibernateOnClose && rm.closeToTray
+}
+
+func (rm *RuleManager) SetHibernateOnClose(enabled bool) error {
+	rm.mu.Lock()
+	if enabled {
+		rm.closeToTray = true
+	}
+	rm.hibernateOnClose = enabled
 	rm.mu.Unlock()
 	return rm.saveSettingsConfig()
 }
@@ -810,6 +834,7 @@ func (rm *RuleManager) saveSettingsConfig() error {
 		socks5Port = "8081"
 	}
 	closeToTray := rm.closeToTray
+	hibernateOnClose := rm.hibernateOnClose
 	autoStart := rm.autoStart
 	showMainOnAutoStart := rm.showMainOnAutoStart
 	autoEnableProxyOnAutoStart := rm.autoEnableProxyOnAutoStart
@@ -822,6 +847,7 @@ func (rm *RuleManager) saveSettingsConfig() error {
 		Socks5Port:                 socks5Port,
 
 		CloseToTray:                &closeToTray,
+		HibernateOnClose:           &hibernateOnClose,
 		AutoStart:                  &autoStart,
 		ShowMainWindowOnAutoStart:  &showMainOnAutoStart,
 		AutoEnableProxyOnAutoStart: &autoEnableProxyOnAutoStart,
