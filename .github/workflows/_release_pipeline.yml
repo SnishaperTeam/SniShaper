@@ -615,21 +615,11 @@ jobs:
       contents: write
     env:
       LLM_CONFIGURED: ${{ secrets.LLM_API_KEY != '' }}
-      RELEASE_BOT_READY: ${{ secrets.RELEASE_BOT_APP_ID != '' && secrets.RELEASE_BOT_PRIVATE_KEY != '' }}
     steps:
-      - name: Generate release bot token
-        id: bot
-        if: env.RELEASE_BOT_READY == 'true'
-        uses: actions/create-github-app-token@v2
-        with:
-          app-id: ${{ secrets.RELEASE_BOT_APP_ID }}
-          private-key: ${{ secrets.RELEASE_BOT_PRIVATE_KEY }}
-
       - name: Checkout full history
         uses: actions/checkout@v7
         with:
           fetch-depth: 0
-          token: ${{ steps.bot.outputs.token || github.token }}
 
       - name: Download Windows artifacts
         uses: actions/download-artifact@v8
@@ -900,7 +890,7 @@ jobs:
       - name: Create GitHub Release
         shell: pwsh
         env:
-          GH_TOKEN: ${{ steps.bot.outputs.token || github.token }}
+          GH_TOKEN: ${{ github.token }}
         run: |
           # Continue + explicit exit-code handling so a failed gh call
           # produces a clear ::error:: line instead of a bare throw.
@@ -937,7 +927,7 @@ jobs:
       - name: Append GitHub generated contributor list
         shell: pwsh
         env:
-          GH_TOKEN: ${{ steps.bot.outputs.token || github.token }}
+          GH_TOKEN: ${{ github.token }}
         run: |
           # The contributor block comes from GitHub's own release notes
           # generator, so identities are resolved against real accounts
