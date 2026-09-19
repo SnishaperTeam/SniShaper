@@ -238,49 +238,62 @@ jobs:
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
-          Write-Host "::group::build_windows.ps1 -Platform windows -Arch x64 -Type gui -InstallDeps -BuildMsix -Silent"
-          ./build_windows.ps1 -Platform windows -Arch x64 -Type gui -InstallDeps -BuildMsix -Silent
+          # All three Windows GUI architectures are built so the MSIX step can
+          # emit a single mixed-architecture .msixbundle (x64/x86/arm64).
+          Write-Host "::group::build_windows.ps1 -Platform windows -Arch x64,x86,arm64 -Type gui -InstallDeps -BuildMsix -Silent"
+          ./build_windows.ps1 -Platform windows -Arch x64,x86,arm64 -Type gui -InstallDeps -BuildMsix -Silent
           if ($LASTEXITCODE -ne 0) {
             Write-Host "::error::build_windows.ps1 failed"
             exit 1
           }
           Write-Host "::endgroup::"
-          $msix = Get-ChildItem -Path Apppackage -Filter "*.msix" -ErrorAction Stop | Select-Object -First 1
+          $outDir = Join-Path $env:GITHUB_WORKSPACE 'build/bin/gui/Windows'
+          $msix = Get-ChildItem -Path $outDir -File -ErrorAction Stop |
+                  Where-Object { $_.Name -match '\.msix(bundle)?$' -and $_.Name -notlike 'unsigned_*' } |
+                  Select-Object -First 1
           if (-not $msix) {
-            Write-Host "::error::no .msix produced in Apppackage"
+            Write-Host "::error::no .msix/.msixbundle produced in $outDir"
             exit 1
           }
-          Write-Host "::notice::MSIX ready: $($msix.FullName)"
+          Write-Host "::notice::Package ready: $($msix.FullName)"
 
       - name: Create unsigned MSIX (Partner Center)
         shell: pwsh
         run: |
           # Partner Center re-signs submitted packages, so publish an
-          # unsigned MSIX alongside the signed one. `winapp pack` is
+          # unsigned package alongside the signed one. `winapp pack` is
           # pure packaging - no signing - same layout as
-          # build_windows.ps1 -SkipSign (unsigned_ prefix).
+          # build_windows.ps1 -SkipSign (unsigned_ prefix). Passing every
+          # architecture folder keeps the bundle mixed-architecture.
           $ErrorActionPreference = 'Stop'
           $root = $env:GITHUB_WORKSPACE
-          $binDir = Join-Path $root 'build/bin/gui/Windows/x64'
-          if (-not (Test-Path (Join-Path $binDir 'snishaper.exe'))) {
-            Write-Host "::error::build/bin/gui/Windows/x64/snishaper.exe not found"
+          $outDir = Join-Path $root 'build/bin/gui/Windows'
+          $payloadDirs = @()
+          foreach ($arch in @('x64', 'x86', 'arm64')) {
+            $dir = Join-Path $outDir $arch
+            if (Test-Path (Join-Path $dir 'snishaper.exe')) { $payloadDirs += $dir }
+          }
+          if ($payloadDirs.Count -eq 0) {
+            Write-Host "::error::no Windows GUI payload under $outDir"
             exit 1
           }
-          $msix = Get-ChildItem -Path (Join-Path $root 'Apppackage') -Filter '*.msix' | Select-Object -First 1
-          if (-not $msix) {
-            Write-Host "::error::no signed msix to derive name from"
+          $signed = Get-ChildItem -Path $outDir -File |
+                    Where-Object { $_.Name -match '\.msix(bundle)?$' -and $_.Name -notlike 'unsigned_*' } |
+                    Select-Object -First 1
+          if (-not $signed) {
+            Write-Host "::error::no signed package to derive name from"
             exit 1
           }
-          $unsignedName = 'unsigned_' + $msix.Name
-          $unsignedPath = Join-Path (Join-Path $root 'Apppackage') $unsignedName
-          Write-Host "::group::winapp pack (unsigned) -> $unsignedName"
-          winapp pack $binDir --manifest (Join-Path $root 'Package.appxmanifest') --output $unsignedPath
+          $unsignedName = 'unsigned_' + $signed.Name
+          $unsignedPath = Join-Path $outDir $unsignedName
+          Write-Host "::group::winapp pack (unsigned, $($payloadDirs.Count) arch) -> $unsignedName"
+          winapp pack @payloadDirs --manifest (Join-Path $root 'Package.appxmanifest') --output $unsignedPath
           if ($LASTEXITCODE -ne 0) {
             Write-Host "::error::winapp pack (unsigned) failed"
             exit 1
           }
           Write-Host "::endgroup::"
-          Write-Host "::notice::Unsigned MSIX ready: $unsignedPath"
+          Write-Host "::notice::Unsigned package ready: $unsignedPath"
 
       - name: Create 7z archive
         run: 7z a -mx=9 snishaper-windows-amd64.7z .\build\bin\gui\Windows\x64\*
@@ -289,9 +302,12 @@ jobs:
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
-          $msix = Get-ChildItem -Path Apppackage -Filter '*.msix' | Where-Object { $_.Name -notlike 'unsigned_*' } | Select-Object -First 1
+          $pkgDir = Join-Path $env:GITHUB_WORKSPACE 'build/bin/gui/Windows'
+          $msix = Get-ChildItem -Path $pkgDir -File |
+                  Where-Object { $_.Name -match '\.msix(bundle)?$' -and $_.Name -notlike 'unsigned_*' } |
+                  Select-Object -First 1
           if (-not $msix) {
-            Write-Host "::error::no signed .msix found for install.bat"
+            Write-Host "::error::no signed package found for install.bat"
             exit 1
           }
           $password = if ($env:MSIX_PFX_PASSWORD) { $env:MSIX_PFX_PASSWORD } else { 'password' }
@@ -316,12 +332,14 @@ jobs:
           # Bundle the signed MSIX + cert + install.bat + signing password
           # into one 7z named after the MSIX base name, so users get a
           # single self-contained archive
-          # (e.g. dongle.Snishaper_1.29.0.0_x64.7z).
+          # (e.g. dongle.Snishaper_1.29.0.0_x64_x86_arm64.7z).
           $ErrorActionPreference = 'Stop'
           $root = $env:GITHUB_WORKSPACE
-          $msix = Get-ChildItem -Path (Join-Path $root 'Apppackage') -Filter '*.msix' | Where-Object { $_.Name -notlike 'unsigned_*' } | Select-Object -First 1
+          $msix = Get-ChildItem -Path (Join-Path $root 'build/bin/gui/Windows') -File |
+                  Where-Object { $_.Name -match '\.msix(bundle)?$' -and $_.Name -notlike 'unsigned_*' } |
+                  Select-Object -First 1
           if (-not $msix) {
-            Write-Host "::error::no signed .msix found for bundle"
+            Write-Host "::error::no signed package found for bundle"
             exit 1
           }
           $bundleName = $msix.BaseName + '.7z'
@@ -375,12 +393,19 @@ jobs:
           New-Item -ItemType Directory -Path $assetsDir -Force | Out-Null
           Get-ChildItem $assetsDir -ErrorAction SilentlyContinue | Remove-Item -Recurse -Force
 
-          $msix = Get-ChildItem -Path (Join-Path $root 'Apppackage') -Filter '*.msix' | Where-Object { $_.Name -notlike 'unsigned_*' } | Select-Object -First 1
+          $pkgDir = Join-Path $root 'build/bin/gui/Windows'
+          $msix = Get-ChildItem -Path $pkgDir -File |
+                  Where-Object { $_.Name -match '\.msix(bundle)?$' -and $_.Name -notlike 'unsigned_*' } |
+                  Select-Object -First 1
+          if (-not $msix) {
+            Write-Host "::error::no signed package found under $pkgDir"
+            exit 1
+          }
           Copy-Item $msix.FullName $assetsDir\ -ErrorAction Stop
-          $unsigned = Get-ChildItem -Path (Join-Path $root 'Apppackage') -Filter 'unsigned_*.msix' | Select-Object -First 1
+          $unsigned = Get-ChildItem -Path $pkgDir -File -Filter 'unsigned_*' | Select-Object -First 1
           if ($unsigned) { Copy-Item $unsigned.FullName $assetsDir\ -ErrorAction Stop }
           Copy-Item (Join-Path $root 'snishaper-windows-amd64.7z') $assetsDir\ -ErrorAction Stop
-          $bundle = Get-ChildItem -Path $root -Filter '*_x64.7z' -ErrorAction SilentlyContinue | Where-Object { $_.Name -ne 'snishaper-windows-amd64.7z' } | Select-Object -First 1
+          $bundle = Get-ChildItem -Path $root -Filter '*_x64*.7z' -ErrorAction SilentlyContinue | Where-Object { $_.Name -ne 'snishaper-windows-amd64.7z' } | Select-Object -First 1
           if ($bundle) { Copy-Item $bundle.FullName $assetsDir\ -ErrorAction Stop }
           $setupExe = Get-ChildItem -Path (Join-Path $root 'installer') -Filter '*.exe' -ErrorAction SilentlyContinue | Select-Object -First 1
           if ($setupExe) { Copy-Item $setupExe.FullName $assetsDir\ -ErrorAction Stop }
@@ -807,16 +832,16 @@ jobs:
             [void]$sb.AppendLine("| $($file.Name) | $purpose (Size: $sizeMB MB) | $md5 |")
           }
 
-          $bundle = Get-ChildItem -Path $assetsDir -Filter '*_x64.7z' -ErrorAction SilentlyContinue | Where-Object { $_.Name -ne 'snishaper-windows-amd64.7z' } | Select-Object -First 1
+          $bundle = Get-ChildItem -Path $assetsDir -Filter '*_x64*.7z' -ErrorAction SilentlyContinue | Where-Object { $_.Name -ne 'snishaper-windows-amd64.7z' } | Select-Object -First 1
           $portable = Get-ChildItem -Path $assetsDir -Filter 'snishaper-windows-amd64.7z' -ErrorAction SilentlyContinue | Select-Object -First 1
-          $unsigned = Get-ChildItem -Path $assetsDir -Filter 'unsigned_*.msix' -ErrorAction SilentlyContinue | Select-Object -First 1
+          $unsigned = Get-ChildItem -Path $assetsDir -Filter 'unsigned_*' -ErrorAction SilentlyContinue | Select-Object -First 1
           $setupExe = Get-ChildItem -Path $assetsDir -Filter '*-x64Setup.exe' -ErrorAction SilentlyContinue | Select-Object -First 1
           $linuxTgz = Get-ChildItem -Path $assetsDir -Filter 'snishaper-linux-amd64.tar.gz' -ErrorAction SilentlyContinue | Select-Object -First 1
 
           Add-AssetRow $setupExe "Windows installer (Inno Setup): classic guided installation with license and desktop shortcut, for regular users"
-          Add-AssetRow $bundle "Signed bundle: MSIX installer + signing certificate (devcert.pfx) + install.bat + signing password, for one-click sideload"
+          Add-AssetRow $bundle "Signed bundle: mixed-architecture MSIX package + signing certificate (devcert.pfx) + install.bat + signing password, for one-click sideload"
           Add-AssetRow $portable "Windows portable build: extract and run snishaper.exe directly, no installation required"
-          Add-AssetRow $unsigned "Unsigned MSIX for Microsoft Partner Center submission (re-signed by Microsoft on upload)"
+          Add-AssetRow $unsigned "Unsigned mixed-architecture MSIX package for Microsoft Partner Center submission (re-signed by Microsoft on upload)"
           Add-AssetRow $linuxTgz "Linux portable build (amd64): extract and run ./SniShaper, requires GTK4/WebKitGTK runtime"
 
           $cliPurpose = @{
@@ -873,11 +898,11 @@ jobs:
           Write-Host "::group::gh release create $tag"
           $args = @(
             'release', 'create', $tag,
-            # Signed MSIX + devcert.pfx + install.bat + password are bundled
-            # into the *_x64.7z archive, so only upload the unsigned MSIX
-            # (for Partner Center) plus the Inno Setup exe, the two 7z
-            # archives and the Linux tar.gz.
-            (Join-Path $assetsDir 'unsigned_*.msix'),
+            # The signed mixed-architecture package + devcert.pfx +
+            # install.bat + password are bundled into the *_x64*.7z archive,
+            # so only upload the unsigned package (for Partner Center) plus
+            # the Inno Setup exe, the two 7z archives and the Linux tar.gz.
+            (Join-Path $assetsDir 'unsigned_*'),
             (Join-Path $assetsDir '*.exe'),
             (Join-Path $assetsDir '*.7z'),
             (Join-Path $assetsDir 'snishaper-linux-amd64.tar.gz'),

@@ -32,7 +32,7 @@
 
   <Applications>
     <Application Id="dongle.Snishaper"
-      Executable="build\bin\snishaper.exe"
+      Executable="snishaper.exe"
       EntryPoint="Windows.FullTrustApplication">
       <uap:VisualElements
         DisplayName="Snishaper"
