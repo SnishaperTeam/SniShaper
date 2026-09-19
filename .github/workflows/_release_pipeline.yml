@@ -613,6 +613,8 @@ jobs:
     runs-on: windows-2025
     permissions:
       contents: write
+    env:
+      LLM_CONFIGURED: ${{ secrets.LLM_API_KEY != '' }}
     steps:
       - name: Checkout full history
         uses: actions/checkout@v7
@@ -699,7 +701,14 @@ jobs:
           Write-Host "::notice::Ollama model = $model"
           "OLLAMA_MODEL=$model" >> $env:GITHUB_ENV
 
+      - name: Skip local Ollama (LLM API configured)
+        if: env.LLM_CONFIGURED == 'true'
+        shell: pwsh
+        run: |
+          Write-Host "::notice::LLM API is configured, the local Ollama model is not needed for release notes"
+
       - name: Cache Ollama (binary + models)
+        if: env.LLM_CONFIGURED != 'true'
         uses: actions/cache@v6
         with:
           path: |
@@ -710,6 +719,7 @@ jobs:
             ollama-${{ runner.os }}-
 
       - name: Setup Ollama (local LLM for release notes)
+        if: env.LLM_CONFIGURED != 'true'
         shell: pwsh
         env:
           OLLAMA_MODEL: ${{ env.OLLAMA_MODEL }}
