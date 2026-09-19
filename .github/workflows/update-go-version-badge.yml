@@ -17,24 +17,13 @@ concurrency:
 
 jobs:
   update:
-    if: github.actor != 'github-actions[bot]' && !endsWith(github.actor, '[bot]')
+    if: github.actor != 'github-actions[bot]'
     runs-on: ubuntu-latest
     env:
       RELEASE_BOT_NAME: SnishaperTeam-ReleaseBot
-      RELEASE_BOT_READY: ${{ secrets.RELEASE_BOT_APP_ID != '' && secrets.RELEASE_BOT_PRIVATE_KEY != '' }}
     steps:
-      - name: Generate release bot token
-        id: bot
-        if: env.RELEASE_BOT_READY == 'true'
-        uses: actions/create-github-app-token@v2
-        with:
-          app-id: ${{ secrets.RELEASE_BOT_APP_ID }}
-          private-key: ${{ secrets.RELEASE_BOT_PRIVATE_KEY }}
-
       - name: Checkout
         uses: actions/checkout@v7
-        with:
-          token: ${{ steps.bot.outputs.token || github.token }}
 
       - name: Update minimum Go version badge
         shell: bash
@@ -78,20 +67,11 @@ jobs:
 
       - name: Commit README badge changes
         shell: bash
-        env:
-          GH_TOKEN: ${{ steps.bot.outputs.token || github.token }}
-          APP_SLUG: ${{ steps.bot.outputs.app-slug }}
         run: |
           set -euo pipefail
-          if [[ -n "$APP_SLUG" ]]; then
-            user_id="$(gh api "/users/${APP_SLUG}[bot]" --jq .id)"
-            author_email="${user_id}+${APP_SLUG}[bot]@users.noreply.github.com"
-          else
-            author_email="${RELEASE_BOT_NAME}@users.noreply.github.com"
-          fi
           git config user.name "$RELEASE_BOT_NAME"
-          git config user.email "$author_email"
-          echo "::notice::committing as $RELEASE_BOT_NAME <$author_email>"
+          git config user.email "${RELEASE_BOT_NAME}@users.noreply.github.com"
+          echo "::notice::committing as $RELEASE_BOT_NAME"
           git add README.md README_EN.md README_RU.md
           if git diff --cached --quiet; then
             exit 0
