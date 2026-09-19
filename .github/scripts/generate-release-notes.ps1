@@ -106,28 +106,23 @@ $groups = @{
     test     = @()
     other    = @()
 }
-$authors = @{}
 $totalCommits = 0
 $commitList = @()
 
 foreach ($line in $lines) {
     if ([string]::IsNullOrWhiteSpace($line)) { continue }
-    $parts = $line -split "`t"
+    $parts = @($line -split "`t")
     if ($parts.Count -lt 4) { continue }
     $hash = $parts[0]
-    $subject = $parts[1]
-    $author = $parts[2]
-    $email = $parts[3]
+    # The last two fields are the author name and email; a commit subject may
+    # itself contain tabs, so everything between belongs to the subject.
+    $subject = (($parts[1..($parts.Count - 3)]) -join ' ').Trim()
     $totalCommits++
 
     $key = Get-CommitGroup -Subject $subject
 
     $groups[$key] += [PSCustomObject]@{ Hash = $hash; Subject = $subject }
     $commitList += [PSCustomObject]@{ Hash = $hash; Subject = $subject }
-    if (-not $authors.ContainsKey($email)) {
-        $authors[$email] = @{ Name = $author; Count = 0 }
-    }
-    $authors[$email].Count++
 }
 
 # ---------- LLM summarization (Ollama first, then external API) ----------
@@ -408,15 +403,6 @@ if ($llmSummary) {
 }
 
 [void]$sb.AppendLine("---")
-[void]$sb.AppendLine("")
-
-[void]$sb.AppendLine("## Contributors ($($authors.Count))")
-[void]$sb.AppendLine("")
-$sorted = $authors.GetEnumerator() | Sort-Object { $_.Value.Count } -Descending
-foreach ($a in $sorted) {
-    $commitWord = if ($a.Value.Count -gt 1) { 'commits' } else { 'commit' }
-    [void]$sb.AppendLine("- $($a.Value.Name) <$($a.Key)>: $($a.Value.Count) $commitWord")
-}
 [void]$sb.AppendLine("")
 
 $outParent = Split-Path -Parent $OutputPath

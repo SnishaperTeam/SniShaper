@@ -876,18 +876,11 @@ jobs:
           [void]$sb.AppendLine("")
 
           $existing = [System.IO.File]::ReadAllText($notesFile, [System.Text.Encoding]::UTF8)
-          $marker = '## Contributors'
-          $insertAt = $existing.IndexOf($marker)
           $manifest = $sb.ToString()
-          if ($insertAt -ge 0) {
-            # Insert the asset table right before the Contributors section.
-            $newContent = $existing.Substring(0, $insertAt) + $manifest + $existing.Substring($insertAt)
-          } else {
-            # No Contributors section found (unexpected); append at the end.
-            $newContent = $existing + "`n---`n`n" + $manifest
-          }
-          [System.IO.File]::WriteAllText($notesFile, $newContent, [System.Text.Encoding]::UTF8)
-          Write-Host "::notice::Asset manifest inserted before Contributors in $notesFile"
+          # The Changes section already ends with a separator, so the asset
+          # table is appended directly.
+          [System.IO.File]::WriteAllText($notesFile, $existing.TrimEnd() + "`n`n" + $manifest, [System.Text.Encoding]::UTF8)
+          Write-Host "::notice::Asset manifest appended to $notesFile"
 
       - name: List staged assets
         shell: pwsh
@@ -930,3 +923,43 @@ jobs:
           }
           Write-Host "::endgroup::"
           Write-Host "::notice::Release $releaseName ($tag) published, prerelease=$prerelease"
+
+      - name: Append GitHub generated contributor list
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # The contributor block comes from GitHub's own release notes
+          # generator, so identities are resolved against real accounts
+          # instead of being parsed out of git author metadata.
+          $ErrorActionPreference = 'Stop'
+          $assetsDir = Join-Path $env:GITHUB_WORKSPACE 'staging'
+          $notesFile = Join-Path $assetsDir 'RELEASE_NOTES.md'
+          $tag = "${{ needs.check.outputs.tag }}"
+          $prev = "${{ steps.prev-tag.outputs.prev_tag }}"
+          $apiArgs = @('api', '--method', 'POST', "repos/$env:GITHUB_REPOSITORY/releases/generate-notes", '-f', "tag_name=$tag")
+          if ($prev) { $apiArgs += @('-f', "previous_tag_name=$prev") }
+          Write-Host "::group::gh api releases/generate-notes"
+          $generated = (gh @apiArgs | ConvertFrom-Json).body
+          Write-Host "::endgroup::"
+          if (-not $generated) {
+            Write-Host "::warning::GitHub returned empty generated notes; keeping the notes unchanged"
+            exit 0
+          }
+          $start = $generated.IndexOf('## New Contributors')
+          if ($start -lt 0) { $start = $generated.IndexOf('**Full Changelog**') }
+          if ($start -lt 0) {
+            Write-Host "::warning::generated notes carry no contributor section; keeping the notes unchanged"
+            exit 0
+          }
+          $block = $generated.Substring($start).TrimEnd()
+          $existing = [System.IO.File]::ReadAllText($notesFile, [System.Text.Encoding]::UTF8)
+          [System.IO.File]::WriteAllText($notesFile, $existing.TrimEnd() + "`n`n---`n`n" + $block + "`n", [System.Text.Encoding]::UTF8)
+          Write-Host "::group::gh release edit $tag"
+          gh release edit $tag --repo $env:GITHUB_REPOSITORY --notes-file $notesFile
+          if ($LASTEXITCODE -ne 0) {
+            Write-Host "::error::gh release edit failed (exit $LASTEXITCODE)"
+            exit 1
+          }
+          Write-Host "::endgroup::"
+          Write-Host "::notice::Contributor section taken from GitHub generated notes"
