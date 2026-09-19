@@ -47,7 +47,7 @@ permissions:
 jobs:
   check:
     name: Check and Resolve
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     outputs:
       version: ${{ steps.resolve.outputs.version }}
       tag: ${{ steps.resolve.outputs.tag }}
@@ -398,13 +398,13 @@ jobs:
           retention-days: 3
 
   # ------------------------------------------------------------------
-  # Linux build (ubuntu-24.04): portable tar.gz via build.sh.
+  # Linux build (ubuntu-26.04): portable tar.gz via build.sh.
   # ------------------------------------------------------------------
   build-linux:
     name: Build Linux (${{ inputs.channel }})
     needs: check
     if: needs.check.outputs.skip != 'true'
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     permissions:
       contents: read
     steps:

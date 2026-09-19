@@ -19,7 +19,7 @@ jobs:
   # darwin built natively on macOS runners), so nothing is built twice.
   #
   # ARM64 GUI targets never use a cross toolchain:
-  #   linux/arm64  -> ubuntu-24.04-arm   (native ARM64 Linux runner)
+  #   linux/arm64  -> ubuntu-26.04-arm   (native ARM64 Linux runner)
   #   windows/arm64-> windows-latest     (Go emits windows/arm64 with
   #                                       CGO_ENABLED=0; switch to a native
   #                                       Windows ARM64 runner when available)
@@ -48,11 +48,11 @@ jobs:
             platform: windows
             arch: arm64
             script: ps1
-          - runner: ubuntu-latest
+          - runner: ubuntu-26.04
             platform: linux
             arch: x64
             script: sh
-          - runner: ubuntu-24.04-arm
+          - runner: ubuntu-26.04-arm
             platform: linux
             arch: arm64
             script: sh
@@ -185,8 +185,8 @@ jobs:
 
   # ------------------------------------------------------------------
   # CLI: Darwin, built natively and smoke-tested on real macOS runners.
-  #   darwin/x64  -> macos-15-intel (macos-13 was retired 2025-12-04)
-  #   darwin/arm64-> macos-14      (Apple Silicon)
+  #   darwin/x64  -> macos-26-intel (last x86_64 image, EOL Aug 2027)
+  #   darwin/arm64-> macos-26      (Apple Silicon)
   # ------------------------------------------------------------------
   darwin-cli:
     name: CLI ${{ matrix.platform }}/${{ matrix.arch }} on ${{ matrix.runner }}
@@ -196,10 +196,10 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - runner: macos-15-intel
+          - runner: macos-26-intel
             platform: darwin
             arch: x64
-          - runner: macos-14
+          - runner: macos-26
             platform: darwin
             arch: arm64
 
