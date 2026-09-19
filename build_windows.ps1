@@ -77,8 +77,9 @@
 #   -Wails             build the GUI through the Wails CLI instead of go build
 #   -Silent            never prompt
 #   -InstallDeps       run npm install before the frontend build
-#   -BuildMsix         package (and sign) an MSIX from the Windows GUI output
-#   -SkipSign          package but do not sign (unsigned_*.msix)
+#   -BuildMsix         package every built Windows GUI architecture into
+#                      build\bin\gui\Windows\<name>_<version>_<arch...>.msixbundle
+#   -SkipSign          package but do not sign (unsigned_ prefix)
 #   -Gtk3              build the Linux GUI against GTK3/WebKit2GTK-4.1
 #   -Help              show this help
 #
@@ -1086,10 +1087,15 @@ if ($BuildMsix) {
     Write-Host "[MSIX] Building MSIX package..." -ForegroundColor Cyan
     Write-Host "==========================================" -ForegroundColor Cyan
 
-    $OutputDir = Join-Path $ProjectRoot "Apppackage"
-    if (Test-Path $OutputDir) {
-        Remove-Item "$OutputDir\*.msix" -Force -ErrorAction SilentlyContinue
-    }
+    # Package artifacts live next to the Windows GUI builds, so the whole
+    # Windows output stays under build\bin\gui\Windows\:
+    #   <name>_<version>_<arch...>.msixbundle  (multi-arch, x64/x86/arm64)
+    #   <name>_<version>_<arch>.msix           (single arch)
+    $OutputDir = Join-Path $ProjectRoot "build\bin\gui\Windows"
+    New-Item -ItemType Directory -Force -Path $OutputDir | Out-Null
+    Get-ChildItem -Path $OutputDir -File -ErrorAction SilentlyContinue |
+        Where-Object { $_.Name -match '\.msix(bundle)?$' } |
+        Remove-Item -Force -ErrorAction SilentlyContinue
 
     try {
         winapp --version | Out-Null
@@ -1119,59 +1125,47 @@ if ($BuildMsix) {
         }
     }
 
-    # Packaging source: build\bin\gui\Windows\<arch>
-    $SourceDir = $null
+    # Packaging sources: build\bin\gui\Windows\<arch> for every Windows GUI
+    # architecture built in this run. winapp derives each folder's
+    # architecture from the executable it contains and emits a single
+    # .msixbundle when more than one folder is passed.
+    $ArchOrder = @("x64", "x86", "arm64")
     $guiWinRoot = Join-Path $ProjectRoot "build\bin\gui\Windows"
-    foreach ($candidate in @($HostArch, "x64", "x86", "arm64") | Select-Object -Unique) {
-        $dir = Join-Path $guiWinRoot $candidate
-        if (Test-Path (Join-Path $dir "snishaper.exe")) { $SourceDir = $dir; break }
+    $pkgDirs = @()
+    $selectedArchs = @($Targets | Where-Object { $_.Type -eq "gui" -and $_.Platform -eq "windows" -and $_.State -eq "build" } | ForEach-Object { $_.Arch })
+    if ($selectedArchs.Count -eq 0) { $selectedArchs = $ArchOrder }
+    foreach ($a in $ArchOrder) {
+        if ($selectedArchs -notcontains $a) { continue }
+        $dir = Join-Path $guiWinRoot $a
+        if (Test-Path (Join-Path $dir "snishaper.exe")) { $pkgDirs += $dir }
     }
-    if (-not $SourceDir -and (Test-Path (Join-Path $ProjectRoot "build\bin\snishaper.exe"))) {
-        # backward compatibility with the legacy flat layout
-        $SourceDir = Join-Path $ProjectRoot "build\bin"
-    }
-    if (-not $SourceDir) {
+    if ($pkgDirs.Count -eq 0) {
         Write-Host "[ERROR] No Windows GUI output found (expected build\bin\gui\Windows\<arch>\snishaper.exe)" -ForegroundColor Red
         if (-not $Silent) { Read-Host (msg -Key "Exit") }
         exit 1
     }
-    Write-Host "[MSIX] Source directory: $SourceDir" -ForegroundColor Green
+    Write-Host "[MSIX] Source folders: $($pkgDirs -join ', ')" -ForegroundColor Green
 
     [xml]$ManifestXml = Get-Content $ManifestPath
     $PkgName = $ManifestXml.Package.Identity.Name
     $PkgVersion = $ManifestXml.Package.Identity.Version
 
-    $ExePath = Join-Path $SourceDir "snishaper.exe"
-    $fs = [System.IO.File]::OpenRead($ExePath)
-    $fs.Seek(0x3C, [System.IO.SeekOrigin]::Begin) | Out-Null
-    $peOffset = New-Object byte[] 4
-    $fs.Read($peOffset, 0, 4) | Out-Null
-    $offset = [BitConverter]::ToUInt32($peOffset, 0)
-    $fs.Seek($offset + 4, [System.IO.SeekOrigin]::Begin) | Out-Null
-    $machine = New-Object byte[] 2
-    $fs.Read($machine, 0, 2) | Out-Null
-    $fs.Close()
-    $machineId = [BitConverter]::ToUInt16($machine, 0)
-    switch ($machineId) {
-        0x8664 { $PkgArch = "x64" }
-        0xAA64 { $PkgArch = "arm64" }
-        0x014C { $PkgArch = "x86" }
-        default { $PkgArch = "unknown" }
-    }
-    Write-Host "[MSIX] Detected architecture: $PkgArch" -ForegroundColor Green
+    $archNames = @($pkgDirs | ForEach-Object { Split-Path -Leaf $_ })
+    $pkgExt = if ($archNames.Count -gt 1) { ".msixbundle" } else { ".msix" }
+    $MsixFileName = "${PkgName}_${PkgVersion}_$($archNames -join '_')$pkgExt"
+    $MsixTarget = Join-Path $OutputDir $MsixFileName
+    Write-Host "[MSIX] Target: $MsixFileName ($($archNames -join '/'))" -ForegroundColor Green
 
-    $MsixFileName = "${PkgName}_${PkgVersion}_${PkgArch}.msix"
-
-    winapp pack $SourceDir --manifest $ManifestPath --output (Join-Path $OutputDir $MsixFileName)
+    winapp pack @pkgDirs --manifest $ManifestPath --output $MsixTarget
     if ($LASTEXITCODE -ne 0) {
         Write-Host "[ERROR] winapp pack failed." -ForegroundColor Red
         if (-not $Silent) { Read-Host (msg -Key "Exit") }
         exit 1
     }
 
-    $MsixFile = Get-Item (Join-Path $OutputDir $MsixFileName) -ErrorAction SilentlyContinue
+    $MsixFile = Get-Item $MsixTarget -ErrorAction SilentlyContinue
     if (-not $MsixFile) {
-        Write-Host "[ERROR] No .msix file found in $OutputDir." -ForegroundColor Red
+        Write-Host "[ERROR] Package file not found: $MsixTarget" -ForegroundColor Red
         if (-not $Silent) { Read-Host (msg -Key "Exit") }
         exit 1
     }
@@ -1184,7 +1178,7 @@ if ($BuildMsix) {
             if (-not $Silent) { Read-Host (msg -Key "Exit") }
             exit 1
         }
-        Write-Host "[MSIX] Package signed successfully at $OutputDir" -ForegroundColor Green
+        Write-Host "[MSIX] Package signed successfully: $MsixTarget" -ForegroundColor Green
     } else {
         Write-Host "[MSIX] Skipping signing as requested." -ForegroundColor Yellow
         $UnsignedName = "unsigned_" + $MsixFile.Name

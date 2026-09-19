@@ -1,7 +1,8 @@
 param(
     [Parameter(Mandatory = $true)][string]$RepoRoot,
     [Parameter(Mandatory = $true)][string]$Version,
-    [Parameter(Mandatory = $false)][string]$Suffix = ""
+    [Parameter(Mandatory = $false)][string]$Suffix = "",
+    [Parameter(Mandatory = $false)][string]$Arch = ""
 )
 
 $ErrorActionPreference = 'Stop'
@@ -17,15 +18,27 @@ if (-not (Test-Path $licenseFile)) {
     exit 1
 }
 
-$binDir = Join-Path $RepoRoot 'build/bin'
-if (-not (Test-Path (Join-Path $binDir 'snishaper.exe'))) {
-    Write-Host "::error::build/bin/snishaper.exe not found"
+# Windows GUI payload lives at build/bin/gui/Windows/<arch>/; use the
+# requested architecture when given, else the first one that was built.
+$archCandidates = if ($Arch) { @($Arch) } else { @('x64', 'x86', 'arm64') }
+$binDir = $null
+foreach ($candidate in $archCandidates) {
+    $dir = Join-Path $RepoRoot "build/bin/gui/Windows/$candidate"
+    if (Test-Path (Join-Path $dir 'snishaper.exe')) { $binDir = $dir; break }
+}
+if (-not $binDir) {
+    Write-Host "::error::no Windows GUI payload found (expected build/bin/gui/Windows/<arch>/snishaper.exe)"
     exit 1
+}
+$setupArch = Split-Path -Leaf $binDir
+Write-Host "[inno] Payload=$binDir Arch=$setupArch"
+if ($setupArch -ne 'x64') {
+    Write-Host "::warning::the generated installer targets x64 only, but the payload is $setupArch"
 }
 
 $outDir = Join-Path $RepoRoot 'installer'
 New-Item -ItemType Directory -Path $outDir -Force | Out-Null
-$outName = "Snishaper-$displayVersion-x64Setup"
+$outName = "Snishaper-$displayVersion-${setupArch}Setup"
 
 $iss = @'
 ; Inno Setup script generated for SniShaper CI builds
