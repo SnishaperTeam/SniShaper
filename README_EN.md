@@ -142,7 +142,7 @@ pwsh -ExecutionPolicy Bypass -File .\build_windows.ps1
 - **Auto-elevation**: The script requires administrator privileges. When run as a regular user, it relaunches itself via a UAC prompt and passes all parameters through unchanged.
 - **Pre-build cleanup**: Any running `snishaper` processes are force-terminated before the build to avoid file locks.
 - **Version sync**: Before compiling the backend, the version and release channel are read from `Package.appxmanifest`, synced into the version resource via go-winres and injected via ldflags; if go-winres fails, the existing version resource is kept and the build continues. `go mod download` is always executed.
-- **MSIX packaging**: Requires the WinApp CLI (`winget install Microsoft.WinAppCLI`); if the `devcert.pfx` certificate is missing, one is generated from the manifest and installed automatically. Output goes to the `Apppackage/` directory.
+- **MSIX packaging**: Requires the WinApp CLI (`winget install Microsoft.WinAppCLI`); if the `devcert.pfx` certificate is missing, one is generated from the manifest and installed automatically. Every Windows GUI architecture that was built (`-Arch x64,x86,arm64`) is passed as payload, yielding a single mixed-architecture package at `build/bin/gui/Windows/<name>_<version>_<arch...>.msixbundle` (a plain `.msix` of the same name when only one architecture is built).
 - **Linux build (WSL)**: `-Build linux` delegates to `build.sh` via WSL (GTK4 by default, `-Gtk3` switches to GTK3, `-Arch` forwarded as `--arch`); if WSL is not found, a warning is printed and the Linux build is skipped.
 
 **Usage examples:**

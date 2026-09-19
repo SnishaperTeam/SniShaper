@@ -210,7 +210,7 @@ pwsh -ExecutionPolicy Bypass -File .\build_windows.ps1
 - **自动提权**：脚本需要管理员权限。若以普通用户运行，会通过 UAC 弹窗自动提权重启自身，并以原样传递所有参数。
 - **预清理**：构建开始前会强制结束正在运行的 `snishaper` 进程，避免文件占用。
 - **版本同步**：后端编译前从 `Package.appxmanifest` 读取版本号与发布渠道，经 go-winres 同步到版本资源并通过 ldflags 注入；若 go-winres 失败则保留现有版本资源继续构建。后端始终执行 `go mod download`。
-- **MSIX 打包**：依赖 WinApp CLI（`winget install Microsoft.WinAppCLI`）；缺少 `devcert.pfx` 证书时会自动从 manifest 生成并安装证书。产物输出到 `Apppackage/` 目录。
+- **MSIX 打包**：依赖 WinApp CLI（`winget install Microsoft.WinAppCLI`）；缺少 `devcert.pfx` 证书时会自动从 manifest 生成并安装证书。已构建的 Windows GUI 架构（`-Arch x64,x86,arm64`）全部作为负载，产出单个混合架构包，输出到 `build/bin/gui/Windows/<name>_<version>_<arch...>.msixbundle`（仅单架构时退化为同名 `.msix`）。
 - **Linux 构建（WSL）**：`-Build linux` 通过 WSL 调用 `build.sh`（默认 GTK4，`-Gtk3` 切换 GTK3，`-Arch` 以 `--arch` 透传）；未检测到 WSL 时输出警告并跳过 Linux 构建。
 
 **用法示例：**
