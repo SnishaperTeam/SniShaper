@@ -333,7 +333,7 @@ func filterUpdateAssets(assets []githubAsset) []ReleaseAsset {
 		switch {
 		case strings.HasSuffix(lower, ".exe"):
 			kind = "exe"
-		case strings.HasSuffix(lower, ".7z") && !strings.Contains(lower, "_x64.7z") && !strings.Contains(lower, "_x86.7z") && !strings.Contains(lower, "_arm64.7z") && !strings.Contains(lower, "unsigned"):
+		case strings.HasSuffix(lower, ".7z") && !strings.Contains(lower, "_x64") && !strings.Contains(lower, "_x86") && !strings.Contains(lower, "_arm64") && !strings.Contains(lower, "unsigned"):
 			kind = "7z"
 		default:
 			continue
