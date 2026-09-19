@@ -693,6 +693,7 @@ jobs:
           exit 0
 
       - name: Resolve Ollama model
+        if: env.LLM_CONFIGURED != 'true'
         shell: pwsh
         env:
           OLLAMA_MODEL: ${{ secrets.OLLAMA_MODEL }}
