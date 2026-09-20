@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"sync"
 	"time"
 
 	"snishaper/proxy"
@@ -16,7 +17,9 @@ import (
 
 // CoreClient is an RPC client that communicates with the core process.
 type CoreClient struct {
-	token string
+	startMu sync.Mutex
+	tokenMu sync.Mutex
+	token   string
 }
 
 // NewCoreClient creates a new core RPC client.
@@ -24,10 +27,7 @@ func NewCoreClient() *CoreClient {
 	return &CoreClient{}
 }
 
-func (c *CoreClient) readToken() string {
-	if c.token != "" {
-		return c.token
-	}
+func (c *CoreClient) loadTokenFromDisk() string {
 	execPath, err := os.Executable()
 	if err != nil {
 		return ""
@@ -37,8 +37,22 @@ func (c *CoreClient) readToken() string {
 	if err != nil {
 		return ""
 	}
-	c.token = strings.TrimSpace(string(data))
+	return strings.TrimSpace(string(data))
+}
+
+func (c *CoreClient) readToken() string {
+	c.tokenMu.Lock()
+	defer c.tokenMu.Unlock()
+	if c.token == "" {
+		c.token = c.loadTokenFromDisk()
+	}
 	return c.token
+}
+
+func (c *CoreClient) invalidateToken() {
+	c.tokenMu.Lock()
+	c.token = ""
+	c.tokenMu.Unlock()
 }
 
 func (c *CoreClient) dial() (*rpc.Client, error) {
@@ -71,6 +85,9 @@ func (c *CoreClient) EnsureRunning() error {
 }
 
 func (c *CoreClient) ensureRunningWithElevation(requireElevated bool) error {
+	c.startMu.Lock()
+	defer c.startMu.Unlock()
+
 	wasLogCaptureEnabled := false
 	wasProxyRunning := false
 	var pong BoolReply
@@ -103,9 +120,11 @@ func (c *CoreClient) ensureRunningWithElevation(requireElevated bool) error {
 	if err != nil {
 		return err
 	}
+	c.invalidateToken()
 	if err := startCoreProcess(execPath, requireElevated); err != nil {
 		return err
 	}
+	authRejected := false
 	for i := 0; i < 75; i++ {
 		time.Sleep(200 * time.Millisecond)
 		if err := c.Call("Core.Ping", EmptyArgs{}, &pong); err == nil && pong.Value {
@@ -114,6 +133,8 @@ func (c *CoreClient) ensureRunningWithElevation(requireElevated bool) error {
 			if token != "" {
 				var authReply BoolReply
 				if err := c.Call("Core.Authenticate", AuthArgs{Token: token}, &authReply); err != nil || !authReply.Value {
+					c.invalidateToken()
+					authRejected = true
 					continue // Authentication failed, retry
 				}
 			}
@@ -138,6 +159,9 @@ func (c *CoreClient) ensureRunningWithElevation(requireElevated bool) error {
 			}
 			return nil
 		}
+	}
+	if authRejected {
+		return fmt.Errorf("core process is reachable on %s but rejected the RPC token after 75 retries (15s): a stale core instance is still running", coreRPCAddr)
 	}
 	return fmt.Errorf("core process did not become ready after 75 retries (15s): check admin rights, antivirus, and core process logs")
 }

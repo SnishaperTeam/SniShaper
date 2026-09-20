@@ -240,6 +240,10 @@ func (r *coreRuntime) startProxy() error {
 	r.proxyOpMu.Lock()
 	defer r.proxyOpMu.Unlock()
 
+	if r.proxyServer.IsRunning() {
+		return nil
+	}
+
 	originalPort := r.getListenPort()
 	if originalPort == 0 {
 		originalPort = 8080
