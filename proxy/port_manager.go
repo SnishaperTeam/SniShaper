@@ -3,6 +3,7 @@ package proxy
 import (
 	"fmt"
 	"net"
+	"os"
 	"strings"
 	"time"
 )
@@ -12,7 +13,7 @@ import (
 // 2. 如果被其他进程占用或 Kill 失败，则返回错误，不再自动跳端口。
 func EnsurePortAvailable(port int, selfNames []string) (int, error) {
 	pid, err := FindProcessByPort(port)
-	if err == nil && pid > 0 {
+	if err == nil && pid > 0 && pid != os.Getpid() {
 		// 端口被占用，检查进程名
 		name, _ := GetProcessNameByPID(pid)
 		isSelf := false

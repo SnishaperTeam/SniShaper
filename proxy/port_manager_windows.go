@@ -22,6 +22,7 @@ func FindProcessByPort(port int) (int, error) {
 	}
 
 	lines := strings.Split(string(out), "\n")
+	portSuffix := fmt.Sprintf(":%d", port)
 	for _, line := range lines {
 		line = strings.TrimSpace(line)
 		if line == "" {
@@ -29,11 +30,18 @@ func FindProcessByPort(port int) (int, error) {
 		}
 		// TCP    0.0.0.0:8080           0.0.0.0:0              LISTENING       pid
 		fields := strings.Fields(line)
-		if len(fields) >= 5 && strings.Contains(fields[1], fmt.Sprintf(":%d", port)) {
-			pid, err := strconv.Atoi(fields[len(fields)-1])
-			if err == nil {
-				return pid, nil
-			}
+		if len(fields) < 5 {
+			continue
+		}
+		if !strings.EqualFold(fields[0], "TCP") || !strings.EqualFold(fields[3], "LISTENING") {
+			continue
+		}
+		if !strings.HasSuffix(fields[1], portSuffix) {
+			continue
+		}
+		pid, err := strconv.Atoi(fields[len(fields)-1])
+		if err == nil && pid > 0 {
+			return pid, nil
 		}
 	}
 	return 0, nil
