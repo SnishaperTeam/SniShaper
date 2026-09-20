@@ -32,13 +32,13 @@ on:
         description: "Local Ollama model for release notes summary (default: qwen3.5:2b); used when LLM_API_KEY is not set"
         required: false
       LLM_API_KEY:
-        description: Preferred LLM API key for release notes (OpenAI-compatible, NVIDIA NIM by default); falls back to the local Ollama model when not set
+        description: Preferred LLM API key for release notes (OpenAI-compatible; this repository uses a Cloudflare Workers AI token); falls back to the local Ollama model when not set
         required: false
       LLM_MODEL:
-        description: "Preferred LLM model name (default: poolside/laguna-xs-2.1)"
+        description: "Preferred LLM model name (this repository uses @cf/meta/llama-3.3-70b-instruct-fp8-fast)"
         required: false
       LLM_BASE_URL:
-        description: "Preferred LLM API base URL (default: https://integrate.api.nvidia.com/v1)"
+        description: "Preferred LLM API base URL (this repository uses the Cloudflare Workers AI OpenAI-compatible endpoint)"
         required: false
 
 permissions:
