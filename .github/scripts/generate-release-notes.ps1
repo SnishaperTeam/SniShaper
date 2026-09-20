@@ -243,10 +243,11 @@ if ($useExternal) {
     $headers = @{ Authorization = "Bearer $LlmApiKey" }
     Write-Host "[release-notes] POST $uri"
 
-    $maxAttempts = 3
+    $maxAttempts = 4
+    $attemptTimeout = 150
     for ($attempt = 1; $attempt -le $maxAttempts; $attempt++) {
         try {
-            $resp = Invoke-RestMethod -Uri $uri -Method Post -Headers $headers -ContentType 'application/json; charset=utf-8' -Body $bodyJson -TimeoutSec 300
+            $resp = Invoke-RestMethod -Uri $uri -Method Post -Headers $headers -ContentType 'application/json; charset=utf-8' -Body $bodyJson -TimeoutSec $attemptTimeout
             $content = $null
             $reasoning = $null
             $finish = $null
@@ -279,8 +280,8 @@ if ($useExternal) {
             Write-Host "::warning::LLM request failed (attempt $attempt/$maxAttempts, status $status): $($_.Exception.Message)"
             if ($detail) { Write-Host "[release-notes] API error body: $detail" }
             $llmSummary = $null
-            if (($status -eq 429 -or $status -ge 500) -and $attempt -lt $maxAttempts) {
-                $wait = 10 * $attempt
+            if (($status -eq 0 -or $status -eq 429 -or $status -ge 500) -and $attempt -lt $maxAttempts) {
+                $wait = [Math]::Min(60, 10 * [Math]::Pow(2, $attempt - 1))
                 Write-Host "[release-notes] Retrying in ${wait}s (status $status)"
                 Start-Sleep -Seconds $wait
                 continue
