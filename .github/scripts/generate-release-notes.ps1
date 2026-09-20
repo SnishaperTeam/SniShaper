@@ -11,7 +11,7 @@ param(
     [Parameter(Mandatory = $false)][ValidateSet('external', 'ollama')][string]$LlmPriority = "external",
     [Parameter(Mandatory = $false)][string]$LlmModel = "poolside/laguna-xs-2.1",
     [Parameter(Mandatory = $false)][string]$LlmBaseUrl = "https://integrate.api.nvidia.com/v1",
-    [Parameter(Mandatory = $false)][int]$LlmMaxTokens = 2500,
+    [Parameter(Mandatory = $false)][int]$LlmMaxTokens = 2000,
     [Parameter(Mandatory = $false)][int]$LlmMaxCommits = 80
 )
 
@@ -243,7 +243,7 @@ if ($useExternal) {
     $headers = @{ Authorization = "Bearer $LlmApiKey" }
     Write-Host "[release-notes] POST $uri"
 
-    $maxAttempts = 4
+    $maxAttempts = 6
     $attemptTimeout = 150
     for ($attempt = 1; $attempt -le $maxAttempts; $attempt++) {
         try {
@@ -281,8 +281,9 @@ if ($useExternal) {
             if ($detail) { Write-Host "[release-notes] API error body: $detail" }
             $llmSummary = $null
             if (($status -eq 0 -or $status -eq 429 -or $status -ge 500) -and $attempt -lt $maxAttempts) {
-                $wait = [Math]::Min(60, 10 * [Math]::Pow(2, $attempt - 1))
-                Write-Host "[release-notes] Retrying in ${wait}s (status $status)"
+                $backoff = [Math]::Min(60, 10 * [Math]::Pow(2, $attempt - 1))
+                $wait = [Math]::Max(5, [int]$backoff + (Get-Random -Minimum -3 -Maximum 4))
+                Write-Host "[release-notes] Retrying in ${wait}s (status $status, attempt $attempt/$maxAttempts)"
                 Start-Sleep -Seconds $wait
                 continue
             }
