@@ -1,22 +1,18 @@
 package certmanager
 
 import (
-	"bufio"
-	"bytes"
 	"crypto/rand"
 	"crypto/rsa"
 	"crypto/sha1"
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"encoding/hex"
-	"encoding/json"
 	"encoding/pem"
 	"fmt"
 	"math/big"
 	"os"
-	"os/exec"
 	"path/filepath"
-	"regexp"
+	"runtime"
 	"strings"
 	"sync"
 	"time"
@@ -200,8 +196,8 @@ func (cm *CertManager) GetCAInstallStatus() CAInstallStatus {
 
 	status := CAInstallStatus{
 		CertPath:    cm.caPath,
-		Platform:    "windows",
-		InstallHelp: "双击 CA 证书文件 -> 安装证书 -> 导入到\"受信任的根证书颁发机构\"（当前用户或本地计算机）",
+		Platform:    runtime.GOOS,
+		InstallHelp: platformInstallHelp(),
 	}
 
 	if cm.caCert == nil {
@@ -213,27 +209,7 @@ func (cm *CertManager) GetCAInstallStatus() CAInstallStatus {
 		return status
 	}
 
-	sum := sha1.Sum(cm.caCert.Raw)
-	thumb := strings.ToUpper(hex.EncodeToString(sum[:]))
-	clean := func(s string) string {
-		s = strings.ToLower(s)
-		s = strings.ReplaceAll(s, " ", "")
-		s = strings.ReplaceAll(s, ":", "")
-		return s
-	}
-	cleanThumb := clean(thumb)
-
-	// Run native certutil to check if cert thumbprint exists in User Root or CA store.
-	// This avoids any PowerShell ExecutionPolicy restriction issues and does not require temp files.
-	outputRoot, _ := outputHiddenCommand("certutil", "-user", "-store", "root", thumb)
-	if strings.Contains(clean(string(outputRoot)), cleanThumb) {
-		status.Installed = true
-	} else {
-		outputCA, _ := outputHiddenCommand("certutil", "-user", "-store", "ca", thumb)
-		if strings.Contains(clean(string(outputCA)), cleanThumb) {
-			status.Installed = true
-		}
-	}
+	status.Installed = platformCACertInstalled(certThumbprint(cm.caCert))
 
 	// Update cache
 	cm.certMu.Lock()
@@ -242,6 +218,13 @@ func (cm *CertManager) GetCAInstallStatus() CAInstallStatus {
 	cm.certMu.Unlock()
 
 	return status
+}
+
+// certThumbprint returns the uppercase hex SHA-1 of the certificate DER. Every
+// platform trust store addresses certificates by it.
+func certThumbprint(cert *x509.Certificate) string {
+	sum := sha1.Sum(cert.Raw)
+	return strings.ToUpper(hex.EncodeToString(sum[:]))
 }
 
 func (cm *CertManager) InstallCA() error {
@@ -254,24 +237,20 @@ func (cm *CertManager) InstallCA() error {
 		return fmt.Errorf("CA certificate path is empty")
 	}
 
+	// Drop earlier generations of the CA before installing the current one.
 	if certs, err := cm.GetInstalledCertificates(); err == nil {
 		for _, c := range certs {
 			_ = cm.UninstallCertificate(c.Token)
 		}
 	}
 
-	// Use certutil to install to CurrentUser Root store.
-	// This will pop up a standard Windows security warning.
-	// We run it visible (without hide) so that the interactive warning dialog is not hidden by the OS.
-	cmd := exec.Command("certutil", "-user", "-addstore", "root", cm.caPath)
-	err := cmd.Run()
-	if err != nil {
-		return fmt.Errorf("failed to install CA certificate: %w", err)
+	if err := platformInstallCA(cm.caPath); err != nil {
+		return err
 	}
 
 	cm.invalidateInstallStatusCache()
 
-	fmt.Println("[Cert] CA certificate installed successfully to CurrentUser Root store")
+	fmt.Println("[Cert] CA certificate installed successfully")
 	return nil
 }
 
@@ -284,134 +263,10 @@ type InstalledCert struct {
 	Token         string `json:"token"`
 }
 
+// GetInstalledCertificates lists the certificates this app owns in the platform
+// trust store.
 func (cm *CertManager) GetInstalledCertificates() ([]InstalledCert, error) {
-	psScript := `
-$stores = @(
-  @{ Location = 'CurrentUser'; Name = 'Root' },
-  @{ Location = 'CurrentUser'; Name = 'CA' },
-  @{ Location = 'LocalMachine'; Name = 'Root' },
-  @{ Location = 'LocalMachine'; Name = 'CA' }
-)
-$result = @()
-foreach ($spec in $stores) {
-  $store = New-Object System.Security.Cryptography.X509Certificates.X509Store($spec.Name, $spec.Location)
-  try {
-    $store.Open([System.Security.Cryptography.X509Certificates.OpenFlags]::ReadOnly)
-    foreach ($cert in $store.Certificates) {
-      if ($cert.Subject -match 'SniShaper' -or $cert.Issuer -match 'SniShaper') {
-        $result += [PSCustomObject]@{
-          subject = $cert.Subject
-          thumbprint = $cert.Thumbprint
-          notAfter = $cert.NotAfter.ToString('yyyy-MM-dd HH:mm:ss')
-          storeName = $spec.Name
-          storeLocation = $spec.Location
-          token = "$($spec.Location)|$($spec.Name)|$($cert.Thumbprint)"
-        }
-      }
-    }
-  } finally {
-    $store.Close()
-  }
-}
-$result | ConvertTo-Json -Compress
-`
-	output, err := outputHiddenCommand("powershell", "-NoProfile", "-Command", psScript)
-	if err != nil {
-		return nil, fmt.Errorf("failed to enumerate certificate stores: %w", err)
-	}
-
-	text := strings.TrimSpace(string(output))
-	if text == "" {
-		return []InstalledCert{}, nil
-	}
-
-	var certs []InstalledCert
-	if strings.HasPrefix(text, "[") {
-		if err := json.Unmarshal(output, &certs); err != nil {
-			return nil, fmt.Errorf("failed to parse installed certificates: %w", err)
-		}
-		return certs, nil
-	}
-
-	var single InstalledCert
-	if err := json.Unmarshal(output, &single); err != nil {
-		return nil, fmt.Errorf("failed to parse installed certificate: %w", err)
-	}
-	return []InstalledCert{single}, nil
-}
-
-var sha1ThumbprintPattern = regexp.MustCompile(`(?i)[A-F0-9]{40}`)
-
-func parseCertutilStoreOutput(output []byte, storeLocation, storeName string) []InstalledCert {
-	scanner := bufio.NewScanner(bytes.NewReader(output))
-	var blocks [][]string
-	var current []string
-
-	for scanner.Scan() {
-		line := strings.TrimSpace(scanner.Text())
-		if strings.Contains(line, "====") {
-			if len(current) > 0 {
-				blocks = append(blocks, current)
-			}
-			current = []string{line}
-			continue
-		}
-		if len(current) > 0 {
-			current = append(current, line)
-		}
-	}
-	if len(current) > 0 {
-		blocks = append(blocks, current)
-	}
-
-	var certs []InstalledCert
-	for _, block := range blocks {
-		joined := strings.Join(block, "\n")
-		if !strings.Contains(strings.ToLower(joined), "snishaper") {
-			continue
-		}
-
-		var subject string
-		var notAfter string
-		var thumbprint string
-
-		for _, line := range block {
-			lower := strings.ToLower(line)
-			if subject == "" && strings.Contains(lower, "snishaper") {
-				if idx := strings.Index(line, ":"); idx >= 0 && idx+1 < len(line) {
-					subject = strings.TrimSpace(line[idx+1:])
-				}
-			}
-			if notAfter == "" && strings.Contains(lower, "notafter:") {
-				if idx := strings.Index(line, ":"); idx >= 0 && idx+1 < len(line) {
-					notAfter = strings.TrimSpace(line[idx+1:])
-				}
-			}
-			if thumbprint == "" {
-				if match := sha1ThumbprintPattern.FindString(line); match != "" {
-					thumbprint = strings.ToUpper(match)
-				}
-			}
-		}
-
-		if thumbprint == "" {
-			continue
-		}
-		if subject == "" {
-			subject = "SniShaper CA"
-		}
-
-		certs = append(certs, InstalledCert{
-			Subject:       subject,
-			Thumbprint:    thumbprint,
-			NotAfter:      notAfter,
-			StoreName:     storeName,
-			StoreLocation: storeLocation,
-			Token:         storeLocation + "|" + storeName + "|" + thumbprint,
-		})
-	}
-
-	return certs
+	return platformListCerts()
 }
 
 func (cm *CertManager) UninstallCertificate(thumbprint string) error {
@@ -419,33 +274,19 @@ func (cm *CertManager) UninstallCertificate(thumbprint string) error {
 		return fmt.Errorf("thumbprint is empty")
 	}
 
-	storeLocation := "CurrentUser"
-	storeName := "Root"
+	storeLocation := ""
+	storeName := ""
 	certThumbprint := thumbprint
-
 	if parts := strings.SplitN(thumbprint, "|", 3); len(parts) == 3 {
 		storeLocation = parts[0]
 		storeName = parts[1]
 		certThumbprint = parts[2]
 	}
 
-	args := []string{}
-	if strings.EqualFold(storeLocation, "CurrentUser") {
-		args = append(args, "-user")
-	}
-	args = append(args, "-delstore", storeName, certThumbprint)
-
-	if strings.EqualFold(storeLocation, "LocalMachine") {
-		if err := runElevatedCommand("certutil", args...); err != nil {
-			return err
-		}
-		cm.invalidateInstallStatusCache()
-		return nil
-	}
-
-	if err := runHiddenCommand("certutil", args...); err != nil {
+	if err := platformUninstallCert(storeLocation, storeName, certThumbprint); err != nil {
 		return err
 	}
+
 	cm.invalidateInstallStatusCache()
 	return nil
 }
