@@ -90,7 +90,13 @@ func main() {
 		},
 		Icon:   trayIcon,
 		Logger: a.FrameworkLogger(),
+		// The app owns the window lifecycle on every desktop platform: a
+		// window that disappears must not end the process, because closing to
+		// the tray and hibernating both leave the app running with a tray icon.
 		Windows: application.WindowsOptions{
+			DisableQuitOnLastWindowClosed: true,
+		},
+		Linux: application.LinuxOptions{
 			DisableQuitOnLastWindowClosed: true,
 		},
 	})

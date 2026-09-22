@@ -58,7 +58,7 @@ func (a *App) StartEvolutionTest(domains []string, enableIPv6 bool) (map[string]
 			}
 
 			a.invokeAsync(func() {
-				if a.hasMainWindow() {
+				if a.hasUI() {
 					a.emitEvent("evolution:progress", map[string]interface{}{
 						"progress":   currentTask.Progress,
 						"total":      currentTask.Total,
@@ -73,7 +73,7 @@ func (a *App) StartEvolutionTest(domains []string, enableIPv6 bool) (map[string]
 		finalTask := tester.Snapshot()
 		if finalTask != nil {
 			a.invokeAsync(func() {
-				if a.hasMainWindow() {
+				if a.hasUI() {
 					a.emitEvent("evolution:complete", map[string]interface{}{
 						"id":         finalTask.ID,
 						"status":     string(finalTask.Status),

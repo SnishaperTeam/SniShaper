@@ -61,3 +61,10 @@ func (a *App) SetSystemProxyMenuItem(i any)   {}
 func (a *App) IsHibernated() bool             { return false }
 func (a *App) IsMainWindowVisible() bool      { return false }
 func (a *App) hasMainWindow() bool            { return false }
+
+// AttachMainWindowHandlers is a no-op without a window (see SetMainWindow).
+func (a *App) AttachMainWindowHandlers(_ any) {}
+
+// hasUI reports whether app state can be delivered to a UI. There is no window
+// to track here, so state goes to the adapter a headless frontend installs.
+func (a *App) hasUI() bool { return a.ui != nil }

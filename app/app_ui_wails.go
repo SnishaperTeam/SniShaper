@@ -5,47 +5,13 @@ package app
 import (
 	"context"
 	"log"
-	"log/slog"
 	"runtime"
 	"runtime/debug"
-	"strings"
 	"time"
 
 	"github.com/wailsapp/wails/v3/pkg/application"
 	"github.com/wailsapp/wails/v3/pkg/events"
 )
-
-// wailsLogHandler routes the runtime's system messages into the app log. The
-// build has no console, so the runtime's own logger (stderr) is otherwise
-// invisible - that is where notification icon and window failures are reported.
-type wailsLogHandler struct{ app *App }
-
-func (h wailsLogHandler) Enabled(_ context.Context, level slog.Level) bool {
-	return level >= slog.LevelInfo
-}
-
-func (h wailsLogHandler) Handle(_ context.Context, record slog.Record) error {
-	var b strings.Builder
-	b.WriteString("[wails] ")
-	b.WriteString(strings.ToLower(record.Level.String()))
-	b.WriteString(": ")
-	b.WriteString(record.Message)
-	record.Attrs(func(attr slog.Attr) bool {
-		b.WriteString(" ")
-		b.WriteString(attr.Key)
-		b.WriteString("=")
-		b.WriteString(attr.Value.String())
-		return true
-	})
-	h.app.appendLog(b.String())
-	return nil
-}
-
-func (h wailsLogHandler) WithAttrs(_ []slog.Attr) slog.Handler { return h }
-func (h wailsLogHandler) WithGroup(_ string) slog.Handler      { return h }
-
-// FrameworkLogger is the logger handed to the wails runtime.
-func (a *App) FrameworkLogger() *slog.Logger { return slog.New(wailsLogHandler{app: a}) }
 
 // Typed accessors for the GUI-only UI references (stored as `any` on App
 // so the headless build never links the wails runtime).
@@ -144,9 +110,13 @@ func (a *App) liveMainWindow() *application.WebviewWindow {
 	return w
 }
 
-// hasMainWindow reports whether a live main window is tracked. The headless
-// build always reports false.
+// hasMainWindow reports whether a live main window is tracked.
 func (a *App) hasMainWindow() bool { return a.liveMainWindow() != nil }
+
+// hasUI reports whether app state can be delivered to a UI. The desktop build
+// needs a live window for that; the headless build (app_headless.go) pushes
+// state to the adapter a frontend installs instead.
+func (a *App) hasUI() bool { return a.hasMainWindow() }
 
 func (a *App) IsHibernated() bool { return a.mainWindow == nil && !a.shouldQuit }
 
