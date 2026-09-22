@@ -682,7 +682,7 @@ func (a *App) emitDownloadProgress(name string, received, total int64, speed flo
 		percent = float64(received) / float64(total) * 100
 	}
 	a.invokeAsync(func() {
-		if !a.hasMainWindow() || a.shouldQuit {
+		if !a.hasUI() || a.shouldQuit {
 			return
 		}
 		a.emitEvent("update:download_progress", map[string]interface{}{
