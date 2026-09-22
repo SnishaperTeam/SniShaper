@@ -43,7 +43,10 @@ func setAutoStartEnabled(enabled bool, command string) error {
 	}
 	entry := filepath.Join(dir, "snishaper.desktop")
 	if !enabled {
-		return os.Remove(entry)
+		if err := os.Remove(entry); err != nil && !os.IsNotExist(err) {
+			return err
+		}
+		return nil
 	}
 	content := "[Desktop Entry]\n" +
 		"Type=Application\n" +
