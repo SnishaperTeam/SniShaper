@@ -15,6 +15,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"sort"
 	"strconv"
 	"strings"
@@ -792,7 +793,7 @@ func (a *App) GetCAInstallStatus() CAInstallStatus {
 	if a.certManager == nil {
 		return CAInstallStatus{
 			CertPath:    a.certPath,
-			Platform:    "windows",
+			Platform:    runtime.GOOS,
 			InstallHelp: "证书状态初始化中",
 		}
 	}
