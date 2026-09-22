@@ -337,7 +337,7 @@ func (a *App) startRouteEventsPoller() {
 				return
 			case <-ticker.C:
 			}
-			if a.core == nil || a.mainWindow == nil {
+			if a.core == nil || !a.hasMainWindow() {
 				continue
 			}
 			events := a.core.GetRouteEvents()
@@ -346,7 +346,7 @@ func (a *App) startRouteEventsPoller() {
 			}
 			for _, e := range events {
 				a.invokeAsync(func() {
-					if a.mainWindow == nil || a.shouldQuit {
+					if !a.hasMainWindow() || a.shouldQuit {
 						return
 					}
 					a.emitEvent("app:route", map[string]interface{}{
@@ -460,11 +460,11 @@ func (a *App) emitFrontendState() {
 		return
 	}
 	a.UpdateTrayMenu()
-	if a.mainWindow == nil {
+	if !a.hasMainWindow() {
 		return
 	}
 	a.invokeAsync(func() {
-		if a.mainWindow == nil || a.shouldQuit {
+		if !a.hasMainWindow() || a.shouldQuit {
 			return
 		}
 		tunStatus := a.GetTUNStatus()

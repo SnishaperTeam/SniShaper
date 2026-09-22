@@ -88,7 +88,8 @@ func main() {
 			},
 			ExitCode: 0,
 		},
-		Icon: trayIcon,
+		Icon:   trayIcon,
+		Logger: a.FrameworkLogger(),
 		Windows: application.WindowsOptions{
 			DisableQuitOnLastWindowClosed: true,
 		},
@@ -180,19 +181,7 @@ func main() {
 		Hidden:           hidden,
 		BackgroundColour: application.NewRGB(27, 38, 54),
 	})
-	mainWindow.OnWindowEvent(events.Common.WindowClosing, func(event *application.WindowEvent) {
-		if a.ShouldQuit() {
-			return
-		}
-		if a.GetHibernateOnClose() {
-			a.SetMainWindow(nil)
-			return
-		}
-		if a.GetCloseToTray() {
-			event.Cancel()
-			mainWindow.Hide()
-		}
-	})
+	a.AttachMainWindowHandlers(mainWindow)
 	mainWindow.OnWindowEvent(events.Common.WindowRuntimeReady, func(event *application.WindowEvent) {
 		if !a.ShouldStartHidden() {
 			a.RevealMainWindow()

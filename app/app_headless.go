@@ -60,3 +60,4 @@ func (a *App) SetProxyMenuItem(i any)         {}
 func (a *App) SetSystemProxyMenuItem(i any)   {}
 func (a *App) IsHibernated() bool             { return false }
 func (a *App) IsMainWindowVisible() bool      { return false }
+func (a *App) hasMainWindow() bool            { return false }
