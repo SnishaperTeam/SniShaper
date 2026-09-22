@@ -324,16 +324,13 @@ func (a *App) SetListenPort(port int) error {
 }
 
 func (a *App) RevealMainWindow() {
-	if a.mainWindow != nil {
-		a.showMainWindow()
+	if a.wailsApp == nil {
+		a.pendingShow = true
 		return
 	}
-	// hibernated: recreate window
-	if a.wailsApp != nil {
-		a.showMainWindow()
-		return
-	}
-	a.pendingShow = true
+	// showMainWindow recreates the window when the tracked one is gone, so a
+	// window destroyed behind the app's back can always be brought back.
+	a.showMainWindow()
 }
 
 func (a *App) GetSocks5Enabled() bool {

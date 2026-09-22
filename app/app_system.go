@@ -313,7 +313,7 @@ func (a *App) WindowClose() {
 }
 
 func (a *App) HandleWindowClose() {
-	if !a.shouldQuit && a.mainWindow != nil {
+	if !a.shouldQuit && a.hasMainWindow() {
 		if a.GetHibernateOnClose() {
 			a.HibernateMainWindow()
 			return
