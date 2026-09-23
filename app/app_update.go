@@ -109,6 +109,27 @@ func (a *App) SetCustomDownloadSource(prefix string) error {
 	return a.ruleManager.SetCustomDownloadSource(prefix)
 }
 
+// UpdateChannels lists the channels CheckUpdate accepts, so callers can show
+// the valid values instead of hardcoding them.
+func UpdateChannels() []string {
+	names := make([]string, 0, len(validUpdateChannels))
+	for name := range validUpdateChannels {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	return names
+}
+
+// DownloadSources lists the download source prefixes the updater understands.
+func DownloadSources() []string {
+	names := make([]string, 0, len(downloadSources))
+	for name := range downloadSources {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	return names
+}
+
 type DownloadSourceStatus struct {
 	Name      string `json:"name"`
 	URL       string `json:"url"`

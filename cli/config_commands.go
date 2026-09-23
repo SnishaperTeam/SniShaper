@@ -777,8 +777,58 @@ func opUpdate(args []string, out cmdOut) int {
 		}
 		out("安装完成")
 		return 0
+	case "channel":
+		if len(args) == 1 {
+			out("当前更新通道: " + a.GetUpdateChannel())
+			out("可选: " + strings.Join(app.UpdateChannels(), " / "))
+			return 0
+		}
+		if err := a.SetUpdateChannel(args[1]); err != nil {
+			out("设置更新通道失败: " + err.Error())
+			out("可选: " + strings.Join(app.UpdateChannels(), " / "))
+			return 1
+		}
+		out("更新通道已设为 " + a.GetUpdateChannel())
+		return 0
+	case "source":
+		if len(args) == 1 {
+			out("当前下载源: " + a.GetDownloadSource())
+			if custom := a.GetCustomDownloadSource(); custom != "" {
+				out("自定义前缀: " + custom)
+			}
+			out("可选: " + strings.Join(app.DownloadSources(), " / "))
+			return 0
+		}
+		if err := a.SetDownloadSource(args[1]); err != nil {
+			out("设置下载源失败: " + err.Error())
+			out("可选: " + strings.Join(app.DownloadSources(), " / "))
+			return 1
+		}
+		out("下载源已设为 " + a.GetDownloadSource())
+		if len(args) >= 3 {
+			if err := a.SetCustomDownloadSource(args[2]); err != nil {
+				out("设置自定义前缀失败: " + err.Error())
+				return 1
+			}
+			out("自定义前缀已设为 " + args[2])
+		}
+		return 0
+	case "measure":
+		results := a.MeasureDownloadSources()
+		if len(results) == 0 {
+			out("没有可测速的下载源")
+			return 1
+		}
+		for _, r := range results {
+			if r.OK {
+				out(fmt.Sprintf("%-20s %6d ms  %s", r.Name, r.LatencyMS, r.URL))
+				continue
+			}
+			out(fmt.Sprintf("%-20s %10s  %s (%s)", r.Name, "失败", r.URL, r.Error))
+		}
+		return 0
 	default:
-		out("用法: update check|download [name]|install [name|path]")
+		out("用法: update check|download [序号或名称]|install [序号或名称或路径]|channel [名称]|source [名称] [前缀]|measure")
 		return 2
 	}
 }
@@ -789,7 +839,7 @@ func opLogsAdmin(args []string, out cmdOut) int {
 		return 1
 	}
 	if len(args) == 0 {
-		out("用法: logs clear|clean")
+		out("用法: logs [N]|clear|clean|files|show <文件名>|capture [on|off]")
 		return 2
 	}
 
@@ -809,8 +859,58 @@ func opLogsAdmin(args []string, out cmdOut) int {
 		}
 		out(fmt.Sprintf("已删除 %d 个历史日志文件", removed))
 		return 0
+	case "files":
+		files := a.GetLogFiles()
+		if len(files) == 0 {
+			out("没有日志文件")
+			return 0
+		}
+		for _, file := range files {
+			out(fmt.Sprintf("%-32s %s", file.Name, humanSize(file.Size)))
+		}
+		return 0
+	case "show":
+		if len(args) < 2 {
+			out("用法: logs show <文件名>")
+			return 2
+		}
+		content := a.GetLogFileContent(args[1])
+		if strings.TrimSpace(content) == "" {
+			out("日志文件不存在或为空: " + args[1])
+			return 1
+		}
+		out(content)
+		return 0
+	case "capture":
+		if len(args) < 2 {
+			state := "关"
+			if c := core.NewCoreClient(); c.Ping() && c.IsLogCaptureEnabled() {
+				state = "开"
+			}
+			out("日志捕获: " + state)
+			return 0
+		}
+		switch args[1] {
+		case "on":
+			if err := a.StartLogCapture(); err != nil {
+				out("开启日志捕获失败: " + err.Error())
+				return 1
+			}
+			out("已开启核心日志捕获")
+			return 0
+		case "off":
+			if err := a.StopLogCapture(); err != nil {
+				out("关闭日志捕获失败: " + err.Error())
+				return 1
+			}
+			out("已关闭核心日志捕获")
+			return 0
+		default:
+			out("用法: logs capture [on|off]")
+			return 2
+		}
 	default:
-		out("用法: logs clear|clean")
+		out("用法: logs [N]|clear|clean|files|show <文件名>|capture [on|off]")
 		return 2
 	}
 }
