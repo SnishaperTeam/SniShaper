@@ -100,6 +100,12 @@ func runTUI() {
 		os.Exit(1)
 	}
 	a := app.NewApp()
+	defer func() {
+		if r := recover(); r != nil {
+			log.Printf("[cli] panic recovered, forcing cleanup: %v", r)
+			a.ForceCleanup()
+		}
+	}()
 	t := newTUI(a)
 	if err := t.run(); err != nil {
 		fmt.Fprintln(os.Stderr, "TUI error:", err)
@@ -111,6 +117,12 @@ func runTUI() {
 func runService() {
 	a := app.NewApp()
 	a.SetCLIMode(true)
+	defer func() {
+		if r := recover(); r != nil {
+			log.Printf("[cli] panic recovered, forcing cleanup: %v", r)
+			a.ForceCleanup()
+		}
+	}()
 	if err := a.StartupCLI(); err != nil {
 		log.Fatal(err)
 	}
