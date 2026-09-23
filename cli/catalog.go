@@ -26,6 +26,9 @@ func commandCatalog() []commandGroup {
 				{"logs [N]", "打印最近 N 行日志（默认 100）"},
 				{"logs clear", "清空内存日志缓冲"},
 				{"logs clean", "删除历史日志文件（保留当前）"},
+				{"logs files", "列出历史日志文件"},
+				{"logs show <文件名>", "查看某个日志文件的内容"},
+				{"logs capture [on|off]", "查看 / 切换核心日志捕获"},
 			},
 		},
 		{
@@ -56,6 +59,8 @@ func commandCatalog() []commandGroup {
 				{"ca status", "查看根证书安装状态"},
 				{"ca install", "安装根证书到系统信任库（需要管理员 / root）"},
 				{"ca uninstall", "卸载已安装的根证书"},
+				{"ca list", "列出系统中本程序安装的根证书"},
+				{"ca pem", "输出 CA 证书 PEM 内容"},
 				{"ca export", "导出 CA 证书到 ca.crt"},
 				{"ca path", "显示 CA 证书文件路径"},
 				{"ca regenerate", "重新生成根证书（之后需重新安装）"},
@@ -84,6 +89,9 @@ func commandCatalog() []commandGroup {
 				{"update check", "检查新版本并列出可用资产"},
 				{"update download [序号|名称]", "下载更新（缺省选当前平台适配的资产）"},
 				{"update install [序号|名称|路径]", "安装更新（进程可能被替换并重启）"},
+				{"update channel [名称]", "查看 / 切换更新通道"},
+				{"update source [名称] [前缀]", "查看 / 切换下载源与自定义前缀"},
+				{"update measure", "测试各下载源延迟"},
 			},
 		},
 		{

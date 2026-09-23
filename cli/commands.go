@@ -266,7 +266,7 @@ func reloadCoreCert(out cmdOut) {
 
 func opCA(args []string, out cmdOut) int {
 	if len(args) == 0 {
-		out("用法: ca status|install|uninstall|export|path|regenerate")
+		out("用法: ca status|install|uninstall|list|pem|export|path|regenerate")
 		return 2
 	}
 	cm, err := certmanager.InitCertManager(common.ConfigCertDir(execDir()))
@@ -309,6 +309,26 @@ func opCA(args []string, out cmdOut) int {
 			}
 		}
 		reloadCoreCert(out)
+		return 0
+	case "list":
+		certs, err := cm.GetInstalledCertificates()
+		if err != nil {
+			out("查询已安装证书失败: " + err.Error())
+			return 1
+		}
+		if len(certs) == 0 {
+			out("系统中没有本程序安装的根证书")
+			return 0
+		}
+		printJSON(out, certs)
+		return 0
+	case "pem":
+		pem := cm.GetCACertPEM()
+		if strings.TrimSpace(pem) == "" {
+			out("读取 CA 证书失败")
+			return 1
+		}
+		out(pem)
 		return 0
 	case "export":
 		pem, err := cm.ExportCert()

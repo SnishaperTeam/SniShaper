@@ -69,8 +69,11 @@ func dispatchCommand(args []string, out cmdOut) int {
 	case "status":
 		return opStatus(out)
 	case "logs":
-		if len(args) > 1 && (args[1] == "clear" || args[1] == "clean") {
-			return opLogsAdmin(args[1:], out)
+		if len(args) > 1 {
+			switch args[1] {
+			case "clear", "clean", "files", "show", "capture":
+				return opLogsAdmin(args[1:], out)
+			}
 		}
 		n := 100
 		if len(args) > 1 {
