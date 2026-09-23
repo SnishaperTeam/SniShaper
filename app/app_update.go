@@ -1,5 +1,3 @@
-//go:build !headless
-
 package app
 
 import (
@@ -335,6 +333,10 @@ func filterUpdateAssets(assets []githubAsset) []ReleaseAsset {
 			kind = "exe"
 		case strings.HasSuffix(lower, ".7z") && !strings.Contains(lower, "_x64") && !strings.Contains(lower, "_x86") && !strings.Contains(lower, "_arm64") && !strings.Contains(lower, "unsigned"):
 			kind = "7z"
+		case strings.HasSuffix(lower, ".tar.gz"):
+			// Portable bundle used by the Linux build, and the only archive
+			// the Linux installer can unpack on its own.
+			kind = "tar.gz"
 		default:
 			continue
 		}
