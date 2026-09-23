@@ -108,3 +108,76 @@ func escapePlistText(s string) string {
 	)
 	return replacer.Replace(s)
 }
+
+// SetNamedAutoStartEntry writes or removes an extra launch agent under its own
+// label, so the headless service can register independently of the desktop app
+// entry.
+func SetNamedAutoStartEntry(name string, enabled bool, command string) error {
+	if name == "" {
+		return fmt.Errorf("autostart entry name is empty")
+	}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return fmt.Errorf("cannot resolve the home directory")
+	}
+	path := filepath.Join(home, "Library", "LaunchAgents", name+".plist")
+	domain := "gui/" + strconv.Itoa(os.Getuid())
+
+	if !enabled {
+		_ = exec.Command("launchctl", "bootout", domain, path).Run()
+		_ = exec.Command("launchctl", "unload", path).Run()
+		if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
+			return err
+		}
+		return nil
+	}
+	if strings.TrimSpace(command) == "" {
+		return fmt.Errorf("autostart command is empty")
+	}
+	if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
+		return err
+	}
+	if err := os.WriteFile(path, []byte(namedLaunchAgentPlist(name, command)), 0644); err != nil {
+		return err
+	}
+	if err := exec.Command("launchctl", "bootstrap", domain, path).Run(); err != nil {
+		if err := exec.Command("launchctl", "load", "-w", path).Run(); err != nil {
+			return fmt.Errorf("launchctl could not load %s: %w", path, err)
+		}
+	}
+	return nil
+}
+
+// NamedAutoStartEntryExists reports whether such a launch agent is registered.
+func NamedAutoStartEntryExists(name string) bool {
+	home, err := os.UserHomeDir()
+	if err != nil || name == "" {
+		return false
+	}
+	_, statErr := os.Stat(filepath.Join(home, "Library", "LaunchAgents", name+".plist"))
+	return statErr == nil
+}
+
+func namedLaunchAgentPlist(label, command string) string {
+	return `<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>Label</key>
+	<string>` + label + `</string>
+	<key>ProgramArguments</key>
+	<array>
+		<string>/bin/sh</string>
+		<string>-c</string>
+		<string>` + escapePlistText(command) + `</string>
+	</array>
+	<key>RunAtLoad</key>
+	<true/>
+	<key>KeepAlive</key>
+	<false/>
+	<key>ProcessType</key>
+	<string>Background</string>
+</dict>
+</plist>
+`
+}

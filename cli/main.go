@@ -136,6 +136,12 @@ func dispatchCommand(args []string, out cmdOut) int {
 		return opMigration(args[1:], out)
 	case "evolution":
 		return opEvolution(args[1:], out)
+	case "autostart":
+		return opAutoStart(args[1:], out)
+	case "diag":
+		return opDiag(out)
+	case "selfcheck":
+		return opSelfCheck(out)
 	case "version", "-v", "--version":
 		out(app.VersionString())
 		return 0
@@ -257,7 +263,11 @@ func cmdStart() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	cmd := exec.Command(exe, "--serve")
+	serveArgs := []string{"--serve"}
+	if app.HasLaunchArg("--autoproxy") {
+		serveArgs = append(serveArgs, "--autoproxy")
+	}
+	cmd := exec.Command(exe, serveArgs...)
 	applyDetached(cmd)
 	dir := filepath.Join(filepath.Dir(exe), "log")
 	_ = os.MkdirAll(dir, 0755)

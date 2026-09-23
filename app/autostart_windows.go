@@ -3,6 +3,7 @@
 package app
 
 import (
+	"fmt"
 	"strings"
 	"syscall"
 
@@ -49,4 +50,43 @@ func setAutoStartEnabled(enabled bool, command string) error {
 	}
 
 	return key.SetStringValue(autoStartValueName, command)
+}
+
+// SetNamedAutoStartEntry writes or removes an extra Run value under its own
+// name, so the headless service can register independently of the desktop app
+// entry.
+func SetNamedAutoStartEntry(name string, enabled bool, command string) error {
+	if name == "" {
+		return fmt.Errorf("autostart entry name is empty")
+	}
+	key, _, err := registry.CreateKey(registry.CURRENT_USER, autoStartRegistryPath, registry.SET_VALUE)
+	if err != nil {
+		return err
+	}
+	defer key.Close()
+
+	if !enabled {
+		if err := key.DeleteValue(name); err != nil && err != registry.ErrNotExist {
+			return err
+		}
+		return nil
+	}
+	if trimmed := strings.TrimSpace(command); trimmed == "" {
+		return fmt.Errorf("autostart command is empty")
+	}
+	return key.SetStringValue(name, command)
+}
+
+// NamedAutoStartEntryExists reports whether such a Run value is registered.
+func NamedAutoStartEntryExists(name string) bool {
+	if name == "" {
+		return false
+	}
+	key, err := registry.OpenKey(registry.CURRENT_USER, autoStartRegistryPath, registry.QUERY_VALUE)
+	if err != nil {
+		return false
+	}
+	defer key.Close()
+	value, _, err := key.GetStringValue(name)
+	return err == nil && strings.TrimSpace(value) != ""
 }
