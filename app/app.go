@@ -291,6 +291,7 @@ func (a *App) startupV3() {
 	a.RefreshIPv6Check()
 	a.startRouteEventsPoller()
 	a.startLogFileMirror()
+	a.serveInstanceListener()
 }
 
 // autoEnableProxyAtStartup starts the proxy (and system proxy) with backoff

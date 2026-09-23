@@ -62,6 +62,13 @@ func (a *App) IsHibernated() bool             { return false }
 func (a *App) IsMainWindowVisible() bool      { return false }
 func (a *App) hasMainWindow() bool            { return false }
 
+// StartInstanceListener and stopInstanceListener are no-ops without a window.
+func (a *App) StartInstanceListener(string) {}
+
+func (a *App) serveInstanceListener() {}
+
+func stopInstanceListener() {}
+
 // AttachMainWindowHandlers is a no-op without a window (see SetMainWindow).
 func (a *App) AttachMainWindowHandlers(_ any) {}
 

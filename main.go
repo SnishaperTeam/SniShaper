@@ -103,6 +103,8 @@ func main() {
 
 	a.SetWailsApp(wailsApp)
 
+	a.StartInstanceListener("com.snishaper.desktop")
+
 	app.AllowSingleInstanceCrossIntegrity("com.snishaper.desktop")
 	go func() {
 		for i := 0; i < 10; i++ {
