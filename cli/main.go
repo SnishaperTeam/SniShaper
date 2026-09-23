@@ -123,6 +123,16 @@ func dispatchCommand(args []string, out cmdOut) int {
 		return opIPv6(out)
 	case "update":
 		return opUpdate(args[1:], out)
+	case "mode":
+		return opMode(args[1:], out)
+	case "port":
+		return opPort(args[1:], out)
+	case "socks5":
+		return opSocks5(args[1:], out)
+	case "migration":
+		return opMigration(args[1:], out)
+	case "evolution":
+		return opEvolution(args[1:], out)
 	case "version", "-v", "--version":
 		out(app.VersionString())
 		return 0

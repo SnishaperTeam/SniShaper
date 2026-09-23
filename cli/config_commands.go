@@ -457,6 +457,20 @@ func opECH(args []string, out cmdOut) int {
 		out("已保存 ECH 配置: " + p.ID)
 		reloadService(out)
 		return 0
+	case "fetch":
+		if len(args) < 2 {
+			out("用法: ech fetch <域名> [DoH 地址]")
+			return 2
+		}
+		config, err := a.FetchECHConfig(args[1], argAt(args, 2))
+		if err != nil {
+			out("获取 ECH 配置失败: " + err.Error())
+			return 1
+		}
+		out("ECH 配置（base64）:")
+		out(config)
+		out("保存: ech upsert '{\"name\":\"" + args[1] + "\",\"config\":\"" + config + "\"}'")
+		return 0
 	case "delete":
 		if len(args) < 2 {
 			out("用法: ech delete <id>")
@@ -474,7 +488,7 @@ func opECH(args []string, out cmdOut) int {
 		reloadService(out)
 		return 0
 	default:
-		out("用法: ech list|upsert <json>|delete <id>")
+		out("用法: ech list|upsert <json>|fetch <域名> [DoH 地址]|delete <id>")
 		return 2
 	}
 }
@@ -609,8 +623,24 @@ func opCloudflare(args []string, out cmdOut) int {
 		}
 		out("已触发健康检查")
 		return 0
+	case "config":
+		if len(args) == 1 {
+			printJSON(out, a.GetCloudflareConfig())
+			return 0
+		}
+		var cfg proxy.CloudflareConfig
+		if !decodeJSONArg(out, `cf config '{"enabled":true,"preferred_ips":["1.1.1.1"]}'`, args[1], &cfg) {
+			return 2
+		}
+		if err := a.UpdateCloudflareConfig(cfg); err != nil {
+			out("保存 CF 配置失败: " + err.Error())
+			return 1
+		}
+		out("已保存 CF 配置")
+		reloadService(out)
+		return 0
 	default:
-		out("用法: cf status|refresh|fetch|prune|health")
+		out("用法: cf status|config [json]|refresh|fetch|prune|health")
 		return 2
 	}
 }
