@@ -1,4 +1,4 @@
-//go:build windows && !headless
+//go:build windows
 
 package app
 
