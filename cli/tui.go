@@ -17,17 +17,24 @@ import (
 	"snishaper/app"
 )
 
+const catalogPage = "catalog"
+
 type tuiApp struct {
 	app        *app.App
 	tv         *tview.Application
+	pages      *tview.Pages
 	logView    *tview.TextView
 	statusView *tview.TextView
+	catalog    *tview.TextView
 	input      *tview.InputField
 
 	logMu       sync.Mutex
 	pendingLogs []string
 	appAnchor   string
 	coreAnchor  string
+
+	screenW int
+	screenH int
 }
 
 func newTUI(a *app.App) *tuiApp {
@@ -38,10 +45,15 @@ func newTUI(a *app.App) *tuiApp {
 	t.statusView = tview.NewTextView().
 		SetDynamicColors(true).
 		SetTextAlign(tview.AlignCenter)
+	t.catalog = tview.NewTextView().
+		SetDynamicColors(true).
+		SetScrollable(true)
+	t.catalog.SetBorder(true).SetTitle(" 命令目录（Esc 关闭，↑↓ 滚动） ")
+	t.pages = tview.NewPages()
 	t.input = tview.NewInputField().
 		SetLabel("snishaper> ").
 		SetFieldBackgroundColor(tview.Styles.PrimitiveBackgroundColor).
-		SetPlaceholder("输入 help 查看命令")
+		SetPlaceholder("输入 目录 或 F1 查看命令")
 	t.input.SetDoneFunc(func(key tcell.Key) {
 		if key == tcell.KeyEnter {
 			cmdline := t.input.GetText()
@@ -53,9 +65,18 @@ func newTUI(a *app.App) *tuiApp {
 		}
 	})
 	t.tv.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
-		if event.Key() == tcell.KeyCtrlC {
+		switch event.Key() {
+		case tcell.KeyCtrlC:
 			t.tv.Stop()
 			return nil
+		case tcell.KeyF1:
+			t.toggleCatalog()
+			return nil
+		case tcell.KeyEscape:
+			if t.pages.HasPage(catalogPage) {
+				t.closeCatalog()
+				return nil
+			}
 		}
 		return event
 	})
@@ -67,7 +88,7 @@ func (t *tuiApp) build() tview.Primitive {
 		AddItem(t.statusView, 1, 0, false)
 	inputBox := tview.NewFlex().
 		SetDirection(tview.FlexRow).
-		AddItem(tview.NewTextView().SetText("日志可滚动：鼠标滚轮 / PageUp / PageDown；End 回到底部；Tab 切换焦点"), 1, 0, false).
+		AddItem(tview.NewTextView().SetText("日志可滚动：滚轮 / PageUp / PageDown；End 到底部；F1 命令目录；Tab 切换焦点"), 1, 0, false).
 		AddItem(t.input, 1, 0, true)
 	return tview.NewFlex().
 		SetDirection(tview.FlexRow).
@@ -91,7 +112,10 @@ func (t *tuiApp) run() error {
 		t.tv.Stop()
 	}()
 
-	t.tv.SetBeforeDrawFunc(func(tcell.Screen) bool {
+	t.tv.SetBeforeDrawFunc(func(screen tcell.Screen) bool {
+		if w, h := screen.Size(); w != t.screenW || h != t.screenH {
+			t.screenW, t.screenH = w, h
+		}
 		t.flushLogs()
 		return false
 	})
@@ -99,7 +123,8 @@ func (t *tuiApp) run() error {
 	go t.pollLogs()
 	go t.refreshStatus()
 
-	if err := t.tv.SetRoot(t.build(), true).EnableMouse(true).Run(); err != nil {
+	t.pages.AddPage("main", t.build(), true, true)
+	if err := t.tv.SetRoot(t.pages, true).EnableMouse(true).Run(); err != nil {
 		return err
 	}
 	return nil
@@ -229,6 +254,73 @@ func statusColor(on bool) string {
 	return "red:关:white"
 }
 
+// commandAliases maps the Chinese verbs the panel accepts onto the command
+// names the shared dispatcher knows.
+var commandAliases = map[string]string{
+	"状态": "status", "证书": "ca", "配置": "config", "版本": "version",
+	"规则": "sites", "站点": "sites", "上游": "upstreams", "节点": "dns",
+	"路由": "route", "统计": "stats", "更新": "update", "日志": "logs",
+}
+
+func (t *tuiApp) openCatalog() {
+	var b strings.Builder
+	for _, group := range commandCatalog() {
+		fmt.Fprintf(&b, "[yellow::b]%s[-:-:-]\n", group.Title)
+		for _, item := range group.Items {
+			fmt.Fprintf(&b, "  [white]%s[gray]  %s[-]\n", item.Usage, item.Desc)
+		}
+		b.WriteString("\n")
+	}
+	t.catalog.SetText(b.String())
+	t.catalog.ScrollToBeginning()
+	t.pages.AddPage(catalogPage, t.catalogModal(), true, true)
+}
+
+func (t *tuiApp) closeCatalog() {
+	t.pages.RemovePage(catalogPage)
+}
+
+func (t *tuiApp) toggleCatalog() {
+	if t.pages.HasPage(catalogPage) {
+		t.closeCatalog()
+		return
+	}
+	t.openCatalog()
+}
+
+// catalogModal centres the command catalogue so it reads as a panel instead of
+// taking over the log area.
+func (t *tuiApp) catalogModal() tview.Primitive {
+	width, height := t.screenW, t.screenH
+	if width <= 0 {
+		width = 80
+	}
+	if height <= 0 {
+		height = 24
+	}
+	panelWidth := width - 4
+	if panelWidth > 100 {
+		panelWidth = 100
+	}
+	panelHeight := height - 4
+	if panelHeight > 30 {
+		panelHeight = 30
+	}
+	if panelWidth < 20 {
+		panelWidth = 20
+	}
+	if panelHeight < 6 {
+		panelHeight = 6
+	}
+	return tview.NewFlex().
+		AddItem(nil, 0, 1, false).
+		AddItem(tview.NewFlex().SetDirection(tview.FlexRow).
+			AddItem(nil, 0, 1, false).
+			AddItem(t.catalog, panelHeight, 1, true).
+			AddItem(nil, 0, 1, false), panelWidth, 1, true).
+		AddItem(nil, 0, 1, false)
+}
+
 func (t *tuiApp) execCommand(cmdline string) {
 	fields := strings.Fields(cmdline)
 	if len(fields) == 0 {
@@ -240,21 +332,28 @@ func (t *tuiApp) execCommand(cmdline string) {
 	t.queueLog("> " + cmdline)
 
 	switch cmd {
-	case "help", "h", "?", "帮助":
-		t.queueLog(t.cmdHelp())
+	case "help", "h", "?", "帮助", "目录", "catalog":
+		// execCommand already runs on the event loop, so the page change is
+		// applied directly: QueueUpdateDraw from inside the loop would wait for
+		// the loop to process the queued function and deadlock the panel.
+		t.openCatalog()
+		return
 	case "start", "启动", "on", "proxyon", "代理on":
 		go opStartProxy(t.queueLog)
+		return
 	case "stop", "停止", "off", "proxyoff", "代理off":
 		go opStopProxy(t.queueLog)
+		return
 	case "proxy", "代理":
 		if len(args) == 1 && (args[0] == "off" || args[0] == "停止" || args[0] == "关") {
 			go opStopProxy(t.queueLog)
-		} else {
-			go opStartProxy(t.queueLog)
+			return
 		}
+		go opStartProxy(t.queueLog)
+		return
 	case "sysproxy", "sp", "系统代理":
 		if len(args) == 0 {
-			t.queueLog("用法: 系统代理 on|off 或 sysproxy on|off")
+			t.queueLog("用法: sysproxy on|off")
 			return
 		}
 		switch args[0] {
@@ -263,52 +362,47 @@ func (t *tuiApp) execCommand(cmdline string) {
 		case "off", "关":
 			go opDisableSysProxy(t.queueLog)
 		default:
-			t.queueLog("用法: 系统代理 on|off 或 sysproxy on|off")
+			t.queueLog("用法: sysproxy on|off")
 		}
-	case "tun":
-		if len(args) == 0 {
-			t.queueLog("用法: tun on|off（需要管理员/root 权限）")
-			return
-		}
-		switch args[0] {
-		case "on", "开":
-			go opTun(true, t.queueLog)
-		case "off", "关":
-			go opTun(false, t.queueLog)
-		default:
-			t.queueLog("用法: tun on|off（需要管理员/root 权限）")
-		}
-	case "ca":
-		go opCA(args, t.queueLog)
-	case "status", "s", "状态":
-		go opStatus(t.queueLog)
-	case "version", "v", "版本":
-		t.queueLog("SniShaper CLI " + app.VersionString())
+		return
 	case "clear", "cls", "清屏":
 		t.logView.Clear()
 		t.logView.ScrollToEnd()
+		return
 	case "quit", "exit", "q", "退出":
 		t.tv.Stop()
-	default:
-		t.queueLog("未知命令: " + cmd)
-		t.queueLog(t.cmdHelp())
+		return
 	}
+
+	if alias, ok := commandAliases[cmd]; ok {
+		cmd = alias
+		fields[0] = alias
+	}
+
+	// Everything else goes through the same dispatcher the shell entry point
+	// uses, so the panel exposes exactly the same command set.
+	if !isKnownCommand(cmd) {
+		t.queueLog("未知命令: " + cmd + "（按 F1 或输入 目录 查看命令目录）")
+		return
+	}
+	go func() {
+		if code := dispatchCommand(fields, t.queueLog); code != 0 {
+			t.queueLog(fmt.Sprintf("命令退出码: %d", code))
+		}
+	}()
 }
 
-func (t *tuiApp) cmdHelp() string {
-	return `命令列表:
-  start / proxy on / 启动        启动代理 (HTTP + SOCKS5)
-  stop  / proxy off / 停止       停止代理
-  sysproxy on|off / 系统代理     开启/关闭系统代理
-  tun on|off                    切换 TUN 模式 (需要管理员/root)
-  ca status                     查看根证书安装状态
-  ca install                    安装根证书 (需要管理员)
-  ca uninstall                  卸载根证书
-  ca export                     导出 CA 证书到 ca.crt
-  ca path                       显示 CA 证书路径
-  ca regenerate                 重新生成根证书
-  status / 状态                  查看当前状态
-  clear / 清屏                   清空日志面板
-  quit / exit / 退出             停止服务并退出
-  help / 帮助                    显示本帮助`
+// isKnownCommand reports whether the verb appears in the command catalogue.
+func isKnownCommand(verb string) bool {
+	for _, group := range commandCatalog() {
+		for _, item := range group.Items {
+			if name, _, ok := strings.Cut(item.Usage, " "); ok && name == verb {
+				return true
+			}
+			if item.Usage == verb {
+				return true
+			}
+		}
+	}
+	return false
 }
