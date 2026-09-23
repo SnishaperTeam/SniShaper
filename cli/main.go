@@ -48,6 +48,9 @@ func main() {
 	case "status":
 		os.Exit(opStatus(out))
 	case "logs":
+		if len(args) > 1 && (args[1] == "clear" || args[1] == "clean") {
+			os.Exit(opLogsAdmin(args[1:], out))
+		}
 		n := 100
 		if len(args) > 1 {
 			if v, err := strconv.Atoi(args[1]); err == nil && v > 0 {
@@ -83,6 +86,26 @@ func main() {
 		os.Exit(opConfig(args[1:], out))
 	case "ca":
 		os.Exit(opCA(args[1:], out))
+	case "sites":
+		os.Exit(opSites(args[1:], out))
+	case "upstreams":
+		os.Exit(opUpstreams(args[1:], out))
+	case "dns":
+		os.Exit(opDNS(args[1:], out))
+	case "ech":
+		os.Exit(opECH(args[1:], out))
+	case "nat64":
+		os.Exit(opNAT64(args[1:], out))
+	case "cf":
+		os.Exit(opCloudflare(args[1:], out))
+	case "route":
+		os.Exit(opRoute(args[1:], out))
+	case "stats":
+		os.Exit(opStats(out))
+	case "ipv6":
+		os.Exit(opIPv6(out))
+	case "update":
+		os.Exit(opUpdate(args[1:], out))
 	case "version", "-v", "--version":
 		fmt.Println(app.VersionString())
 	case "help", "-h", "--help":
