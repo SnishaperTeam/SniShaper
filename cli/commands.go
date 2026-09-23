@@ -195,6 +195,48 @@ func opConfig(args []string, out cmdOut) int {
 		raw, _ := json.Marshal(v)
 		out(string(raw))
 		return 0
+	case "export":
+		a := configApp(out)
+		if a == nil {
+			return 1
+		}
+		content, err := a.ExportConfig()
+		if err != nil {
+			out("导出配置失败: " + err.Error())
+			return 1
+		}
+		if len(args) < 2 {
+			out(content)
+			return 0
+		}
+		if err := os.WriteFile(args[1], []byte(content), 0644); err != nil {
+			out("写入文件失败: " + err.Error())
+			return 1
+		}
+		out("已导出配置: " + args[1])
+		return 0
+	case "import":
+		if len(args) < 2 {
+			out("用法: config import <path>")
+			return 2
+		}
+		content, err := os.ReadFile(args[1])
+		if err != nil {
+			out("读取文件失败: " + err.Error())
+			return 1
+		}
+		a := configApp(out)
+		if a == nil {
+			return 1
+		}
+		summary, err := a.ImportConfigWithSummary(string(content))
+		if err != nil {
+			out("导入配置失败: " + err.Error())
+			return 1
+		}
+		out(fmt.Sprintf("导入完成: 共 %d，新增 %d，覆盖 %d，跳过 %d", summary.Total, summary.Added, summary.Overwritten, summary.Skipped))
+		reloadService(out)
+		return 0
 	case "set":
 		if len(args) != 3 {
 			out("用法: config set <key> <value>")
@@ -327,6 +369,8 @@ func printHelpText(out cmdOut) {
   snishaper stop           停止正在运行的服务
   snishaper status         查看服务/代理/系统代理/TUN 状态
   snishaper logs [N]       打印最近 N 行日志（默认 100）
+  snishaper logs clear     清空内存日志缓冲
+  snishaper logs clean     删除历史日志文件（保留当前）
   snishaper proxy on|off   启动/停止代理
   snishaper sysproxy on|off
                            开启/关闭系统代理
@@ -334,6 +378,28 @@ func printHelpText(out cmdOut) {
   snishaper config get [key]
   snishaper config set <key> <value>
                            查看/修改 settings.json
+  snishaper config export [path]
+                           导出规则与设置（不指定路径则输出到标准输出）
+  snishaper config import <path>
+                           导入规则与设置
+  snishaper sites list|show|add|update|delete
+                           站点组规则（add/update 接受 JSON）
+  snishaper upstreams list|show|add|update|delete
+                           上游配置（add/update 接受 JSON）
+  snishaper dns list|show|add|update|delete|priority|test
+                           DNS 节点
+  snishaper ech list|upsert|delete
+                           ECH 配置
+  snishaper nat64 list|add|update|delete|test
+                           NAT64 配置
+  snishaper cf status|refresh|fetch|prune|health
+                           Cloudflare IP 池
+  snishaper route get|set|status
+                           自动路由配置
+  snishaper stats          流量统计
+  snishaper ipv6           检测 IPv6 可用性
+  snishaper update check|download|install
+                           检查/下载/安装更新
   snishaper ca status      查看根证书安装状态
   snishaper ca install     安装根证书到系统信任库（需要管理员）
   snishaper ca uninstall   卸载已安装的根证书
