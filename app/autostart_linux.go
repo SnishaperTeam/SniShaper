@@ -58,3 +58,40 @@ func setAutoStartEnabled(enabled bool, command string) error {
 		"X-GNOME-Autostart-enabled=true\n"
 	return os.WriteFile(entry, []byte(content), 0644)
 }
+
+// SetNamedAutoStartEntry writes or removes an extra autostart entry under its
+// own file name, so the headless service can register independently of the
+// desktop app entry.
+func SetNamedAutoStartEntry(name string, enabled bool, command string) error {
+	if name == "" {
+		return fmt.Errorf("autostart entry name is empty")
+	}
+	dir := autostartDir()
+	if !enabled {
+		if err := os.Remove(filepath.Join(dir, name+".desktop")); err != nil && !os.IsNotExist(err) {
+			return err
+		}
+		return nil
+	}
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		return fmt.Errorf("create autostart dir: %w", err)
+	}
+	content := "[Desktop Entry]\n" +
+		"Type=Application\n" +
+		"Name=" + name + "\n" +
+		"Comment=SniShaper command line service\n" +
+		"Exec=" + command + "\n" +
+		"Terminal=false\n" +
+		"NoDisplay=true\n" +
+		"X-GNOME-Autostart-enabled=true\n"
+	return os.WriteFile(filepath.Join(dir, name+".desktop"), []byte(content), 0644)
+}
+
+// NamedAutoStartEntryExists reports whether such an entry is registered.
+func NamedAutoStartEntryExists(name string) bool {
+	if name == "" {
+		return false
+	}
+	_, err := os.Stat(filepath.Join(autostartDir(), name+".desktop"))
+	return err == nil
+}

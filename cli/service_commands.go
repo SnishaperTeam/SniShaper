@@ -8,6 +8,8 @@ import (
 	"strings"
 	"time"
 
+	"os"
+
 	"snishaper/app"
 )
 
@@ -363,4 +365,128 @@ func evolutionFinished(status map[string]interface{}) bool {
 		return true
 	}
 	return false
+}
+
+// cliAutoStartEntry is the autostart entry name of the command line service. It
+// is deliberately different from the desktop app entry, so both can be
+// registered on the same machine without overwriting each other.
+const cliAutoStartEntry = "com.snishaper.cli"
+
+func opAutoStart(args []string, out cmdOut) int {
+	if len(args) == 0 {
+		args = []string{"status"}
+	}
+
+	switch args[0] {
+	case "status":
+		exists := app.NamedAutoStartEntryExists(cliAutoStartEntry)
+		a := configApp(out)
+		if a == nil {
+			return 1
+		}
+		state := "未注册"
+		if exists {
+			state = "已注册"
+		}
+		out("开机自启: " + state + "（条目 " + cliAutoStartEntry + "）")
+		out("启动命令: " + autoStartCommand(a, false))
+		proxyState := "关"
+		if a.GetAutoEnableProxyOnAutoStart() {
+			proxyState = "开"
+		}
+		out("启动后自动开启代理: " + proxyState)
+		return 0
+	case "on":
+		withProxy := false
+		for _, arg := range args[1:] {
+			if arg == "--with-proxy" || arg == "--proxy" {
+				withProxy = true
+			}
+		}
+		a := configApp(out)
+		if a == nil {
+			return 1
+		}
+		if withProxy {
+			if err := a.SetAutoEnableProxyOnAutoStart(true); err != nil {
+				out("设置“启动后自动开启代理”失败: " + err.Error())
+				return 1
+			}
+		}
+		command := autoStartCommand(a, withProxy)
+		if err := app.SetNamedAutoStartEntry(cliAutoStartEntry, true, command); err != nil {
+			out("注册开机自启失败: " + err.Error())
+			return 1
+		}
+		out("已注册开机自启: " + command)
+		return 0
+	case "off":
+		if err := app.SetNamedAutoStartEntry(cliAutoStartEntry, false, ""); err != nil {
+			out("取消开机自启失败: " + err.Error())
+			return 1
+		}
+		out("已取消开机自启")
+		return 0
+	default:
+		out("用法: autostart status|on [--with-proxy]|off")
+		return 2
+	}
+}
+
+// autoStartCommand builds the command the autostart entry runs: the service is
+// started detached, optionally enabling the proxy on the way up.
+func autoStartCommand(a *app.App, withProxy bool) string {
+	exe, err := os.Executable()
+	if err != nil {
+		exe = "snishaper"
+	}
+	command := quoteIfNeeded(exe) + " start"
+	if withProxy || a.GetAutoEnableProxyOnAutoStart() {
+		command += " --autoproxy"
+	}
+	return command
+}
+
+func quoteIfNeeded(path string) string {
+	if strings.ContainsAny(path, " \t") {
+		return "\"" + path + "\""
+	}
+	return path
+}
+
+func opDiag(out cmdOut) int {
+	a := configApp(out)
+	if a == nil {
+		return 1
+	}
+	printJSON(out, a.GetProxyDiagnostics())
+	return 0
+}
+
+func opSelfCheck(out cmdOut) int {
+	a := configApp(out)
+	if a == nil {
+		return 1
+	}
+	result := a.ProxySelfCheck()
+	for _, check := range result.Checks {
+		mark := "OK  "
+		switch {
+		case check.Skipped:
+			mark = "SKIP"
+		case !check.OK:
+			mark = "FAIL"
+		}
+		line := fmt.Sprintf("[%s] %-16s %s", mark, check.Name, check.Detail)
+		if check.DurationMS > 0 {
+			line += fmt.Sprintf(" (%d ms)", check.DurationMS)
+		}
+		out(line)
+	}
+	if result.OK {
+		out("自检通过")
+		return 0
+	}
+	out("自检未通过")
+	return 1
 }

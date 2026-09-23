@@ -23,6 +23,8 @@ func commandCatalog() []commandGroup {
 				{"status", "查看服务 / 代理 / 系统代理 / TUN 状态"},
 				{"stats", "查看上下行流量统计"},
 				{"ipv6", "检测 IPv6 可用性"},
+				{"diag", "输出诊断信息（版本/端口/系统代理/TUN/路径，JSON）"},
+				{"selfcheck", "端到端自检：服务、监听端口、经代理请求、系统代理与 TUN"},
 				{"logs [N]", "打印最近 N 行日志（默认 100）"},
 				{"logs clear", "清空内存日志缓冲"},
 				{"logs clean", "删除历史日志文件（保留当前）"},
@@ -98,7 +100,8 @@ func commandCatalog() []commandGroup {
 			Title: "其他",
 			Items: []commandEntry{
 				{"tui", "进入交互面板"},
-				{"start | stop", "后台启动 / 停止常驻服务"},
+				{"start [--autoproxy] | stop", "后台启动 / 停止常驻服务（--autoproxy 启动后自动开代理）"},
+				{"autostart status|on [--with-proxy]|off", "命令行服务的开机自启（独立条目，不影响桌面端）"},
 				{"version", "打印版本号"},
 				{"help", "显示本目录"},
 			},
