@@ -37,6 +37,13 @@ func (a *App) isManagedSystemProxy(status SystemProxyStatus) bool {
 	return false
 }
 
+// IsManagedSystemProxy reports whether the system proxy currently in effect is
+// the one this app configured, so callers can safely change it back.
+func (a *App) IsManagedSystemProxy() bool {
+	status := a.GetSystemProxyStatus()
+	return status.Enabled && a.isManagedSystemProxy(status)
+}
+
 func (a *App) saveManagedSystemProxyMarker(expected string) error {
 	marker := map[string]interface{}{
 		"expected_server": expected,
