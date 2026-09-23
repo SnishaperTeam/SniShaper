@@ -37,19 +37,40 @@ func main() {
 		return
 	}
 
-	out := func(s string) { fmt.Println(s) }
+	// Process lifecycle verbs stay in main: they either take over the process
+	// or hand over to a long running loop, so the interactive panel must not be
+	// able to reach them through the shared dispatcher.
 	switch args[0] {
 	case "tui":
 		runTUI()
+		return
 	case "start":
 		cmdStart()
+		return
 	case "stop":
 		cmdStop()
+		return
+	}
+
+	out := func(s string) { fmt.Println(s) }
+	os.Exit(dispatchCommand(args, out))
+}
+
+// dispatchCommand runs one command and returns its exit code. It covers every
+// command that only touches the service or the configuration, which lets the
+// TUI expose the very same command set as the shell entry point.
+func dispatchCommand(args []string, out cmdOut) int {
+	if len(args) == 0 {
+		printHelpText(out)
+		return 0
+	}
+
+	switch args[0] {
 	case "status":
-		os.Exit(opStatus(out))
+		return opStatus(out)
 	case "logs":
 		if len(args) > 1 && (args[1] == "clear" || args[1] == "clean") {
-			os.Exit(opLogsAdmin(args[1:], out))
+			return opLogsAdmin(args[1:], out)
 		}
 		n := 100
 		if len(args) > 1 {
@@ -57,63 +78,61 @@ func main() {
 				n = v
 			}
 		}
-		os.Exit(opLogs(n, out))
+		return opLogs(n, out)
 	case "proxy":
 		if len(args) != 2 || (args[1] != "on" && args[1] != "off") {
-			fmt.Fprintln(os.Stderr, "用法: snishaper proxy on|off")
-			os.Exit(2)
+			out("用法: snishaper proxy on|off")
+			return 2
 		}
 		if args[1] == "on" {
-			os.Exit(opStartProxy(out))
+			return opStartProxy(out)
 		}
-		os.Exit(opStopProxy(out))
+		return opStopProxy(out)
 	case "sysproxy":
 		if len(args) != 2 || (args[1] != "on" && args[1] != "off") {
-			fmt.Fprintln(os.Stderr, "用法: snishaper sysproxy on|off")
-			os.Exit(2)
+			out("用法: snishaper sysproxy on|off")
+			return 2
 		}
 		if args[1] == "on" {
-			os.Exit(opEnableSysProxy(out))
+			return opEnableSysProxy(out)
 		}
-		os.Exit(opDisableSysProxy(out))
+		return opDisableSysProxy(out)
 	case "tun":
-		if len(args) != 2 || (args[1] != "on" && args[1] != "off") {
-			fmt.Fprintln(os.Stderr, "用法: snishaper tun on|off")
-			os.Exit(2)
-		}
-		os.Exit(opTun(args[1] == "on", out))
+		return opTunCommand(args[1:], out)
 	case "config":
-		os.Exit(opConfig(args[1:], out))
+		return opConfig(args[1:], out)
 	case "ca":
-		os.Exit(opCA(args[1:], out))
+		return opCA(args[1:], out)
 	case "sites":
-		os.Exit(opSites(args[1:], out))
+		return opSites(args[1:], out)
 	case "upstreams":
-		os.Exit(opUpstreams(args[1:], out))
+		return opUpstreams(args[1:], out)
 	case "dns":
-		os.Exit(opDNS(args[1:], out))
+		return opDNS(args[1:], out)
 	case "ech":
-		os.Exit(opECH(args[1:], out))
+		return opECH(args[1:], out)
 	case "nat64":
-		os.Exit(opNAT64(args[1:], out))
+		return opNAT64(args[1:], out)
 	case "cf":
-		os.Exit(opCloudflare(args[1:], out))
+		return opCloudflare(args[1:], out)
 	case "route":
-		os.Exit(opRoute(args[1:], out))
+		return opRoute(args[1:], out)
 	case "stats":
-		os.Exit(opStats(out))
+		return opStats(out)
 	case "ipv6":
-		os.Exit(opIPv6(out))
+		return opIPv6(out)
 	case "update":
-		os.Exit(opUpdate(args[1:], out))
+		return opUpdate(args[1:], out)
 	case "version", "-v", "--version":
-		fmt.Println(app.VersionString())
+		out(app.VersionString())
+		return 0
 	case "help", "-h", "--help":
 		printHelpText(out)
+		return 0
 	default:
-		fmt.Fprintf(os.Stderr, "未知命令: %s\n", args[0])
+		out("未知命令: " + args[0])
 		printHelpText(out)
-		os.Exit(2)
+		return 2
 	}
 }
 
