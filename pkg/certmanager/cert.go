@@ -16,6 +16,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"snishaper/common"
 )
 
 type CertManager struct {
@@ -298,11 +300,11 @@ func (cm *CertManager) invalidateInstallStatusCache() {
 }
 
 func (cm *CertManager) OpenCertDir() error {
-	dir := filepath.Dir(cm.caPath)
-	return startVisibleCommand("explorer.exe", dir)
+	return common.OpenTarget(filepath.Dir(cm.caPath))
 }
+
 func (cm *CertManager) OpenCAFile() error {
-	return startVisibleCommand("explorer.exe", "/select,"+cm.caPath)
+	return common.RevealPath(cm.caPath)
 }
 
 func (cm *CertManager) GetCACertPEM() string {

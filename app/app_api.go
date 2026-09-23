@@ -13,7 +13,6 @@ import (
 	"net/http"
 	"net/url"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"runtime"
 	"sort"
@@ -701,8 +700,7 @@ func (a *App) OpenLogFile(name string) {
 	if _, err := os.Stat(path); err != nil {
 		return
 	}
-	cmd := exec.Command("cmd", "/c", "start", "", path)
-	if err := cmd.Run(); err != nil {
+	if err := common.OpenTarget(path); err != nil {
 		a.appendLog(fmt.Sprintf("[logs] Failed to open log file %s: %v", name, err))
 	}
 }
@@ -1174,10 +1172,7 @@ func (a *App) OpenURL(rawURL string) {
 		a.appendLog(fmt.Sprintf("[update] Invalid or unsupported URL: %s", rawURL))
 		return
 	}
-	cmd := exec.Command("cmd", "/c", "start", parsed.String())
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	if err := cmd.Run(); err != nil {
+	if err := common.OpenTarget(parsed.String()); err != nil {
 		a.appendLog(fmt.Sprintf("[update] Failed to open URL: %v", err))
 	}
 }
