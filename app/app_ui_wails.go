@@ -228,6 +228,7 @@ func (a *App) ServiceStartup(ctx context.Context, options application.ServiceOpt
 }
 
 func (a *App) ServiceShutdown() error {
+	stopInstanceListener()
 	a.shutdown()
 	return nil
 }
