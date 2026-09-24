@@ -2,6 +2,12 @@ name: Release (Official)
 
 on:
   workflow_dispatch:
+    inputs:
+      msix_version:
+        description: "MSIX Identity version, e.g. 1.29.0.0; follows the base version only, never the channel. Empty keeps the current manifest version"
+        required: false
+        type: string
+        default: ""
   push:
     tags:
       - "v*"
@@ -17,5 +23,6 @@ jobs:
       channel: release
       prerelease: false
       version_suffix: ""
+      msix_version: ${{ inputs.msix_version }}
       tag_override: ${{ github.ref_type == 'tag' && github.ref_name || '' }}
     secrets: inherit
