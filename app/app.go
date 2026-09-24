@@ -102,6 +102,8 @@ func (a *App) setupFileLogger() {
 		log.SetOutput(io.MultiWriter(&gatedLogWriter{app: a}, os.Stdout))
 	}
 	a.openLogFile()
+	a.noteCrashLog()
+	a.reportPreviousRun()
 }
 
 // openLogFile creates a new timestamped log file for this run in
@@ -403,6 +405,7 @@ func (a *App) shutdown() {
 	if len(errs) > 0 {
 		log.Printf("[shutdown] Shutdown completed with errors: %s", strings.Join(errs, "; "))
 	} else {
+		a.clearRunMarker()
 		log.Printf("[shutdown] Shutdown completed cleanly")
 	}
 
