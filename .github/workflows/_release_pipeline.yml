@@ -21,6 +21,11 @@ on:
         required: false
         type: string
         default: ""
+      msix_version:
+        description: "MSIX package Identity version, e.g. 1.29.0.0; it never carries the channel and only moves when the base version moves. Empty derives <rel:Version>.0, provided value also defines the base version"
+        required: false
+        type: string
+        default: ""
     secrets:
       MSIX_PFX_PASSWORD:
         description: "MSIX signing certificate password (default: password)"
@@ -54,6 +59,8 @@ jobs:
       release_name: ${{ steps.resolve.outputs.release_name }}
       display_version: ${{ steps.resolve.outputs.display_version }}
       suffix: ${{ steps.resolve.outputs.suffix }}
+      rel_channel: ${{ steps.resolve.outputs.rel_channel }}
+      identity_version: ${{ steps.resolve.outputs.identity_version }}
       skip: ${{ steps.release-check.outputs.skip }}
     steps:
       - name: Checkout
@@ -68,7 +75,8 @@ jobs:
           # Package.appxmanifest is the single source of truth for the
           # release version and channel on every platform; the manifest is
           # injected with the resolved channel/version by each build job
-          # before compiling.
+          # before compiling, and committed back to the repository by the
+          # sync step below.
           $ErrorActionPreference = 'Stop'
           $manifestPath = Join-Path $env:GITHUB_WORKSPACE 'Package.appxmanifest'
           if (-not (Test-Path $manifestPath)) {
@@ -77,11 +85,26 @@ jobs:
           }
           [xml]$manifest = Get-Content -Raw $manifestPath
           $pkgVersion = $manifest.Package.Identity.Version
-          $parts = $pkgVersion.Split('.')
-          if ($parts.Count -eq 4 -and $parts[3] -eq '0') {
-            $version = ($parts[0..2] -join '.')
+
+          # The Identity version is a four part number that follows the base
+          # version only - the channel never moves it. When explicitly given
+          # it also defines the base version, so a release can move the
+          # package version without editing the manifest by hand.
+          $identityVersion = "${{ inputs.msix_version }}".Trim()
+          if ($identityVersion) {
+            if ($identityVersion -notmatch '^\d+\.\d+\.\d+\.\d+$') {
+              Write-Host "::error::msix_version '$identityVersion' is not a four part number (expected e.g. 1.29.0.0)"
+              exit 1
+            }
+            $version = ($identityVersion.Split('.')[0..2] -join '.')
           } else {
-            $version = $pkgVersion
+            $parts = $pkgVersion.Split('.')
+            if ($parts.Count -eq 4 -and $parts[3] -eq '0') {
+              $version = ($parts[0..2] -join '.')
+            } else {
+              $version = $pkgVersion
+            }
+            $identityVersion = "$version.0"
           }
 
           $channel = "${{ inputs.channel }}"
@@ -104,6 +127,12 @@ jobs:
             $displayVersion = $version
           }
 
+          # rel:ReleaseChannel records the channel that produced the release:
+          # the full suffix for prereleases (e.g. beta.5), the channel name
+          # otherwise.
+          $relChannel = if ($channel -eq 'release') { 'stable' } else { $channel }
+          if ($suffix) { $relChannel = $suffix }
+
           $channelLabel = switch ($channel) {
             'release' { '' }
             'beta'    { 'Beta' }
@@ -114,12 +143,14 @@ jobs:
           $releaseName = "SniShaper v$displayVersion"
           if ($channelLabel) { $releaseName += " ($channelLabel)" }
 
-          Write-Host "::notice::ManifestVersion=$pkgVersion Version=$version Tag=$tag Release=$releaseName"
+          Write-Host "::notice::ManifestVersion=$pkgVersion Version=$version Tag=$tag Release=$releaseName Channel=$relChannel Identity=$identityVersion"
           "version=$version" >> $env:GITHUB_OUTPUT
           "tag=$tag" >> $env:GITHUB_OUTPUT
           "display_version=$displayVersion" >> $env:GITHUB_OUTPUT
           "release_name=$releaseName" >> $env:GITHUB_OUTPUT
           "suffix=$suffix" >> $env:GITHUB_OUTPUT
+          "rel_channel=$relChannel" >> $env:GITHUB_OUTPUT
+          "identity_version=$identityVersion" >> $env:GITHUB_OUTPUT
 
       - name: Check if release already exists
         id: release-check
@@ -137,6 +168,63 @@ jobs:
             echo "skip=false" >> "$GITHUB_OUTPUT"
           fi
           exit 0
+
+      # ------------------------------------------------------------------
+      # Every channel stamps the resolved version/channel into
+      # Package.appxmanifest and pushes it, so the repository state always
+      # mirrors the release that is being built. The build jobs inject the
+      # same values locally, so a rejected push cannot produce a package
+      # with stale release metadata.
+      # ------------------------------------------------------------------
+      - name: Inject release metadata into manifest
+        if: steps.release-check.outputs.skip != 'true'
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $script = Join-Path $env:GITHUB_WORKSPACE '.github/scripts/inject-manifest-release.ps1'
+          if (-not (Test-Path $script)) {
+            Write-Host "::error::inject-manifest-release.ps1 missing: $script"
+            exit 1
+          }
+          & $script -RepoRoot $env:GITHUB_WORKSPACE `
+            -ReleaseVersion "${{ steps.resolve.outputs.version }}" `
+            -ReleaseChannel "${{ steps.resolve.outputs.rel_channel }}" `
+            -IdentityVersion "${{ steps.resolve.outputs.identity_version }}"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Commit and push manifest
+        if: steps.release-check.outputs.skip != 'true'
+        shell: bash
+        env:
+          RELEASE_BOT_NAME: SnishaperTeam-ReleaseBot
+          TARGET_BRANCH: ${{ github.event.repository.default_branch }}
+          RELEASE_VERSION: ${{ steps.resolve.outputs.version }}
+          RELEASE_CHANNEL: ${{ steps.resolve.outputs.rel_channel }}
+        run: |
+          set -euo pipefail
+          git config user.name "$RELEASE_BOT_NAME"
+          git config user.email "${RELEASE_BOT_NAME}@users.noreply.github.com"
+          git add Package.appxmanifest
+          if git diff --cached --quiet; then
+            echo "::notice::Package.appxmanifest is already at $RELEASE_VERSION ($RELEASE_CHANNEL), nothing to push"
+            exit 0
+          fi
+          git commit -m "chore(release): sync Package.appxmanifest to $RELEASE_VERSION ($RELEASE_CHANNEL) [skip ci]"
+          for attempt in 1 2 3; do
+            if git push origin "HEAD:$TARGET_BRANCH"; then
+              echo "::notice::Package.appxmanifest pushed to $TARGET_BRANCH"
+              exit 0
+            fi
+            echo "::warning::push attempt $attempt rejected, rebasing on origin/$TARGET_BRANCH"
+            git fetch origin "$TARGET_BRANCH" || true
+            if ! git rebase "origin/$TARGET_BRANCH"; then
+              git rebase --abort || true
+              echo "::error::cannot rebase the manifest commit onto origin/$TARGET_BRANCH (concurrent release edit?)"
+              exit 1
+            fi
+          done
+          echo "::error::could not push Package.appxmanifest to $TARGET_BRANCH after 3 attempts"
+          exit 1
 
   # ------------------------------------------------------------------
   # Windows build (windows-2025): MSIX (signed + unsigned), portable 7z,
@@ -217,22 +305,20 @@ jobs:
             Write-Host "::warning::devcert.pfx not found and MSIX_PFX_BASE64 not set; build_windows.ps1 will generate a certificate"
           }
 
-      - name: Inject release channel into manifest
+      - name: Inject release metadata into manifest
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
-          $channel = "${{ inputs.channel }}"
-          $suffix = "${{ needs.check.outputs.suffix }}"
-          $relChannel = if ($channel -eq 'release') { 'stable' } else { $channel }
-          if ($suffix) { $relChannel = $suffix }
-          $relVersion = "${{ needs.check.outputs.version }}"
-          if ([string]::IsNullOrWhiteSpace($relVersion)) { $relVersion = '0.0.0' }
-          $manifest = Join-Path $env:GITHUB_WORKSPACE 'Package.appxmanifest'
-          $content = Get-Content -Raw $manifest
-          $content = $content -replace '<rel:ReleaseChannel>[^<]*</rel:ReleaseChannel>', "<rel:ReleaseChannel>$relChannel</rel:ReleaseChannel>"
-          $content = $content -replace '<rel:Version>[^<]*</rel:Version>', "<rel:Version>$relVersion</rel:Version>"
-          Set-Content -Path $manifest -Value $content -Encoding UTF8
-          Write-Host "::notice::Manifest ReleaseChannel=$relChannel ReleaseVersion=$relVersion"
+          $script = Join-Path $env:GITHUB_WORKSPACE '.github/scripts/inject-manifest-release.ps1'
+          if (-not (Test-Path $script)) {
+            Write-Host "::error::inject-manifest-release.ps1 missing: $script"
+            exit 1
+          }
+          & $script -RepoRoot $env:GITHUB_WORKSPACE `
+            -ReleaseVersion "${{ needs.check.outputs.version }}" `
+            -ReleaseChannel "${{ needs.check.outputs.rel_channel }}" `
+            -IdentityVersion "${{ needs.check.outputs.identity_version }}"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - name: Build, package & sign MSIX
         shell: pwsh
@@ -455,22 +541,20 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y libgtk-4-dev libwebkitgtk-6.0-dev
 
-      - name: Inject release channel into manifest
+      - name: Inject release metadata into manifest
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
-          $channel = "${{ inputs.channel }}"
-          $suffix = "${{ needs.check.outputs.suffix }}"
-          $relChannel = if ($channel -eq 'release') { 'stable' } else { $channel }
-          if ($suffix) { $relChannel = $suffix }
-          $relVersion = "${{ needs.check.outputs.version }}"
-          if ([string]::IsNullOrWhiteSpace($relVersion)) { $relVersion = '0.0.0' }
-          $manifest = Join-Path $env:GITHUB_WORKSPACE 'Package.appxmanifest'
-          $content = Get-Content -Raw $manifest
-          $content = $content -replace '<rel:ReleaseChannel>[^<]*</rel:ReleaseChannel>', "<rel:ReleaseChannel>$relChannel</rel:ReleaseChannel>"
-          $content = $content -replace '<rel:Version>[^<]*</rel:Version>', "<rel:Version>$relVersion</rel:Version>"
-          Set-Content -Path $manifest -Value $content -Encoding UTF8
-          Write-Host "::notice::Manifest ReleaseChannel=$relChannel ReleaseVersion=$relVersion"
+          $script = Join-Path $env:GITHUB_WORKSPACE '.github/scripts/inject-manifest-release.ps1'
+          if (-not (Test-Path $script)) {
+            Write-Host "::error::inject-manifest-release.ps1 missing: $script"
+            exit 1
+          }
+          & $script -RepoRoot $env:GITHUB_WORKSPACE `
+            -ReleaseVersion "${{ needs.check.outputs.version }}" `
+            -ReleaseChannel "${{ needs.check.outputs.rel_channel }}" `
+            -IdentityVersion "${{ needs.check.outputs.identity_version }}"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - name: Build Linux
         run: |
@@ -525,22 +609,20 @@ jobs:
       - name: Install 7-Zip
         run: choco install 7zip -y --no-progress
 
-      - name: Inject release channel into manifest
+      - name: Inject release metadata into manifest
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
-          $channel = "${{ inputs.channel }}"
-          $suffix = "${{ needs.check.outputs.suffix }}"
-          $relChannel = if ($channel -eq 'release') { 'stable' } else { $channel }
-          if ($suffix) { $relChannel = $suffix }
-          $relVersion = "${{ needs.check.outputs.version }}"
-          if ([string]::IsNullOrWhiteSpace($relVersion)) { $relVersion = '0.0.0' }
-          $manifest = Join-Path $env:GITHUB_WORKSPACE 'Package.appxmanifest'
-          $content = Get-Content -Raw $manifest
-          $content = $content -replace '<rel:ReleaseChannel>[^<]*</rel:ReleaseChannel>', "<rel:ReleaseChannel>$relChannel</rel:ReleaseChannel>"
-          $content = $content -replace '<rel:Version>[^<]*</rel:Version>', "<rel:Version>$relVersion</rel:Version>"
-          Set-Content -Path $manifest -Value $content -Encoding UTF8
-          Write-Host "::notice::Manifest ReleaseChannel=$relChannel ReleaseVersion=$relVersion"
+          $script = Join-Path $env:GITHUB_WORKSPACE '.github/scripts/inject-manifest-release.ps1'
+          if (-not (Test-Path $script)) {
+            Write-Host "::error::inject-manifest-release.ps1 missing: $script"
+            exit 1
+          }
+          & $script -RepoRoot $env:GITHUB_WORKSPACE `
+            -ReleaseVersion "${{ needs.check.outputs.version }}" `
+            -ReleaseChannel "${{ needs.check.outputs.rel_channel }}" `
+            -IdentityVersion "${{ needs.check.outputs.identity_version }}"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - name: Build and package CLI (7 targets, one 7z each)
         shell: pwsh

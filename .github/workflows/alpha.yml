@@ -8,6 +8,11 @@ on:
         required: false
         type: string
         default: ""
+      msix_version:
+        description: "MSIX Identity version, e.g. 1.29.0.0; follows the base version only, never the channel. Empty keeps the current manifest version"
+        required: false
+        type: string
+        default: ""
 
 permissions:
   contents: write
@@ -20,4 +25,5 @@ jobs:
       channel: alpha
       prerelease: true
       version_suffix: ${{ inputs.version_suffix || 'alpha.1' }}
+      msix_version: ${{ inputs.msix_version }}
     secrets: inherit
