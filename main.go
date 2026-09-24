@@ -113,68 +113,9 @@ func main() {
 		}
 	}()
 
-	// Create Tray
-	tray := wailsApp.SystemTray.New()
-	tray.SetIcon(trayIcon)
-	tray.SetDarkModeIcon(trayIcon)
-	tray.SetTooltip("SniShaper")
-	// ponytail: single click on tray icon shows main window
-	tray.OnClick(func() {
-		a.RevealMainWindow()
-	})
-	a.SetSystemTray(tray)
-
-	// Define Tray Menu
-	trayMenu := application.NewMenu()
-	trayMenu.Add("仪表盘").OnClick(func(ctx *application.Context) {
-		a.RevealMainWindow()
-	})
-	trayMenu.AddSeparator()
-
-	proxyLabel := "代理: 关"
-	if a.IsProxyRunning() {
-		proxyLabel = "代理: 开"
-	}
-	proxyItem := trayMenu.AddCheckbox(proxyLabel, a.IsProxyRunning())
-	proxyItem.OnClick(func(ctx *application.Context) {
-		a.RunSafeAsync("tray proxy toggle", func() {
-			if a.IsProxyRunning() {
-				_ = a.StopProxy()
-			} else {
-				_ = a.StartProxy()
-			}
-		})
-	})
-	a.SetProxyMenuItem(proxyItem)
-
-	systemProxyLabel := "系统代理: 关"
-	if a.GetSystemProxyStatus().Enabled {
-		systemProxyLabel = "系统代理: 开"
-	}
-	systemProxyItem := trayMenu.Add(systemProxyLabel)
-	systemProxyItem.OnClick(func(ctx *application.Context) {
-		a.RunSafeAsync("tray system proxy toggle", func() {
-			if a.GetSystemProxyStatus().Enabled {
-				_ = a.DisableSystemProxy()
-				return
-			}
-			if !a.IsProxyRunning() {
-				if err := a.StartProxy(); err != nil {
-					return
-				}
-			}
-			_ = a.EnableSystemProxy()
-		})
-	})
-	a.SetSystemProxyMenuItem(systemProxyItem)
-
-	trayMenu.AddSeparator()
-	trayMenu.Add("退出").OnClick(func(ctx *application.Context) {
-		a.QuitApp()
-	})
-
-	tray.SetMenu(trayMenu)
-	a.SetTrayMenu(trayMenu)
+	// Create Tray. The app owns the tray lifecycle so it can rebuild the icon
+	// when the shell drops it.
+	a.BuildSystemTray(wailsApp, trayIcon)
 
 	// Create Main Window
 	hidden := a.ShouldStartHidden()

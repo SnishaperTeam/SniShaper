@@ -197,11 +197,13 @@ func (a *App) handleWindowClosing(event *application.WindowEvent, w *application
 	event.Cancel()
 	if a.GetHibernateOnClose() {
 		a.HibernateMainWindow()
+		a.RebuildSystemTray()
 		return
 	}
 	if a.GetCloseToTray() {
 		w.Hide()
 		log.Printf("[window] close: hidden to tray")
+		a.RebuildSystemTray()
 		return
 	}
 	log.Printf("[window] close: quitting application")
