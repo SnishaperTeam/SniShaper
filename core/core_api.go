@@ -13,6 +13,7 @@ import (
 	"sync"
 	"time"
 
+	"snishaper/common"
 	"snishaper/proxy"
 )
 
@@ -223,6 +224,14 @@ func (s *coreService) SetSocks5Port(args StringReply, _ *EmptyArgs) error {
 
 // RunCoreMain starts the core RPC server. Called from main when --core flag is present.
 func RunCoreMain() error {
+	// The core hosts the proxy, and its stderr goes nowhere when the desktop app
+	// spawned it, so a fatal error would be lost: write crash reports to a file.
+	if execPath, err := os.Executable(); err == nil {
+		if path := common.EnableCrashLog(filepath.Join(filepath.Dir(execPath), "log")); path != "" {
+			fmt.Println("[core] Crash report file: " + path)
+		}
+	}
+
 	runtime, err := newCoreRuntime()
 	if err != nil {
 		return err
