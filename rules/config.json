@@ -3802,6 +3802,20 @@
       "website": "supabase",
       "enabled": true,
       "nat64_enabled": false
+    },
+    {
+      "id": "sg-cloudflare-challenges",
+      "name": "challenges.cloudflare.com",
+      "mode": "direct",
+      "domains": [
+        "challenges.cloudflare.com"
+      ],
+      "ech_enabled": false,
+      "use_cf_pool": false,
+      "cert_verify": {},
+      "website": "cloudflare",
+      "enabled": true,
+      "nat64_enabled": false
     }
   ],
   "upstreams": [],
