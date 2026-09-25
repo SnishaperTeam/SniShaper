@@ -3773,6 +3773,35 @@
       "website": "spotify",
       "enabled": true,
       "nat64_enabled": false
+    },
+    {
+      "id": "sg-supabase-1",
+      "name": "supabase.co",
+      "mode": "tls-rf",
+      "domains": [
+        "supabase.co"
+      ],
+      "ech_enabled": false,
+      "use_cf_pool": false,
+      "cert_verify": {},
+      "website": "supabase",
+      "enabled": true,
+      "upstream": "76.76.21.61:443,76.76.21.93:443,76.76.21.98:443,76.76.21.241:443,76.76.21.22:443,76.76.21.107:443",
+      "nat64_enabled": false
+    },
+    {
+      "id": "sg-supabase-2",
+      "name": "supabase.co (subdomains)",
+      "mode": "tls-rf",
+      "domains": [
+        "~^.+\\.supabase\\.co$"
+      ],
+      "ech_enabled": false,
+      "use_cf_pool": false,
+      "cert_verify": {},
+      "website": "supabase",
+      "enabled": true,
+      "nat64_enabled": false
     }
   ],
   "upstreams": [],
