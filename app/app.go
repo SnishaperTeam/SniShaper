@@ -72,6 +72,8 @@ type App struct {
 	pendingUpdatePath   string
 	downloadConcurrency int
 	downloadChunkSize   int64
+	rulesWatchMu        sync.Mutex
+	rulesWatchStop      func()
 }
 
 // ShouldQuit returns whether the app should quit.
@@ -294,6 +296,7 @@ func (a *App) startupV3() {
 	a.startRouteEventsPoller()
 	a.startLogFileMirror()
 	a.serveInstanceListener()
+	a.startRulesWatcher()
 }
 
 // autoEnableProxyAtStartup starts the proxy (and system proxy) with backoff
@@ -365,6 +368,7 @@ func (a *App) startRouteEventsPoller() {
 func (a *App) shutdown() {
 	a.appendLog("[shutdown] SniShaper shutdown hook entered")
 	a.cancel()
+	a.stopRulesWatcher()
 
 	var errs []string
 

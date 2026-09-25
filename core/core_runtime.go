@@ -48,6 +48,7 @@ type coreRuntime struct {
 	tunStartErr       string
 	routeEventsMu     sync.Mutex
 	routeEvents       []RouteEvent
+	rulesWatchStop    func()
 }
 
 func newCoreRuntime() (*coreRuntime, error) {
@@ -118,11 +119,27 @@ func (r *coreRuntime) start() error {
 	}
 	})
 
+	if stop, err := r.ruleManager.WatchRulesFile(func() {
+		if err := r.reloadConfig(); err != nil {
+			r.appendLog("[core] rules file changed but reload failed: " + err.Error())
+			return
+		}
+		r.appendLog("[core] rules file changed, reloaded automatically")
+	}); err != nil {
+		r.appendLog("[core] rules file watch unavailable: " + err.Error())
+	} else {
+		r.rulesWatchStop = stop
+	}
+
 	r.appendLog("[core] runtime ready")
 	return nil
 }
 
 func (r *coreRuntime) shutdown() {
+	if r.rulesWatchStop != nil {
+		r.rulesWatchStop()
+		r.rulesWatchStop = nil
+	}
 	if r.nativeTUN != nil {
 		_ = r.nativeTUN.Stop()
 	}
