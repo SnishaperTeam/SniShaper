@@ -44,6 +44,8 @@ type RuleManager struct {
 	updateChannel              string
 	downloadSource             string
 	customDownloadSource       string
+	rulesHashMu                sync.Mutex
+	rulesHash                  string
 }
 
 func (r *RuleManager) SetRouteEventCallback(cb func(domain, mode string)) {
@@ -367,6 +369,7 @@ func (rm *RuleManager) loadRulesConfig() error {
 	rm.dnsNodes = config.DNSNodes
 	rm.echProfiles = config.ECHProfiles
 	rm.nat64Profiles = config.NAT64Profiles
+	rm.setRulesHash(dataHash(data))
 	// Ensure at least the default Ali DoH bootstrap node exists
 	if len(rm.dnsNodes) == 0 {
 		rm.dnsNodes = defaultDNSNodes()
@@ -901,6 +904,7 @@ func (rm *RuleManager) saveRulesConfig() error {
 	if err := os.WriteFile(rm.rulesPath, data, 0644); err != nil {
 		return err
 	}
+	rm.setRulesHash(dataHash(data))
 	rm.triggerConfigSaved()
 	return nil
 }

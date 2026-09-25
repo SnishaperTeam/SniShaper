@@ -3,7 +3,7 @@ import {
   Plus, Search, Filter, Edit, OpenInNew, Trash2, Activity, Zap
 } from '../lib/icons';
 import {
-  GetSiteGroups, DeleteSiteGroup, ExportConfig
+  GetSiteGroups, DeleteSiteGroup, ExportConfig, EventsOn
 } from '../api/bindings';
 import {
   Box, Typography, Button, IconButton, TextField, InputAdornment,
@@ -113,6 +113,11 @@ const Rules: React.FC = () => {
   };
 
   useEffect(() => { loadData(); }, []);
+
+  useEffect(() => {
+    const unlisten = EventsOn('app:rules_changed', () => { loadData(); });
+    return () => { if (unlisten) unlisten(); };
+  }, []);
 
   const handleAdd = () => { setEditingGroup(null); setIsModalOpen(true); };
   const handleEdit = (group: any) => { setEditingGroup(group); setIsModalOpen(true); };

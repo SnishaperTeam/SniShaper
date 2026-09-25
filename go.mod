@@ -4,6 +4,7 @@ go 1.27.0
 
 require (
 	github.com/admpub/go-download/v2 v2.2.0
+	github.com/fsnotify/fsnotify v1.7.0
 	github.com/gdamore/tcell/v2 v2.13.10
 	github.com/miekg/dns v1.1.73
 	github.com/quic-go/quic-go v0.61.0
@@ -24,7 +25,6 @@ require (
 	github.com/coder/websocket v1.8.14 // indirect
 	github.com/florianl/go-nfqueue/v2 v2.0.2 // indirect
 	github.com/francoispqt/gojay v1.2.13 // indirect
-	github.com/fsnotify/fsnotify v1.7.0 // indirect
 	github.com/gdamore/encoding v1.0.1 // indirect
 	github.com/go-ole/go-ole v1.3.0 // indirect
 	github.com/goccy/go-json v0.10.5 // indirect
