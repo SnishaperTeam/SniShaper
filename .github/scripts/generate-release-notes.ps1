@@ -86,7 +86,7 @@ function Test-SummaryShape {
         $items = ([regex]::Matches($Text, '(?m)^\s*(?:[-*\u2022]|\d+[.)])\s+\S')).Count
         if ($headings -lt 1) { $reason = 'no Markdown category heading' }
         elseif ($bodyLen -lt 200) { $reason = "content too short ($bodyLen chars after headings)" }
-        elseif ($items -gt 35) { $reason = "$items list items exceed the 35 limit" }
+        elseif ($items -gt 60) { $reason = "$items list items exceed the 60 limit" }
     }
     if (-not $reason) { return $true }
     Write-Host "::warning::summary rejected: $reason"
@@ -177,7 +177,7 @@ Writing requirements:
 5. Output only the release-notes body. No preamble, postscript, or explanatory text.
 
 Hard limits (violating these makes the notes unusable):
-6. At most 12 bullet points in total, across all sections combined.
+6. Use three to six bullet points per section and never exceed eight in one section.
 7. The first line MUST be a Markdown heading (### ...). Never open with a sentence such as "Here is ...", a greeting, or any other preamble.
 8. Rewrite each change as a user-facing statement. Never copy a commit subject verbatim and never emit a raw list of commit titles.
 9. Skip sections that have no changes.
@@ -202,7 +202,7 @@ LANGUAGE CONSTRAINT (highest priority):
 
 Writing requirements:
 1. Organize the content by change type, e.g.: New Features, Bug Fixes, Performance Improvements, Refactoring, Documentation, Build & CI, Tests, Other.
-2. For each type, describe the core changes in detail: what was modified, why, and the impact on users or the system. Use one or more concise bullet points per item, and at most 12 bullet points in total.
+2. For each type, describe the core changes in detail: what was modified, why, and the impact on users or the system. Use three to six concise bullet points per section, at most eight.
 3. If a change touches multiple modules (proxy core, TUN, frontend UI, build scripts, etc.), break them out per module.
 4. Minor changes such as dependency bumps, formatting, or merges may be condensed into a single brief note.
 5. Write in formal, rigorous English. Strictly forbid emoji. Do not output commit hashes, and do not copy commit subjects verbatim.
