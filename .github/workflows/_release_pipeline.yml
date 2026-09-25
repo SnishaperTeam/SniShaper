@@ -53,6 +53,10 @@ jobs:
   check:
     name: Check and Resolve
     runs-on: ubuntu-26.04
+    env:
+      RELEASE_BOT_NAME: SnishaperTeam-ReleaseBot
+      RELEASE_BOT_EMAIL: youmao2023@outlook.com
+      SIGNING_READY: ${{ secrets.GPG_PRIVATE_KEY != '' && secrets.GPG_PASSPHRASE != '' }}
     outputs:
       version: ${{ steps.resolve.outputs.version }}
       tag: ${{ steps.resolve.outputs.tag }}
@@ -67,6 +71,17 @@ jobs:
         uses: actions/checkout@v7
         with:
           fetch-depth: 0
+
+      - name: Import release bot signing key
+        if: env.SIGNING_READY == 'true'
+        uses: crazy-max/ghaction-import-gpg@v7
+        with:
+          gpg_private_key: ${{ secrets.GPG_PRIVATE_KEY }}
+          passphrase: ${{ secrets.GPG_PASSPHRASE }}
+          git_user_signingkey: true
+          git_commit_gpgsign: true
+          git_committer_name: ${{ env.RELEASE_BOT_NAME }}
+          git_committer_email: ${{ env.RELEASE_BOT_EMAIL }}
 
       - name: Resolve version from Package.appxmanifest
         id: resolve
@@ -196,14 +211,14 @@ jobs:
         if: steps.release-check.outputs.skip != 'true'
         shell: bash
         env:
-          RELEASE_BOT_NAME: SnishaperTeam-ReleaseBot
           TARGET_BRANCH: ${{ github.event.repository.default_branch }}
           RELEASE_VERSION: ${{ steps.resolve.outputs.version }}
           RELEASE_CHANNEL: ${{ steps.resolve.outputs.rel_channel }}
         run: |
           set -euo pipefail
           git config user.name "$RELEASE_BOT_NAME"
-          git config user.email "${RELEASE_BOT_NAME}@users.noreply.github.com"
+          git config user.email "$RELEASE_BOT_EMAIL"
+          echo "::notice::committing as $RELEASE_BOT_NAME <$RELEASE_BOT_EMAIL> (gpg=$SIGNING_READY)"
           git add Package.appxmanifest
           if git diff --cached --quiet; then
             echo "::notice::Package.appxmanifest is already at $RELEASE_VERSION ($RELEASE_CHANNEL), nothing to push"

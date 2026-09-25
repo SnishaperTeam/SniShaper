@@ -21,9 +21,22 @@ jobs:
     runs-on: ubuntu-latest
     env:
       RELEASE_BOT_NAME: SnishaperTeam-ReleaseBot
+      RELEASE_BOT_EMAIL: youmao2023@outlook.com
+      SIGNING_READY: ${{ secrets.GPG_PRIVATE_KEY != '' && secrets.GPG_PASSPHRASE != '' }}
     steps:
       - name: Checkout
         uses: actions/checkout@v7
+
+      - name: Import release bot signing key
+        if: env.SIGNING_READY == 'true'
+        uses: crazy-max/ghaction-import-gpg@v7
+        with:
+          gpg_private_key: ${{ secrets.GPG_PRIVATE_KEY }}
+          passphrase: ${{ secrets.GPG_PASSPHRASE }}
+          git_user_signingkey: true
+          git_commit_gpgsign: true
+          git_committer_name: ${{ env.RELEASE_BOT_NAME }}
+          git_committer_email: ${{ env.RELEASE_BOT_EMAIL }}
 
       - name: Update minimum Go version badge
         shell: bash
@@ -70,8 +83,8 @@ jobs:
         run: |
           set -euo pipefail
           git config user.name "$RELEASE_BOT_NAME"
-          git config user.email "${RELEASE_BOT_NAME}@users.noreply.github.com"
-          echo "::notice::committing as $RELEASE_BOT_NAME"
+          git config user.email "$RELEASE_BOT_EMAIL"
+          echo "::notice::committing as $RELEASE_BOT_NAME <$RELEASE_BOT_EMAIL> (gpg=$SIGNING_READY)"
           git add README.md README_EN.md README_RU.md
           if git diff --cached --quiet; then
             exit 0
