@@ -185,7 +185,6 @@
         "bignewsnetwork.com",
         "journals.sagepub.com",
         "foreignpolicy.com",
-        "cloudflare.com",
         "itch.io",
         "dnschecker.org",
         "cloudflare-dns.com",
@@ -685,7 +684,7 @@
     {
       "id": "sg-1771319670672-41",
       "name": "f-droid.org",
-      "mode": "mitm",
+      "mode": "tls-rf",
       "sni_policy": "fake",
       "domains": [
         "f-droid.org"
@@ -737,7 +736,7 @@
     {
       "id": "sg-1771319670672-46",
       "name": "forum.f-droid.org",
-      "mode": "mitm",
+      "mode": "tls-rf",
       "sni_policy": "fake",
       "domains": [
         "forum.f-droid.org"
@@ -3701,7 +3700,7 @@
       "cert_verify": {},
       "website": "X",
       "enabled": true,
-      "upstream": "151.101.2.146",
+      "upstream": "abby.ns.cloudflare.com",
       "nat64_enabled": false
     },
     {
@@ -3814,6 +3813,21 @@
       "use_cf_pool": false,
       "cert_verify": {},
       "website": "cloudflare",
+      "enabled": true,
+      "nat64_enabled": false
+    },
+    {
+      "id": "sg-openstreetmap",
+      "name": "OpenStreetMap",
+      "mode": "tls-rf",
+      "domains": [
+        "openstreetmap.org",
+        "osm.org"
+      ],
+      "ech_enabled": false,
+      "use_cf_pool": false,
+      "cert_verify": {},
+      "website": "openstreetmap",
       "enabled": true,
       "nat64_enabled": false
     }
