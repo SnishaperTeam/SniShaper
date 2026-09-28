@@ -4066,8 +4066,10 @@
       "name": "Notion",
       "mode": "tls-rf",
       "domains": [
-        "notion.so"
+        "notion.so",
+        "notion.com"
       ],
+      "upstream": "208.103.161.17",
       "ech_enabled": false,
       "use_cf_pool": false,
       "cert_verify": {},
@@ -4170,6 +4172,50 @@
       "use_cf_pool": false,
       "cert_verify": {},
       "website": "zoom",
+      "enabled": true,
+      "nat64_enabled": false
+    },
+    {
+      "id": "sg-tiktok",
+      "name": "TikTok",
+      "mode": "tls-rf",
+      "domains": [
+        "tiktok.com",
+        "tiktokv.com"
+      ],
+      "ech_enabled": false,
+      "use_cf_pool": false,
+      "cert_verify": {},
+      "website": "tiktok",
+      "enabled": true,
+      "nat64_enabled": false
+    },
+    {
+      "id": "sg-wsj",
+      "name": "WSJ",
+      "mode": "tls-rf",
+      "domains": [
+        "wsj.com",
+        "wsj.net"
+      ],
+      "ech_enabled": false,
+      "use_cf_pool": false,
+      "cert_verify": {},
+      "website": "wsj",
+      "enabled": true,
+      "nat64_enabled": false
+    },
+    {
+      "id": "sg-torproject",
+      "name": "Tor Project",
+      "mode": "tls-rf",
+      "domains": [
+        "torproject.org"
+      ],
+      "ech_enabled": false,
+      "use_cf_pool": false,
+      "cert_verify": {},
+      "website": "torproject",
       "enabled": true,
       "nat64_enabled": false
     }
