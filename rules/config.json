@@ -3863,6 +3863,21 @@
       "website": "openstreetmap",
       "enabled": true,
       "nat64_enabled": false
+    },
+    {
+      "id": "sg-twitch-cdn",
+      "name": "Twitch CDN",
+      "mode": "tls-rf",
+      "domains": [
+        "jtvnw.net",
+        "ttvnw.net"
+      ],
+      "ech_enabled": false,
+      "use_cf_pool": false,
+      "cert_verify": {},
+      "website": "twitch",
+      "enabled": true,
+      "nat64_enabled": false
     }
   ],
   "upstreams": [],
@@ -3903,7 +3918,7 @@
     {
       "id": "legacy-cloudflare",
       "name": "Cloudflare",
-      "config": "AEX+DQBBkAAgACDpyBXSgx4JC5zCezLA7rN0dHy2APSLOq3ni9z/ASPJTgAEAAEAAQASY2xvdWRmbGFyZS1lY2guY29tAAA=",
+      "config": "AEX+DQBB6AAgACB8SigCx1P7j8Uu+cLjjDxwxzFGP8rmDVQ8BRGPwPivAgAEAAEAAQASY2xvdWRmbGFyZS1lY2guY29tAAA=",
       "discovery_domain": "crypto.cloudflare.com",
       "doh_upstream": "https://xwfpeb16ii.cloudflare-gateway.com/dns-query",
       "auto_update": true
