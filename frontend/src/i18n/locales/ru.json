@@ -282,6 +282,8 @@
     "update_rules": "Обновить правила",
     "update_running": "Обновление...",
     "update_latest": "Правила уже актуальны",
+    "update_latest_detail": "Обновлено {date} · {hash}",
+    "update_applied_detail": "Локальный {local} → удалённый {remote} · удалённый обновлён {date}",
     "update_applied": "Правила обновлены: добавлено {added}, изменено {changed}",
     "update_failed": "Не удалось обновить правила"
   },

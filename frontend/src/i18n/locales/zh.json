@@ -282,6 +282,8 @@
     "update_rules": "更新规则",
     "update_running": "更新中…",
     "update_latest": "规则已是最新",
+    "update_latest_detail": "更新于 {date} · {hash}",
+    "update_applied_detail": "本地 {local} → 远程 {remote} · 远端更新于 {date}",
     "update_applied": "规则已更新：新增 {added} 条，修改 {changed} 条",
     "update_failed": "规则更新失败"
   },

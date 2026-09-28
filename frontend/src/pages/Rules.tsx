@@ -134,6 +134,8 @@ const Rules: React.FC = () => {
     }
   };
 
+  const shortHash = (value?: string) => (value ? String(value).slice(0, 12) : '-');
+
   const handleUpdateRules = async () => {
     if (updatingRules) return;
     setUpdatingRules(true);
@@ -142,10 +144,23 @@ const Rules: React.FC = () => {
       if (res?.error) {
         toast.error(t('rules.update_failed'), String(res.error));
       } else if (res?.updated) {
-        toast.success(t('rules.update_applied', { added: res.added ?? 0, changed: res.changed ?? 0 }));
+        toast.success(
+          t('rules.update_applied', { added: res.added ?? 0, changed: res.changed ?? 0 }),
+          t('rules.update_applied_detail', {
+            local: shortHash(res.localHash),
+            remote: shortHash(res.remoteHash),
+            date: res.remoteUpdatedAt || '-',
+          })
+        );
         await loadData();
       } else {
-        toast.success(t('rules.update_latest'), res?.source ? String(res.source) : undefined);
+        toast.success(
+          t('rules.update_latest'),
+          t('rules.update_latest_detail', {
+            date: res?.appliedAt || '-',
+            hash: shortHash(res?.remoteHash),
+          })
+        );
       }
     } catch (err: any) {
       toast.error(t('rules.update_failed'), String(err));

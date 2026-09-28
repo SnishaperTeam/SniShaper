@@ -73,8 +73,8 @@ type App struct {
 	downloadConcurrency int
 	downloadChunkSize   int64
 	sourceRankMu        sync.Mutex
-	sourceRankCache     []string
-	sourceRankAt        time.Time
+	sourceRankCache     map[string][]string
+	sourceRankAt        map[string]time.Time
 	rulesWatchMu        sync.Mutex
 	rulesWatchStop      func()
 }

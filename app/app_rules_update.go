@@ -21,14 +21,18 @@ const rulesRemoteURL = "https://raw.githubusercontent.com/" + githubRepo + "/mai
 const autoRulesUpdateDelay = 10 * time.Second
 
 type RulesUpdateResult struct {
-	UpToDate bool     `json:"up_to_date"`
-	Updated  bool     `json:"updated"`
-	Added    int      `json:"added"`
-	Changed  int      `json:"changed"`
-	Kept     int      `json:"kept"`
-	Source   string   `json:"source,omitempty"`
-	Error    string   `json:"error,omitempty"`
-	Details  []string `json:"details,omitempty"`
+	UpToDate        bool     `json:"up_to_date"`
+	Updated         bool     `json:"updated"`
+	Added           int      `json:"added"`
+	Changed         int      `json:"changed"`
+	Kept            int      `json:"kept"`
+	Source          string   `json:"source,omitempty"`
+	LocalHash       string   `json:"local_hash,omitempty"`
+	RemoteHash      string   `json:"remote_hash,omitempty"`
+	AppliedAt       string   `json:"applied_at,omitempty"`
+	RemoteUpdatedAt string   `json:"remote_updated_at,omitempty"`
+	Error           string   `json:"error,omitempty"`
+	Details         []string `json:"details,omitempty"`
 }
 
 type rulesFetchCandidate struct {
@@ -63,7 +67,13 @@ func (a *App) syncRemoteRules() RulesUpdateResult {
 
 	if hash == a.ruleManager.RemoteRulesHash() {
 		a.appendLog("[rules-update] remote rules already applied (" + hash[:12] + ")")
-		return RulesUpdateResult{UpToDate: true, Source: source}
+		return RulesUpdateResult{
+			UpToDate:   true,
+			Source:     source,
+			LocalHash:  a.ruleManager.CurrentRulesHash(),
+			RemoteHash: hash,
+			AppliedAt:  a.ruleManager.RemoteRulesAppliedAt(),
+		}
 	}
 
 	var remote proxy.RulesConfig
@@ -73,6 +83,8 @@ func (a *App) syncRemoteRules() RulesUpdateResult {
 		return RulesUpdateResult{Error: msg, Source: source}
 	}
 
+	localHash := a.ruleManager.CurrentRulesHash()
+	remoteUpdatedAt := a.fetchRemoteRulesUpdatedAt()
 	summary, err := a.ruleManager.MergeRemoteRules(remote, hash)
 	if err != nil {
 		a.appendLog("[rules-update] merge failed: " + err.Error())
@@ -81,19 +93,77 @@ func (a *App) syncRemoteRules() RulesUpdateResult {
 
 	if !summary.Changed() {
 		a.appendLog("[rules-update] remote file differs but all rules are current")
-		return RulesUpdateResult{UpToDate: true, Source: source}
+		return RulesUpdateResult{
+			UpToDate:        true,
+			Source:          source,
+			LocalHash:       a.ruleManager.CurrentRulesHash(),
+			RemoteHash:      hash,
+			AppliedAt:       a.ruleManager.RemoteRulesAppliedAt(),
+			RemoteUpdatedAt: remoteUpdatedAt,
+		}
 	}
 
 	res := RulesUpdateResult{
-		Updated: true,
-		Added:   summary.AddedGroups + summary.AddedUpstreams + summary.AddedDNSNodes + summary.AddedECHProfiles + summary.AddedNAT64,
-		Changed: summary.UpdatedGroups + summary.UpdatedUpstreams,
-		Kept:    summary.KeptGroups + summary.KeptUpstreams,
-		Source:  source,
-		Details: summary.Details,
+		Updated:         true,
+		Added:           summary.AddedGroups + summary.AddedUpstreams + summary.AddedDNSNodes + summary.AddedECHProfiles + summary.AddedNAT64,
+		Changed:         summary.UpdatedGroups + summary.UpdatedUpstreams,
+		Kept:            summary.KeptGroups + summary.KeptUpstreams,
+		Source:          source,
+		LocalHash:       localHash,
+		RemoteHash:      hash,
+		RemoteUpdatedAt: remoteUpdatedAt,
+		AppliedAt:       a.ruleManager.RemoteRulesAppliedAt(),
+		Details:         summary.Details,
 	}
-	a.appendLog(fmt.Sprintf("[rules-update] applied from %s: %d added, %d updated, %d kept local", source, res.Added, res.Changed, res.Kept))
+	a.appendLog(fmt.Sprintf("[rules-update] applied from %s: %d added, %d updated, %d kept local",
+		source, res.Added, res.Changed, res.Kept))
 	return res
+}
+
+// fetchRemoteRulesUpdatedAt reports when the remote rules file last changed,
+// read from the GitHub commits API. It is best effort: an empty result only
+// means the caller should fall back to the fetch time.
+func (a *App) fetchRemoteRulesUpdatedAt() string {
+	apiURL := "https://api.github.com/repos/" + githubRepo + "/commits?path=rules/config.json&per_page=1"
+	client := &http.Client{
+		Timeout: 8 * time.Second,
+		Transport: &http.Transport{
+			TLSClientConfig: &tls.Config{MinVersion: tls.VersionTLS12},
+		},
+	}
+	var payload []struct {
+		Commit struct {
+			Committer struct {
+				Date string `json:"date"`
+			} `json:"committer"`
+		} `json:"commit"`
+	}
+	for _, e := range a.downloadSourceEntries(sourcePurposeRaw) {
+		req, err := http.NewRequest(http.MethodGet, e.prefix+apiURL, nil)
+		if err != nil {
+			continue
+		}
+		req.Header.Set("User-Agent", updateUserAgent)
+		req.Header.Set("Accept", "application/vnd.github+json")
+		resp, err := client.Do(req)
+		if err != nil {
+			continue
+		}
+		body, readErr := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+		resp.Body.Close()
+		if readErr != nil || resp.StatusCode != http.StatusOK {
+			continue
+		}
+		if err := json.Unmarshal(body, &payload); err != nil || len(payload) == 0 {
+			continue
+		}
+		ts, err := time.Parse(time.RFC3339, payload[0].Commit.Committer.Date)
+		if err != nil {
+			continue
+		}
+		return ts.Local().Format("2006-01-02 15:04")
+	}
+	return ""
 }
 
 func (a *App) rulesFetchCandidates() []rulesFetchCandidate {
@@ -104,7 +174,7 @@ func (a *App) rulesFetchCandidates() []rulesFetchCandidate {
 		},
 	}
 
-	entries := a.downloadSourceEntries()
+	entries := a.downloadSourceEntries(sourcePurposeRaw)
 	candidates := make([]rulesFetchCandidate, 0, len(entries)*2)
 	for _, e := range entries {
 		candidates = append(candidates, rulesFetchCandidate{label: e.label, url: e.prefix + rulesRemoteURL, client: direct})

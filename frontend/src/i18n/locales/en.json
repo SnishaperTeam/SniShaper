@@ -282,6 +282,8 @@
     "update_rules": "Update rules",
     "update_running": "Updating...",
     "update_latest": "Rules are already up to date",
+    "update_latest_detail": "Updated {date} · {hash}",
+    "update_applied_detail": "Local {local} → remote {remote} · remote updated {date}",
     "update_applied": "Rules updated: {added} added, {changed} changed",
     "update_failed": "Rules update failed"
   },

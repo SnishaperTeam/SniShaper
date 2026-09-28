@@ -48,10 +48,17 @@ var downloadSources = map[string]string{
 
 const defaultDownloadSource = "down.mxw.qzz.io"
 
+const smartSourceCacheTTL = 10 * time.Minute
+
 const (
-	smartSourceCacheTTL = 10 * time.Minute
-	sourceProbeURL      = "https://github.com/SnishaperTeam/SniShaper/releases/latest"
+	sourcePurposeRelease = "release"
+	sourcePurposeRaw     = "raw"
 )
+
+var sourceProbes = map[string]string{
+	sourcePurposeRelease: "https://github.com/" + githubRepo + "/releases/latest",
+	sourcePurposeRaw:     "https://raw.githubusercontent.com/" + githubRepo + "/main/rules/config.json",
+}
 
 type githubRelease struct {
 	TagName    string        `json:"tag_name"`
@@ -156,7 +163,7 @@ func (a *App) MeasureDownloadSources() []DownloadSourceStatus {
 		wg.Add(1)
 		go func(i int, tg target) {
 			defer wg.Done()
-			results[i] = measureSourceLatency(tg.name, tg.prefix)
+			results[i] = measureSourceLatency(tg.name, tg.prefix, sourceProbes[sourcePurposeRelease])
 		}(i, tg)
 	}
 	wg.Wait()
@@ -169,15 +176,15 @@ func (a *App) MeasureDownloadSources() []DownloadSourceStatus {
 	return results
 }
 
-func measureSourceLatency(name, prefix string) DownloadSourceStatus {
-	probe := sourceProbeURL
+func measureSourceLatency(name, prefix, probe string) DownloadSourceStatus {
+	target := probe
 	if prefix != "" {
-		probe = prefix + probe
+		target = prefix + probe
 	}
-	st := DownloadSourceStatus{Name: name, URL: probe}
+	st := DownloadSourceStatus{Name: name, URL: target}
 	client := &http.Client{Timeout: 5 * time.Second}
 	start := time.Now()
-	req, err := http.NewRequest(http.MethodHead, probe, nil)
+	req, err := http.NewRequest(http.MethodHead, target, nil)
 	if err != nil {
 		st.Error = err.Error()
 		return st
@@ -190,6 +197,10 @@ func measureSourceLatency(name, prefix string) DownloadSourceStatus {
 		return st
 	}
 	resp.Body.Close()
+	if resp.StatusCode >= 400 {
+		st.Error = fmt.Sprintf("http status %d", resp.StatusCode)
+		return st
+	}
 	st.OK = true
 	return st
 }
@@ -199,11 +210,17 @@ type downloadSourceEntry struct {
 	prefix string
 }
 
-// rankedSourceOrder measures every mirror and returns the reachable ones
-// fastest first, so the "smart" source always points at the quickest mirror.
-func (a *App) rankedSourceOrder() []string {
+// rankedSourceOrder measures every mirror against the probe for the given
+// purpose and returns the reachable ones fastest first, so the "smart" source
+// always points at the quickest mirror for that kind of request.
+func (a *App) rankedSourceOrder(purpose string) []string {
+	probe, ok := sourceProbes[purpose]
+	if !ok {
+		probe = sourceProbes[sourcePurposeRelease]
+	}
+
 	a.sourceRankMu.Lock()
-	cached, at := a.sourceRankCache, a.sourceRankAt
+	cached, at := a.sourceRankCache[purpose], a.sourceRankAt[purpose]
 	a.sourceRankMu.Unlock()
 	if len(cached) > 0 && time.Since(at) < smartSourceCacheTTL {
 		return cached
@@ -221,7 +238,7 @@ func (a *App) rankedSourceOrder() []string {
 		wg.Add(1)
 		go func(i int, name string) {
 			defer wg.Done()
-			st := measureSourceLatency(name, downloadSources[name])
+			st := measureSourceLatency(name, downloadSources[name], probe)
 			samples[i] = sample{name: name, latencyMS: st.LatencyMS, ok: st.OK}
 		}(i, name)
 	}
@@ -244,15 +261,19 @@ func (a *App) rankedSourceOrder() []string {
 	}
 
 	a.sourceRankMu.Lock()
-	a.sourceRankCache, a.sourceRankAt = order, time.Now()
+	if a.sourceRankCache == nil {
+		a.sourceRankCache = map[string][]string{}
+		a.sourceRankAt = map[string]time.Time{}
+	}
+	a.sourceRankCache[purpose], a.sourceRankAt[purpose] = order, time.Now()
 	a.sourceRankMu.Unlock()
-	a.appendLog("[update] smart source ranking: " + strings.Join(order, " > "))
+	a.appendLog(fmt.Sprintf("[update] smart source ranking (%s): %s", purpose, strings.Join(order, " > ")))
 	return order
 }
 
 // downloadSourceEntries lists the mirrors to try for the configured download
 // source, in order: the configured one first, then direct, then the rest.
-func (a *App) downloadSourceEntries() []downloadSourceEntry {
+func (a *App) downloadSourceEntries(purpose string) []downloadSourceEntry {
 	src := a.GetDownloadSource()
 	entries := []downloadSourceEntry{}
 	seen := map[string]bool{}
@@ -270,7 +291,7 @@ func (a *App) downloadSourceEntries() []downloadSourceEntry {
 			add("custom", p+"/")
 		}
 	case "smart":
-		for _, name := range a.rankedSourceOrder() {
+		for _, name := range a.rankedSourceOrder(purpose) {
 			add(name, downloadSources[name])
 		}
 	case "direct", "":
@@ -600,7 +621,7 @@ func (a *App) DownloadUpdateAsset(assetURL string) (DownloadResult, error) {
 		return DownloadResult{}, err
 	}
 	dest := filepath.Join(dir, fileName)
-	urls := buildDownloadURLs(assetURL, a.downloadSourceEntries())
+	urls := buildDownloadURLs(assetURL, a.downloadSourceEntries(sourcePurposeRelease))
 	var lastErr error
 	for _, u := range urls {
 		if err := a.downloadFileWithProgress(u, dest, fileName); err != nil {

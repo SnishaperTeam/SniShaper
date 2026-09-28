@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"time"
 )
 
 type RulesMergeSummary struct {
@@ -26,6 +27,7 @@ func (s RulesMergeSummary) Changed() bool {
 
 type rulesSyncState struct {
 	RemoteHash string            `json:"remote_hash"`
+	AppliedAt  string            `json:"applied_at,omitempty"`
 	Groups     map[string]string `json:"groups,omitempty"`
 	Upstreams  map[string]string `json:"upstreams,omitempty"`
 }
@@ -85,6 +87,19 @@ func (rm *RuleManager) RemoteRulesHash() string {
 	return rm.loadSyncState().RemoteHash
 }
 
+// RemoteRulesAppliedAt reports when the last remote revision was applied.
+func (rm *RuleManager) RemoteRulesAppliedAt() string {
+	rm.mu.RLock()
+	defer rm.mu.RUnlock()
+	return rm.loadSyncState().AppliedAt
+}
+
+// CurrentRulesHash reports the hash of the rules currently in memory, which is
+// the hash of the local rules file as last written.
+func (rm *RuleManager) CurrentRulesHash() string {
+	return rm.rulesHashValue()
+}
+
 // MergeRemoteRules folds a remote rules file into the local set three-way: the
 // last applied upstream revision is the baseline, so a rule is only replaced
 // when the local copy is untouched, upstream changed it and local edits win.
@@ -98,6 +113,7 @@ func (rm *RuleManager) MergeRemoteRules(remote RulesConfig, remoteHash string) (
 	baseline := rm.loadSyncState()
 	next := rulesSyncState{
 		RemoteHash: remoteHash,
+		AppliedAt:  time.Now().Format("2006-01-02 15:04:05"),
 		Groups:     make(map[string]string, len(remote.SiteGroups)),
 		Upstreams:  make(map[string]string, len(remote.Upstreams)),
 	}
