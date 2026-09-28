@@ -1734,7 +1734,10 @@
         "chromebook.com",
         "withgoogle.com",
         "gmail.com",
-        "gstatic.com"
+        "gstatic.com",
+        "*.developer.android.com",
+        "*.android.com",
+        "*.google.com"
       ],
       "ech_enabled": false,
       "use_cf_pool": false,
@@ -3817,6 +3820,36 @@
       "nat64_enabled": false
     },
     {
+      "id": "1790336143697938600",
+      "name": "jetcpp",
+      "mode": "mitm",
+      "domains": [
+        "jetcpp.cc.cd"
+      ],
+      "ech_enabled": true,
+      "ech_profile_id": "legacy-cloudflare",
+      "use_cf_pool": true,
+      "cert_verify": {},
+      "website": "Others",
+      "enabled": true,
+      "nat64_enabled": false
+    },
+    {
+      "id": "1790336145028952400",
+      "name": "jetcpp",
+      "mode": "mitm",
+      "domains": [
+        "jetcpp.ccwu.cc"
+      ],
+      "ech_enabled": true,
+      "ech_profile_id": "legacy-cloudflare",
+      "use_cf_pool": true,
+      "cert_verify": {},
+      "website": "Others",
+      "enabled": true,
+      "nat64_enabled": false
+    },
+    {
       "id": "sg-openstreetmap",
       "name": "OpenStreetMap",
       "mode": "tls-rf",
@@ -3870,7 +3903,7 @@
     {
       "id": "legacy-cloudflare",
       "name": "Cloudflare",
-      "config": "AEX+DQBBngAgACClX+1r+fDot1mbE5COyr0qlfxfrdJttivWWBo3kiSRaQAEAAEAAQASY2xvdWRmbGFyZS1lY2guY29tAAA=",
+      "config": "AEX+DQBBkAAgACDpyBXSgx4JC5zCezLA7rN0dHy2APSLOq3ni9z/ASPJTgAEAAEAAQASY2xvdWRmbGFyZS1lY2guY29tAAA=",
       "discovery_domain": "crypto.cloudflare.com",
       "doh_upstream": "https://xwfpeb16ii.cloudflare-gateway.com/dns-query",
       "auto_update": true
