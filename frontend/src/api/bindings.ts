@@ -11,6 +11,8 @@ export const GetShowMainWindowOnAutoStart = () => appCall('GetShowMainWindowOnAu
 export const SetShowMainWindowOnAutoStart = (enabled: boolean) => appCall('SetShowMainWindowOnAutoStart', enabled);
 export const GetAutoEnableProxyOnAutoStart = () => appCall('GetAutoEnableProxyOnAutoStart');
 export const SetAutoEnableProxyOnAutoStart = (enabled: boolean) => appCall('SetAutoEnableProxyOnAutoStart', enabled);
+export const GetAutoEnableSysProxyOnAutoStart = () => appCall('GetAutoEnableSysProxyOnAutoStart');
+export const SetAutoEnableSysProxyOnAutoStart = (enabled: boolean) => appCall('SetAutoEnableSysProxyOnAutoStart', enabled);
 export const GetLanguage = () => appCall('GetLanguage');
 export const SetLanguage = (lang: string) => appCall('SetLanguage', lang);
 export const GetTheme = () => appCall('GetTheme');

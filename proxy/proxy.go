@@ -97,24 +97,25 @@ type ECHProfile struct {
 }
 
 type SettingsConfig struct {
-	ListenPort                 string            `json:"listen_port"`
-	Socks5Port                 string            `json:"socks5_port,omitempty"`
-	CloseToTray                *bool             `json:"close_to_tray,omitempty"`
-	HibernateOnClose           *bool             `json:"hibernate_on_close,omitempty"`
-	AutoStart                  *bool             `json:"auto_start,omitempty"`
-	ShowMainWindowOnAutoStart  *bool             `json:"show_main_window_on_auto_start,omitempty"`
-	AutoEnableProxyOnAutoStart *bool             `json:"auto_enable_proxy_on_auto_start,omitempty"`
-	AutoRouting                AutoRoutingConfig `json:"auto_routing,omitempty"`
-	TUN                        TUNConfig         `json:"tun,omitempty"`
-	Language                   string            `json:"language,omitempty"`
-	Theme                      string            `json:"theme,omitempty"`
-	CloudflareConfig           CloudflareConfig  `json:"cloudflare_config,omitempty"`
-	Socks5Enabled              *bool             `json:"socks5_enabled,omitempty"`
-	MigrationEnabled           *bool             `json:"migration_enabled,omitempty"`
-	MigrationServer            string            `json:"migration_server,omitempty"`
-	UpdateChannel              string            `json:"update_channel,omitempty"`
-	DownloadSource             string            `json:"download_source,omitempty"`
-	CustomDownloadSource       string            `json:"custom_download_source,omitempty"`
+	ListenPort                    string            `json:"listen_port"`
+	Socks5Port                    string            `json:"socks5_port,omitempty"`
+	CloseToTray                   *bool             `json:"close_to_tray,omitempty"`
+	HibernateOnClose              *bool             `json:"hibernate_on_close,omitempty"`
+	AutoStart                     *bool             `json:"auto_start,omitempty"`
+	ShowMainWindowOnAutoStart     *bool             `json:"show_main_window_on_auto_start,omitempty"`
+	AutoEnableProxyOnAutoStart    *bool             `json:"auto_enable_proxy_on_auto_start,omitempty"`
+	AutoEnableSysProxyOnAutoStart *bool             `json:"auto_enable_sysproxy_on_auto_start,omitempty"`
+	AutoRouting                   AutoRoutingConfig `json:"auto_routing,omitempty"`
+	TUN                           TUNConfig         `json:"tun,omitempty"`
+	Language                      string            `json:"language,omitempty"`
+	Theme                         string            `json:"theme,omitempty"`
+	CloudflareConfig              CloudflareConfig  `json:"cloudflare_config,omitempty"`
+	Socks5Enabled                 *bool             `json:"socks5_enabled,omitempty"`
+	MigrationEnabled              *bool             `json:"migration_enabled,omitempty"`
+	MigrationServer               string            `json:"migration_server,omitempty"`
+	UpdateChannel                 string            `json:"update_channel,omitempty"`
+	DownloadSource                string            `json:"download_source,omitempty"`
+	CustomDownloadSource          string            `json:"custom_download_source,omitempty"`
 }
 
 type NAT64Profile struct {

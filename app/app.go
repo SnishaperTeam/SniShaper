@@ -309,8 +309,12 @@ func (a *App) autoEnableProxyAtStartup() {
 	for attempt := 0; ; attempt++ {
 		err := a.StartProxy()
 		if err == nil {
-			if sysErr := a.EnableSystemProxy(); sysErr != nil {
-				a.appendLog("[startup] AutoStart EnableSystemProxy failed: " + sysErr.Error())
+			if a.GetAutoEnableSysProxyOnAutoStart() {
+				if sysErr := a.EnableSystemProxy(); sysErr != nil {
+					a.appendLog("[startup] AutoStart EnableSystemProxy failed: " + sysErr.Error())
+				}
+			} else {
+				a.appendLog("[startup] AutoStart: system proxy left off by configuration")
 			}
 			a.appendLog(fmt.Sprintf("[startup] AutoStart proxy enabled (attempt %d)", attempt+1))
 			return

@@ -5,6 +5,7 @@
   "auto_start": false,
   "show_main_window_on_auto_start": true,
   "auto_enable_proxy_on_auto_start": false,
+  "auto_enable_sysproxy_on_auto_start": true,
   "auto_routing": {
     "mode": "default"
   },

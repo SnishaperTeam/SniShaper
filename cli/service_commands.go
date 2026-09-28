@@ -395,6 +395,11 @@ func opAutoStart(args []string, out cmdOut) int {
 			proxyState = "开"
 		}
 		out("启动后自动开启代理: " + proxyState)
+		sysState := "开"
+		if !a.GetAutoEnableSysProxyOnAutoStart() {
+			sysState = "关"
+		}
+		out("自动开启代理时设置系统代理: " + sysState)
 		return 0
 	case "on":
 		withProxy := false

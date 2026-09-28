@@ -8,6 +8,7 @@ import {
   GetListenPort, SetListenPort, GetCloseToTray, SetCloseToTray,
   GetAutoStart, SetAutoStart, GetShowMainWindowOnAutoStart, SetShowMainWindowOnAutoStart,
   GetAutoEnableProxyOnAutoStart, SetAutoEnableProxyOnAutoStart,
+  GetAutoEnableSysProxyOnAutoStart, SetAutoEnableSysProxyOnAutoStart,
   GetSocks5Port, SetSocks5Port, GetTUNConfig, UpdateTUNConfig, GetTUNStatus,
   OpenCertDir, RegenerateCert, GetCAInstallStatus, GetInstalledCerts,
   UninstallCert, ExportConfig, ImportConfigWithSummary,
@@ -110,6 +111,7 @@ const Settings: React.FC<SettingsProps> = ({ cache, onCacheUpdate, currentThemeI
   const [autoStart, setAutoStart] = useState(cache.autoStart);
   const [showMainOnAutoStart, setShowMainOnAutoStart] = useState(cache.showMainOnAutoStart);
   const [autoEnableProxyOnAutoStart, setAutoEnableProxyOnAutoStart] = useState(cache.autoEnableProxyOnAutoStart);
+  const [autoEnableSysProxyOnAutoStart, setAutoEnableSysProxyOnAutoStart] = useState(cache.autoEnableSysProxyOnAutoStart);
   const [cfConfig, setCfConfig] = useState<any>(cache.cfConfig);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isCheckingHealth, setIsCheckingHealth] = useState(false);
@@ -275,6 +277,15 @@ const Settings: React.FC<SettingsProps> = ({ cache, onCacheUpdate, currentThemeI
       onCacheUpdate({ autoEnableProxyOnAutoStart: val });
       toast.success(t('settings.notifications.updated'));
     } catch (err: any) { setAutoEnableProxyOnAutoStart(!val); toast.error(t('common.failed'), String(err)); }
+  };
+
+  const handleToggleAutoEnableSysProxyOnAutoStart = async (val: boolean) => {
+    setAutoEnableSysProxyOnAutoStart(val);
+    try {
+      await SetAutoEnableSysProxyOnAutoStart(val);
+      onCacheUpdate({ autoEnableSysProxyOnAutoStart: val });
+      toast.success(t('settings.notifications.updated'));
+    } catch (err: any) { setAutoEnableSysProxyOnAutoStart(!val); toast.error(t('common.failed'), String(err)); }
   };
 
   const handleToggleShowMainWindowOnAutoStart = async (val: boolean) => {
@@ -650,6 +661,13 @@ const Settings: React.FC<SettingsProps> = ({ cache, onCacheUpdate, currentThemeI
                 <FormControlLabel
                   control={<Switch checked={autoEnableProxyOnAutoStart} onChange={(e) => handleToggleAutoEnableProxyOnAutoStart(e.target.checked)} />}
                   label={t('settings.auto_proxy.title')}
+                  sx={{ gap: 1, marginLeft: 0, marginRight: 0 }}
+                />
+              </SettingRowInline>
+              <SettingRowInline title={t('settings.auto_sysproxy.title')} desc={t('settings.auto_sysproxy.desc')} icon={<Anchor size={18} />}>
+                <FormControlLabel
+                  control={<Switch checked={autoEnableSysProxyOnAutoStart} onChange={(e) => handleToggleAutoEnableSysProxyOnAutoStart(e.target.checked)} />}
+                  label={t('settings.auto_sysproxy.title')}
                   sx={{ gap: 1, marginLeft: 0, marginRight: 0 }}
                 />
               </SettingRowInline>

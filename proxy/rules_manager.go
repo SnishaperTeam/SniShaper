@@ -14,38 +14,39 @@ import (
 )
 
 type RuleManager struct {
-	rules                      []Rule
-	siteGroups                 []SiteGroup
-	upstreams                  []Upstream
-	dnsNodes                   []DNSNode
-	settingsPath               string
-	rulesPath                  string
-	cloudflareConfig           CloudflareConfig
-	tunConfig                  TUNConfig
-	closeToTray                bool
-	hibernateOnClose           bool
-	autoStart                  bool
-	showMainOnAutoStart        bool
-	autoEnableProxyOnAutoStart bool
-	socks5Enabled              bool
-	socks5Port                 string
-	listenPort                 string
-	echProfiles                []ECHProfile
-	nat64Profiles              []NAT64Profile
-	autoRouter                 *AutoRouter
-	autoRoutingConfig          AutoRoutingConfig
-	mu                         sync.RWMutex
-	routeEventCallback         func(domain, mode string)
-	onConfigSaved              func()
-	language                   string
-	theme                      string
-	migrationEnabled           bool
-	migrationServer            string
-	updateChannel              string
-	downloadSource             string
-	customDownloadSource       string
-	rulesHashMu                sync.Mutex
-	rulesHash                  string
+	rules                         []Rule
+	siteGroups                    []SiteGroup
+	upstreams                     []Upstream
+	dnsNodes                      []DNSNode
+	settingsPath                  string
+	rulesPath                     string
+	cloudflareConfig              CloudflareConfig
+	tunConfig                     TUNConfig
+	closeToTray                   bool
+	hibernateOnClose              bool
+	autoStart                     bool
+	showMainOnAutoStart           bool
+	autoEnableProxyOnAutoStart    bool
+	autoEnableSysProxyOnAutoStart bool
+	socks5Enabled                 bool
+	socks5Port                    string
+	listenPort                    string
+	echProfiles                   []ECHProfile
+	nat64Profiles                 []NAT64Profile
+	autoRouter                    *AutoRouter
+	autoRoutingConfig             AutoRoutingConfig
+	mu                            sync.RWMutex
+	routeEventCallback            func(domain, mode string)
+	onConfigSaved                 func()
+	language                      string
+	theme                         string
+	migrationEnabled              bool
+	migrationServer               string
+	updateChannel                 string
+	downloadSource                string
+	customDownloadSource          string
+	rulesHashMu                   sync.Mutex
+	rulesHash                     string
 }
 
 func (r *RuleManager) SetRouteEventCallback(cb func(domain, mode string)) {
@@ -296,6 +297,7 @@ func (rm *RuleManager) loadSettingsConfig() error {
 	rm.autoStart = false
 	rm.showMainOnAutoStart = true
 	rm.autoEnableProxyOnAutoStart = false
+	rm.autoEnableSysProxyOnAutoStart = true
 
 	// 2. Override with JSON values if they exist
 	rm.cloudflareConfig = config.CloudflareConfig
@@ -329,6 +331,9 @@ func (rm *RuleManager) loadSettingsConfig() error {
 	}
 	if config.AutoEnableProxyOnAutoStart != nil {
 		rm.autoEnableProxyOnAutoStart = *config.AutoEnableProxyOnAutoStart
+	}
+	if config.AutoEnableSysProxyOnAutoStart != nil {
+		rm.autoEnableSysProxyOnAutoStart = *config.AutoEnableSysProxyOnAutoStart
 	}
 	if config.Socks5Enabled != nil {
 		rm.socks5Enabled = *config.Socks5Enabled
@@ -382,6 +387,7 @@ func (rm *RuleManager) saveDefaultSettingsConfig() error {
 	rm.autoStart = false
 	rm.showMainOnAutoStart = true
 	rm.autoEnableProxyOnAutoStart = false
+	rm.autoEnableSysProxyOnAutoStart = true
 	rm.applySettingsDefaults()
 	return rm.saveSettingsConfig()
 }
@@ -621,6 +627,19 @@ func (rm *RuleManager) SetAutoEnableProxyOnAutoStart(enabled bool) error {
 	return rm.saveSettingsConfig()
 }
 
+func (rm *RuleManager) GetAutoEnableSysProxyOnAutoStart() bool {
+	rm.mu.RLock()
+	defer rm.mu.RUnlock()
+	return rm.autoEnableSysProxyOnAutoStart
+}
+
+func (rm *RuleManager) SetAutoEnableSysProxyOnAutoStart(enabled bool) error {
+	rm.mu.Lock()
+	rm.autoEnableSysProxyOnAutoStart = enabled
+	rm.mu.Unlock()
+	return rm.saveSettingsConfig()
+}
+
 func (r *RuleManager) GetLanguage() string {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
@@ -841,6 +860,7 @@ func (rm *RuleManager) saveSettingsConfig() error {
 	autoStart := rm.autoStart
 	showMainOnAutoStart := rm.showMainOnAutoStart
 	autoEnableProxyOnAutoStart := rm.autoEnableProxyOnAutoStart
+	autoEnableSysProxyOnAutoStart := rm.autoEnableSysProxyOnAutoStart
 	socks5Enabled := rm.socks5Enabled
 	migrationEnabled := rm.migrationEnabled
 	cloudflareConfig := rm.cloudflareConfig
@@ -854,6 +874,7 @@ func (rm *RuleManager) saveSettingsConfig() error {
 		AutoStart:                  &autoStart,
 		ShowMainWindowOnAutoStart:  &showMainOnAutoStart,
 		AutoEnableProxyOnAutoStart: &autoEnableProxyOnAutoStart,
+		AutoEnableSysProxyOnAutoStart: &autoEnableSysProxyOnAutoStart,
 		CloudflareConfig:           cloudflareConfig,
 		AutoRouting:                rm.autoRoutingConfig,
 		TUN:                        tunConfig,

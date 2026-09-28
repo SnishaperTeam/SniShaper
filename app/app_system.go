@@ -266,6 +266,15 @@ func (a *App) SetAutoEnableProxyOnAutoStart(enabled bool) error {
 	return a.syncAutoStartRegistration()
 }
 
+func (a *App) GetAutoEnableSysProxyOnAutoStart() bool {
+	return a.ruleManager.GetAutoEnableSysProxyOnAutoStart()
+}
+
+func (a *App) SetAutoEnableSysProxyOnAutoStart(enabled bool) error {
+	a.appendLog(fmt.Sprintf("[action] SetAutoEnableSysProxyOnAutoStart called: %v", enabled))
+	return a.ruleManager.SetAutoEnableSysProxyOnAutoStart(enabled)
+}
+
 // ForceCleanup is a last-resort synchronous cleanup for crash/force-exit paths.
 // It stops TUN, core, proxy, and system proxy without checking state.
 func (a *App) ForceCleanup() {
