@@ -29,7 +29,6 @@ type RulesUpdateResult struct {
 	Source          string   `json:"source,omitempty"`
 	LocalHash       string   `json:"local_hash,omitempty"`
 	RemoteHash      string   `json:"remote_hash,omitempty"`
-	AppliedAt       string   `json:"applied_at,omitempty"`
 	RemoteUpdatedAt string   `json:"remote_updated_at,omitempty"`
 	Error           string   `json:"error,omitempty"`
 	Details         []string `json:"details,omitempty"`
@@ -65,14 +64,16 @@ func (a *App) syncRemoteRules() RulesUpdateResult {
 	sum256 := sha256.Sum256(body)
 	hash := hex.EncodeToString(sum256[:])
 
+	remoteUpdatedAt := a.fetchRemoteRulesUpdatedAt()
+
 	if hash == a.ruleManager.RemoteRulesHash() {
 		a.appendLog("[rules-update] remote rules already applied (" + hash[:12] + ")")
 		return RulesUpdateResult{
-			UpToDate:   true,
-			Source:     source,
-			LocalHash:  a.ruleManager.CurrentRulesHash(),
-			RemoteHash: hash,
-			AppliedAt:  a.ruleManager.RemoteRulesAppliedAt(),
+			UpToDate:        true,
+			Source:          source,
+			LocalHash:       a.ruleManager.CurrentRulesHash(),
+			RemoteHash:      hash,
+			RemoteUpdatedAt: remoteUpdatedAt,
 		}
 	}
 
@@ -84,7 +85,6 @@ func (a *App) syncRemoteRules() RulesUpdateResult {
 	}
 
 	localHash := a.ruleManager.CurrentRulesHash()
-	remoteUpdatedAt := a.fetchRemoteRulesUpdatedAt()
 	summary, err := a.ruleManager.MergeRemoteRules(remote, hash)
 	if err != nil {
 		a.appendLog("[rules-update] merge failed: " + err.Error())
@@ -98,7 +98,6 @@ func (a *App) syncRemoteRules() RulesUpdateResult {
 			Source:          source,
 			LocalHash:       a.ruleManager.CurrentRulesHash(),
 			RemoteHash:      hash,
-			AppliedAt:       a.ruleManager.RemoteRulesAppliedAt(),
 			RemoteUpdatedAt: remoteUpdatedAt,
 		}
 	}
@@ -112,7 +111,6 @@ func (a *App) syncRemoteRules() RulesUpdateResult {
 		LocalHash:       localHash,
 		RemoteHash:      hash,
 		RemoteUpdatedAt: remoteUpdatedAt,
-		AppliedAt:       a.ruleManager.RemoteRulesAppliedAt(),
 		Details:         summary.Details,
 	}
 	a.appendLog(fmt.Sprintf("[rules-update] applied from %s: %d added, %d updated, %d kept local",

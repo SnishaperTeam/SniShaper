@@ -147,9 +147,9 @@ const Rules: React.FC = () => {
         toast.success(
           t('rules.update_applied', { added: res.added ?? 0, changed: res.changed ?? 0 }),
           t('rules.update_applied_detail', {
-            local: shortHash(res.localHash),
-            remote: shortHash(res.remoteHash),
-            date: res.remoteUpdatedAt || '-',
+            local: shortHash(res.local_hash),
+            remote: shortHash(res.remote_hash),
+            date: res.remote_updated_at || '-',
           })
         );
         await loadData();
@@ -157,8 +157,8 @@ const Rules: React.FC = () => {
         toast.success(
           t('rules.update_latest'),
           t('rules.update_latest_detail', {
-            date: res?.appliedAt || '-',
-            hash: shortHash(res?.remoteHash),
+            date: res?.remote_updated_at || '-',
+            hash: shortHash(res?.remote_hash),
           })
         );
       }
