@@ -3878,6 +3878,300 @@
       "website": "twitch",
       "enabled": true,
       "nat64_enabled": false
+    },
+    {
+      "id": "sg-signal",
+      "name": "Signal",
+      "mode": "tls-rf",
+      "domains": [
+        "signal.org"
+      ],
+      "ech_enabled": false,
+      "use_cf_pool": false,
+      "cert_verify": {},
+      "website": "signal",
+      "enabled": true,
+      "nat64_enabled": false
+    },
+    {
+      "id": "sg-bloomberg",
+      "name": "Bloomberg",
+      "mode": "tls-rf",
+      "domains": [
+        "bloomberg.com"
+      ],
+      "ech_enabled": false,
+      "use_cf_pool": false,
+      "cert_verify": {},
+      "website": "bloomberg",
+      "enabled": true,
+      "nat64_enabled": false
+    },
+    {
+      "id": "sg-vimeo",
+      "name": "Vimeo",
+      "mode": "tls-rf",
+      "domains": [
+        "vimeo.com"
+      ],
+      "ech_enabled": false,
+      "use_cf_pool": false,
+      "cert_verify": {},
+      "website": "vimeo",
+      "enabled": true,
+      "nat64_enabled": false
+    },
+    {
+      "id": "sg-bandcamp",
+      "name": "Bandcamp",
+      "mode": "tls-rf",
+      "domains": [
+        "bandcamp.com"
+      ],
+      "ech_enabled": false,
+      "use_cf_pool": false,
+      "cert_verify": {},
+      "website": "bandcamp",
+      "enabled": true,
+      "nat64_enabled": false
+    },
+    {
+      "id": "sg-theguardian",
+      "name": "The Guardian",
+      "mode": "tls-rf",
+      "domains": [
+        "theguardian.com"
+      ],
+      "ech_enabled": false,
+      "use_cf_pool": false,
+      "cert_verify": {},
+      "website": "theguardian",
+      "enabled": true,
+      "nat64_enabled": false
+    },
+    {
+      "id": "sg-tumblr",
+      "name": "Tumblr",
+      "mode": "tls-rf",
+      "domains": [
+        "tumblr.com"
+      ],
+      "ech_enabled": false,
+      "use_cf_pool": false,
+      "cert_verify": {},
+      "website": "tumblr",
+      "enabled": true,
+      "nat64_enabled": false
+    },
+    {
+      "id": "sg-soundcloud",
+      "name": "SoundCloud",
+      "mode": "tls-rf",
+      "domains": [
+        "soundcloud.com"
+      ],
+      "ech_enabled": false,
+      "use_cf_pool": false,
+      "cert_verify": {},
+      "website": "soundcloud",
+      "enabled": true,
+      "nat64_enabled": false
+    },
+    {
+      "id": "sg-pypi",
+      "name": "PyPI",
+      "mode": "tls-rf",
+      "domains": [
+        "pypi.org"
+      ],
+      "ech_enabled": false,
+      "use_cf_pool": false,
+      "cert_verify": {},
+      "website": "pypi",
+      "enabled": true,
+      "nat64_enabled": false
+    },
+    {
+      "id": "sg-anthropic",
+      "name": "Anthropic",
+      "mode": "tls-rf",
+      "domains": [
+        "anthropic.com"
+      ],
+      "ech_enabled": false,
+      "use_cf_pool": false,
+      "cert_verify": {},
+      "website": "anthropic",
+      "enabled": true,
+      "nat64_enabled": false
+    },
+    {
+      "id": "sg-linkedin",
+      "name": "LinkedIn",
+      "mode": "tls-rf",
+      "domains": [
+        "linkedin.com"
+      ],
+      "ech_enabled": false,
+      "use_cf_pool": false,
+      "cert_verify": {},
+      "website": "linkedin",
+      "enabled": true,
+      "nat64_enabled": false
+    },
+    {
+      "id": "sg-npmjs",
+      "name": "npm",
+      "mode": "tls-rf",
+      "domains": [
+        "npmjs.com"
+      ],
+      "ech_enabled": false,
+      "use_cf_pool": false,
+      "cert_verify": {},
+      "website": "npmjs",
+      "enabled": true,
+      "nat64_enabled": false
+    },
+    {
+      "id": "sg-gitlab",
+      "name": "GitLab",
+      "mode": "tls-rf",
+      "domains": [
+        "gitlab.com"
+      ],
+      "ech_enabled": false,
+      "use_cf_pool": false,
+      "cert_verify": {},
+      "website": "gitlab",
+      "enabled": true,
+      "nat64_enabled": false
+    },
+    {
+      "id": "sg-netflix",
+      "name": "Netflix",
+      "mode": "tls-rf",
+      "domains": [
+        "netflix.com"
+      ],
+      "ech_enabled": false,
+      "use_cf_pool": false,
+      "cert_verify": {},
+      "website": "netflix",
+      "enabled": true,
+      "nat64_enabled": false
+    },
+    {
+      "id": "sg-notion",
+      "name": "Notion",
+      "mode": "tls-rf",
+      "domains": [
+        "notion.so"
+      ],
+      "ech_enabled": false,
+      "use_cf_pool": false,
+      "cert_verify": {},
+      "website": "notion",
+      "enabled": true,
+      "nat64_enabled": false
+    },
+    {
+      "id": "sg-roblox",
+      "name": "Roblox",
+      "mode": "tls-rf",
+      "domains": [
+        "roblox.com"
+      ],
+      "ech_enabled": false,
+      "use_cf_pool": false,
+      "cert_verify": {},
+      "website": "roblox",
+      "enabled": true,
+      "nat64_enabled": false
+    },
+    {
+      "id": "sg-stackoverflow",
+      "name": "Stack Overflow",
+      "mode": "tls-rf",
+      "domains": [
+        "stackoverflow.com"
+      ],
+      "ech_enabled": false,
+      "use_cf_pool": false,
+      "cert_verify": {},
+      "website": "stackoverflow",
+      "enabled": true,
+      "nat64_enabled": false
+    },
+    {
+      "id": "sg-epicgames",
+      "name": "Epic Games",
+      "mode": "tls-rf",
+      "domains": [
+        "epicgames.com"
+      ],
+      "ech_enabled": false,
+      "use_cf_pool": false,
+      "cert_verify": {},
+      "website": "epicgames",
+      "enabled": true,
+      "nat64_enabled": false
+    },
+    {
+      "id": "sg-slack",
+      "name": "Slack",
+      "mode": "tls-rf",
+      "domains": [
+        "slack.com"
+      ],
+      "ech_enabled": false,
+      "use_cf_pool": false,
+      "cert_verify": {},
+      "website": "slack",
+      "enabled": true,
+      "nat64_enabled": false
+    },
+    {
+      "id": "sg-xbox",
+      "name": "Xbox",
+      "mode": "tls-rf",
+      "domains": [
+        "xbox.com"
+      ],
+      "ech_enabled": false,
+      "use_cf_pool": false,
+      "cert_verify": {},
+      "website": "xbox",
+      "enabled": true,
+      "nat64_enabled": false
+    },
+    {
+      "id": "sg-playstation",
+      "name": "PlayStation",
+      "mode": "tls-rf",
+      "domains": [
+        "playstation.com"
+      ],
+      "ech_enabled": false,
+      "use_cf_pool": false,
+      "cert_verify": {},
+      "website": "playstation",
+      "enabled": true,
+      "nat64_enabled": false
+    },
+    {
+      "id": "sg-zoom",
+      "name": "Zoom",
+      "mode": "tls-rf",
+      "domains": [
+        "zoom.us"
+      ],
+      "ech_enabled": false,
+      "use_cf_pool": false,
+      "cert_verify": {},
+      "website": "zoom",
+      "enabled": true,
+      "nat64_enabled": false
     }
   ],
   "upstreams": [],
