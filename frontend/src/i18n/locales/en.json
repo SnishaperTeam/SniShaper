@@ -454,8 +454,9 @@
     },
     "download_source": {
       "title": "Download Source",
-      "desc": "Select the download source for update packages. The selected mirror is tried first, falling back to direct and other mirrors.",
+      "desc": "Pick the download source for update packages. Smart mode measures every mirror and uses the fastest; a specific mirror is tried first, falling back to direct and the other mirrors.",
       "direct": "Direct",
+      "smart": "Smart (auto-select fastest)",
       "custom": "Custom",
       "custom_placeholder": "https://your-mirror.example.com/",
       "measure": "Measure",

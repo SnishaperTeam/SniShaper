@@ -104,33 +104,10 @@ func (a *App) rulesFetchCandidates() []rulesFetchCandidate {
 		},
 	}
 
-	prefixes := []struct{ label, prefix string }{}
-	seen := map[string]bool{}
-	add := func(label, prefix string) {
-		if seen[label] {
-			return
-		}
-		seen[label] = true
-		prefixes = append(prefixes, struct{ label, prefix string }{label, prefix})
-	}
-	switch src := a.GetDownloadSource(); src {
-	case "custom":
-		add("custom", a.GetCustomDownloadSource())
-	case "direct", "":
-	default:
-		if p, ok := downloadSources[src]; ok {
-			add(src, p)
-		}
-	}
-	add("direct", "")
-	for _, name := range downloadSourceOrder {
-		add(name, downloadSources[name])
-	}
-	add("gh.llkk.cc", githubProxyBase)
-
-	candidates := make([]rulesFetchCandidate, 0, len(prefixes)*2)
-	for _, p := range prefixes {
-		candidates = append(candidates, rulesFetchCandidate{label: p.label, url: p.prefix + rulesRemoteURL, client: direct})
+	entries := a.downloadSourceEntries()
+	candidates := make([]rulesFetchCandidate, 0, len(entries)*2)
+	for _, e := range entries {
+		candidates = append(candidates, rulesFetchCandidate{label: e.label, url: e.prefix + rulesRemoteURL, client: direct})
 	}
 
 	if a.IsProxyRunning() {
@@ -142,8 +119,8 @@ func (a *App) rulesFetchCandidates() []rulesFetchCandidate {
 					TLSClientConfig: &tls.Config{MinVersion: tls.VersionTLS12},
 				},
 			}
-			for _, p := range prefixes {
-				candidates = append(candidates, rulesFetchCandidate{label: p.label + "+proxy", url: p.prefix + rulesRemoteURL, client: viaProxy})
+			for _, e := range entries {
+				candidates = append(candidates, rulesFetchCandidate{label: e.label + "+proxy", url: e.prefix + rulesRemoteURL, client: viaProxy})
 			}
 		}
 	}
@@ -151,10 +128,27 @@ func (a *App) rulesFetchCandidates() []rulesFetchCandidate {
 	return candidates
 }
 
+// fetchRemoteRules tries the configured download source first and only then
+// races the remaining mirrors, so the choice made in Settings is honoured.
 func (a *App) fetchRemoteRules() ([]byte, string, error) {
 	candidates := a.rulesFetchCandidates()
+	if len(candidates) == 0 {
+		return nil, "", fmt.Errorf("no download source available")
+	}
+
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
+
+	if body, err := fetchRulesFile(ctx, candidates[0].client, candidates[0].url); err == nil {
+		return body, candidates[0].label, nil
+	} else {
+		a.appendLog(fmt.Sprintf("[rules-update] %s failed: %v", candidates[0].label, err))
+	}
+
+	rest := candidates[1:]
+	if len(rest) == 0 {
+		return nil, "", fmt.Errorf("no reachable download source")
+	}
 
 	type outcome struct {
 		body   []byte
@@ -162,9 +156,9 @@ func (a *App) fetchRemoteRules() ([]byte, string, error) {
 		err    error
 	}
 
-	results := make(chan outcome, len(candidates))
+	results := make(chan outcome, len(rest))
 	var wg sync.WaitGroup
-	for _, c := range candidates {
+	for _, c := range rest {
 		wg.Add(1)
 		go func(c rulesFetchCandidate) {
 			defer wg.Done()
@@ -189,7 +183,7 @@ func (a *App) fetchRemoteRules() ([]byte, string, error) {
 		lastErr = r.err
 	}
 	if lastErr == nil {
-		lastErr = fmt.Errorf("no download source reachable")
+		lastErr = fmt.Errorf("no reachable download source")
 	}
 	return nil, "", lastErr
 }

@@ -93,6 +93,7 @@ const UPDATE_CHANNELS = [
 ];
 
 const DOWNLOAD_SOURCES = [
+  { value: 'smart', labelKey: 'settings.download_source.smart' },
   { value: 'direct', labelKey: 'settings.download_source.direct' },
   { value: 'down.mxw.qzz.io', label: 'down.mxw.qzz.io' },
   { value: 'gh-proxy.org', label: 'gh-proxy.org' },

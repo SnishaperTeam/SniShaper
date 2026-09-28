@@ -72,6 +72,9 @@ type App struct {
 	pendingUpdatePath   string
 	downloadConcurrency int
 	downloadChunkSize   int64
+	sourceRankMu        sync.Mutex
+	sourceRankCache     []string
+	sourceRankAt        time.Time
 	rulesWatchMu        sync.Mutex
 	rulesWatchStop      func()
 }

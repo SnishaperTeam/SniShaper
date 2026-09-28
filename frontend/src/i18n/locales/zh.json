@@ -454,8 +454,9 @@
     },
     "download_source": {
       "title": "下载源",
-      "desc": "选择更新包下载源，所选加速站优先，失败后自动回退直连与其他加速站。",
+      "desc": "选择更新包下载源：智能模式会自动为各加速站测速并选最快的；指定加速站时优先使用它，失败后自动回退直连与其他加速站。",
       "direct": "直连",
+      "smart": "智能（自动测速选最快）",
       "custom": "自定义",
       "custom_placeholder": "https://your-mirror.example.com/",
       "measure": "测速",

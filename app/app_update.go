@@ -35,6 +35,7 @@ var downloadSourceOrder = []string{
 }
 
 var downloadSources = map[string]string{
+	"smart":                "",
 	"direct":               "",
 	"down.mxw.qzz.io":      "https://down.mxw.qzz.io/",
 	"gh-proxy.org":         "https://gh-proxy.org/",
@@ -46,6 +47,11 @@ var downloadSources = map[string]string{
 }
 
 const defaultDownloadSource = "down.mxw.qzz.io"
+
+const (
+	smartSourceCacheTTL = 10 * time.Minute
+	sourceProbeURL      = "https://github.com/SnishaperTeam/SniShaper/releases/latest"
+)
 
 type githubRelease struct {
 	TagName    string        `json:"tag_name"`
@@ -164,7 +170,7 @@ func (a *App) MeasureDownloadSources() []DownloadSourceStatus {
 }
 
 func measureSourceLatency(name, prefix string) DownloadSourceStatus {
-	probe := "https://github.com/SnishaperTeam/SniShaper/releases/latest"
+	probe := sourceProbeURL
 	if prefix != "" {
 		probe = prefix + probe
 	}
@@ -186,6 +192,103 @@ func measureSourceLatency(name, prefix string) DownloadSourceStatus {
 	resp.Body.Close()
 	st.OK = true
 	return st
+}
+
+type downloadSourceEntry struct {
+	label  string
+	prefix string
+}
+
+// rankedSourceOrder measures every mirror and returns the reachable ones
+// fastest first, so the "smart" source always points at the quickest mirror.
+func (a *App) rankedSourceOrder() []string {
+	a.sourceRankMu.Lock()
+	cached, at := a.sourceRankCache, a.sourceRankAt
+	a.sourceRankMu.Unlock()
+	if len(cached) > 0 && time.Since(at) < smartSourceCacheTTL {
+		return cached
+	}
+
+	names := append([]string{"direct"}, downloadSourceOrder...)
+	type sample struct {
+		name      string
+		latencyMS int64
+		ok        bool
+	}
+	samples := make([]sample, len(names))
+	var wg sync.WaitGroup
+	for i, name := range names {
+		wg.Add(1)
+		go func(i int, name string) {
+			defer wg.Done()
+			st := measureSourceLatency(name, downloadSources[name])
+			samples[i] = sample{name: name, latencyMS: st.LatencyMS, ok: st.OK}
+		}(i, name)
+	}
+	wg.Wait()
+
+	sort.SliceStable(samples, func(i, j int) bool {
+		if samples[i].ok != samples[j].ok {
+			return samples[i].ok
+		}
+		return samples[i].latencyMS < samples[j].latencyMS
+	})
+	order := make([]string, 0, len(samples))
+	for _, s := range samples {
+		if s.ok {
+			order = append(order, s.name)
+		}
+	}
+	if len(order) == 0 {
+		order = names
+	}
+
+	a.sourceRankMu.Lock()
+	a.sourceRankCache, a.sourceRankAt = order, time.Now()
+	a.sourceRankMu.Unlock()
+	a.appendLog("[update] smart source ranking: " + strings.Join(order, " > "))
+	return order
+}
+
+// downloadSourceEntries lists the mirrors to try for the configured download
+// source, in order: the configured one first, then direct, then the rest.
+func (a *App) downloadSourceEntries() []downloadSourceEntry {
+	src := a.GetDownloadSource()
+	entries := []downloadSourceEntry{}
+	seen := map[string]bool{}
+	add := func(label, prefix string) {
+		if seen[prefix] {
+			return
+		}
+		seen[prefix] = true
+		entries = append(entries, downloadSourceEntry{label: label, prefix: prefix})
+	}
+
+	switch src {
+	case "custom":
+		if p := strings.TrimRight(a.GetCustomDownloadSource(), "/"); p != "" {
+			add("custom", p+"/")
+		}
+	case "smart":
+		for _, name := range a.rankedSourceOrder() {
+			add(name, downloadSources[name])
+		}
+	case "direct", "":
+		add("direct", "")
+	default:
+		if p, ok := downloadSources[src]; ok {
+			add(src, p)
+		}
+	}
+
+	add("direct", "")
+	for _, name := range downloadSourceOrder {
+		if name == src {
+			continue
+		}
+		add(name, downloadSources[name])
+	}
+	return entries
 }
 
 func (a *App) GetReleaseChannel() string {
@@ -371,7 +474,7 @@ func filterUpdateAssets(assets []githubAsset) []ReleaseAsset {
 	return result
 }
 
-func buildDownloadURLs(assetURL, preferred, customPrefix string) []string {
+func buildDownloadURLs(assetURL string, entries []downloadSourceEntry) []string {
 	seen := map[string]bool{}
 	var urls []string
 	add := func(u string) {
@@ -384,20 +487,10 @@ func buildDownloadURLs(assetURL, preferred, customPrefix string) []string {
 		add(assetURL)
 		return urls
 	}
-	if p := downloadSources[preferred]; p != "" {
-		add(p + assetURL)
-	} else if preferred == "custom" {
-		add(strings.TrimRight(customPrefix, "/") + "/" + assetURL)
+	for _, e := range entries {
+		add(e.prefix + assetURL)
 	}
 	add(assetURL)
-	for _, k := range downloadSourceOrder {
-		if k == preferred {
-			continue
-		}
-		if p := downloadSources[k]; p != "" {
-			add(p + assetURL)
-		}
-	}
 	return urls
 }
 
@@ -507,7 +600,7 @@ func (a *App) DownloadUpdateAsset(assetURL string) (DownloadResult, error) {
 		return DownloadResult{}, err
 	}
 	dest := filepath.Join(dir, fileName)
-	urls := buildDownloadURLs(assetURL, a.ruleManager.GetDownloadSource(), a.ruleManager.GetCustomDownloadSource())
+	urls := buildDownloadURLs(assetURL, a.downloadSourceEntries())
 	var lastErr error
 	for _, u := range urls {
 		if err := a.downloadFileWithProgress(u, dest, fileName); err != nil {
