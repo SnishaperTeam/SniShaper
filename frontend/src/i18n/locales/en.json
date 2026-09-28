@@ -278,7 +278,12 @@
     "edit_rule_aria": "Edit rule",
     "delete_rule_aria": "Delete rule",
     "filter_mode_aria": "Filter mode",
-    "export_aria": "Export config"
+    "export_aria": "Export config",
+    "update_rules": "Update rules",
+    "update_running": "Updating...",
+    "update_latest": "Rules are already up to date",
+    "update_applied": "Rules updated: {added} added, {changed} changed",
+    "update_failed": "Rules update failed"
   },
   "logs": {
     "title": "System Logs",
@@ -371,6 +376,10 @@
     "auto_sysproxy": {
       "title": "Set system proxy on auto-enable",
       "desc": "Also enable the system proxy when the proxy is auto-enabled at startup. Disable to start the local proxy service only."
+    },
+    "auto_update_rules": {
+      "title": "Auto-update rules",
+      "desc": "Check GitHub for the latest rules on every start and merge them in. Rules are only added and updated; rules you edited yourself are never overwritten."
     },
     "show_main": {
       "title": "Show main window on startup",

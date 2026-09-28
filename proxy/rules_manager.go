@@ -28,6 +28,7 @@ type RuleManager struct {
 	showMainOnAutoStart           bool
 	autoEnableProxyOnAutoStart    bool
 	autoEnableSysProxyOnAutoStart bool
+	autoUpdateRules               bool
 	socks5Enabled                 bool
 	socks5Port                    string
 	listenPort                    string
@@ -298,6 +299,7 @@ func (rm *RuleManager) loadSettingsConfig() error {
 	rm.showMainOnAutoStart = true
 	rm.autoEnableProxyOnAutoStart = false
 	rm.autoEnableSysProxyOnAutoStart = true
+	rm.autoUpdateRules = true
 
 	// 2. Override with JSON values if they exist
 	rm.cloudflareConfig = config.CloudflareConfig
@@ -334,6 +336,9 @@ func (rm *RuleManager) loadSettingsConfig() error {
 	}
 	if config.AutoEnableSysProxyOnAutoStart != nil {
 		rm.autoEnableSysProxyOnAutoStart = *config.AutoEnableSysProxyOnAutoStart
+	}
+	if config.AutoUpdateRules != nil {
+		rm.autoUpdateRules = *config.AutoUpdateRules
 	}
 	if config.Socks5Enabled != nil {
 		rm.socks5Enabled = *config.Socks5Enabled
@@ -388,6 +393,7 @@ func (rm *RuleManager) saveDefaultSettingsConfig() error {
 	rm.showMainOnAutoStart = true
 	rm.autoEnableProxyOnAutoStart = false
 	rm.autoEnableSysProxyOnAutoStart = true
+	rm.autoUpdateRules = true
 	rm.applySettingsDefaults()
 	return rm.saveSettingsConfig()
 }
@@ -640,6 +646,19 @@ func (rm *RuleManager) SetAutoEnableSysProxyOnAutoStart(enabled bool) error {
 	return rm.saveSettingsConfig()
 }
 
+func (rm *RuleManager) GetAutoUpdateRules() bool {
+	rm.mu.RLock()
+	defer rm.mu.RUnlock()
+	return rm.autoUpdateRules
+}
+
+func (rm *RuleManager) SetAutoUpdateRules(enabled bool) error {
+	rm.mu.Lock()
+	rm.autoUpdateRules = enabled
+	rm.mu.Unlock()
+	return rm.saveSettingsConfig()
+}
+
 func (r *RuleManager) GetLanguage() string {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
@@ -861,6 +880,7 @@ func (rm *RuleManager) saveSettingsConfig() error {
 	showMainOnAutoStart := rm.showMainOnAutoStart
 	autoEnableProxyOnAutoStart := rm.autoEnableProxyOnAutoStart
 	autoEnableSysProxyOnAutoStart := rm.autoEnableSysProxyOnAutoStart
+	autoUpdateRules := rm.autoUpdateRules
 	socks5Enabled := rm.socks5Enabled
 	migrationEnabled := rm.migrationEnabled
 	cloudflareConfig := rm.cloudflareConfig
@@ -875,6 +895,7 @@ func (rm *RuleManager) saveSettingsConfig() error {
 		ShowMainWindowOnAutoStart:  &showMainOnAutoStart,
 		AutoEnableProxyOnAutoStart: &autoEnableProxyOnAutoStart,
 		AutoEnableSysProxyOnAutoStart: &autoEnableSysProxyOnAutoStart,
+		AutoUpdateRules:               &autoUpdateRules,
 		CloudflareConfig:           cloudflareConfig,
 		AutoRouting:                rm.autoRoutingConfig,
 		TUN:                        tunConfig,

@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import {
-  Plus, Search, Filter, Edit, OpenInNew, Trash2, Activity, Zap
+  Plus, Search, Filter, Edit, OpenInNew, Trash2, Activity, Zap, RefreshCcw
 } from '../lib/icons';
 import {
-  GetSiteGroups, DeleteSiteGroup, ExportConfig, EventsOn
+  GetSiteGroups, DeleteSiteGroup, ExportConfig, EventsOn, UpdateRules
 } from '../api/bindings';
 import {
   Box, Typography, Button, IconButton, TextField, InputAdornment,
@@ -106,6 +106,7 @@ const Rules: React.FC = () => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingGroup, setEditingGroup] = useState<any>(null);
   const [pendingDeleteGroup, setPendingDeleteGroup] = useState<any>(null);
+  const [updatingRules, setUpdatingRules] = useState(false);
 
   const loadData = async () => {
     try { setGroups((await GetSiteGroups()) || []); }
@@ -130,6 +131,26 @@ const Rules: React.FC = () => {
     if (cfg) {
       await navigator.clipboard.writeText(cfg);
       toast.success(t('rules.copy_success'), t('rules.copy_hint'));
+    }
+  };
+
+  const handleUpdateRules = async () => {
+    if (updatingRules) return;
+    setUpdatingRules(true);
+    try {
+      const res: any = await UpdateRules();
+      if (res?.error) {
+        toast.error(t('rules.update_failed'), String(res.error));
+      } else if (res?.updated) {
+        toast.success(t('rules.update_applied', { added: res.added ?? 0, changed: res.changed ?? 0 }));
+        await loadData();
+      } else {
+        toast.success(t('rules.update_latest'), res?.source ? String(res.source) : undefined);
+      }
+    } catch (err: any) {
+      toast.error(t('rules.update_failed'), String(err));
+    } finally {
+      setUpdatingRules(false);
     }
   };
   const handleDeleteConfirm = async () => {
@@ -176,6 +197,16 @@ const Rules: React.FC = () => {
           <Typography variant="h5" sx={{ fontWeight: 700, letterSpacing: '-0.02em' }}>{t('rules.title')}</Typography>
         </Box>
         <Box sx={{ display: 'flex', gap: 1 }}>
+          <Button
+            onClick={handleUpdateRules}
+            disabled={updatingRules}
+            variant="outlined"
+            size="small"
+            aria-label={t('rules.update_rules')}
+            startIcon={<RefreshCcw size={16} />}
+          >
+            {updatingRules ? t('rules.update_running') : t('rules.update_rules')}
+          </Button>
           <Button onClick={handleExport} variant="outlined" size="small" aria-label={t('rules.export_aria')} sx={{ minWidth: 0, px: 1 }}>
             <OpenInNew size={16} />
           </Button>

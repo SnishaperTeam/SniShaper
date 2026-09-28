@@ -105,6 +105,7 @@ type SettingsConfig struct {
 	ShowMainWindowOnAutoStart     *bool             `json:"show_main_window_on_auto_start,omitempty"`
 	AutoEnableProxyOnAutoStart    *bool             `json:"auto_enable_proxy_on_auto_start,omitempty"`
 	AutoEnableSysProxyOnAutoStart *bool             `json:"auto_enable_sysproxy_on_auto_start,omitempty"`
+	AutoUpdateRules               *bool             `json:"auto_update_rules,omitempty"`
 	AutoRouting                   AutoRoutingConfig `json:"auto_routing,omitempty"`
 	TUN                           TUNConfig         `json:"tun,omitempty"`
 	Language                      string            `json:"language,omitempty"`

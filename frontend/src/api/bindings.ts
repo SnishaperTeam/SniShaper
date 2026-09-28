@@ -13,6 +13,9 @@ export const GetAutoEnableProxyOnAutoStart = () => appCall('GetAutoEnableProxyOn
 export const SetAutoEnableProxyOnAutoStart = (enabled: boolean) => appCall('SetAutoEnableProxyOnAutoStart', enabled);
 export const GetAutoEnableSysProxyOnAutoStart = () => appCall('GetAutoEnableSysProxyOnAutoStart');
 export const SetAutoEnableSysProxyOnAutoStart = (enabled: boolean) => appCall('SetAutoEnableSysProxyOnAutoStart', enabled);
+export const GetAutoUpdateRules = () => appCall('GetAutoUpdateRules');
+export const SetAutoUpdateRules = (enabled: boolean) => appCall('SetAutoUpdateRules', enabled);
+export const UpdateRules = () => appCall('UpdateRules');
 export const GetLanguage = () => appCall('GetLanguage');
 export const SetLanguage = (lang: string) => appCall('SetLanguage', lang);
 export const GetTheme = () => appCall('GetTheme');

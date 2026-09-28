@@ -10,6 +10,9 @@ build/bin/
 .gocache/
 *.test
 
+# Rules remote sync state (written next to the live rules file)
+rules_remote_sync.json
+
 # Frontend deps and build artifacts
 node_modules/
 frontend/node_modules/

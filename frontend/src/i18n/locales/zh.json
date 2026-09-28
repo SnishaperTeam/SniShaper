@@ -278,7 +278,12 @@
     "edit_rule_aria": "编辑规则",
     "delete_rule_aria": "删除规则",
     "filter_mode_aria": "筛选模式",
-    "export_aria": "导出配置"
+    "export_aria": "导出配置",
+    "update_rules": "更新规则",
+    "update_running": "更新中…",
+    "update_latest": "规则已是最新",
+    "update_applied": "规则已更新：新增 {added} 条，修改 {changed} 条",
+    "update_failed": "规则更新失败"
   },
   "logs": {
     "title": "系统日志",
@@ -371,6 +376,10 @@
     "auto_sysproxy": {
       "title": "自动开启代理时设置系统代理",
       "desc": "自动开启代理生效后同步打开系统代理；关闭则仅启动本地代理服务，不修改系统代理设置。"
+    },
+    "auto_update_rules": {
+      "title": "自动更新规则",
+      "desc": "每次启动程序时从 GitHub 检查并合并最新规则；只新增和更新，你自己改过的规则不会被覆盖。"
     },
     "show_main": {
       "title": "启动时显示主界面",

@@ -9,6 +9,7 @@ import {
   GetAutoStart, SetAutoStart, GetShowMainWindowOnAutoStart, SetShowMainWindowOnAutoStart,
   GetAutoEnableProxyOnAutoStart, SetAutoEnableProxyOnAutoStart,
   GetAutoEnableSysProxyOnAutoStart, SetAutoEnableSysProxyOnAutoStart,
+  GetAutoUpdateRules, SetAutoUpdateRules,
   GetSocks5Port, SetSocks5Port, GetTUNConfig, UpdateTUNConfig, GetTUNStatus,
   OpenCertDir, RegenerateCert, GetCAInstallStatus, GetInstalledCerts,
   UninstallCert, ExportConfig, ImportConfigWithSummary,
@@ -112,6 +113,7 @@ const Settings: React.FC<SettingsProps> = ({ cache, onCacheUpdate, currentThemeI
   const [showMainOnAutoStart, setShowMainOnAutoStart] = useState(cache.showMainOnAutoStart);
   const [autoEnableProxyOnAutoStart, setAutoEnableProxyOnAutoStart] = useState(cache.autoEnableProxyOnAutoStart);
   const [autoEnableSysProxyOnAutoStart, setAutoEnableSysProxyOnAutoStart] = useState(cache.autoEnableSysProxyOnAutoStart);
+  const [autoUpdateRules, setAutoUpdateRules] = useState(cache.autoUpdateRules !== false);
   const [cfConfig, setCfConfig] = useState<any>(cache.cfConfig);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isCheckingHealth, setIsCheckingHealth] = useState(false);
@@ -286,6 +288,15 @@ const Settings: React.FC<SettingsProps> = ({ cache, onCacheUpdate, currentThemeI
       onCacheUpdate({ autoEnableSysProxyOnAutoStart: val });
       toast.success(t('settings.notifications.updated'));
     } catch (err: any) { setAutoEnableSysProxyOnAutoStart(!val); toast.error(t('common.failed'), String(err)); }
+  };
+
+  const handleToggleAutoUpdateRules = async (val: boolean) => {
+    setAutoUpdateRules(val);
+    try {
+      await SetAutoUpdateRules(val);
+      onCacheUpdate({ autoUpdateRules: val });
+      toast.success(t('settings.notifications.updated'));
+    } catch (err: any) { setAutoUpdateRules(!val); toast.error(t('common.failed'), String(err)); }
   };
 
   const handleToggleShowMainWindowOnAutoStart = async (val: boolean) => {
@@ -642,6 +653,13 @@ const Settings: React.FC<SettingsProps> = ({ cache, onCacheUpdate, currentThemeI
                     </Box>
                   )}
                 </Box>
+              </SettingRowInline>
+              <SettingRowInline title={t('settings.auto_update_rules.title')} desc={t('settings.auto_update_rules.desc')} icon={<RefreshCcw size={18} />}>
+                <FormControlLabel
+                  control={<Switch checked={autoUpdateRules} onChange={(e) => handleToggleAutoUpdateRules(e.target.checked)} />}
+                  label={t('settings.auto_update_rules.title')}
+                  sx={{ gap: 1, marginLeft: 0, marginRight: 0 }}
+                />
               </SettingRowInline>
             </Box>
           </Box>

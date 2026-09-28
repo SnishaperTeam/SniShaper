@@ -9,7 +9,7 @@ import ToastProvider from './components/ToastProvider';
 import { appTheme, defaultTheme, availableThemes } from './theme';
 import {
   GetListenPort, GetCloseToTray, GetAutoStart,
-  GetShowMainWindowOnAutoStart, GetAutoEnableProxyOnAutoStart, GetAutoEnableSysProxyOnAutoStart, GetSocks5Enabled, GetSocks5Port,
+  GetShowMainWindowOnAutoStart, GetAutoEnableProxyOnAutoStart, GetAutoEnableSysProxyOnAutoStart, GetAutoUpdateRules, GetSocks5Enabled, GetSocks5Port,
   GetTUNConfig, GetTUNStatus, GetCloudflareConfig,
   GetCAInstallStatus, GetInstalledCerts, GetCloudflareIPStats,
   GetLanguage, GetTheme, SetTheme, GetIPv6Available, EventsOn
@@ -39,6 +39,7 @@ interface SettingsCache {
   showMainOnAutoStart: boolean;
   autoEnableProxyOnAutoStart: boolean;
   autoEnableSysProxyOnAutoStart: boolean;
+  autoUpdateRules: boolean;
   socks5Enabled: boolean;
   socks5Port: string;
   tunConfig: any;
@@ -56,6 +57,7 @@ const defaultCache: SettingsCache = {
   port: 8080, closeToTray: false, autoStart: false,
   showMainOnAutoStart: true, autoEnableProxyOnAutoStart: false,
   autoEnableSysProxyOnAutoStart: true,
+  autoUpdateRules: true,
   socks5Enabled: false,
   socks5Port: '8081',
   tunConfig: { enabled: false, mtu: 9000, dns_hijack: true, auto_route: true, strict_route: true },
@@ -100,9 +102,9 @@ const App: React.FC = () => {
     const fastLoad = async () => {
       try {
         const [language, port, closeToTray, autoStart,
-          showMainOnAutoStart, autoEnableProxyOnAutoStart, autoEnableSysProxyOnAutoStart, socks5Enabled, socks5Port, cfConfig, ipv6Available] = await Promise.all([
+          showMainOnAutoStart, autoEnableProxyOnAutoStart, autoEnableSysProxyOnAutoStart, autoUpdateRules, socks5Enabled, socks5Port, cfConfig, ipv6Available] = await Promise.all([
           GetLanguage(), GetListenPort(), GetCloseToTray(), GetAutoStart(),
-          GetShowMainWindowOnAutoStart(), GetAutoEnableProxyOnAutoStart(), GetAutoEnableSysProxyOnAutoStart(), GetSocks5Enabled(), GetSocks5Port(), GetCloudflareConfig(), GetIPv6Available()
+          GetShowMainWindowOnAutoStart(), GetAutoEnableProxyOnAutoStart(), GetAutoEnableSysProxyOnAutoStart(), GetAutoUpdateRules(), GetSocks5Enabled(), GetSocks5Port(), GetCloudflareConfig(), GetIPv6Available()
         ]);
         if (language) {
           localStorage.setItem('language', language as string);
@@ -116,6 +118,7 @@ const App: React.FC = () => {
           showMainOnAutoStart: showMainOnAutoStart ?? prev.showMainOnAutoStart,
           autoEnableProxyOnAutoStart: autoEnableProxyOnAutoStart ?? prev.autoEnableProxyOnAutoStart,
           autoEnableSysProxyOnAutoStart: autoEnableSysProxyOnAutoStart ?? prev.autoEnableSysProxyOnAutoStart,
+          autoUpdateRules: autoUpdateRules ?? prev.autoUpdateRules,
           socks5Enabled: socks5Enabled ?? prev.socks5Enabled,
           socks5Port: (socks5Port as string) || '8081',
           cfConfig: cfConfig || prev.cfConfig,

@@ -291,6 +291,18 @@ func (a *App) startupV3() {
 		})
 	}
 
+	if a.GetAutoUpdateRules() {
+		a.appendLog("[startup] AutoUpdate: rules sync scheduled")
+		a.runSafeAsync("startup rules update", func() {
+			select {
+			case <-time.After(autoRulesUpdateDelay):
+			case <-a.ctx.Done():
+				return
+			}
+			a.syncRemoteRules()
+		})
+	}
+
 	a.startIPv6Monitor()
 	a.RefreshIPv6Check()
 	a.startRouteEventsPoller()
