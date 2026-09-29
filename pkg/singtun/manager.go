@@ -6,28 +6,32 @@ import (
 	"net/netip"
 	"runtime"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/sagernet/sing-tun"
 	"github.com/sagernet/sing/common/control"
 
 	"snishaper/pkg/dohresolver"
+	"snishaper/pkg/netiface"
 	"snishaper/proxy"
 )
 
-// Manager 管理 sing-tun TUN 接口
 type Manager struct {
-	mu          sync.Mutex
-	tun         tun.Tun
-	stack       tun.Stack
-	handler     *Handler
-	options     tun.Options
-	running     bool
-	resolver    *dohresolver.FailoverResolver
-	logf        func(string)
+	mu             sync.Mutex
+	tun            tun.Tun
+	stack          tun.Stack
+	handler        *Handler
+	options        tun.Options
+	running        bool
+	releasing      atomic.Bool
+	resolver       *dohresolver.FailoverResolver
+	logf           func(string)
+	ifaceConfig    netiface.Config
+	networkMonitor tun.NetworkUpdateMonitor
+	ifaceMonitor   tun.DefaultInterfaceMonitor
 }
 
-// NewManager 创建新的 TUN 管理器
 func NewManager(resolver *dohresolver.FailoverResolver, logf func(string)) *Manager {
 	return &Manager{
 		resolver: resolver,
@@ -35,16 +39,28 @@ func NewManager(resolver *dohresolver.FailoverResolver, logf func(string)) *Mana
 	}
 }
 
-// Start 启动 TUN
-func (m *Manager) Start(cfg proxy.TUNConfig, proxyAddr string) error {
+func (m *Manager) Start(cfg proxy.TUNConfig, proxyAddr string) (err error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
 	if m.running {
 		return nil
 	}
+	if err = m.waitReleasingLocked(); err != nil {
+		return err
+	}
 
-	// 1. 构建 TUN 选项
+	released := false
+	defer func() {
+		if err == nil || released {
+			return
+		}
+		m.releaseLocked()
+	}()
+
+	netiface.InvalidateCache()
+	m.ifaceConfig = cfg.InterfaceConfig()
+
 	mtu := cfg.MTU
 	if mtu <= 0 {
 		mtu = 9000
@@ -64,35 +80,29 @@ func (m *Manager) Start(cfg proxy.TUNConfig, proxyAddr string) error {
 		AutoRoute:    cfg.AutoRoute,
 		StrictRoute:  cfg.StrictRoute,
 		DNSServers: []netip.Addr{
-			// 用 TUN 网段内的非自身地址（198.18.0.2），原因：
-			// 1. 查询路由进 TUN → gvisor 劫持（UDP:53）→ Handler 生成 fake-ip；
-			// 2. 不能用 127.0.0.1（被 Inet4RouteExcludeAddress 排除，走 loopback），
-			//    也不能用 198.18.0.1（TUN 自身地址，OS 本地投递，不经过 TUN）；
-			// 3. 不能用公共 DNS（如 1.1.1.1）：Chrome 检测到系统 DNS 是公共 DNS 会
-			//    自动启用 Secure DNS (DoH)，查询走 443 绕过 fake-ip 劫持，且 DoH
-			//    域名被 MITM 规则处理后上游超时。私有地址不触发 DoH。
 			netip.MustParseAddr("198.18.0.2"),
 			netip.MustParseAddr("fd65:198:18::2"),
 		},
-		// 启用 DNS 劫持，使用 fake-ip 模式
 		EXP_DisableDNSHijack: false,
-		// 自环防护：排除 loopback
-		Inet4RouteExcludeAddress: []netip.Prefix{
-			netip.MustParsePrefix("127.0.0.0/8"),
-		},
-		Inet6RouteExcludeAddress: []netip.Prefix{
-			netip.MustParsePrefix("::1/128"),
-		},
+		Inet4RouteExcludeAddress: append(
+			[]netip.Prefix{netip.MustParsePrefix("127.0.0.0/8")},
+			routeExcludePrefixes(cfg, false)...,
+		),
+		Inet6RouteExcludeAddress: append(
+			[]netip.Prefix{netip.MustParsePrefix("::1/128")},
+			routeExcludePrefixes(cfg, true)...,
+		),
 		Logger: &singTunLogger{m.logf},
 	}
 
-	// 创建 InterfaceMonitor (sing-tun 需要)
 	if cfg.AutoRoute {
+		stageStart := time.Now()
 		ifaceFinder := control.NewDefaultInterfaceFinder()
 		if err := ifaceFinder.Update(); err != nil {
 			m.logf("[sing-tun] failed to update interface finder: " + err.Error())
 		}
 		m.options.InterfaceFinder = ifaceFinder
+		m.logf("[sing-tun] start: interface finder updated in " + time.Since(stageStart).String())
 
 		networkMonitor, err := tun.NewNetworkUpdateMonitor(&singTunLogger{m.logf})
 		if err != nil {
@@ -100,26 +110,30 @@ func (m *Manager) Start(cfg proxy.TUNConfig, proxyAddr string) error {
 		} else {
 			if err := networkMonitor.Start(); err != nil {
 				m.logf("[sing-tun] failed to start network monitor: " + err.Error())
-			}
-			ifaceMonitor, err := tun.NewDefaultInterfaceMonitor(networkMonitor, &singTunLogger{m.logf}, tun.DefaultInterfaceMonitorOptions{
-				InterfaceFinder: ifaceFinder,
-			})
-			if err != nil {
-				m.logf("[sing-tun] failed to create interface monitor: " + err.Error())
+				networkMonitor.Close()
 			} else {
-				if err := ifaceMonitor.Start(); err != nil {
-					m.logf("[sing-tun] failed to start interface monitor: " + err.Error())
+				m.networkMonitor = networkMonitor
+				ifaceMonitor, err := tun.NewDefaultInterfaceMonitor(networkMonitor, &singTunLogger{m.logf}, tun.DefaultInterfaceMonitorOptions{
+					InterfaceFinder: ifaceFinder,
+				})
+				if err != nil {
+					m.logf("[sing-tun] failed to create interface monitor: " + err.Error())
+				} else {
+					if err := ifaceMonitor.Start(); err != nil {
+						m.logf("[sing-tun] failed to start interface monitor: " + err.Error())
+						ifaceMonitor.Close()
+						networkMonitor.Close()
+						m.networkMonitor = nil
+					} else {
+						m.ifaceMonitor = ifaceMonitor
+						m.options.InterfaceMonitor = ifaceMonitor
+					}
 				}
-				m.options.InterfaceMonitor = ifaceMonitor
 			}
 		}
 	}
 
-	// 2. 创建 TUN 接口
-	// macOS 仅接受 utunN 形式的接口名（sing-tun darwin 实现以 Sscanf("utun%d")
-	// 解析名称，且不支持序号自动分配），固定名 "SniShaper" 会直接报
-	// "bad tun name"。因此在 darwin 上循环探测空闲序号；其他平台沿用原名。
-	var err error
+	tunStart := time.Now()
 	if runtime.GOOS == "darwin" {
 		var lastErr error
 		for i := 0; i < 128; i++ {
@@ -136,16 +150,16 @@ func (m *Manager) Start(cfg proxy.TUNConfig, proxyAddr string) error {
 			return fmt.Errorf("create tun failed (tried utun0..utun127): %w", lastErr)
 		}
 	} else {
-		m.tun, err = tun.New(m.options)
-		if err != nil {
-			return fmt.Errorf("create tun failed: %w", err)
+		if m.tun, err = newTunWithRetry(m.options, m.logf); err != nil {
+			return err
 		}
 	}
+	m.logf("[sing-tun] start: tun.New completed in " + time.Since(tunStart).String())
 
-	// 3. 创建 Handler
 	m.handler = NewHandler(proxyAddr, m.resolver, m.logf)
+	m.handler.SetInterfaceConfig(cfg.InterfaceConfig())
 
-	// 4. 创建网络栈
+	stackStart := time.Now()
 	m.stack, err = tun.NewStack("gvisor", tun.StackOptions{
 		Context:    context.Background(),
 		Tun:        m.tun,
@@ -155,28 +169,152 @@ func (m *Manager) Start(cfg proxy.TUNConfig, proxyAddr string) error {
 		Logger:     &singTunLogger{m.logf},
 	})
 	if err != nil {
-		m.tun.Close()
 		return fmt.Errorf("create stack failed: %w", err)
 	}
+	m.logf("[sing-tun] start: NewStack completed in " + time.Since(stackStart).String())
 
-	// 5. 启动 TUN 接口 (添加路由)
-	if err := m.tun.Start(); err != nil {
-		m.tun.Close()
+	routeStart := time.Now()
+	if err = m.tun.Start(); err != nil {
 		return fmt.Errorf("start tun failed: %w", err)
 	}
+	m.logf("[sing-tun] start: tun.Start (routes+dns) completed in " + time.Since(routeStart).String())
 
-	// 6. 启动网络栈
-	if err := m.stack.Start(); err != nil {
-		m.tun.Close()
+	stackUpStart := time.Now()
+	if err = m.stack.Start(); err != nil {
 		return fmt.Errorf("start stack failed: %w", err)
 	}
+	m.logf("[sing-tun] start: stack.Start completed in " + time.Since(stackUpStart).String())
 
 	m.running = true
+	released = true
+	netiface.InvalidateCache()
 	m.logf("[sing-tun] TUN started, running=true")
 	return nil
 }
 
-// Stop 停止 TUN
+func newTunWithRetry(options tun.Options, logf func(string)) (tun.Tun, error) {
+	maxRetry := 3
+	var lastErr error
+	for i := 0; i < maxRetry; i++ {
+		attemptStart := time.Now()
+		t, err := tun.New(options)
+		if err == nil {
+			return t, nil
+		}
+		lastErr = err
+		if time.Since(attemptStart) < time.Second {
+			return nil, fmt.Errorf("create tun failed: %w", err)
+		}
+		logf("[sing-tun] tun.New slow failure, retrying " + fmt.Sprint(i+1) + "/" + fmt.Sprint(maxRetry) + ": " + err.Error())
+	}
+	return nil, fmt.Errorf("create tun failed after %d attempts: %w", maxRetry, lastErr)
+}
+
+func (m *Manager) waitReleasingLocked() error {
+	deadline := time.Now().Add(12 * time.Second)
+	for m.releasing.Load() {
+		if time.Now().After(deadline) {
+			return fmt.Errorf("previous TUN release still in progress, try again later")
+		}
+		m.mu.Unlock()
+		time.Sleep(100 * time.Millisecond)
+		m.mu.Lock()
+	}
+	return nil
+}
+
+func (m *Manager) releaseLocked() {
+	m.releasing.Store(true)
+	defer m.releasing.Store(false)
+
+	if m.handler != nil {
+		m.handler.Close()
+	}
+	if m.stack != nil {
+		start := time.Now()
+		m.logf("[sing-tun] release: closing stack (detaches dispatcher)")
+		m.stack.Close()
+		m.stack = nil
+		m.logf("[sing-tun] release: stack closed in " + time.Since(start).String())
+	}
+	if m.tun != nil {
+		start := time.Now()
+		m.logf("[sing-tun] release: closing tun")
+		if closeWithTimeout("tun", m.tun.Close, 10*time.Second, m.logf) {
+			dumpGoroutines(m.logf)
+		}
+		m.tun = nil
+		m.logf("[sing-tun] release: tun close stage done in " + time.Since(start).String())
+	}
+	if m.ifaceMonitor != nil {
+		start := time.Now()
+		m.logf("[sing-tun] release: closing interface monitor")
+		m.ifaceMonitor.Close()
+		m.ifaceMonitor = nil
+		m.options.InterfaceMonitor = nil
+		m.logf("[sing-tun] release: interface monitor closed in " + time.Since(start).String())
+	}
+	if m.networkMonitor != nil {
+		start := time.Now()
+		m.logf("[sing-tun] release: closing network monitor")
+		m.networkMonitor.Close()
+		m.networkMonitor = nil
+		m.logf("[sing-tun] release: network monitor closed in " + time.Since(start).String())
+	}
+	m.handler = nil
+	m.running = false
+}
+
+func closeWithTimeout(name string, shutdown func() error, timeout time.Duration, logf func(string)) bool {
+	done := make(chan struct{})
+	start := time.Now()
+	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				logf("[sing-tun] release: " + name + " close panicked: " + fmt.Sprint(r))
+			}
+			close(done)
+		}()
+		if err := shutdown(); err != nil {
+			logf("[sing-tun] release: " + name + " close error: " + err.Error())
+		}
+	}()
+	select {
+	case <-done:
+		logf("[sing-tun] release: " + name + " closed in " + time.Since(start).String())
+		return false
+	case <-time.After(timeout):
+		logf("[sing-tun] release: " + name + " close timed out after " + timeout.String() + ", continuing")
+		return true
+	}
+}
+
+func dumpGoroutines(logf func(string)) {
+	buf := make([]byte, 1<<20)
+	n := runtime.Stack(buf, true)
+	s := string(buf[:n])
+	const chunkSize = 16 * 1024
+	const capSize = 128 * 1024
+	for i := 0; i < len(s) && i < capSize; i += chunkSize {
+		end := i + chunkSize
+		if end > len(s) {
+			end = len(s)
+		}
+		logf("[sing-tun] goroutine dump (" + fmt.Sprint(i/chunkSize+1) + "): " + s[i:end])
+	}
+	if len(s) > capSize {
+		logf("[sing-tun] goroutine dump truncated at " + fmt.Sprint(capSize) + " bytes (total " + fmt.Sprint(len(s)) + ")")
+	}
+}
+
+func routeExcludePrefixes(cfg proxy.TUNConfig, ipv6 bool) []netip.Prefix {
+	ipv4Prefixes, ipv6Prefixes := cfg.RouteExcludePrefixes()
+	if ipv6 {
+		return ipv6Prefixes
+	}
+	return ipv4Prefixes
+}
+
 func (m *Manager) Stop() error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -185,21 +323,23 @@ func (m *Manager) Stop() error {
 		return nil
 	}
 
-	if m.stack != nil {
-		m.stack.Close()
-	}
-	if m.tun != nil {
-		m.tun.Close()
-	}
-
-	m.running = false
+	m.releaseLocked()
+	netiface.InvalidateCache()
 	m.logf("[sing-tun] TUN stopped")
 	return nil
 }
 
-// Status 获取 TUN 状态
 func (m *Manager) Status() proxy.TUNStatus {
-	m.mu.Lock()
+	if m.releasing.Load() || !m.mu.TryLock() {
+		return proxy.TUNStatus{
+			Supported: true,
+			Running:   false,
+			Enabled:   false,
+			Driver:    "sing-tun",
+			Message:   "TUN is not running",
+		}
+	}
+
 	defer m.mu.Unlock()
 
 	status := proxy.TUNStatus{

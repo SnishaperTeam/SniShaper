@@ -202,6 +202,9 @@ func tunConfig(args []string, out cmdOut) int {
 	if payload.StrictRoute != nil {
 		current.StrictRoute = *payload.StrictRoute
 	}
+	if payload.InterfaceName != nil {
+		current.InterfaceName = *payload.InterfaceName
+	}
 
 	if err := a.UpdateTUNConfig(current); err != nil {
 		out("保存 TUN 配置失败: " + err.Error())
@@ -216,9 +219,10 @@ func tunConfig(args []string, out cmdOut) int {
 // tunConfigPayload uses pointers so a partial update cannot silently switch
 // unset options off.
 type tunConfigPayload struct {
-	Enabled     *bool `json:"enabled,omitempty"`
-	MTU         *int  `json:"mtu,omitempty"`
-	DNSHijack   *bool `json:"dns_hijack,omitempty"`
-	AutoRoute   *bool `json:"auto_route,omitempty"`
-	StrictRoute *bool `json:"strict_route,omitempty"`
+	Enabled       *bool   `json:"enabled,omitempty"`
+	MTU           *int    `json:"mtu,omitempty"`
+	DNSHijack     *bool   `json:"dns_hijack,omitempty"`
+	AutoRoute     *bool   `json:"auto_route,omitempty"`
+	StrictRoute   *bool   `json:"strict_route,omitempty"`
+	InterfaceName *string `json:"interface_name,omitempty"`
 }

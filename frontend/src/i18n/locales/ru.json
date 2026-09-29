@@ -52,6 +52,15 @@
     "proxy_stop": "Остановить прокси",
     "sys_proxy": "Системный прокси",
     "tun_status": "TUN",
+    "outbound_interface": "Исходящий интерфейс",
+    "outbound_interface_smart": "Авто (рекомендуется)",
+    "outbound_interface_hint": "Физический адаптер для исходящего трафика TUN. В авторежиме виртуальные адаптеры пропускаются, выбирается физический владелец маршрута по умолчанию с наименьшей метрикой.",
+    "outbound_interface_virtual": "вирт.",
+    "outbound_interface_own": "TUN прокси",
+    "outbound_interface_default": "маршрут по умолч.",
+    "outbound_interface_auto_pick": "авто",
+    "outbound_interface_applied": "Исходящий интерфейс обновлён",
+    "outbound_interface_failed": "Не удалось переключить исходящий интерфейс",
     "core_status": "Статус ядра",
     "run_status": "Статус запуска",
     "work_mode": "Режим работы",
@@ -81,6 +90,7 @@
       "kill_process_failed": "Не удалось завершить процесс или перезапустить",
       "sys_proxy_failed": "Не удалось изменить системный прокси",
       "tun_starting": "TUN запускается, подождите...",
+      "tun_timeout": "Время запуска TUN истекло. Проверьте журнал.",
       "tun_stopped": "Путь TUN отключён."
     },
     "port_occupied": {

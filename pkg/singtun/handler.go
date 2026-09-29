@@ -19,15 +19,44 @@ import (
 	N "github.com/sagernet/sing/common/network"
 
 	"snishaper/pkg/dohresolver"
+	"snishaper/pkg/netiface"
 )
 
 // Handler 实现 sing-tun 的 Handler 接口
 // 负责将 TUN 流量转发到 SniShaper Proxy
 type Handler struct {
-	proxyAddr string
-	resolver  *dohresolver.FailoverResolver
-	fakeIP    *FakeIPStore
-	logf      func(string)
+	proxyAddr   string
+	resolver    *dohresolver.FailoverResolver
+	fakeIP      *FakeIPStore
+	logf        func(string)
+	ifaceConfig netiface.Config
+	mu          sync.Mutex
+	live        map[net.Conn]struct{}
+}
+
+func (h *Handler) track(c net.Conn) {
+	h.mu.Lock()
+	if h.live == nil {
+		h.live = make(map[net.Conn]struct{})
+	}
+	h.live[c] = struct{}{}
+	h.mu.Unlock()
+}
+
+func (h *Handler) untrack(c net.Conn) {
+	h.mu.Lock()
+	delete(h.live, c)
+	h.mu.Unlock()
+}
+
+func (h *Handler) Close() {
+	h.mu.Lock()
+	conns := h.live
+	h.live = nil
+	h.mu.Unlock()
+	for c := range conns {
+		c.Close()
+	}
 }
 
 // NewHandler 创建新的 Handler
@@ -40,6 +69,10 @@ func NewHandler(proxyAddr string, resolver *dohresolver.FailoverResolver, logf f
 	}
 	h.logf("[sing-tun] Handler created, proxy: " + proxyAddr)
 	return h
+}
+
+func (h *Handler) SetInterfaceConfig(cfg netiface.Config) {
+	h.ifaceConfig = cfg
 }
 
 // PrepareConnection 在连接建立前调用，可用于规则预匹配
@@ -152,8 +185,13 @@ func (h *Handler) NewConnectionEx(ctx context.Context, conn net.Conn, source M.S
 	// （代理在 200 响应后可能立即发送 TLS ServerHello 等数据）
 	upstream = &bufferedConn{Conn: upstream, br: br}
 
-	// 双向复制数据
-	go h.proxyConn(ctx, conn, upstream, onClose)
+	go func() {
+		h.track(conn)
+		h.track(upstream)
+		h.proxyConn(ctx, conn, upstream, onClose)
+		h.untrack(conn)
+		h.untrack(upstream)
+	}()
 }
 
 // isHTTPSuccess 检查 HTTP 状态行是否为 2xx
@@ -467,10 +505,13 @@ func (h *Handler) sendDNSResponse(conn N.PacketConn, msg *dns.Msg, dest M.Socksa
 		h.logf("[sing-tun] failed to pack DNS response: " + err.Error())
 		return
 	}
+	// WritePacket 的契约是消费并释放传入的 buffer（UDPBackWriter.WritePacket
+	// 内部 defer packetBuffer.Release()），成功路径由它负责回收；
+	// 仅在其返回错误、可能未接管所有权时兜底释放。
 	respBuf := buf.NewPacket()
-	defer respBuf.Release()
 	respBuf.Write(respBytes)
 	if err := conn.WritePacket(respBuf, dest); err != nil {
+		respBuf.Release()
 		h.logf("[sing-tun] failed to write DNS response to " + dest.String() + ": " + err.Error())
 	}
 }
@@ -605,8 +646,13 @@ func (h *Handler) forwardUDPDirect(ctx context.Context, conn N.PacketConn, sourc
 				responsePacket := buf.NewPacket()
 				responsePacket.Write(responseBuf[:n])
 				// WritePacket 的 dest 是响应包的源地址（远端服务器），不是目标（应用）
-				_ = conn.WritePacket(responsePacket, destination)
-				responsePacket.Release()
+				// 所有权随 WritePacket 转移，由 gvisor 背压写端负责 Release
+				if err := conn.WritePacket(responsePacket, destination); err != nil {
+					responsePacket.Release()
+					h.logf("[sing-tun] failed to write UDP response: " + err.Error())
+					remoteConn.Close()
+					return
+				}
 			}
 		}()
 
@@ -677,38 +723,14 @@ func (h *Handler) dialProxy() (net.Conn, error) {
 // wantIPv6=true 时返回 IPv6 地址，否则返回 IPv4 地址
 // 用于 forwardUDPDirect 绑定物理网卡，避免 UDP 包进 TUN 循环
 func (h *Handler) getPhysicalUDPAddr(wantIPv6 bool) net.IP {
-	interfaces, err := net.Interfaces()
+	family := netiface.FamilyIPv4
+	if wantIPv6 {
+		family = netiface.FamilyIPv6
+	}
+	binding, err := netiface.Select(family, h.ifaceConfig, h.logf)
 	if err != nil {
+		h.logf("[sing-tun] no physical UDP bind address: " + err.Error())
 		return nil
 	}
-	for _, iface := range interfaces {
-		if iface.Flags&net.FlagLoopback != 0 || iface.Flags&net.FlagUp == 0 {
-			continue
-		}
-		name := iface.Name
-		if strings.Contains(name, "SniShaper") || strings.Contains(name, "tun") || strings.Contains(name, "TAP") {
-			continue
-		}
-		addrs, err := iface.Addrs()
-		if err != nil || len(addrs) == 0 {
-			continue
-		}
-		for _, addr := range addrs {
-			ipNet, ok := addr.(*net.IPNet)
-			if !ok {
-				continue
-			}
-			if wantIPv6 {
-				if ipNet.IP.To4() != nil {
-					continue
-				}
-				return ipNet.IP
-			}
-			if ipNet.IP.To4() == nil {
-				continue
-			}
-			return ipNet.IP
-		}
-	}
-	return nil
+	return net.IP(binding.Address.AsSlice())
 }

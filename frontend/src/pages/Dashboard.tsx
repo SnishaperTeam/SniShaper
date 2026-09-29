@@ -22,6 +22,8 @@ import {
   KillPortOccupant,
   GetTUNConfig,
   GetTUNStatus,
+  GetNetworkInterfaces,
+  SetTUNInterface,
   StartProxy,
   StartTUN,
   StopProxy,
@@ -42,6 +44,12 @@ import {
   Typography,
   Button,
   Grid,
+  FormControl,
+  Select,
+  MenuItem,
+  ListSubheader,
+  Tooltip,
+  CircularProgress,
 } from '@mui/material';
 
 const Dashboard: React.FC = () => {
@@ -56,6 +64,9 @@ const Dashboard: React.FC = () => {
   const [isPageVisible, setIsPageVisible] = useState(true);
   const inactivityTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [tunConfig, setTunConfig] = useState<any>({ mtu: 9000, dns_hijack: true });
+  const [interfaces, setInterfaces] = useState<any[]>([]);
+  const [outboundInterface, setOutboundInterface] = useState('');
+  const [ifaceBusy, setIfaceBusy] = useState(false);
   const [tunStatus, setTunStatus] = useState<any>({
     supported: true, running: false, enabled: false, message: t('common.loading')
   });
@@ -86,6 +97,7 @@ const Dashboard: React.FC = () => {
         mtu: Number(tunCfg?.mtu ?? tunCfg?.MTU ?? 9000),
         dns_hijack: Boolean(tunCfg?.dns_hijack ?? tunCfg?.DNSHijack ?? true),
       };
+      setOutboundInterface(String(tunCfg?.interface_name ?? tunCfg?.InterfaceName ?? ''));
       const normalizedTunStatus = {
         supported: Boolean(tunState?.supported ?? tunState?.Supported),
         running: Boolean(tunState?.running ?? tunState?.Running),
@@ -105,6 +117,48 @@ const Dashboard: React.FC = () => {
       console.error("Dashboard refresh error:", e);
     }
   };
+
+  const loadInterfaces = async () => {
+    try {
+      const list = await GetNetworkInterfaces();
+      setInterfaces(Array.isArray(list) ? list : []);
+    } catch (e) {
+      console.error("Failed to load network interfaces:", e);
+    }
+  };
+
+  const handleInterfaceChange = async (name: string) => {
+    if (ifaceBusy || name === outboundInterface) return;
+    setIfaceBusy(true);
+    const previous = outboundInterface;
+    setOutboundInterface(name);
+    try {
+      await SetTUNInterface(name);
+      toast.success(t('dashboard.outbound_interface_applied'), name || t('dashboard.outbound_interface_smart'));
+      await loadInterfaces();
+      await refresh();
+    } catch (err) {
+      setOutboundInterface(previous);
+      toast.error(t('dashboard.outbound_interface_failed'), extractErrorMessage(err));
+    } finally {
+      setIfaceBusy(false);
+    }
+  };
+
+  const ifaceLabel = (iface: any) => {
+    const addresses = Array.isArray(iface?.addresses) ? iface.addresses : [];
+    const tags = [];
+    if (iface?.virtual) tags.push(t('dashboard.outbound_interface_virtual'));
+    if (iface?.own_tunnel) tags.push(t('dashboard.outbound_interface_own'));
+    if (iface?.default_route) tags.push(t('dashboard.outbound_interface_default'));
+    const suffix = tags.length ? ` · ${tags.join('/')}` : '';
+    const address = addresses.length ? ` · ${addresses[0]}` : '';
+    return `${iface?.name ?? ''}${address}${suffix}`;
+  };
+
+  const physicalInterfaces = interfaces.filter((iface: any) => !iface?.virtual && !iface?.own_tunnel);
+  const virtualInterfaces = interfaces.filter((iface: any) => iface?.virtual && !iface?.own_tunnel);
+  const ownInterfaces = interfaces.filter((iface: any) => iface?.own_tunnel);
 
   useEffect(() => {
     const resetInactivityTimer = () => {
@@ -129,6 +183,7 @@ const Dashboard: React.FC = () => {
 
   useEffect(() => {
     refresh();
+    loadInterfaces();
     const getInterval = () => {
       if (!isPageVisible) return 60000;
       if (!isActive) return 30000;
@@ -144,6 +199,7 @@ const Dashboard: React.FC = () => {
       if (typeof state.tunRunning === 'boolean') {
         setTunStatus((prev: any) => ({ ...prev, running: state.tunRunning, enabled: state.tunRunning }));
         if (state.tunRunning) setIsTUNBusy(false);
+        loadInterfaces();
       }
       if (typeof state.tunMessage === 'string') {
         setTunStatus((prev: any) => ({ ...prev, message: state.tunMessage }));
@@ -235,17 +291,40 @@ const Dashboard: React.FC = () => {
       if (nextEnabled) {
         await StartTUN();
         toast.success(t('dashboard.notifications.tun_updated'), t('dashboard.notifications.tun_starting'));
+        const started = await waitForTUNState(true);
+        if (!started) {
+          toast.error(t('dashboard.notifications.tun_failed'), t('dashboard.notifications.tun_timeout'));
+        }
       } else {
         await StopTUN();
         toast.success(t('dashboard.notifications.tun_updated'), t('dashboard.notifications.tun_stopped'));
-        refresh();
-        setIsTUNBusy(false);
+        await waitForTUNState(false);
       }
     } catch (err) {
       toast.error(t('dashboard.notifications.tun_failed'), extractErrorMessage(err));
-      refresh();
+    } finally {
+      await refresh();
       setIsTUNBusy(false);
     }
+  };
+
+  // 轮询 TUN 实际状态。core 侧启动/停止是异步的（IPC 立即返回），
+  // 这里必须等到真实状态翻转才算完成，否则按钮会永久停在 busy。
+  // 采用递增间隔，避免在 core 正忙于建/删路由时叠加请求压力。
+  const waitForTUNState = async (wantRunning: boolean, timeoutMs = 60000) => {
+    const deadline = Date.now() + timeoutMs;
+    let delay = 300;
+    while (Date.now() < deadline) {
+      try {
+        const state = await GetTUNStatus();
+        if (Boolean(state?.running ?? state?.Running) === wantRunning) return true;
+      } catch {
+        return false;
+      }
+      await new Promise(r => setTimeout(r, delay));
+      delay = Math.min(delay + 200, 1500);
+    }
+    return false;
   };
 
   const handleInstallCA = async () => {
@@ -305,6 +384,75 @@ const Dashboard: React.FC = () => {
           >
             {t('dashboard.tun_status')}: {tunStatus.running ? t('common.on') : t('common.off')}
           </Button>
+          <Tooltip title={t('dashboard.outbound_interface_hint')} arrow placement="bottom">
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+              <FormControl size="small" sx={{ minWidth: 240, maxWidth: 340 }}>
+                <Select
+                  value={outboundInterface}
+                  onChange={(event) => handleInterfaceChange(String(event.target.value))}
+                  disabled={ifaceBusy || interfaces.length === 0}
+                  displayEmpty
+                  inputProps={{ 'aria-label': t('dashboard.outbound_interface') }}
+                  renderValue={(value) => {
+                    const selected = String(value ?? '');
+                    if (!selected) return t('dashboard.outbound_interface_smart');
+                    const iface = interfaces.find((item: any) => item?.name === selected);
+                    return iface ? ifaceLabel(iface) : selected;
+                  }}
+                  sx={{
+                    fontSize: '0.8125rem',
+                    '& .MuiSelect-select': { py: 0.5 },
+                  }}
+                >
+                  <MenuItem value="">
+                    <Globe size={14} />
+                    <Box component="span" sx={{ ml: 1 }}>{t('dashboard.outbound_interface_smart')}</Box>
+                  </MenuItem>
+                  {physicalInterfaces.length > 0 && (
+                    <ListSubheader sx={{ fontSize: '0.6875rem', lineHeight: 2, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+                      {t('dashboard.outbound_interface')}
+                    </ListSubheader>
+                  )}
+                  {physicalInterfaces.map((iface: any) => (
+                    <MenuItem key={iface.index} value={iface.name} sx={{ display: 'flex', justifyContent: 'space-between', gap: 2 }}>
+                      <Box component="span" sx={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis' }}>{ifaceLabel(iface)}</Box>
+                      {iface.smart_selected && (
+                        <Box component="span" sx={{ fontSize: '0.6875rem', color: 'warning.main', flexShrink: 0 }}>
+                          {t('dashboard.outbound_interface_auto_pick')}
+                        </Box>
+                      )}
+                    </MenuItem>
+                  ))}
+                  {virtualInterfaces.length > 0 && (
+                    <ListSubheader sx={{ fontSize: '0.6875rem', lineHeight: 2, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+                      {t('dashboard.outbound_interface_virtual')}
+                    </ListSubheader>
+                  )}
+                  {virtualInterfaces.map((iface: any) => (
+                    <MenuItem key={iface.index} value={iface.name} sx={{ display: 'flex', justifyContent: 'space-between', gap: 2 }}>
+                      <Box component="span" sx={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis' }}>{ifaceLabel(iface)}</Box>
+                      {iface.smart_selected && (
+                        <Box component="span" sx={{ fontSize: '0.6875rem', color: 'warning.main', flexShrink: 0 }}>
+                          {t('dashboard.outbound_interface_auto_pick')}
+                        </Box>
+                      )}
+                    </MenuItem>
+                  ))}
+                  {ownInterfaces.length > 0 && (
+                    <ListSubheader sx={{ fontSize: '0.6875rem', lineHeight: 2, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+                      {t('dashboard.outbound_interface_own')}
+                    </ListSubheader>
+                  )}
+                  {ownInterfaces.map((iface: any) => (
+                    <MenuItem key={iface.index} value={iface.name} disabled>
+                      {ifaceLabel(iface)}
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+              {ifaceBusy && <CircularProgress size={16} />}
+            </Box>
+          </Tooltip>
         </Box>
       </Box>
 

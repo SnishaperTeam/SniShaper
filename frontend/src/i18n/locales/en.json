@@ -52,6 +52,15 @@
     "proxy_stop": "Stop Proxy",
     "sys_proxy": "System Proxy",
     "tun_status": "TUN",
+    "outbound_interface": "Outbound NIC",
+    "outbound_interface_smart": "Smart (recommended)",
+    "outbound_interface_hint": "Physical adapter bound for TUN outbound traffic. Smart mode skips virtual adapters and picks the physical owner of the lowest-metric default route.",
+    "outbound_interface_virtual": "virtual",
+    "outbound_interface_own": "proxy TUN",
+    "outbound_interface_default": "default route",
+    "outbound_interface_auto_pick": "auto",
+    "outbound_interface_applied": "Outbound NIC updated",
+    "outbound_interface_failed": "Failed to switch outbound NIC",
     "core_status": "Core Status",
     "run_status": "Run Status",
     "work_mode": "Mode",
@@ -81,6 +90,7 @@
       "kill_process_failed": "Failed to kill process or restart",
       "sys_proxy_failed": "System proxy operation failed",
       "tun_starting": "TUN is starting, please wait...",
+      "tun_timeout": "TUN startup timed out. Check the logs.",
       "tun_stopped": "TUN path disabled."
     },
     "port_occupied": {

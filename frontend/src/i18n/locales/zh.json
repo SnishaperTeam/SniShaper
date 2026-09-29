@@ -52,6 +52,15 @@
     "proxy_stop": "停止代理",
     "sys_proxy": "系统代理",
     "tun_status": "TUN",
+    "outbound_interface": "出站网卡",
+    "outbound_interface_smart": "智能选择（推荐）",
+    "outbound_interface_hint": "TUN 出站流量绑定的物理网卡。智能模式会排除虚拟网卡，并按默认路由度量值挑选物理网卡。",
+    "outbound_interface_virtual": "虚拟",
+    "outbound_interface_own": "代理自身",
+    "outbound_interface_default": "默认路由",
+    "outbound_interface_auto_pick": "智能选中",
+    "outbound_interface_applied": "出站网卡已更新",
+    "outbound_interface_failed": "切换出站网卡失败",
     "core_status": "核心状态",
     "run_status": "运行状态",
     "work_mode": "工作模式",
@@ -81,6 +90,7 @@
       "kill_process_failed": "结束进程或重启失败",
       "sys_proxy_failed": "系统代理操作失败",
       "tun_starting": "TUN 启动中，请稍候...",
+      "tun_timeout": "TUN 启动超时，请查看日志。",
       "tun_stopped": "已关闭 TUN 路径。"
     },
     "port_occupied": {

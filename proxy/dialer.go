@@ -9,6 +9,8 @@ import (
 	"strings"
 	"time"
 
+	"snishaper/pkg/netiface"
+
 	utls "github.com/refraction-networking/utls"
 )
 
@@ -360,52 +362,19 @@ func (p *ProxyServer) getPhysicalLocalAddr(targetAddr string) *net.TCPAddr {
 	if err != nil {
 		host = targetAddr
 	}
-	targetIP := net.ParseIP(host)
-	wantIPv6 := targetIP != nil && targetIP.To4() == nil
+	family := netiface.FamilyIPv4
+	if parsed := net.ParseIP(host); parsed != nil && parsed.To4() == nil {
+		family = netiface.FamilyIPv6
+	}
 
-	interfaces, err := net.Interfaces()
+	binding, err := netiface.Select(family, p.outboundInterfaceConfig(), func(line string) {
+		p.tracef("%s", line)
+	})
 	if err != nil {
+		p.tracef("[netiface] no physical outbound address for %s: %v", targetAddr, err)
 		return nil
 	}
-	for _, iface := range interfaces {
-		if iface.Flags&net.FlagLoopback != 0 || iface.Flags&net.FlagUp == 0 {
-			continue
-		}
-		name := iface.Name
-		if strings.Contains(name, "SniShaper") || strings.Contains(name, "tun") || strings.Contains(name, "TAP") {
-			continue
-		}
-		addrs, err := iface.Addrs()
-		if err != nil || len(addrs) == 0 {
-			continue
-		}
-		for _, addr := range addrs {
-			ipNet, ok := addr.(*net.IPNet)
-			if !ok {
-				continue
-			}
-			if wantIPv6 {
-				// IPv6 目标：跳过 IPv4 地址
-				if ipNet.IP.To4() != nil {
-					continue
-				}
-				// 跳过链路本地地址：绑定 fe80::（无 zone）在 macOS 上会报
-				// "bind: can't assign requested address"（曾导致 TUN 模式下
-				// 所有 IPv6 目标 502）；且链路本地源地址无法路由到全局目标。
-				// 应选用接口上的全局 IPv6 地址（SLAAC/2409:: 等）。
-				if ipNet.IP.IsLinkLocalUnicast() || ipNet.IP.IsLoopback() {
-					continue
-				}
-				return &net.TCPAddr{IP: ipNet.IP}
-			}
-			// IPv4 目标：跳过 IPv6 地址
-			if ipNet.IP.To4() == nil {
-				continue
-			}
-			return &net.TCPAddr{IP: ipNet.IP}
-		}
-	}
-	return nil
+	return binding.LocalTCPAddr()
 }
 
 // getPhysicalInterfaceAddr 获取物理网卡的 IPv4 地址（排除 TUN/Loopback）

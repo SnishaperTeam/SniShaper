@@ -25,6 +25,7 @@ import (
 	"snishaper/pkg/certmanager"
 	"snishaper/pkg/cfpool"
 	"snishaper/pkg/dohresolver"
+	"snishaper/pkg/netiface"
 	"snishaper/proxy"
 )
 
@@ -427,6 +428,56 @@ func (a *App) GetTUNStatus() proxy.TUNStatus {
 		Running: false,
 		Message:   "core_service_not_running",
 	}
+}
+
+func (a *App) GetNetworkInterfaces() []netiface.Descriptor {
+	cfg := a.ruleManager.GetTUNConfig()
+	descriptors := netiface.List(cfg.InterfaceConfig())
+	a.appendLog(fmt.Sprintf("[action] GetNetworkInterfaces: %d interface(s) listed", len(descriptors)))
+	return descriptors
+}
+
+func (a *App) SetTUNInterface(name string) error {
+	cfg := a.ruleManager.GetTUNConfig()
+	selected := strings.TrimSpace(name)
+	a.appendLog(fmt.Sprintf("[action] SetTUNInterface called: %q", selected))
+
+	if selected != "" {
+		known := false
+		for _, descriptor := range netiface.List(cfg.InterfaceConfig()) {
+			if strings.EqualFold(descriptor.Name, selected) || strconv.Itoa(descriptor.Index) == selected {
+				known = true
+				selected = descriptor.Name
+				break
+			}
+		}
+		if !known {
+			return fmt.Errorf("network interface not found: %s", selected)
+		}
+	}
+
+	if cfg.InterfaceName == selected {
+		return nil
+	}
+	cfg.InterfaceName = selected
+	if err := a.ruleManager.UpdateTUNConfig(cfg); err != nil {
+		return err
+	}
+	netiface.InvalidateCache()
+
+	if a.core == nil {
+		return nil
+	}
+	if !a.core.GetTUNStatus().Running {
+		a.appendLog("[action] SetTUNInterface: TUN not running, config saved only")
+		return nil
+	}
+
+	a.appendLog("[action] SetTUNInterface: restarting TUN to apply the new outbound interface")
+	if err := a.StopTUN(); err != nil {
+		a.appendLog("[warn] SetTUNInterface: StopTUN failed: " + err.Error())
+	}
+	return a.StartTUN()
 }
 
 func (a *App) StartTUN() error {

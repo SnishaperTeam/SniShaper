@@ -11,6 +11,7 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"net/netip"
 	"regexp"
 	"strings"
 	"sync"
@@ -19,6 +20,7 @@ import (
 
 	"snishaper/pkg/cfpool"
 	"snishaper/pkg/dohresolver"
+	"snishaper/pkg/netiface"
 
 	"github.com/miekg/dns"
 	"github.com/things-go/go-socks5"
@@ -72,11 +74,58 @@ type CloudflareConfig struct {
 }
 
 type TUNConfig struct {
-	Enabled     bool `json:"enabled"`
-	MTU         int  `json:"mtu,omitempty"`
-	DNSHijack   bool `json:"dns_hijack,omitempty"`
-	AutoRoute   bool `json:"auto_route,omitempty"`
-	StrictRoute bool `json:"strict_route,omitempty"`
+	Enabled               bool     `json:"enabled"`
+	MTU                   int      `json:"mtu,omitempty"`
+	DNSHijack             bool     `json:"dns_hijack,omitempty"`
+	AutoRoute             bool     `json:"auto_route,omitempty"`
+	StrictRoute           bool     `json:"strict_route,omitempty"`
+	InterfaceName         string   `json:"interface_name,omitempty"`
+	ExcludeInterfaces     []string `json:"exclude_interface,omitempty"`
+	RouteExcludeAddresses []string `json:"route_exclude_address,omitempty"`
+}
+
+func (c TUNConfig) InterfaceConfig() netiface.Config {
+	return netiface.Config{
+		ExcludeInterfaces: c.ExcludeInterfaces,
+		ExcludeAddresses:  c.RouteExcludeAddresses,
+		ForceInterface:    c.InterfaceName,
+	}
+}
+
+func (c TUNConfig) RouteExcludePrefixes() ([]netip.Prefix, []netip.Prefix) {
+	var ipv4, ipv6 []netip.Prefix
+	for _, raw := range c.RouteExcludeAddresses {
+		value := strings.TrimSpace(raw)
+		if value == "" {
+			continue
+		}
+		if !strings.Contains(value, "/") {
+			if addr, err := netip.ParseAddr(value); err == nil {
+				bits := 32
+				if addr.Is6() {
+					bits = 128
+				}
+				prefix := netip.PrefixFrom(addr.Unmap(), bits)
+				if addr.Is6() {
+					ipv6 = append(ipv6, prefix)
+				} else {
+					ipv4 = append(ipv4, prefix)
+				}
+				continue
+			}
+		}
+		prefix, err := netip.ParsePrefix(value)
+		if err != nil {
+			continue
+		}
+		prefix = prefix.Masked()
+		if prefix.Addr().Is6() {
+			ipv6 = append(ipv6, prefix)
+		} else {
+			ipv4 = append(ipv4, prefix)
+		}
+	}
+	return ipv4, ipv6
 }
 
 type TUNStatus struct {
@@ -222,7 +271,8 @@ type ProxyServer struct {
 	migrationCacheInitOnce sync.Once
 
 	// tunMode indicates TUN is active, outbound connections should bind physical NIC
-	tunMode bool
+	tunMode     bool
+	ifaceConfig netiface.Config
 }
 
 type dohProxyAdapter struct {
@@ -277,9 +327,24 @@ func (a *dohProxyAdapter) GetPhysicalBindAddr(targetAddr string) net.IP {
 
 // SetTUNMode 设置 TUN 模式标记，启用后出站连接绑定物理网卡
 func (p *ProxyServer) SetTUNMode(enabled bool) {
+	cfg := netiface.Config{}
+	if enabled && p.rules != nil {
+		cfg = p.rules.GetTUNConfig().InterfaceConfig()
+	}
+
+	netiface.InvalidateCache()
+
 	p.mu.Lock()
-	defer p.mu.Unlock()
 	p.tunMode = enabled
+	p.ifaceConfig = cfg
+	p.mu.Unlock()
+}
+
+func (p *ProxyServer) outboundInterfaceConfig() netiface.Config {
+	p.mu.RLock()
+	cfg := p.ifaceConfig
+	p.mu.RUnlock()
+	return cfg
 }
 
 func NewProxyServer(addr string) *ProxyServer {
@@ -1082,7 +1147,33 @@ func normalizeTUNConfig(cfg TUNConfig) TUNConfig {
 		cfg.MTU = 9000
 	}
 	cfg.StrictRoute = false
+	cfg.InterfaceName = strings.TrimSpace(cfg.InterfaceName)
+	cfg.ExcludeInterfaces = normalizeStringList(cfg.ExcludeInterfaces)
+	cfg.RouteExcludeAddresses = normalizeStringList(cfg.RouteExcludeAddresses)
 	return cfg
+}
+
+func normalizeStringList(values []string) []string {
+	if len(values) == 0 {
+		return nil
+	}
+	seen := make(map[string]struct{}, len(values))
+	out := make([]string, 0, len(values))
+	for _, raw := range values {
+		value := strings.TrimSpace(raw)
+		if value == "" {
+			continue
+		}
+		if _, ok := seen[value]; ok {
+			continue
+		}
+		seen[value] = struct{}{}
+		out = append(out, value)
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
 }
 
 func defaultDNSNodes() []DNSNode {

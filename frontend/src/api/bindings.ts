@@ -23,6 +23,8 @@ export const SetTheme = (theme: string) => appCall('SetTheme', theme);
 export const GetTUNConfig = () => appCall('GetTUNConfig');
 export const UpdateTUNConfig = (cfg: any) => appCall('UpdateTUNConfig', cfg);
 export const GetTUNStatus = () => appCall('GetTUNStatus');
+export const GetNetworkInterfaces = () => appCall('GetNetworkInterfaces');
+export const SetTUNInterface = (name: string) => appCall('SetTUNInterface', name);
 export const GetIPv6Available = () => appCall('GetIPv6Available');
 export const RefreshIPv6Check = () => appCall('RefreshIPv6Check');
 export const StartTUN = () => appCall('StartTUN');
