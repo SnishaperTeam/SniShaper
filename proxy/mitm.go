@@ -791,9 +791,6 @@ func (p *ProxyServer) certCacheCleanup(ctx context.Context) {
 }
 
 func chooseUTLSClientHelloID(alpn string) utls.ClientHelloID {
-	if strings.EqualFold(strings.TrimSpace(alpn), "http/1.1") {
-		return utls.HelloFirefox_120
-	}
 	return utls.HelloChrome_120
 }
 

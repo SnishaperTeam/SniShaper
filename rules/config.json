@@ -3310,7 +3310,7 @@
     {
       "id": "1781239859359540900",
       "name": "web",
-      "mode": "mitm",
+      "mode": "transparent",
       "sni_fake": "apple.com",
       "domains": [
         "onedrive.com"
@@ -3586,7 +3586,7 @@
     {
       "id": "1784449000000000002",
       "name": "ms-identity",
-      "mode": "mitm",
+      "mode": "transparent",
       "domains": [
         "live.com",
         "www.live.com",
@@ -3603,7 +3603,6 @@
       },
       "website": "microsoft",
       "enabled": true,
-      "upstream": "20.190.144.136,20.190.144.137,20.190.144.138,20.190.144.164,20.190.148.165,40.126.16.161,40.126.16.164,40.126.16.165,40.126.16.166,204.79.197.212,204.79.197.219,184.28.32.71",
       "nat64_enabled": false
     },
     {
