@@ -395,10 +395,8 @@
         "names": [
           "*.instagram.com",
           "*.cdninstagram.com",
-          "*.igsonar.com",
           "instagram.com",
-          "cdninstagram.com",
-          "igsonar.com"
+          "cdninstagram.com"
         ]
       },
       "website": "meta",
