@@ -3,6 +3,7 @@ package main
 import (
 	"embed"
 	"log"
+	"os"
 	"time"
 
 	"snishaper/app"
@@ -27,9 +28,12 @@ func main() {
 		return
 	}
 
-	if app.HasLaunchArg("--elevated") {
-		// Already elevated, continue
-	} else if !core.IsProcessElevated() {
+	devSession := os.Getenv("FRONTEND_DEVSERVER_URL") != ""
+	if devSession {
+		log.Printf("[main] dev session (FRONTEND_DEVSERVER_URL=%s): staying in the foreground, no elevation, no single-instance take-over", os.Getenv("FRONTEND_DEVSERVER_URL"))
+	}
+
+	if !devSession && !app.HasLaunchArg("--elevated") && !core.IsProcessElevated() {
 		// Already running? Don't trigger a UAC prompt for a second instance.
 		if app.IsSingleInstanceRunning("com.snishaper.desktop") {
 			log.Printf("[main] Instance already running, skipping auto-elevate")
@@ -42,8 +46,12 @@ func main() {
 
 	app.RecoverBrokenSingleInstance("com.snishaper.desktop")
 
-	// Wake the running instance; retry to handle UIPI race where first instance hasn't yet allowed cross-integrity.
-	if app.IsSingleInstanceRunning("com.snishaper.desktop") {
+	if devSession {
+		if app.IsSingleInstanceRunning("com.snishaper.desktop") {
+			log.Printf("[main] dev session: another instance is running, proxy ports may conflict until it is closed")
+		}
+	} else if app.IsSingleInstanceRunning("com.snishaper.desktop") {
+		// Wake the running instance; retry to handle UIPI race where first instance hasn't yet allowed cross-integrity.
 		woke := false
 		for i := 0; i < 3; i++ {
 			if err := app.WakeSingleInstance("com.snishaper.desktop"); err == nil {
@@ -71,7 +79,7 @@ func main() {
 		_ = sysproxy.DisableSystemProxy()
 	}()
 
-	wailsApp := application.New(application.Options{
+	opts := application.Options{
 		Name:        "snishaper",
 		Description: "SniShaper - Cloudflare IP Shaper",
 		Assets: application.AssetOptions{
@@ -79,14 +87,6 @@ func main() {
 		},
 		Services: []application.Service{
 			application.NewService(a),
-		},
-		SingleInstance: &application.SingleInstanceOptions{
-			UniqueID: "com.snishaper.desktop",
-			OnSecondInstanceLaunch: func(data application.SecondInstanceData) {
-				log.Printf("[single-instance] OnSecondInstanceLaunch args=%v", data.Args)
-				a.RevealMainWindow()
-			},
-			ExitCode: 0,
 		},
 		Icon:   trayIcon,
 		Logger: a.FrameworkLogger(),
@@ -99,19 +99,37 @@ func main() {
 		Linux: application.LinuxOptions{
 			DisableQuitOnLastWindowClosed: true,
 		},
-	})
+	}
+
+	if !devSession {
+		// The framework exits a second instance outright, which would end the
+		// `wails3 dev` run task (and its Vite server) the moment an instance is
+		// already running, so dev sessions opt out of the handshake entirely.
+		opts.SingleInstance = &application.SingleInstanceOptions{
+			UniqueID: "com.snishaper.desktop",
+			OnSecondInstanceLaunch: func(data application.SecondInstanceData) {
+				log.Printf("[single-instance] OnSecondInstanceLaunch args=%v", data.Args)
+				a.RevealMainWindow()
+			},
+			ExitCode: 0,
+		}
+	}
+
+	wailsApp := application.New(opts)
 
 	a.SetWailsApp(wailsApp)
 
-	a.StartInstanceListener("com.snishaper.desktop")
+	if !devSession {
+		a.StartInstanceListener("com.snishaper.desktop")
 
-	app.AllowSingleInstanceCrossIntegrity("com.snishaper.desktop")
-	go func() {
-		for i := 0; i < 10; i++ {
-			app.AllowSingleInstanceCrossIntegrity("com.snishaper.desktop")
-			time.Sleep(100 * time.Millisecond)
-		}
-	}()
+		app.AllowSingleInstanceCrossIntegrity("com.snishaper.desktop")
+		go func() {
+			for i := 0; i < 10; i++ {
+				app.AllowSingleInstanceCrossIntegrity("com.snishaper.desktop")
+				time.Sleep(100 * time.Millisecond)
+			}
+		}()
+	}
 
 	// Create Tray. The app owns the tray lifecycle so it can rebuild the icon
 	// when the shell drops it.
