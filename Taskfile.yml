@@ -1,0 +1,98 @@
+version: '3'
+
+vars:
+  APP_NAME: "snishaper"
+  PRODUCT_NAME: "Snishaper"
+  BIN_DIR: '{{.BIN_DIR | default "build/bin"}}'
+  PACKAGE_MANAGER: '{{.PACKAGE_MANAGER | default "npm"}}'
+  VITE_PORT: '{{.WAILS_VITE_PORT | default 9245}}'
+  # TARGET OS for build/run. Defaults to the host and is overridden by
+  # `wails3 build GOOS=windows`; the tasks below dispatch through this variable.
+  GOOS: '{{.GOOS | default OS}}'
+  BASE_TAGS: "with_gvisor"
+
+  # Output layout shared with build.sh / build_windows.ps1:
+  # build/bin/{gui,cli}/{Windows,Linux,Darwin}/{x64,x86,arm64}
+  ARCH_IN: '{{.ARCH | default ARCH}}'
+  TARGET_ARCH: '{{if eq .ARCH_IN "x64"}}amd64{{else if eq .ARCH_IN "x86"}}386{{else}}{{.ARCH_IN}}{{end}}'
+  PLATFORM_DIR: '{{if eq .GOOS "windows"}}Windows{{else if eq .GOOS "linux"}}Linux{{else if eq .GOOS "darwin"}}Darwin{{else}}{{.GOOS}}{{end}}'
+  ARCH_DIR: '{{if eq .TARGET_ARCH "amd64"}}x64{{else if eq .TARGET_ARCH "386"}}x86{{else if eq .TARGET_ARCH "arm64"}}arm64{{else}}{{.TARGET_ARCH}}{{end}}'
+  GUI_BIN_DIR: '{{.BIN_DIR}}/gui/{{.PLATFORM_DIR}}/{{.ARCH_DIR}}'
+  # Same binary names as build.sh / build_windows.ps1: snishaper.exe on
+  # Windows, SniShaper on Linux.
+  GUI_BIN_NAME: '{{if eq .GOOS "linux"}}SniShaper{{else}}{{.APP_NAME}}{{if eq .GOOS "windows"}}.exe{{end}}{{end}}'
+  GUI_BIN: '{{.GUI_BIN_DIR}}/{{.GUI_BIN_NAME}}'
+
+  # Package.appxmanifest is the single version source. Values match the
+  # manifest_tag helper in build.sh; backslashes would be eaten by `sh:`, so
+  # the extraction stays grep/cut based.
+  MANIFEST_VERSION:
+    sh: grep -o '<rel:Version>[^<]*' Package.appxmanifest | cut -d '>' -f2 | head -1
+  MANIFEST_CHANNEL:
+    sh: grep -o '<rel:ReleaseChannel>[^<]*' Package.appxmanifest | cut -d '>' -f2 | head -1
+  APPX_VERSION:
+    sh: grep -o '[0-9][0-9]*[.][0-9][0-9]*[.][0-9][0-9]*[.][0-9][0-9]*' Package.appxmanifest | head -1
+
+  BUILD_TAGS: '{{.BASE_TAGS}}{{if .EXTRA_TAGS}},{{.EXTRA_TAGS}}{{end}}'
+  LD_FLAGS: '-s -w{{if eq .GOOS "windows"}} -H windowsgui{{end}}{{if .MANIFEST_VERSION}} -X snishaper/app.buildVersion={{.MANIFEST_VERSION}}{{end}}{{if .MANIFEST_CHANNEL}} -X snishaper/app.buildChannel={{.MANIFEST_CHANNEL}}{{end}}'
+  GO_FLAGS: '-buildvcs=false{{if eq .DEV "true"}} -gcflags=all="-l"{{end}}'
+
+includes:
+  common: ./build/Taskfile.yml
+  windows: ./build/windows/Taskfile.yml
+  linux: ./build/linux/Taskfile.yml
+
+tasks:
+  build:
+    desc: Builds the GUI for GOOS/ARCH (host platform by default)
+    summary: |
+      Usage: wails3 build [GOOS=windows|linux] [ARCH=amd64|386|arm64] [DEV=true]
+                          [EXTRA_TAGS=tag1,tag2] [GTK3=true] [BIN_DIR=path]
+      Writes build/bin/gui/<OS>/<arch>/ and seeds the runtime config/ and rules/
+      folders next to the binary, exactly like build.sh / build_windows.ps1.
+      A running instance locks that binary, so stop it first or pass BIN_DIR=.
+    cmds:
+      - task: '{{.GOOS}}:build'
+        vars:
+          DEV: '{{.DEV}}'
+          EXTRA_TAGS: '{{.EXTRA_TAGS}}'
+          GTK3: '{{.GTK3}}'
+
+  run:
+    desc: Runs the built GUI binary
+    cmds:
+      - task: '{{.GOOS}}:run'
+
+  dev:
+    desc: Runs the app with live reload (Vite dev server + Go watcher)
+    summary: |
+      Reads ./build/config.yml: rebuilds on Go changes and serves the frontend
+      from the Vite dev server. The app auto-elevates, so every rebuild raises a
+      UAC prompt; use `wails3 build` + `wails3 run` for a quiet build/run loop.
+    cmds:
+      - wails3 dev -config ./build/config.yml -port {{.VITE_PORT}}
+
+  frontend:
+    desc: Builds the frontend bundle into frontend/dist
+    cmds:
+      - task: common:build:frontend
+
+  update:build-assets:
+    desc: Regenerates the Wails build assets (plists, info.json, nfpm) from build/config.yml
+    cmds:
+      - task: common:update:build-assets
+
+  icons:
+    desc: Regenerates build/windows/icon.ico from build/appicon.png
+    cmds:
+      - task: common:generate:icons
+
+  clean:
+    desc: Removes the GUI output directory of the target OS
+    cmds:
+      - rm -rf '{{.BIN_DIR}}/gui/{{.PLATFORM_DIR}}'
+
+  package:
+    desc: Packaging is owned by build_windows.ps1 (MSIX) and build.sh
+    cmds:
+      - echo 'Use ".\build_windows.ps1 -Build all -BuildMsix" (Windows) or "./build.sh" (Linux/WSL) to package.'

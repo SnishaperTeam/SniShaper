@@ -1,0 +1,39 @@
+version: '3'
+
+includes:
+  common: ../Taskfile.yml
+
+tasks:
+  build:
+    desc: Builds the Linux GUI (needs cgo + GTK4/WebKitGTK, or GTK3=true)
+    summary: |
+      Usage: wails3 build GOOS=linux [ARCH=amd64|arm64] [DEV=true] [GTK3=true]
+                                    [EXTRA_TAGS=tag1,tag2] [BIN_DIR=path]
+      Same policy as build.sh: the Linux GUI links GTK/WebKit through cgo, so it
+      is built on Linux itself (WSL locally, an ubuntu runner in CI) and never
+      cross-compiled from Windows or macOS.
+    deps:
+      - task: common:build:frontend
+        vars:
+          DEV:
+            ref: .DEV
+    preconditions:
+      - sh: 'test "{{OS}}" = linux'
+        msg: "The Linux GUI must be built on Linux/WSL - use ./build.sh --platform linux --type gui for the supported path."
+      - sh: 'pkg-config --exists {{if eq .GTK3 "true"}}gtk+-3.0 webkit2gtk-4.1{{else}}gtk4 webkitgtk-6.0{{end}}'
+        msg: "GTK/WebKit development packages are missing: libgtk-4-dev libwebkitgtk-6.0-dev (or libgtk-3-dev libwebkit2gtk-4.1-dev with GTK3=true)."
+    cmds:
+      - task: common:seed:runtime
+      - go build -tags '{{.BUILD_TAGS}}{{if eq .GTK3 "true"}},gtk3{{end}}' -ldflags '{{.LD_FLAGS}}' {{.GO_FLAGS}} -o '{{.GUI_BIN}}' .
+    env:
+      GOOS: linux
+      GOARCH: '{{.TARGET_ARCH}}'
+      CGO_ENABLED: 1
+
+  run:
+    desc: Runs the built Linux GUI binary
+    preconditions:
+      - sh: test -f '{{.GUI_BIN}}'
+        msg: "Missing {{.GUI_BIN}} - run `wails3 build GOOS=linux` first."
+    cmds:
+      - '{{.GUI_BIN}}'

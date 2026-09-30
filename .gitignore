@@ -6,6 +6,9 @@ build/bin/
 *.msi
 *.syso
 
+# Wails v3 task runner checksum cache
+.task/
+
 # Go cache / temp
 .gocache/
 *.test
