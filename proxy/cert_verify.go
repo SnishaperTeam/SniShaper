@@ -9,24 +9,12 @@ import (
 	"strings"
 	"time"
 
+	"snishaper/common"
+
 	utls "github.com/refraction-networking/utls"
 )
 
-type CertVerifyConfig struct {
-	Mode                  string   `json:"mode,omitempty"`
-	Names                 []string `json:"names,omitempty"`
-	Suffixes              []string `json:"suffixes,omitempty"`
-	SPKISHA256            []string `json:"spki_sha256,omitempty"`
-	AllowUnknownAuthority bool     `json:"allow_unknown_authority,omitempty"`
-}
-
-func (c CertVerifyConfig) IsZero() bool {
-	return strings.TrimSpace(c.Mode) == "" &&
-		len(c.Names) == 0 &&
-		len(c.Suffixes) == 0 &&
-		len(c.SPKISHA256) == 0 &&
-		!c.AllowUnknownAuthority
-}
+type CertVerifyConfig = common.CertVerifyConfig
 
 func normalizeCertVerifyConfig(cfg CertVerifyConfig, verifyName string) CertVerifyConfig {
 	out := cfg

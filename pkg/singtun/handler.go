@@ -12,6 +12,8 @@ import (
 	"sync"
 	"time"
 
+	"snishaper/common"
+
 	"github.com/miekg/dns"
 	"github.com/sagernet/sing-tun"
 	"github.com/sagernet/sing/common/buf"
@@ -667,13 +669,12 @@ func (h *Handler) proxyConn(ctx context.Context, client, upstream net.Conn, onCl
 	// client -> upstream
 	go func() {
 		io.Copy(upstream, client)
-		halfClose(upstream) // 告知上游：客户端已发完数据
-		done <- struct{}{}
+		common.HalfClose(upstream)
 	}()
 	// upstream -> client
 	go func() {
 		io.Copy(client, upstream)
-		halfClose(client) // 告知客户端：上游已发完数据
+		common.HalfClose(client)
 		done <- struct{}{}
 	}()
 
@@ -694,22 +695,6 @@ func (h *Handler) proxyConn(ctx context.Context, client, upstream net.Conn, onCl
 	if onClose != nil {
 		onClose(nil)
 	}
-}
-
-// halfClose 关闭连接的写端（发送 EOF），保留读端
-func halfClose(conn net.Conn) {
-	if tc, ok := conn.(*net.TCPConn); ok {
-		_ = tc.CloseWrite()
-		return
-	}
-	type closeWriter interface {
-		CloseWrite() error
-	}
-	if cw, ok := conn.(closeWriter); ok {
-		_ = cw.CloseWrite()
-		return
-	}
-	conn.Close()
 }
 
 // dialProxy 连接到代理服务器

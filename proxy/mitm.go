@@ -24,6 +24,8 @@ import (
 	"github.com/quic-go/quic-go/http3"
 
 	utls "github.com/refraction-networking/utls"
+
+	"snishaper/common"
 )
 
 func (p *ProxyServer) handleMITM(clientConn net.Conn, host string, rule Rule, dialCandidates []string, initialDialAddr string) {
@@ -331,7 +333,7 @@ func (p *ProxyServer) GetUConn(conn net.Conn, sni string, verifyName string, rul
 		}
 	}
 
-	clientHelloID := chooseUTLSClientHelloID(alpn)
+	clientHelloID := chooseUTLSClientHelloID()
 	uconn := utls.UClient(conn, config, utls.HelloCustom)
 	if spec, err := utls.UTLSIdToSpec(clientHelloID); err == nil {
 		rewriteUTLSALPN(&spec, nextProtos)
@@ -430,7 +432,7 @@ func (p *ProxyServer) NewQUICRoundTripper(host string, rule Rule) (*http3.Transp
 					cHost = candidate
 					cPort = "443"
 				}
-				if m, ok := mapNAT64Addr(cHost, prefix); ok {
+				if m, ok := common.MapNAT64Addr(cHost, prefix); ok {
 					mapped = append(mapped, net.JoinHostPort(m, cPort))
 				}
 			}
@@ -602,7 +604,7 @@ func (p *ProxyServer) handleQUICMITM(clientConn net.Conn, host string, rule Rule
 		}),
 	}
 
-	_ = srv.Serve(newSingleConnListener(clientTLS))
+	_ = srv.Serve(newOneConnListener(clientTLS))
 }
 
 // isHopByHopHeader reports headers that must not be forwarded across hops
@@ -719,57 +721,6 @@ func (c *closeNotifyConn) Close() error {
 	return err
 }
 
-type singleConnListener struct {
-	addr      net.Addr
-	ch        chan net.Conn
-	closed    chan struct{}
-	closeOnce sync.Once
-}
-
-func newSingleConnListener(conn net.Conn) *singleConnListener {
-	l := &singleConnListener{
-		addr:   conn.LocalAddr(),
-		ch:     make(chan net.Conn, 1),
-		closed: make(chan struct{}),
-	}
-	l.ch <- &closeNotifyConn{
-		Conn: conn,
-		onClose: func() {
-			l.closeOnce.Do(func() { close(l.closed) })
-		},
-	}
-	return l
-}
-
-func (l *singleConnListener) Accept() (net.Conn, error) {
-	select {
-	case c, ok := <-l.ch:
-		if !ok {
-			return nil, net.ErrClosed
-		}
-		return c, nil
-	case <-l.closed:
-		return nil, net.ErrClosed
-	}
-}
-func (l *singleConnListener) Close() error {
-	l.closeOnce.Do(func() {
-		close(l.closed)
-		select {
-		case c := <-l.ch:
-			_ = c.Close()
-		default:
-		}
-	})
-	return nil
-}
-func (l *singleConnListener) Addr() net.Addr {
-	if l.addr != nil {
-		return l.addr
-	}
-	return &net.TCPAddr{}
-}
-
 func (p *ProxyServer) ClearCertCache() {
 	p.certCacheMu.Lock()
 	defer p.certCacheMu.Unlock()
@@ -790,7 +741,7 @@ func (p *ProxyServer) certCacheCleanup(ctx context.Context) {
 	}
 }
 
-func chooseUTLSClientHelloID(alpn string) utls.ClientHelloID {
+func chooseUTLSClientHelloID() utls.ClientHelloID {
 	return utls.HelloChrome_120
 }
 

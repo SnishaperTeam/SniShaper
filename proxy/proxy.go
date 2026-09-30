@@ -190,7 +190,6 @@ type Rule struct {
 	UseCFPool          bool             `json:"use_cf_pool"`
 	ECHDiscoveryDomain string           `json:"ech_discovery_domain,omitempty"`
 	ECHDoHUpstream     string           `json:"ech_doh_upstream,omitempty"`
-	FallbackMode       string           `json:"fallback_mode,omitempty"`
 	CertVerify         CertVerifyConfig `json:"cert_verify,omitempty"`
 	ECHAutoUpdate      bool             `json:"ech_auto_update"`
 	AutoRouted         bool             `json:"auto_routed,omitempty"`
@@ -212,7 +211,6 @@ type SiteGroup struct {
 	UseCFPool          bool             `json:"use_cf_pool"`
 	ECHDiscoveryDomain string           `json:"ech_discovery_domain,omitempty"`
 	ECHDoHUpstream     string           `json:"ech_doh_upstream,omitempty"`
-	FallbackMode       string           `json:"fallback_mode,omitempty"`
 	CertVerify         CertVerifyConfig `json:"cert_verify,omitempty"`
 	Website            string           `json:"website,omitempty"`
 	Enabled            bool             `json:"enabled"`
@@ -285,7 +283,7 @@ func (a *dohProxyAdapter) DialWithRule(ctx context.Context, network, addr string
 		ECHEnabled:    rule.ECHEnabled,
 		ECHProfileID:  rule.ECHProfileID,
 		ECHAutoUpdate: rule.ECHAutoUpdate,
-		CertVerify:    toProxyCertVerify(rule.CertVerify),
+		CertVerify:    rule.CertVerify,
 	}
 	return a.p.dialWithRule(ctx, network, addr, r)
 }
@@ -296,7 +294,7 @@ func (a *dohProxyAdapter) GetUConn(conn net.Conn, sni, verifyName string, rule d
 		ECHEnabled:    rule.ECHEnabled,
 		ECHProfileID:  rule.ECHProfileID,
 		ECHAutoUpdate: rule.ECHAutoUpdate,
-		CertVerify:    toProxyCertVerify(rule.CertVerify),
+		CertVerify:    rule.CertVerify,
 	}
 	return a.p.GetUConn(conn, sni, verifyName, r, allowUnknownAuthority, alpn, ech)
 }
@@ -307,7 +305,7 @@ func (a *dohProxyAdapter) ResolveRuleECHConfig(host string, rule dohresolver.Rul
 		ECHEnabled:    rule.ECHEnabled,
 		ECHProfileID:  rule.ECHProfileID,
 		ECHAutoUpdate: rule.ECHAutoUpdate,
-		CertVerify:    toProxyCertVerify(rule.CertVerify),
+		CertVerify:    rule.CertVerify,
 	}
 	return a.p.resolveRuleECHConfig(host, r)
 }
@@ -384,7 +382,7 @@ func NewProxyServer(addr string) *ProxyServer {
 				ECHAutoUpdate: node.ECHAutoUpdate,
 				QUIC:          node.QUIC,
 				Enabled:       node.Enabled,
-				CertVerify: toDohCertVerify(node.CertVerify),
+				CertVerify: node.CertVerify,
 			})
 		}
 		return nodes
@@ -1178,21 +1176,6 @@ func normalizeStringList(values []string) []string {
 
 func defaultDNSNodes() []DNSNode {
 	return []DNSNode{}
-}
-
-func halfClose(conn net.Conn) {
-	if tc, ok := conn.(*net.TCPConn); ok {
-		_ = tc.CloseWrite()
-		return
-	}
-	type closeWriter interface {
-		CloseWrite() error
-	}
-	if cw, ok := conn.(closeWriter); ok {
-		_ = cw.CloseWrite()
-		return
-	}
-	conn.Close()
 }
 
 func (p *ProxyServer) FetchECH(ctx context.Context, domain string, dohURL string) ([]byte, error) {

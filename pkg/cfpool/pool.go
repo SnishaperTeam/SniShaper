@@ -13,6 +13,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"snishaper/common"
 )
 
 type IPStats struct {
@@ -359,42 +361,11 @@ func (p *CloudflarePool) rebuildActiveIPs() {
 	p.activeIPs = newActive
 }
 
-func mapNAT64Addr(ipStr string, prefix string) (string, bool) {
-	prefix = strings.TrimSpace(prefix)
-	if prefix == "" {
-		return ipStr, true
-	}
-	parsedIP := net.ParseIP(ipStr)
-	if parsedIP == nil {
-		return ipStr, true
-	}
-	ipv4 := parsedIP.To4()
-	if ipv4 == nil {
-		return ipStr, false
-	}
 
-	var prefixIP net.IP
-	if strings.Contains(prefix, "/") {
-		_, ipnet, err := net.ParseCIDR(prefix)
-		if err == nil && ipnet != nil {
-			prefixIP = ipnet.IP
-		}
-	} else {
-		prefixIP = net.ParseIP(prefix)
-	}
-
-	if prefixIP == nil || len(prefixIP) != 16 {
-		return ipStr, true
-	}
-	mappedIP := make(net.IP, 16)
-	copy(mappedIP, prefixIP[:12])
-	copy(mappedIP[12:], ipv4)
-	return mappedIP.String(), true
-}
 
 func (p *CloudflarePool) testIP(ip string) (time.Duration, error) {
 	prefix := p.getNAT64Prefix()
-	mappedIP, ok := mapNAT64Addr(ip, prefix)
+	mappedIP, ok := common.MapNAT64Addr(ip, prefix)
 	if !ok {
 		return 0, fmt.Errorf("native IPv6 %s excluded under NAT64 mode", ip)
 	}
@@ -428,7 +399,7 @@ func (p *CloudflarePool) DialParallel(ctx context.Context, network string, port 
 		best := p.bestIP
 		p.mu.Unlock()
 
-		mappedBest, ok := mapNAT64Addr(best, nat64Prefix)
+		mappedBest, ok := common.MapNAT64Addr(best, nat64Prefix)
 		if ok {
 			dialer := &net.Dialer{Timeout: 2 * time.Second}
 			conn, err := dialer.DialContext(ctx, network, net.JoinHostPort(mappedBest, port))
@@ -462,7 +433,7 @@ func (p *CloudflarePool) DialParallel(ctx context.Context, network string, port 
 	}
 	candidates := make([]mappedCandidate, 0, len(activeIPs))
 	for _, ip := range activeIPs {
-		mapped, ok := mapNAT64Addr(ip, nat64Prefix)
+		mapped, ok := common.MapNAT64Addr(ip, nat64Prefix)
 		if ok {
 			candidates = append(candidates, mappedCandidate{rawIP: ip, mappedIP: mapped})
 		}

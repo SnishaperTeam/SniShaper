@@ -14,19 +14,15 @@ import (
 	"sync"
 	"time"
 
+	"snishaper/common"
+
 	"github.com/miekg/dns"
 	"github.com/quic-go/quic-go"
 	"github.com/quic-go/quic-go/http3"
 	utls "github.com/refraction-networking/utls"
 )
 
-type CertVerifyConfig struct {
-	Mode                  string   `json:"mode,omitempty"`
-	Names                 []string `json:"names,omitempty"`
-	Suffixes              []string `json:"suffixes,omitempty"`
-	SPKISHA256            []string `json:"spki_sha256,omitempty"`
-	AllowUnknownAuthority bool     `json:"allow_unknown_authority,omitempty"`
-}
+type CertVerifyConfig = common.CertVerifyConfig
 
 type DNSNode struct {
 	Name          string           `json:"name"`

@@ -75,41 +75,36 @@ func (r *TempRule) ToSiteGroup() map[string]interface{} {
 }
 
 func inferWebsite(domain string) string {
-	if contains(domain, "google") {
+	if strings.Contains(domain, "google") {
 		return "Google"
 	}
-	if contains(domain, "github") {
+	if strings.Contains(domain, "github") {
 		return "GitHub"
 	}
-	if contains(domain, "telegram") {
+	if strings.Contains(domain, "telegram") {
 		return "Telegram"
 	}
-	if contains(domain, "twitter") || contains(domain, "x.com") {
+	if strings.Contains(domain, "twitter") || strings.Contains(domain, "x.com") {
 		return "Twitter"
 	}
-	if contains(domain, "youtube") {
+	if strings.Contains(domain, "youtube") {
 		return "YouTube"
 	}
-	if contains(domain, "facebook") || contains(domain, "fb.com") {
+	if strings.Contains(domain, "facebook") || strings.Contains(domain, "fb.com") {
 		return "Facebook"
 	}
-	if contains(domain, "instagram") {
+	if strings.Contains(domain, "instagram") {
 		return "Instagram"
 	}
-	if contains(domain, "cloudflare") {
+	if strings.Contains(domain, "cloudflare") {
 		return "Cloudflare"
 	}
-	if contains(domain, "amazon") || contains(domain, "aws") {
+	if strings.Contains(domain, "amazon") || strings.Contains(domain, "aws") {
 		return "Amazon"
 	}
-	if contains(domain, "microsoft") {
+	if strings.Contains(domain, "microsoft") {
 		return "Microsoft"
 	}
 
 	return "Others"
-}
-
-func contains(s, substr string) bool {
-	return len(s) >= len(substr) && (s[:len(substr)] == substr ||
-		(len(s) > len(substr) && contains(s[1:], substr)))
 }

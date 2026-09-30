@@ -89,9 +89,6 @@ func (p *ProxyServer) handleSocks5Connect(ctx context.Context, writer io.Writer,
 	matchHost := normalizeHost(host)
 	mode := p.GetMode()
 	rule := p.rules.matchRule(matchHost, mode)
-	if rule.SiteID != "" {
-		p.rules.incrementRuleHit(rule.SiteID)
-	}
 
 	clientConn := p.socks5Tracker.getConn(req.RemoteAddr.String())
 	if clientConn == nil {

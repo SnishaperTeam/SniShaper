@@ -487,14 +487,6 @@ func (rm *RuleManager) buildRules() {
 	}
 }
 
-func (rm *RuleManager) incrementRuleHit(siteID string) {
-	// No-op after stats removal
-}
-
-func (rm *RuleManager) GetRuleHitCounts() map[string]int64 {
-	return map[string]int64{}
-}
-
 func (rm *RuleManager) GetSiteGroups() []SiteGroup {
 	rm.mu.RLock()
 	defer rm.mu.RUnlock()

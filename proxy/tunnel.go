@@ -10,6 +10,8 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"snishaper/common"
 )
 
 func (p *ProxyServer) handleRequest(w http.ResponseWriter, req *http.Request) {
@@ -20,9 +22,6 @@ func (p *ProxyServer) handleRequest(w http.ResponseWriter, req *http.Request) {
 	matchHost := normalizeHost(host)
 	mode := p.GetMode()
 	rule := p.rules.matchRule(matchHost, mode)
-	if rule.SiteID != "" {
-		p.rules.incrementRuleHit(rule.SiteID)
-	}
 
 	p.tracef("[Proxy] Request: %s -> %s (match: %s, runtime-mode: %s, rule-mode: %s)", req.Method, host, matchHost, mode, rule.Mode)
 
@@ -216,13 +215,13 @@ func (p *ProxyServer) directConnect(w http.ResponseWriter, req *http.Request) {
 		defer wg.Done()
 		defer tunnelBufPool.Put(buf1)
 		io.CopyBuffer(conn, clientConn, *buf1)
-		halfClose(conn)
+		common.HalfClose(conn)
 	}()
 	go func() {
 		defer wg.Done()
 		defer tunnelBufPool.Put(buf2)
 		io.CopyBuffer(clientConn, conn, *buf2)
-		halfClose(clientConn)
+		common.HalfClose(clientConn)
 	}()
 	wg.Wait()
 	clientConn.Close()
@@ -423,14 +422,14 @@ func (p *ProxyServer) directTunnel(clientConn, upstreamConn net.Conn) {
 		defer tunnelBufPool.Put(buf1)
 		n, err := io.CopyBuffer(upstreamConn, clientConn, *buf1)
 		p.tracef("[Tunnel] Client -> Upstream: %d bytes, err: %v", n, err)
-		halfClose(upstreamConn)
+		common.HalfClose(upstreamConn)
 	}()
 	go func() {
 		defer wg.Done()
 		defer tunnelBufPool.Put(buf2)
 		n, err := io.CopyBuffer(clientConn, upstreamConn, *buf2)
 		p.tracef("[Tunnel] Upstream -> Client: %d bytes, err: %v", n, err)
-		halfClose(clientConn)
+		common.HalfClose(clientConn)
 	}()
 	wg.Wait()
 	clientConn.Close()

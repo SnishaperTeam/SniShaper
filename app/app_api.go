@@ -1313,7 +1313,7 @@ func (a *App) TestNAT64Profile(prefix string) (int64, error) {
 	var mappedIP string
 	for _, ip := range ips {
 		if ip.To4() != nil {
-			mapped, ok := mapNAT64AddrForTest(ip.String(), prefix)
+			mapped, ok := common.MapNAT64Addr(ip.String(), prefix)
 			if ok {
 				mappedIP = mapped
 				break
@@ -1335,39 +1335,6 @@ func (a *App) TestNAT64Profile(prefix string) (int64, error) {
 	defer conn.Close()
 
 	return time.Since(start).Milliseconds(), nil
-}
-
-func mapNAT64AddrForTest(ipStr string, prefix string) (string, bool) {
-	prefix = strings.TrimSpace(prefix)
-	if prefix == "" {
-		return ipStr, true
-	}
-	parsedIP := net.ParseIP(ipStr)
-	if parsedIP == nil {
-		return ipStr, true
-	}
-	ipv4 := parsedIP.To4()
-	if ipv4 == nil {
-		return ipStr, false
-	}
-
-	var prefixIP net.IP
-	if strings.Contains(prefix, "/") {
-		_, ipnet, err := net.ParseCIDR(prefix)
-		if err == nil && ipnet != nil {
-			prefixIP = ipnet.IP
-		}
-	} else {
-		prefixIP = net.ParseIP(prefix)
-	}
-
-	if prefixIP == nil || len(prefixIP) != 16 {
-		return ipStr, true
-	}
-	mappedIP := make(net.IP, 16)
-	copy(mappedIP, prefixIP[:12])
-	copy(mappedIP[12:], ipv4)
-	return mappedIP.String(), true
 }
 
 func (a *App) GetMigrationEnabled() bool {

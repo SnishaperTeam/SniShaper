@@ -2,7 +2,6 @@ package proxy
 
 import (
 	"context"
-	"fmt"
 	"log"
 	"net"
 	"strings"
@@ -213,9 +212,4 @@ func (ar *AutoRouter) GetStatus() GFWListStatus {
 		Mode:        string(ar.config.Mode),
 		DomainCount: ar.gfwList.Count(),
 	}
-}
-
-// DialFallback dials targetAddr through the specified fallback transport.
-func DialFallback(fallbackMode string, targetAddr string, serverHost string) (net.Conn, error) {
-	return nil, fmt.Errorf("unknown fallback: %s", fallbackMode)
 }

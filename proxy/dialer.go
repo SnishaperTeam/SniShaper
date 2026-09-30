@@ -9,43 +9,13 @@ import (
 	"strings"
 	"time"
 
+	"snishaper/common"
 	"snishaper/pkg/netiface"
 
 	utls "github.com/refraction-networking/utls"
 )
 
-func mapNAT64Addr(ipStr string, prefix string) (string, bool) {
-	prefix = strings.TrimSpace(prefix)
-	if prefix == "" {
-		return ipStr, true
-	}
-	parsedIP := net.ParseIP(ipStr)
-	if parsedIP == nil {
-		return ipStr, true
-	}
-	ipv4 := parsedIP.To4()
-	if ipv4 == nil {
-		return ipStr, false
-	}
 
-	var prefixIP net.IP
-	if strings.Contains(prefix, "/") {
-		_, ipnet, err := net.ParseCIDR(prefix)
-		if err == nil && ipnet != nil {
-			prefixIP = ipnet.IP
-		}
-	} else {
-		prefixIP = net.ParseIP(prefix)
-	}
-
-	if prefixIP == nil || len(prefixIP) != 16 {
-		return ipStr, true
-	}
-	mappedIP := make(net.IP, 16)
-	copy(mappedIP, prefixIP[:12])
-	copy(mappedIP[12:], ipv4)
-	return mappedIP.String(), true
-}
 
 // orderIPsByDNSMode 按 dns_mode 对解析出的 IP 列表排序/过滤地址族：
 //
@@ -243,7 +213,7 @@ func (p *ProxyServer) dialUpstream(cr *connectResult) error {
 					host = candidate
 					port = "443"
 				}
-				mappedIP, ok := mapNAT64Addr(host, prefix)
+				mappedIP, ok := common.MapNAT64Addr(host, prefix)
 				if ok {
 					mapped = append(mapped, net.JoinHostPort(mappedIP, port))
 				} else {
@@ -310,7 +280,7 @@ func (p *ProxyServer) dialWithRule(ctx context.Context, network, addr string, ru
 		if prefix != "" {
 			host, port, err := net.SplitHostPort(addr)
 			if err == nil {
-				mappedIP, ok := mapNAT64Addr(host, prefix)
+				mappedIP, ok := common.MapNAT64Addr(host, prefix)
 				if ok {
 					addr = net.JoinHostPort(mappedIP, port)
 				}
@@ -375,36 +345,6 @@ func (p *ProxyServer) getPhysicalLocalAddr(targetAddr string) *net.TCPAddr {
 		return nil
 	}
 	return binding.LocalTCPAddr()
-}
-
-// getPhysicalInterfaceAddr 获取物理网卡的 IPv4 地址（排除 TUN/Loopback）
-// 已废弃，保留向后兼容，新代码应使用 getPhysicalLocalAddr
-func (p *ProxyServer) getPhysicalInterfaceAddr() *net.TCPAddr {
-	interfaces, err := net.Interfaces()
-	if err != nil {
-		return nil
-	}
-	for _, iface := range interfaces {
-		if iface.Flags&net.FlagLoopback != 0 || iface.Flags&net.FlagUp == 0 {
-			continue
-		}
-		name := iface.Name
-		if strings.Contains(name, "SniShaper") || strings.Contains(name, "tun") || strings.Contains(name, "TAP") {
-			continue
-		}
-		addrs, err := iface.Addrs()
-		if err != nil || len(addrs) == 0 {
-			continue
-		}
-		for _, addr := range addrs {
-			ipNet, ok := addr.(*net.IPNet)
-			if !ok || ipNet.IP.To4() == nil {
-				continue
-			}
-			return &net.TCPAddr{IP: ipNet.IP}
-		}
-	}
-	return nil
 }
 
 func (p *ProxyServer) DialWithRule(ctx context.Context, network, addr string, rule Rule) (net.Conn, error) {
