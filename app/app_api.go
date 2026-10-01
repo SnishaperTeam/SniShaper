@@ -93,21 +93,9 @@ func NewApp() *App {
 		a.RefreshCloudflareIPPool()
 	})
 
-	// Initialize Cloudflare IP pool and trigger background health check on startup
-	cf := ruleManager.GetCloudflareConfig()
-	if len(cf.PreferredIPs) > 0 {
-		a.proxyServer.UpdateCloudflareIPPool(cf.PreferredIPs)
-		a.wg.Add(1)
-		go func() {
-			defer a.wg.Done()
-			select {
-			case <-time.After(1 * time.Second): // Wait for app to stabilize
-				a.proxyServer.TriggerCFHealthCheck()
-			case <-a.ctx.Done():
-				return
-			}
-		}()
-	}
+	// Initialize Cloudflare IP pool. ProxyServer.Start kicks off the pool's initial
+// health check, so no extra trigger is needed here.
+	a.proxyServer.UpdateCloudflareIPPool(ruleManager.GetCloudflareConfig().PreferredIPs)
 
 	// Initialize auto router (needed for GFW list refresh even without core)
 	ruleManager.InitAutoRouter(a.proxyServer.GetDoHResolver())
@@ -556,7 +544,7 @@ func (a *App) ImportConfig(content string) error {
 	a.appendLog("[action] ImportConfig called")
 	err := a.ruleManager.ImportConfig(content)
 	if err == nil {
-		a.proxyServer.UpdateCloudflareConfig(a.ruleManager.GetCloudflareConfig())
+		a.proxyServer.UpdateCloudflareIPPool(a.ruleManager.GetCloudflareConfig().PreferredIPs)
 		if a.core != nil {
 			a.core.ReloadIfRunning()
 		}
@@ -569,7 +557,7 @@ func (a *App) ImportConfigWithSummary(content string) (proxy.ImportSummary, erro
 	a.appendLog("[action] ImportConfigWithSummary called")
 	summary, err := a.ruleManager.ImportConfigWithSummary(content)
 	if err == nil {
-		a.proxyServer.UpdateCloudflareConfig(a.ruleManager.GetCloudflareConfig())
+		a.proxyServer.UpdateCloudflareIPPool(a.ruleManager.GetCloudflareConfig().PreferredIPs)
 		if a.core != nil {
 			a.core.ReloadIfRunning()
 		}
@@ -939,7 +927,7 @@ func (a *App) UpdateCloudflareConfig(cfg proxy.CloudflareConfig) error {
 
 	err := a.ruleManager.UpdateCloudflareConfig(cfg)
 	if err == nil {
-		a.proxyServer.UpdateCloudflareConfig(cfg)
+		a.proxyServer.UpdateCloudflareIPPool(cfg.PreferredIPs)
 		if a.core != nil {
 			a.core.ReloadIfRunning()
 		}

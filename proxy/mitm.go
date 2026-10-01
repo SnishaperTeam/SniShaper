@@ -264,16 +264,26 @@ func (p *ProxyServer) handleTransparent(clientConn, upstreamConn net.Conn, host 
 			dialCandidates = []string{targetAddr}
 		}
 
-		var lastErr error
+		var errs []error
 		for _, cand := range dialCandidates {
 			upstreamConn, err = p.dialWithRule(context.Background(), "tcp", cand, rule)
 			if err == nil {
+				if rule.UseCFPool && p.cfPool != nil {
+					if h, _, splitErr := net.SplitHostPort(cand); splitErr == nil && h != "" {
+						p.cfPool.ReportSuccess(h)
+					}
+				}
 				break
 			}
-			lastErr = err
+			if rule.UseCFPool && p.cfPool != nil {
+				if h, _, splitErr := net.SplitHostPort(cand); splitErr == nil && h != "" {
+					p.cfPool.ReportFailure(h)
+				}
+			}
+			errs = append(errs, fmt.Errorf("%s: %w", cand, err))
 		}
-		if err != nil {
-			log.Printf("[Tunnel] Direct dial upstream failed for %s: %v", host, lastErr)
+		if upstreamConn == nil {
+			log.Printf("[Tunnel] Direct dial upstream failed for %s: %v", host, errors.Join(errs...))
 			clientConn.Close()
 			return
 		}

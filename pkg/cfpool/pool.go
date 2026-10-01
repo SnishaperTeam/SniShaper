@@ -159,35 +159,40 @@ func (p *CloudflarePool) UpdateIPs(ips []string) {
 	go p.checkAllIPs()
 }
 
-// GetTopIPs returns up to n best IPs.
-func (p *CloudflarePool) GetTopIPs(n int) []string {
+// GetAllIPs returns every IP in the pool, best-first: active IPs ordered by
+// measured latency, then the remaining unchecked or failed ones. This is the
+// list dial candidates are built from, so it returns the whole pool rather than
+// a truncated top slice — a serial dialer must be able to move on to the next
+// IP when one is unreachable.
+func (p *CloudflarePool) GetAllIPs() []string {
 	p.mu.RLock()
 	defer p.mu.RUnlock()
 
-	count := len(p.activeIPs)
-	// Fallback to all IPs if no active ones
-	if count == 0 {
-		res := make([]string, 0, n)
-		i := 0
-		for ip := range p.allIPs {
-			res = append(res, ip)
-			i++
-			if i >= n {
-				break
-			}
+	out := make([]string, 0, len(p.allIPs))
+	for _, stats := range p.activeIPs {
+		out = append(out, stats.IP)
+	}
+	seen := make(map[string]struct{}, len(out))
+	for _, ip := range out {
+		seen[ip] = struct{}{}
+	}
+
+	rest := make([]*IPStats, 0, len(p.allIPs))
+	for ip, stats := range p.allIPs {
+		if _, ok := seen[ip]; !ok {
+			rest = append(rest, stats)
 		}
-		return res
 	}
-
-	if n > count {
-		n = count
+	sort.Slice(rest, func(i, j int) bool {
+		if rest[i].Failures != rest[j].Failures {
+			return rest[i].Failures < rest[j].Failures
+		}
+		return rest[i].LatencyVal < rest[j].LatencyVal
+	})
+	for _, stats := range rest {
+		out = append(out, stats.IP)
 	}
-
-	res := make([]string, n)
-	for i := 0; i < n; i++ {
-		res[i] = p.activeIPs[i].IP
-	}
-	return res
+	return out
 }
 
 func (p *CloudflarePool) GetAllIPsWithStats() []*IPStats {
@@ -475,6 +480,7 @@ func (p *CloudflarePool) DialParallel(ctx context.Context, network string, port 
 	var winningAddr string
 	var winningRawIP string
 
+	collect:
 	for i := 0; i < len(candidates); i++ {
 		select {
 		case res := <-resChan:
@@ -485,9 +491,11 @@ func (p *CloudflarePool) DialParallel(ctx context.Context, network string, port 
 					winningAddr = net.JoinHostPort(res.mappedIP, port)
 					winningRawIP = res.rawIP
 					cancel() // 取消其他竞速协程的拨号
-				} else {
-					res.conn.Close()
+					// 取消后其余协程会走 <-raceCtx.Done() 分支，不再写入 resChan。
+					// 必须立刻停止收集，否则会永远等待这些不会到来的结果。
+					break collect
 				}
+				res.conn.Close()
 			} else {
 				if res.err != nil {
 					lastErr = res.err

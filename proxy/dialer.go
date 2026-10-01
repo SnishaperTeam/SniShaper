@@ -134,6 +134,33 @@ func (p *ProxyServer) resolveDomainCandidates(ctx context.Context, host, port, d
 	return []string{net.JoinHostPort(host, port)}
 }
 
+// filterUnreachableFamily drops candidates whose address family cannot work on
+// this host. On an IPv4-only network every IPv6 candidate fails immediately with
+// "an unreachable network", and because the serial dial loops report only the
+// last error, those IPv6 failures used to mask the real reason an IPv4
+// candidate was rejected. Candidates whose family is viable are kept in order.
+func filterUnreachableFamily(candidates []string) []string {
+	if hasUsableIPv6() {
+		return candidates
+	}
+	out := make([]string, 0, len(candidates))
+	for _, addr := range candidates {
+		host, _, err := net.SplitHostPort(addr)
+		if err != nil {
+			out = append(out, addr)
+			continue
+		}
+		if ip := net.ParseIP(strings.Trim(host, "[]")); ip != nil && ip.To4() == nil {
+			continue
+		}
+		out = append(out, addr)
+	}
+	if len(out) == 0 {
+		return candidates
+	}
+	return out
+}
+
 func (p *ProxyServer) buildDialCandidates(ctx context.Context, targetHost, targetAddr string, rule Rule, effectiveMode string) []string {
 	// 字面 IP 目标（如 TUN 下浏览器 DoH 解析的真实 IP）：直接返回原地址保留端口
 	if isLiteralIP(targetHost) {
@@ -187,18 +214,21 @@ func (p *ProxyServer) buildDialCandidates(ctx context.Context, targetHost, targe
 		}
 
 		if rule.UseCFPool && p.CFPoolUsable() {
-			topIPs := p.cfPool.GetTopIPs(5)
-			if len(topIPs) > 0 {
-				prefs := make([]string, 0, len(topIPs))
-				for _, ip := range topIPs {
+			// 规则显式指定了 upstream 时它优先；upstream 为空/DIRECT 时 CF 池就是唯一
+			// 指定来源。取池中全部候选而非前若干个 —— 串行拨号需要足够的候选才能在个别
+			// IP 不可达时继续往下试。
+			poolIPs := p.cfPool.GetAllIPs()
+			if len(poolIPs) > 0 {
+				prefs := make([]string, 0, len(poolIPs))
+				for _, ip := range poolIPs {
 					prefs = append(prefs, net.JoinHostPort(ip, dialPort))
 				}
-				return dedupeDialCandidates(prefs)
+				return dedupeDialCandidates(filterUnreachableFamily(prefs))
 			}
 		}
 
 		if resolved := p.resolveDomainCandidates(ctx, targetHost, dialPort, rule.DNSMode); len(resolved) > 0 {
-			return resolved
+			return filterUnreachableFamily(resolved)
 		}
 	}
 
@@ -306,7 +336,7 @@ func (p *ProxyServer) dialUpstream(cr *connectResult) error {
 	}
 
 	if len(dialCandidates) > 1 {
-		var lastErr error
+		var errs []error
 		for _, addr := range dialCandidates {
 			conn, err := dial("tcp", addr)
 			if err == nil {
@@ -326,9 +356,11 @@ func (p *ProxyServer) dialUpstream(cr *connectResult) error {
 					p.cfPool.ReportFailure(h)
 				}
 			}
-			lastErr = err
+			errs = append(errs, fmt.Errorf("%s: %w", addr, err))
 		}
-		return lastErr
+		// 汇总所有候选的失败原因：只返回最后一个会让不可达地址族的报错
+		// 覆盖掉真正的失败点，排障时看到的是误导性的错误。
+		return fmt.Errorf("all %d dial candidates failed: %w", len(errs), errors.Join(errs...))
 	}
 
 	conn, err := dial("tcp", cr.dialAddr)

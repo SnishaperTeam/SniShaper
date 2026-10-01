@@ -420,22 +420,25 @@ func (p *ProxyServer) tracef(format string, args ...interface{}) {
 	}
 }
 
-func (p *ProxyServer) UpdateCloudflareConfig(cfg CloudflareConfig) {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-
-	if cfg.AutoUpdate {
-		p.updateCloudflareIPPoolLocked(cfg.PreferredIPs)
-	}
-}
-
+// UpdateCloudflareIPPool applies a set of Cloudflare IPs to the pool, creating
+// it on first use. It is the single entry point for every pool update: the GUI
+// startup path, the core runtime, the rules file watcher and the API refresh all
+// go through here. An empty list leaves an existing pool untouched.
+//
+// There used to be a second entry point gated on CloudflareConfig.AutoUpdate,
+// and the core runtime used that one. With auto-update off — the normal setup
+// for a user who pinned their own preferred IPs — that path never created the
+// pool, so every use_cf_pool rule silently fell back to DNS while the GUI copy
+// of the pool looked healthy. One entry point removes the chance of the two
+// copies disagreeing again. AutoUpdate now only governs whether fresh IPs are
+// pulled from the API.
 func (p *ProxyServer) UpdateCloudflareIPPool(ips []string) {
+	if len(ips) == 0 {
+		return
+	}
+
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	p.updateCloudflareIPPoolLocked(ips)
-}
-
-func (p *ProxyServer) updateCloudflareIPPoolLocked(ips []string) {
 	if p.cfPool == nil {
 		p.cfPool = cfpool.NewCloudflarePool(ips)
 		return

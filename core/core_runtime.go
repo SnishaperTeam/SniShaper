@@ -102,7 +102,7 @@ func (r *coreRuntime) start() error {
 		r.appendLog("[core] Failed to init cert manager: " + err.Error())
 	}
 	r.proxyServer.SetRuleManager(r.ruleManager)
-	r.proxyServer.UpdateCloudflareConfig(r.ruleManager.GetCloudflareConfig())
+	r.proxyServer.UpdateCloudflareIPPool(r.ruleManager.GetCloudflareConfig().PreferredIPs)
 	r.proxyServer.SetCertGenerator(r.certManager)
 	r.proxyServer.SetLogCallback(r.appendLog)
 	r.proxyServer.SetSocks5Enabled(r.ruleManager.GetSocks5Enabled())
@@ -163,7 +163,7 @@ func (r *coreRuntime) reloadConfig() error {
 		return err
 	}
 	r.proxyServer.SetRuleManager(r.ruleManager)
-	r.proxyServer.UpdateCloudflareConfig(r.ruleManager.GetCloudflareConfig())
+	r.proxyServer.UpdateCloudflareIPPool(r.ruleManager.GetCloudflareConfig().PreferredIPs)
 	r.proxyServer.SetCertGenerator(r.certManager)
 	r.proxyServer.SetSocks5Enabled(r.ruleManager.GetSocks5Enabled())
 	r.ruleManager.InitAutoRouter(r.proxyServer.GetDoHResolver())
