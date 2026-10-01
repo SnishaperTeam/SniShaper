@@ -102,6 +102,12 @@ func (r *FailoverResolver) getNodeClient(ctx context.Context, node DNSNode) (*ht
 		if len(echBytes) > 0 {
 			tlsConfig.EncryptedClientHelloConfigList = echBytes
 			tlsConfig.InsecureSkipVerify = false
+		} else if !node.CertVerify.AllowUnknownAuthority {
+			// 与主代理路径一致：默认仅校验证书链（不匹配主机名），
+			// 不再无验证放行；用户显式允许未知 CA 时保持原行为
+			tlsConfig.VerifyConnection = func(cs tls.ConnectionState) error {
+				return common.VerifyChainOnly(cs.PeerCertificates)
+			}
 		}
 		if rule.SniFake != "" {
 			tlsConfig.ServerName = rule.SniFake

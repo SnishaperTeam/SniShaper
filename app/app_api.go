@@ -354,6 +354,28 @@ func (a *App) SetSocks5Port(port string) error {
 	return nil
 }
 
+type Socks5AuthInfo struct {
+	Username string `json:"username"`
+	Password string `json:"password"`
+}
+
+func (a *App) GetSocks5Auth() Socks5AuthInfo {
+	username, password := a.ruleManager.GetSocks5Auth()
+	return Socks5AuthInfo{Username: username, Password: password}
+}
+
+func (a *App) SetSocks5Auth(username, password string) error {
+	a.appendLog(fmt.Sprintf("[action] SetSocks5Auth: user=%s", username))
+	a.ruleManager.SetSocks5Auth(username, password)
+	_ = a.ruleManager.SaveConfig()
+	// 正在运行的 SOCKS5 监听重启后才会套用新凭据
+	if a.proxyServer.IsSocks5Enabled() && a.proxyServer.IsRunning() {
+		a.proxyServer.SetSocks5Enabled(false)
+		a.proxyServer.SetSocks5Enabled(true)
+	}
+	return nil
+}
+
 func (a *App) GetProxyMode() string {
 	if a.core != nil {
 		return a.core.GetProxyMode()

@@ -182,7 +182,15 @@ func (p *ProxyServer) generateCert(host string, caCert *x509.Certificate, caKey 
 	}
 
 	if len(p.certCache) > 1000 {
-		p.certCache = make(map[string]*tls.Certificate)
+		// 超限时只淘汰最老的 256 条，避免全量清空导致证书重新生成风暴
+		drop := 256
+		if drop > len(p.certCacheOrder) {
+			drop = len(p.certCacheOrder)
+		}
+		for _, h := range p.certCacheOrder[:drop] {
+			delete(p.certCache, h)
+		}
+		p.certCacheOrder = p.certCacheOrder[drop:]
 	}
 
 	priv, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
@@ -235,6 +243,7 @@ func (p *ProxyServer) generateCert(host string, caCert *x509.Certificate, caKey 
 	}
 
 	p.certCache[host] = &cert
+	p.certCacheOrder = append(p.certCacheOrder, host)
 	return &cert, nil
 }
 
@@ -315,7 +324,9 @@ func (p *ProxyServer) GetUConn(conn net.Conn, sni string, verifyName string, rul
 		skipVerify = true
 	}
 
+	bypassed := false
 	if _, ok := p.certBypassMap.Load(normalizeHost(verifyName)); ok {
+		bypassed = true
 		skipVerify = true
 		verifyConn = nil
 	}
@@ -323,6 +334,13 @@ func (p *ProxyServer) GetUConn(conn net.Conn, sni string, verifyName string, rul
 	if len(echConfig) > 0 {
 		skipVerify = false
 		verifyConn = nil
+	} else if !bypassed && skipVerify && verifyConn == nil {
+		// 未显式配置证书校验时不直接放行：默认回落为仅链校验
+		// （不匹配主机名，SNI 可能是被主动伪造的）。
+		// 自签/私有 CA 上游需显式配置 cert_verify（allow_unknown_authority）
+		// 或加入豁免列表。
+		skipVerify = false
+		verifyConn = buildVerifyConnection(verifyName, CertVerifyConfig{Mode: "chain_only"})
 	}
 
 	config := &utls.Config{
@@ -334,13 +352,14 @@ func (p *ProxyServer) GetUConn(conn net.Conn, sni string, verifyName string, rul
 	}
 
 	if len(echConfig) > 0 {
+		// ECH 被拒时 uTLS 会回退验证外层 public_name 证书。
+		// 不设置 EncryptedClientHelloRejectionVerify 回调：回调返回 nil 会
+		// 完全替代证书校验，等于放行任意证书。留空回调让 uTLS 用系统根
+		// 验证 public_name 证书链；InsecureServerNameToVerify="*" 表示只验
+		// 链、不匹配主机名（回退证书属于 ECH public name，不是目标站点）。
+		// 正常的 ECH 拒绝仍以 ECHRejectionError 返回并携带 RetryConfigList，
+		// 纠错重试不受影响；证书非法的"拒绝"则直接握手失败。
 		config.InsecureServerNameToVerify = "*"
-		// ECH 被服务器拒绝时，uTLS 会验证外层 public_name 证书。
-		// 返回 nil 允许握手继续，以便提取 RetryConfigList 进行纠错重试。
-		// CA 链验证仍由 uTLS 内部 RootCAs 保证安全性。
-		config.EncryptedClientHelloRejectionVerify = func(cs utls.ConnectionState) error {
-			return nil
-		}
 	}
 
 	clientHelloID := chooseUTLSClientHelloID()
@@ -467,6 +486,10 @@ func (p *ProxyServer) NewQUICRoundTripper(host string, rule Rule) (*http3.Transp
 	}
 
 	verifyConn := buildVerifyConnection(host, rule.CertVerify)
+	bypassed := false
+	if _, ok := p.certBypassMap.Load(normalizeHost(host)); ok {
+		bypassed = true
+	}
 	tlsConfig := &tls.Config{
 		ServerName:         innerSNI,
 		NextProtos:         []string{"h3", "h3-29", "h3-32"},
@@ -477,6 +500,10 @@ func (p *ProxyServer) NewQUICRoundTripper(host string, rule Rule) (*http3.Transp
 		tlsConfig.EncryptedClientHelloConfigList = echConfig
 		tlsConfig.InsecureSkipVerify = false
 		log.Printf("[QUIC] ECH enabled host=%s innerSNI=%s echLen=%d", host, innerSNI, len(echConfig))
+	} else if verifyConn == nil && !bypassed {
+		// 默认仅校验证书链（不匹配主机名），不再无验证放行；
+		// 自签/私有 CA 上游需显式配置 cert_verify 或加入豁免列表
+		verifyConn = buildVerifyConnection(host, CertVerifyConfig{Mode: "chain_only"})
 	}
 
 	if verifyConn != nil && len(echConfig) == 0 {
@@ -735,6 +762,7 @@ func (p *ProxyServer) ClearCertCache() {
 	p.certCacheMu.Lock()
 	defer p.certCacheMu.Unlock()
 	p.certCache = make(map[string]*tls.Certificate)
+	p.certCacheOrder = nil
 }
 
 func (p *ProxyServer) certCacheCleanup(ctx context.Context) {

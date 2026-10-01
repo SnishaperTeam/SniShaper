@@ -70,6 +70,7 @@ type App struct {
 	pendingShow         bool
 	pendingUpdateMu     sync.Mutex
 	pendingUpdatePath   string
+	pendingUpdateSHA    string // 待安装更新包校验通过的 SHA-256
 	downloadConcurrency int
 	downloadChunkSize   int64
 	sourceRankMu        sync.Mutex

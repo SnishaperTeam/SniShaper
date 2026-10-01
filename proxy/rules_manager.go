@@ -31,6 +31,8 @@ type RuleManager struct {
 	autoUpdateRules               bool
 	socks5Enabled                 bool
 	socks5Port                    string
+	socks5Username                string
+	socks5Password                string
 	listenPort                    string
 	echProfiles                   []ECHProfile
 	nat64Profiles                 []NAT64Profile
@@ -103,6 +105,10 @@ func (r *RuleManager) SetRules(rules []Rule) {
 	r.rules = rules
 }
 
+// routerDebugEnabled 由 SNISHAPER_ROUTER_DEBUG=1 开启；
+// 默认关闭，避免每个请求都写路由日志刷屏
+var routerDebugEnabled = os.Getenv("SNISHAPER_ROUTER_DEBUG") == "1"
+
 func (r *RuleManager) matchRule(host, mode string) Rule {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
@@ -127,10 +133,14 @@ func (r *RuleManager) matchRule(host, mode string) Rule {
 	// 如果命中了特定规则
 	if bestScore >= 0 {
 		if mode == "transparent" && best.Mode == "mitm" {
-			log.Printf("[RuleMatch] Global Transparent detected: Downgrading MITM rule (%s) to DIRECT to avoid cert errors.", host)
+			if routerDebugEnabled {
+				log.Printf("[RuleMatch] Global Transparent detected: Downgrading MITM rule (%s) to DIRECT to avoid cert errors.", host)
+			}
 			best.Mode = "direct"
 		}
-		log.Printf("[Router] %s -> %s", host, best.Mode)
+		if routerDebugEnabled {
+			log.Printf("[Router] %s -> %s", host, best.Mode)
+		}
 		r.emitRouteEvent(host, best.Mode)
 		return best
 	}
@@ -139,14 +149,18 @@ func (r *RuleManager) matchRule(host, mode string) Rule {
 	if r.autoRouter != nil && r.autoRoutingConfig.Mode != "" {
 		autoRule := r.autoRouter.Decide(host)
 		if autoRule.Mode != "direct" {
-			log.Printf("[Router] %s -> %s (AutoRoute)", host, autoRule.Mode)
+			if routerDebugEnabled {
+				log.Printf("[Router] %s -> %s (AutoRoute)", host, autoRule.Mode)
+			}
 			r.emitRouteEvent(host, autoRule.Mode)
 			return autoRule
 		}
 	}
 
 	// 未命中任何规则，走直连
-	log.Printf("[Router] %s -> direct (Default)", host)
+	if routerDebugEnabled {
+		log.Printf("[Router] %s -> direct (Default)", host)
+	}
 	r.emitRouteEvent(host, "direct")
 	return Rule{
 		Mode:    "direct",
@@ -311,6 +325,8 @@ func (rm *RuleManager) loadSettingsConfig() error {
 	if config.Socks5Port != "" {
 		rm.socks5Port = config.Socks5Port
 	}
+	rm.socks5Username = strings.TrimSpace(config.Socks5Username)
+	rm.socks5Password = config.Socks5Password
 	rm.autoRoutingConfig = config.AutoRouting
 	if config.Language != "" {
 		rm.language = config.Language
@@ -528,6 +544,19 @@ func (rm *RuleManager) GetSocks5Port() string {
 func (rm *RuleManager) SetSocks5Port(port string) {
 	rm.mu.Lock()
 	rm.socks5Port = port
+	rm.mu.Unlock()
+}
+
+func (rm *RuleManager) GetSocks5Auth() (string, string) {
+	rm.mu.RLock()
+	defer rm.mu.RUnlock()
+	return rm.socks5Username, rm.socks5Password
+}
+
+func (rm *RuleManager) SetSocks5Auth(username, password string) {
+	rm.mu.Lock()
+	rm.socks5Username = strings.TrimSpace(username)
+	rm.socks5Password = password
 	rm.mu.Unlock()
 }
 
@@ -894,6 +923,8 @@ func (rm *RuleManager) saveSettingsConfig() error {
 		Language:                   rm.language,
 		Theme:                      rm.theme,
 		Socks5Enabled:              &socks5Enabled,
+		Socks5Username:             rm.socks5Username,
+		Socks5Password:             rm.socks5Password,
 		MigrationEnabled:           &migrationEnabled,
 		MigrationServer:            rm.migrationServer,
 		UpdateChannel:              rm.updateChannel,

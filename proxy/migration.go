@@ -15,6 +15,7 @@ import (
 	"math/big"
 	"net"
 	"net/http"
+	"net/url"
 	"reflect"
 	"strings"
 	"sync"
@@ -236,10 +237,11 @@ func (p *ProxyServer) handleMigration(clientConn net.Conn, host, port string, ru
 		// 2c. TLS handshake with session resumption
 		cache.setActiveHost(host)
 		tlsConfig := &tls.Config{
-			ServerName:         rule.SniFake,
-			MinVersion:         tls.VersionTLS12,
-			MaxVersion:         tls.VersionTLS12,
+			ServerName: rule.SniFake,
+			MinVersion: tls.VersionTLS12,
+			MaxVersion: tls.VersionTLS12,
 			ClientSessionCache: cache,
+			// blindtls 约定：会话恢复握手时服务端不发送证书，无证书可校验
 			InsecureSkipVerify: true,
 		}
 
@@ -344,7 +346,10 @@ func (p *ProxyServer) resolveMigrationIP(host string, rule Rule) string {
 // fetchMigrationTicket retrieves session credentials from the remote API.
 func (p *ProxyServer) fetchMigrationTicket(cache *migrationSessionCache, host, port, server, resolvedIP string) (string, error) {
 	target := net.JoinHostPort(host, port)
-	apiURL := fmt.Sprintf("%s?target=%s&ip=%s", server, target, resolvedIP)
+	query := url.Values{}
+	query.Set("target", target)
+	query.Set("ip", resolvedIP)
+	apiURL := server + "?" + query.Encode()
 	p.tracef("[Migration] GET %s", apiURL)
 
 	httpClient := &http.Client{Timeout: 15 * time.Second}

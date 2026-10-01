@@ -75,7 +75,16 @@ func (a *App) installSevenZ(localPath string) error {
 	return nil
 }
 
+// psQuoteSingle 将字符串安全嵌入 PowerShell 单引号字符串（' 转义为 ''）
+func psQuoteSingle(s string) string {
+	return strings.ReplaceAll(s, "'", "''")
+}
+
 func buildUpdateScript(archive, stage, execDir, base string) string {
+	archive = psQuoteSingle(archive)
+	stage = psQuoteSingle(stage)
+	execDir = psQuoteSingle(execDir)
+	base = psQuoteSingle(base)
 	return `$ErrorActionPreference = 'Continue'
 $Host.UI.RawUI.WindowTitle = 'SniShaper 便携版更新'
 Write-Host ''

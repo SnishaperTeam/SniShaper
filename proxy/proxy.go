@@ -161,6 +161,8 @@ type SettingsConfig struct {
 	Theme                         string            `json:"theme,omitempty"`
 	CloudflareConfig              CloudflareConfig  `json:"cloudflare_config,omitempty"`
 	Socks5Enabled                 *bool             `json:"socks5_enabled,omitempty"`
+	Socks5Username                string            `json:"socks5_username,omitempty"`
+	Socks5Password                string            `json:"socks5_password,omitempty"`
 	MigrationEnabled              *bool             `json:"migration_enabled,omitempty"`
 	MigrationServer               string            `json:"migration_server,omitempty"`
 	UpdateChannel                 string            `json:"update_channel,omitempty"`
@@ -238,9 +240,11 @@ type ProxyServer struct {
 	rules         *RuleManager
 	running       bool
 	mode          string
-	mu            sync.RWMutex
-	certCacheMu   sync.RWMutex
-	certCache     map[string]*tls.Certificate
+	mu               sync.RWMutex
+	certCacheMu      sync.RWMutex
+	certCache        map[string]*tls.Certificate
+	certCacheOrder   []string // 证书缓存插入顺序，超限时按最老优先淘汰
+	certCleanupCancel context.CancelFunc
 	Fingerprint   string
 	certGenerator CertGenerator
 	dohResolver   *dohresolver.FailoverResolver
@@ -613,7 +617,9 @@ func (p *ProxyServer) Start() error {
 	p.mu.Unlock()
 
 	// Periodic cert cache cleanup (异步化运行，解决永久阻塞)
-	go p.certCacheCleanup(context.Background())
+	cleanupCtx, cleanupCancel := context.WithCancel(context.Background())
+	p.certCleanupCancel = cleanupCancel
+	go p.certCacheCleanup(cleanupCtx)
 
 	go func() {
 		defer func() {
@@ -648,7 +654,9 @@ func (p *ProxyServer) Start() error {
 	}()
 
 	if p.socks5Enabled {
-		p.startSocks5()
+		p.mu.Lock()
+		p.startSocks5Locked()
+		p.mu.Unlock()
 	}
 
 	return nil
@@ -664,6 +672,12 @@ func (p *ProxyServer) Stop() error {
 		return nil
 	}
 	p.running = false
+
+	// 停掉证书缓存清理协程，避免反复 Start/Stop 泄漏 goroutine
+	if p.certCleanupCancel != nil {
+		p.certCleanupCancel()
+		p.certCleanupCancel = nil
+	}
 
 	if p.socks5Tracker != nil {
 		_ = p.socks5Tracker.Close()
@@ -699,7 +713,7 @@ func (p *ProxyServer) SetSocks5Enabled(enabled bool) {
 	p.socks5Enabled = enabled
 	if p.running {
 		if enabled {
-			p.startSocks5()
+			p.startSocks5Locked()
 		} else {
 			if p.socks5Tracker != nil {
 				_ = p.socks5Tracker.Close()
@@ -835,7 +849,13 @@ func (c *socks5TrackedConn) Close() error {
 	return c.Conn.Close()
 }
 
-func (p *ProxyServer) startSocks5() {
+// startSocks5Locked 启动 SOCKS5 监听，调用方必须已持有 p.mu
+func (p *ProxyServer) startSocks5Locked() {
+	// 重复启用时先关闭旧监听，避免端口泄漏
+	if p.socks5Tracker != nil {
+		_ = p.socks5Tracker.Close()
+		p.socks5Tracker = nil
+	}
 	p.socks5Server = p.newSocks5Server()
 	socks5Ln, err := net.Listen("tcp", p.socks5Addr)
 	if err != nil {
@@ -843,14 +863,17 @@ func (p *ProxyServer) startSocks5() {
 		return
 	}
 	p.socks5Tracker = &socks5ConnTracker{Listener: socks5Ln}
+	addr := p.socks5Addr
+	server := p.socks5Server
+	tracker := p.socks5Tracker
 	go func() {
 		defer func() {
 			if r := recover(); r != nil {
 				log.Printf("[Proxy] panic in SOCKS5 server: %v", r)
 			}
 		}()
-		log.Printf("[Proxy] SOCKS5 server started on %s", p.socks5Addr)
-		if err := p.socks5Server.Serve(p.socks5Tracker); err != nil {
+		log.Printf("[Proxy] SOCKS5 server started on %s", addr)
+		if err := server.Serve(tracker); err != nil {
 			log.Printf("[Proxy] SOCKS5 server error: %v", err)
 		}
 	}()
@@ -1084,6 +1107,22 @@ func hostMatchesDomain(host, domain string) bool {
 	return strings.HasSuffix(host, "."+domain)
 }
 
+// domainRegexCache 缓存规则里的 ~ 正则，避免每个请求都重新编译
+var domainRegexCache sync.Map // pattern -> *regexp.Regexp，编译失败存 nil
+
+func getDomainRegex(pattern string) *regexp.Regexp {
+	if v, ok := domainRegexCache.Load(pattern); ok {
+		re, _ := v.(*regexp.Regexp)
+		return re
+	}
+	re, err := regexp.Compile(pattern)
+	if err != nil {
+		re = nil
+	}
+	domainRegexCache.Store(pattern, re)
+	return re
+}
+
 func domainMatchScore(host, domain string) int {
 	host = strings.ToLower(strings.TrimSpace(host))
 	domain = strings.ToLower(strings.TrimSpace(domain))
@@ -1096,8 +1135,8 @@ func domainMatchScore(host, domain string) int {
 		if pattern == "" {
 			return -1
 		}
-		re, err := regexp.Compile(pattern)
-		if err != nil {
+		re := getDomainRegex(pattern)
+		if re == nil {
 			return -1
 		}
 		if re.MatchString(host) {

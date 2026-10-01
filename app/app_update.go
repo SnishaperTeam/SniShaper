@@ -1,6 +1,8 @@
 package app
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -73,6 +75,9 @@ type githubAsset struct {
 	Name        string `json:"name"`
 	Size        int64  `json:"size"`
 	DownloadURL string `json:"browser_download_url"`
+	// Digest is the "sha256:..." digest reported by the GitHub Releases API.
+	// Only the value from the official api.github.com endpoint is trusted.
+	Digest string `json:"digest"`
 }
 
 var validUpdateChannels = map[string]string{
@@ -391,45 +396,69 @@ func (a *App) CheckUpdate() CheckUpdateResult {
 
 func (a *App) fetchGitHubReleases() ([]githubRelease, error) {
 	apiURL := githubAPIBase + "/releases?per_page=100"
-	urls := []string{apiURL, githubProxyBase + apiURL}
-	var lastErr error
-	for _, u := range urls {
-		req, err := http.NewRequest(http.MethodGet, u, nil)
-		if err != nil {
-			lastErr = err
-			continue
-		}
-		req.Header.Set("User-Agent", updateUserAgent)
-		req.Header.Set("Accept", "application/vnd.github+json")
-		client := &http.Client{Timeout: 20 * time.Second}
-		resp, err := client.Do(req)
-		if err != nil {
-			lastErr = err
-			continue
-		}
-		if resp.StatusCode == http.StatusForbidden || resp.StatusCode == http.StatusTooManyRequests {
-			resp.Body.Close()
-			return nil, fmt.Errorf("rate_limited")
-		}
-		if resp.StatusCode != http.StatusOK {
-			lastErr = fmt.Errorf("http status %d", resp.StatusCode)
-			resp.Body.Close()
-			continue
-		}
-		body, err := io.ReadAll(io.LimitReader(resp.Body, 8*1024*1024))
-		resp.Body.Close()
-		if err != nil {
-			lastErr = err
-			continue
-		}
-		var releases []githubRelease
-		if err := json.Unmarshal(body, &releases); err != nil {
-			lastErr = err
-			continue
-		}
+	// Official API first; the mirror is only a fallback for listing releases.
+	releases, err := fetchReleasesFromURL(apiURL)
+	if err == nil {
 		return releases, nil
 	}
-	return nil, lastErr
+	if mirrorReleases, mirrorErr := fetchReleasesFromURL(githubProxyBase + apiURL); mirrorErr == nil {
+		return mirrorReleases, nil
+	}
+	return nil, err
+}
+
+func fetchReleasesFromURL(apiURL string) ([]githubRelease, error) {
+	req, err := http.NewRequest(http.MethodGet, apiURL, nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("User-Agent", updateUserAgent)
+	req.Header.Set("Accept", "application/vnd.github+json")
+	client := &http.Client{Timeout: 20 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	if resp.StatusCode == http.StatusForbidden || resp.StatusCode == http.StatusTooManyRequests {
+		resp.Body.Close()
+		return nil, fmt.Errorf("rate_limited")
+	}
+	if resp.StatusCode != http.StatusOK {
+		resp.Body.Close()
+		return nil, fmt.Errorf("http status %d", resp.StatusCode)
+	}
+	body, err := io.ReadAll(io.LimitReader(resp.Body, 8*1024*1024))
+	resp.Body.Close()
+	if err != nil {
+		return nil, err
+	}
+	var releases []githubRelease
+	if err := json.Unmarshal(body, &releases); err != nil {
+		return nil, err
+	}
+	return releases, nil
+}
+
+// fetchOfficialAssetDigest resolves the expected SHA-256 of a release asset
+// from the official GitHub API. Mirror responses are never used here.
+func (a *App) fetchOfficialAssetDigest(assetURL string) (string, error) {
+	releases, err := fetchReleasesFromURL(githubAPIBase + "/releases?per_page=100")
+	if err != nil {
+		return "", err
+	}
+	for _, rel := range releases {
+		for _, asset := range rel.Assets {
+			if asset.DownloadURL != assetURL {
+				continue
+			}
+			digest := strings.TrimPrefix(strings.ToLower(strings.TrimSpace(asset.Digest)), "sha256:")
+			if digest == "" {
+				return "", fmt.Errorf("official GitHub API did not provide a digest for %s", asset.Name)
+			}
+			return digest, nil
+		}
+	}
+	return "", fmt.Errorf("asset not found on official GitHub releases: %s", assetURL)
 }
 
 func resolveChannelRelease(releases []githubRelease, channel string) *githubRelease {
@@ -611,7 +640,29 @@ func compareReleaseVersions(current, currentChannel, target, targetChannel strin
 	return 0
 }
 
+// fileSHA256Hex streams a file through SHA-256 and returns the lowercase hex digest.
+func fileSHA256Hex(path string) (string, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return "", err
+	}
+	defer f.Close()
+	h := sha256.New()
+	if _, err := io.Copy(h, f); err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(h.Sum(nil)), nil
+}
+
 func (a *App) DownloadUpdateAsset(assetURL string) (DownloadResult, error) {
+	// Resolve the expected SHA-256 from the official GitHub API before
+	// downloading. Without a trusted digest the update is rejected outright.
+	expectedSHA, err := a.fetchOfficialAssetDigest(assetURL)
+	if err != nil {
+		a.appendLog("[update] Integrity check unavailable (official GitHub API): " + err.Error())
+		return DownloadResult{}, fmt.Errorf("update integrity check unavailable: %v", err)
+	}
+
 	fileName := filepath.Base(strings.SplitN(assetURL, "?", 2)[0])
 	if fileName == "." || fileName == "/" || fileName == "" {
 		fileName = "snishaper-update.bin"
@@ -629,7 +680,22 @@ func (a *App) DownloadUpdateAsset(assetURL string) (DownloadResult, error) {
 			a.appendLog("[update] Download attempt failed: " + u + " -> " + err.Error())
 			continue
 		}
-		a.SetPendingUpdate(dest)
+		// Verify the downloaded bytes; a tampered mirror is treated like a
+		// failed download and the next source is tried.
+		sum, hashErr := fileSHA256Hex(dest)
+		if hashErr != nil {
+			lastErr = hashErr
+			os.Remove(dest)
+			a.appendLog("[update] Hashing failed for " + dest + ": " + hashErr.Error())
+			continue
+		}
+		if !strings.EqualFold(sum, expectedSHA) {
+			lastErr = fmt.Errorf("integrity check failed for %s: expected sha256 %s, got %s", fileName, expectedSHA, sum)
+			os.Remove(dest)
+			a.appendLog("[update] " + lastErr.Error())
+			continue
+		}
+		a.setPendingUpdateVerified(dest, expectedSHA)
 		return DownloadResult{LocalPath: dest, Size: fileSize(dest)}, nil
 	}
 	return DownloadResult{}, lastErr
@@ -849,9 +915,34 @@ func (a *App) SetPendingUpdate(path string) {
 	a.pendingUpdateMu.Lock()
 	defer a.pendingUpdateMu.Unlock()
 	a.pendingUpdatePath = path
+	a.pendingUpdateSHA = ""
+}
+
+// setPendingUpdateVerified records the verified download together with the
+// SHA-256 it was validated against, so the installer can re-check the file
+// right before executing it.
+func (a *App) setPendingUpdateVerified(path, expectedSHA string) {
+	a.pendingUpdateMu.Lock()
+	defer a.pendingUpdateMu.Unlock()
+	a.pendingUpdatePath = path
+	a.pendingUpdateSHA = expectedSHA
 }
 
 func (a *App) InstallUpdateAsset(localPath string) error {
+	// Re-verify the pending download before executing it, so a file swapped
+	// or modified on disk after the download cannot be installed.
+	a.pendingUpdateMu.Lock()
+	pendingPath, expectedSHA := a.pendingUpdatePath, a.pendingUpdateSHA
+	a.pendingUpdateMu.Unlock()
+	if expectedSHA != "" && strings.EqualFold(localPath, pendingPath) {
+		sum, err := fileSHA256Hex(localPath)
+		if err != nil {
+			return fmt.Errorf("update integrity re-check failed: %v", err)
+		}
+		if !strings.EqualFold(sum, expectedSHA) {
+			return fmt.Errorf("update file changed after download (sha256 mismatch), refusing to install")
+		}
+	}
 	err := a.installUpdateAsset(localPath)
 	if err == nil {
 		a.SetPendingUpdate("")

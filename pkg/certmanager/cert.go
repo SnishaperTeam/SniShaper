@@ -8,6 +8,7 @@ import (
 	"crypto/x509/pkix"
 	"encoding/hex"
 	"encoding/pem"
+	"errors"
 	"fmt"
 	"math/big"
 	"os"
@@ -123,6 +124,9 @@ func (cm *CertManager) LoadCA() error {
 	}
 
 	block, _ := pem.Decode(caData)
+	if block == nil {
+		return errors.New("invalid CA certificate PEM")
+	}
 	cert, err := x509.ParseCertificate(block.Bytes)
 	if err != nil {
 		return err
@@ -134,6 +138,9 @@ func (cm *CertManager) LoadCA() error {
 	}
 
 	keyBlock, _ := pem.Decode(keyData)
+	if keyBlock == nil {
+		return errors.New("invalid CA key PEM")
+	}
 	key, err := x509.ParsePKCS1PrivateKey(keyBlock.Bytes)
 	if err != nil {
 		return err

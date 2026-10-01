@@ -549,6 +549,12 @@ func (p *ProxyServer) establishUpstreamConn(host string, rule Rule, dialCandidat
 		raceCtx, cancel := context.WithCancel(context.Background())
 		defer cancel()
 
+		// ECH 配置只解析一次，所有候选共用，避免每个候选都触发一次 DoH 查询
+		var sharedECH []byte
+		if rule.ECHEnabled {
+			sharedECH = p.resolveRuleECHConfig(host, rule)
+		}
+
 		for _, cand := range dialCandidates {
 			go func(addr string) {
 				// 1. TCP 拨号
@@ -562,10 +568,7 @@ func (p *ProxyServer) establishUpstreamConn(host string, rule Rule, dialCandidat
 				}
 
 				// 2. TLS 握手
-				var echBytes []byte
-				if rule.ECHEnabled {
-					echBytes = p.resolveRuleECHConfig(host, rule)
-				}
+				echBytes := sharedECH
 				allowInsecure := len(echBytes) == 0
 				uconn := p.GetUConn(tcpConn, rule.SniFake, host, rule, allowInsecure, initialALPN, echBytes)
 
