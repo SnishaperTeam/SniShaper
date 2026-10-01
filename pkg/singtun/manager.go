@@ -79,7 +79,7 @@ func (m *Manager) Start(cfg proxy.TUNConfig, proxyAddr string) (err error) {
 		Inet6Gateway: netip.MustParseAddr("fd65:198:18::1"),
 		AutoRoute:    cfg.AutoRoute,
 		StrictRoute:  cfg.StrictRoute,
-		DNSServers: []netip.Addr{
+		DNSAddress: []netip.Addr{
 			netip.MustParseAddr("198.18.0.2"),
 			netip.MustParseAddr("fd65:198:18::2"),
 		},

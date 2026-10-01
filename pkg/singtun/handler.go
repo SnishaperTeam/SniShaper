@@ -24,6 +24,9 @@ import (
 	"snishaper/pkg/netiface"
 )
 
+// ponytail: JudgeFlow returns ActionAccept unconditionally; add flow-level
+// bypass logic if per-flow direct routing is ever needed.
+
 // Handler 实现 sing-tun 的 Handler 接口
 // 负责将 TUN 流量转发到 SniShaper Proxy
 type Handler struct {
@@ -77,16 +80,12 @@ func (h *Handler) SetInterfaceConfig(cfg netiface.Config) {
 	h.ifaceConfig = cfg
 }
 
-// PrepareConnection 在连接建立前调用，可用于规则预匹配
-func (h *Handler) PrepareConnection(
-	network string,
-	source M.Socksaddr,
-	destination M.Socksaddr,
-	routeContext tun.DirectRouteContext,
-	timeout time.Duration,
-) (tun.DirectRouteDestination, error) {
-	// 返回 nil 表示不直连，走代理
-	return nil, nil
+func (h *Handler) JudgeFlow(network uint8, source netip.AddrPort, destination netip.AddrPort, firstPacket []byte) tun.FlowVerdict {
+	return tun.FlowVerdict{Action: tun.ActionAccept}
+}
+
+func (h *Handler) NewDNSPacket(payload []byte, source M.Socksaddr, destination M.Socksaddr, writer N.PacketWriter) {
+	h.handleRawDNSPacket(payload, source, destination, writer)
 }
 
 // NewConnectionEx 处理新的 TCP 连接
@@ -340,58 +339,32 @@ func (h *Handler) resolveHost(destination M.Socksaddr) string {
 	return addr.String()
 }
 
-// NewPacketConnectionEx 处理新的 UDP 连接
+// NewPacketConnectionEx 处理新的 UDP 连接（非 DNS；DNS 由 NewDNSPacket 接管）
 func (h *Handler) NewPacketConnectionEx(ctx context.Context, conn N.PacketConn, source M.Socksaddr, destination M.Socksaddr, onClose N.CloseHandlerFunc) {
-	// 检测 DNS 请求（目标端口 53）
-	if destination.Port == 53 {
-		h.handleDNS(ctx, conn, source, destination, onClose)
-		return
-	}
-	// 其他 UDP 流量直接转发到上游
 	h.forwardUDPDirect(ctx, conn, source, destination, onClose)
 }
 
-// handleDNS 处理 DNS 查询，实现 fake-ip
-func (h *Handler) handleDNS(ctx context.Context, conn N.PacketConn, source M.Socksaddr, destination M.Socksaddr, onClose N.CloseHandlerFunc) {
-	// 1. 读取 DNS 查询
-	queryBuf := buf.NewPacket()
-	defer queryBuf.Release()
-	_, err := conn.ReadPacket(queryBuf)
-	if err != nil {
-		h.logf("[sing-tun] failed to read DNS: " + err.Error())
-		if onClose != nil {
-			onClose(err)
-		}
-		return
-	}
-
-	// 2. 解析 DNS 消息
+// handleRawDNSPacket handles DNS packets delivered via NewDNSPacket.
+// Unlike handleDNS (which reads from a PacketConn), this receives the raw
+// payload and a PacketWriter for responses.
+func (h *Handler) handleRawDNSPacket(payload []byte, source M.Socksaddr, destination M.Socksaddr, writer N.PacketWriter) {
 	msg := new(dns.Msg)
-	if err := msg.Unpack(queryBuf.Bytes()); err != nil {
-		h.logf("[sing-tun] failed to parse DNS: " + err.Error())
-		if onClose != nil {
-			onClose(err)
-		}
+	if err := msg.Unpack(payload); err != nil {
+		h.logf("[sing-tun] failed to parse DNS packet: " + err.Error())
 		return
 	}
 
-	// 3. 提取查询域名
 	if len(msg.Question) == 0 {
-		if onClose != nil {
-			onClose(nil)
-		}
 		return
 	}
 	question := msg.Question[0]
 	domain := dns.CanonicalName(question.Name)
 
-	// 4. 只处理 A/AAAA 查询，其他类型用真实 DNS
 	if question.Qtype != dns.TypeA && question.Qtype != dns.TypeAAAA {
-		h.handleDNSReal(ctx, conn, msg, destination, onClose)
+		h.handleDNSRealPacket(msg, domain, destination, writer)
 		return
 	}
 
-	// 5. 生成 fake-ip 并存储映射
 	var fakeIP netip.Addr
 	var isNew bool
 	if question.Qtype == dns.TypeA {
@@ -399,12 +372,10 @@ func (h *Handler) handleDNS(ctx context.Context, conn N.PacketConn, source M.Soc
 	} else {
 		fakeIP, isNew = h.fakeIP.CreateIPv6(domain)
 	}
-	// 仅新建时打日志，避免 Windows DNS 重试导致同域名刷屏
 	if isNew {
 		h.logf(fmt.Sprintf("[sing-tun] fake-ip: %s -> %s (type: %d)", domain, fakeIP, question.Qtype))
 	}
 
-	// 6. 构建 DNS 响应（返回 fake-ip）
 	resp := new(dns.Msg)
 	resp.SetReply(msg)
 	resp.RecursionAvailable = true
@@ -431,34 +402,42 @@ func (h *Handler) handleDNS(ctx context.Context, conn N.PacketConn, source M.Soc
 		})
 	}
 
-	// 7. 发送响应
-	// WritePacket 的 dest 参数是响应包的【源地址】（即 DNS 服务器地址），
-	// 不是目标地址——目标地址由 NAT 自动填为应用地址。
-	// 传 destination（DNS 服务器），不是 source（应用）。
-	h.sendDNSResponse(conn, resp, destination)
-	if onClose != nil {
-		onClose(nil)
+	respBytes, err := msg.Pack()
+	if err != nil {
+		h.logf("[sing-tun] failed to pack DNS response: " + err.Error())
+		return
+	}
+	respBytes, err = resp.Pack()
+	if err != nil {
+		h.logf("[sing-tun] failed to pack DNS response: " + err.Error())
+		return
+	}
+	respBuf := buf.NewPacket()
+	respBuf.Write(respBytes)
+	if err := writer.WritePacket(respBuf, destination); err != nil {
+		respBuf.Release()
+		h.logf("[sing-tun] failed to write DNS response: " + err.Error())
 	}
 }
 
-// handleDNSReal 使用真实 DNS 解析（非 A/AAAA 查询）
-func (h *Handler) handleDNSReal(ctx context.Context, conn N.PacketConn, msg *dns.Msg, destination M.Socksaddr, onClose N.CloseHandlerFunc) {
-	question := msg.Question[0]
-	domain := dns.CanonicalName(question.Name)
-
-	// 调用 DoH 解析器
-	ips, err := h.resolver.ResolveIPs(ctx, domain)
+// handleDNSRealPacket resolves non-A/AAAA queries via DoH
+func (h *Handler) handleDNSRealPacket(msg *dns.Msg, domain string, destination M.Socksaddr, writer N.PacketWriter) {
+	ips, err := h.resolver.ResolveIPs(context.Background(), domain)
 	if err != nil {
 		h.logf("[sing-tun] DNS resolve failed for " + domain + ": " + err.Error())
 		msg.Rcode = dns.RcodeServerFailure
-		h.sendDNSResponse(conn, msg, destination)
-		if onClose != nil {
-			onClose(nil)
+		respBytes, packErr := msg.Pack()
+		if packErr != nil {
+			return
+		}
+		respBuf := buf.NewPacket()
+		respBuf.Write(respBytes)
+		if writeErr := writer.WritePacket(respBuf, destination); writeErr != nil {
+			respBuf.Release()
 		}
 		return
 	}
 
-	// 构建响应
 	resp := new(dns.Msg)
 	resp.SetReply(msg)
 	resp.RecursionAvailable = true
@@ -491,30 +470,16 @@ func (h *Handler) handleDNSReal(ctx context.Context, conn N.PacketConn, msg *dns
 		}
 	}
 
-	h.sendDNSResponse(conn, resp, destination)
-	if onClose != nil {
-		onClose(nil)
-	}
-}
-
-// sendDNSResponse 发送 DNS 响应
-// dest 参数是 DNS 服务器的地址（响应包的源地址），不是应用的地址。
-// sing-tun 的 UDPBackWriter.WritePacket 用 dest 作为源地址，
-// 目标地址由 NAT 自动填为应用地址。
-func (h *Handler) sendDNSResponse(conn N.PacketConn, msg *dns.Msg, dest M.Socksaddr) {
-	respBytes, err := msg.Pack()
+	respBytes, err := resp.Pack()
 	if err != nil {
 		h.logf("[sing-tun] failed to pack DNS response: " + err.Error())
 		return
 	}
-	// WritePacket 的契约是消费并释放传入的 buffer（UDPBackWriter.WritePacket
-	// 内部 defer packetBuffer.Release()），成功路径由它负责回收；
-	// 仅在其返回错误、可能未接管所有权时兜底释放。
 	respBuf := buf.NewPacket()
 	respBuf.Write(respBytes)
-	if err := conn.WritePacket(respBuf, dest); err != nil {
+	if err := writer.WritePacket(respBuf, destination); err != nil {
 		respBuf.Release()
-		h.logf("[sing-tun] failed to write DNS response to " + dest.String() + ": " + err.Error())
+		h.logf("[sing-tun] failed to write DNS response: " + err.Error())
 	}
 }
 
