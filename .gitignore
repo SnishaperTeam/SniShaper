@@ -76,6 +76,7 @@ shaper-next/
 snishaper.zip
 Apppackage/
 blindtls-vercel/
+llm/
 
 # Custom ignores - added for mitmverify and cmd
 mitmverify.exe

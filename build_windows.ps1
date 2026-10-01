@@ -852,13 +852,23 @@ function Sync-VersionResource {
     # repository, so non-Windows builds never see a Windows resource object.
     # The generated file is removed again after the build (see
     # Invoke-BuildTarget) so the working tree stays clean.
+    #
+    # Returns $true only when the .syso is actually in place. Everything the
+    # exe shows to Windows and Explorer (RT_GROUP_ICON, RT_VERSION,
+    # RT_MANIFEST) lives in that one file, so a Windows target must abort when
+    # it is missing rather than ship an unbranded, version-less and
+    # DPI-unaware binary.
     $utf8NoBom = New-Object System.Text.UTF8Encoding $false
     $WinResPath = Join-Path $ProjectRoot "winres\winres.json"
     $GenSyso = Join-Path $ProjectRoot ("rsrc_windows_" + $TargetGoArch + ".syso")
-    if (-not (Test-Path $WinResPath)) { return }
+    if (-not (Test-Path $WinResPath)) {
+        Write-Host (msg -Key "BackSyncVerFail") -ForegroundColor Red
+        return $false
+    }
 
     $WinResBackup = Get-Content -Raw $WinResPath -Encoding UTF8
     $SysoBackup = $null
+    $ok = $false
     if (Test-Path $GenSyso) { $SysoBackup = [System.IO.File]::ReadAllBytes($GenSyso) }
 
     try {
@@ -884,7 +894,7 @@ function Sync-VersionResource {
             $rc = $LASTEXITCODE
         }
         if ($rc -ne 0) {
-            Write-Host (msg -Key "BackSyncVerFail") -ForegroundColor Yellow
+            Write-Host (msg -Key "BackSyncVerFail") -ForegroundColor Red
         } else {
             $gen = Get-ChildItem -Path $WinResTmp -Filter ("rsrc_windows_" + $TargetGoArch + ".syso") -ErrorAction SilentlyContinue | Select-Object -First 1
             if ($gen) {
@@ -892,14 +902,16 @@ function Sync-VersionResource {
                 $script:SysoTargetPath = $GenSyso
                 $script:SysoTargetBackup = $SysoBackup
                 Write-Host (msg -Key "BackSyncVerDone" -Arg0 $mainVer) -ForegroundColor Green
+                $ok = $true
             } else {
-                Write-Host (msg -Key "BackSyncVerFail") -ForegroundColor Yellow
+                Write-Host (msg -Key "BackSyncVerFail") -ForegroundColor Red
             }
         }
         Remove-Item -Path $WinResTmp -Recurse -Force -ErrorAction SilentlyContinue
     } finally {
         if ($null -ne $WinResBackup) { [System.IO.File]::WriteAllText($WinResPath, $WinResBackup, $utf8NoBom) }
     }
+    return $ok
 }
 
 # ---------------------------------------------------------------------------
@@ -973,16 +985,19 @@ function Invoke-BuildTarget {
             go build -tags "with_gvisor headless" -ldflags="$ldflags" -o $out ./cli
             $rc = $LASTEXITCODE
         } else {
-            if ($Target.GoOs -eq "windows") { Sync-VersionResource -TargetGoArch $Target.GoArch }
-            $env:GOOS = $Target.GoOs
-            $env:GOARCH = $Target.GoArch
-            $env:CGO_ENABLED = "0"
-            if ($Wails) {
-                wails build -platform "$($Target.GoOs)/$($Target.GoArch)" -o $out
-                $rc = $LASTEXITCODE
+            if ($Target.GoOs -eq "windows" -and -not (Sync-VersionResource -TargetGoArch $Target.GoArch)) {
+                $rc = 1
             } else {
-                go build -tags "with_gvisor" -ldflags="$ldflags" -o $out .
-                $rc = $LASTEXITCODE
+                $env:GOOS = $Target.GoOs
+                $env:GOARCH = $Target.GoArch
+                $env:CGO_ENABLED = "0"
+                if ($Wails) {
+                    wails build -platform "$($Target.GoOs)/$($Target.GoArch)" -o $out
+                    $rc = $LASTEXITCODE
+                } else {
+                    go build -tags "with_gvisor" -ldflags="$ldflags" -o $out .
+                    $rc = $LASTEXITCODE
+                }
             }
         }
     } finally {
@@ -999,6 +1014,18 @@ function Invoke-BuildTarget {
     if ($rc -ne 0) {
         Write-Host (msg -Key "BackErrBuild") -ForegroundColor Red
         return $false
+    }
+
+    # Post-link guard: the icon, the version info and the manifest all travel in
+    # the one .syso, so an empty VersionInfo means cmd/go linked the binary
+    # without it. A zero exit code is not proof the resource made it in, so read
+    # the produced exe back instead of trusting the linker.
+    if ($Target.Type -eq "gui" -and $Target.GoOs -eq "windows") {
+        $linkedVersion = (Get-Item $out -ErrorAction SilentlyContinue).VersionInfo.FileVersion
+        if ([string]::IsNullOrWhiteSpace($linkedVersion)) {
+            Write-Host "[BUILD] FAILED: no Windows icon/version/manifest resource linked into $out" -ForegroundColor Red
+            return $false
+        }
     }
 
     # Seed folders:
