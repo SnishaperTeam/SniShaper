@@ -2259,7 +2259,6 @@
       "mode": "tls-rf",
       "sni_fake": "bs",
       "domains": [
-        "web-cdn.bsky.app",
         "public.api.bsky.app",
         "cdn.bsky.app",
         "events.bsky.app"
@@ -2270,6 +2269,27 @@
       "website": "bluesky",
       "enabled": true,
       "upstream": "156.146.56.168,169.150.220.229",
+      "nat64_enabled": false
+    },
+    {
+      "id": "1790834616862089200",
+      "name": "web-cdn",
+      "mode": "mitm",
+      "sni_fake": "blue",
+      "domains": [
+        "web-cdn.bsky.app"
+      ],
+      "ech_enabled": false,
+      "use_cf_pool": false,
+      "cert_verify": {
+        "mode": "allow_names",
+        "names": [
+          "b-cdn.net"
+        ]
+      },
+      "website": "bluesky",
+      "enabled": true,
+      "upstream": "152.233.22.101",
       "nat64_enabled": false
     },
     {
