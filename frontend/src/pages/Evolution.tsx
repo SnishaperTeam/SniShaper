@@ -356,12 +356,12 @@ const Evolution: React.FC = () => {
                     <Switch
                       checked={enableIPv6}
                       onChange={(e) => setEnableIPv6(e.target.checked)}
-                      disabled={isRunning || !ipv6Available}
+                      disabled={isRunning}
                       size="small"
                     />
                     <Typography variant="body2" color="text.secondary">
                       {t('evolution.enable_ipv6')}
-                      {!ipv6Available && <Box component="span" sx={{ ml: 1, fontSize: 10, color: 'error.main', fontWeight: 900 }}>({t('network.ipv6_disabled_title')})</Box>}
+                      {!ipv6Available && <Box component="span" sx={{ ml: 1, fontSize: 10, color: 'warning.main', fontWeight: 900 }}>({t('network.ipv6_warn_suffix')})</Box>}
                     </Typography>
                   </Box>
 

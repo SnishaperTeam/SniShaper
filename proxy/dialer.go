@@ -17,6 +17,57 @@ import (
 
 
 
+// ErrIPv6Required 表明规则要求 IPv6，但当前网络无法提供可用的 IPv6 候选。
+// 这是一个配置与网络不匹配的错误（dns_mode = ipv6_only 或启用了 NAT64），
+// 而不是一次传输故障：它不会被静默降级为 IPv4，否则规则的地址族约束会被
+// 悄悄稀释，用户会以为 ipv6_only 生效了，实际走的是 IPv4。
+var ErrIPv6Required = errors.New("rule requires IPv6 but no usable IPv6 address was resolved (current network may be IPv4-only)")
+
+// hasUsableIPv6 判断本机是否存在可用于拨号的 IPv6 地址。它不依赖规则解析，
+// 用于在拨号前判断 ipv6_only / NAT64 这类硬约束是否可能成立，避免把一个
+// 配置错误拖成连接超时。与 app.checkIPv6Available 的区别：后者面向 UI 提示
+// （把 ULA 也算作 IPv6 网络），这里面向拨号可行性（必须有可路由的全局地址）。
+func hasUsableIPv6() bool {
+	ifaces, err := net.Interfaces()
+	if err != nil {
+		return false
+	}
+	for _, iface := range ifaces {
+		if iface.Flags&net.FlagUp == 0 || iface.Flags&net.FlagLoopback != 0 {
+			continue
+		}
+		addrs, err := iface.Addrs()
+		if err != nil {
+			continue
+		}
+		for _, addr := range addrs {
+			var ip net.IP
+			switch v := addr.(type) {
+			case *net.IPNet:
+				ip = v.IP
+			case *net.IPAddr:
+				ip = v.IP
+			default:
+				continue
+			}
+			// 只认全局单播；ULA / link-local / loopback 都不能作为出站源地址。
+			if ip.To4() != nil || ip.IsLinkLocalUnicast() || ip.IsLoopback() || ip.IsUnspecified() || !ip.IsGlobalUnicast() {
+				continue
+			}
+			return true
+		}
+	}
+	return false
+}
+
+// ruleRequiresIPv6 报告该规则是否对地址族有硬约束（ipv6_only 或 NAT64）。
+func ruleRequiresIPv6(rule Rule) bool {
+	if strings.EqualFold(strings.TrimSpace(rule.DNSMode), "ipv6_only") {
+		return true
+	}
+	return rule.NAT64Enabled && strings.TrimSpace(rule.NAT64ProfileID) != ""
+}
+
 // orderIPsByDNSMode 按 dns_mode 对解析出的 IP 列表排序/过滤地址族：
 //
 //	ipv4_only: 仅保留 IPv4
@@ -84,6 +135,19 @@ func (p *ProxyServer) resolveDomainCandidates(ctx context.Context, host, port, d
 }
 
 func (p *ProxyServer) buildDialCandidates(ctx context.Context, targetHost, targetAddr string, rule Rule, effectiveMode string) []string {
+	// 字面 IP 目标（如 TUN 下浏览器 DoH 解析的真实 IP）：直接返回原地址保留端口
+	if isLiteralIP(targetHost) {
+		return []string{targetAddr}
+	}
+
+	// 硬性地址族约束（ipv6_only / NAT64）在纯 IPv4 网络上无法满足。这里提前
+	// 判定并返回空列表，让调用方以明确的配置错误失败，而不是把 targetAddr
+	// 兜底回去走系统解析 —— 那会在无 v6 网络上表现为无休止的连接超时。
+	if ruleRequiresIPv6(rule) && !hasUsableIPv6() {
+		p.tracef("[DNSMode] %s requires IPv6 but no usable IPv6 address exists, failing host=%s mode=%v", rule.DNSMode, targetHost, rule.NAT64Enabled)
+		return nil
+	}
+
 	// 提取目标地址的原始端口（域名/IP 目标通用），避免解析时被默认 443 改写。
 	origPort := portFromTargetAddr(targetAddr)
 	defaultPort := "443"
@@ -92,10 +156,6 @@ func (p *ProxyServer) buildDialCandidates(ctx context.Context, targetHost, targe
 		dialPort = defaultPort
 	}
 
-	// 字面 IP 目标（如 TUN 下浏览器 DoH 解析的真实 IP）：直接返回原地址保留端口
-	if isLiteralIP(targetHost) {
-		return []string{targetAddr}
-	}
 	resolvedUpstream := resolveRuleUpstream(targetHost, rule)
 	isWarpRoute := strings.EqualFold(strings.TrimSpace(rule.Upstream), "warp")
 
@@ -200,6 +260,11 @@ func (p *ProxyServer) dialUpstream(cr *connectResult) error {
 
 	dialCandidates := p.buildDialCandidates(context.Background(), cr.targetHost, cr.targetAddr, cr.rule, cr.effectiveMode)
 	if len(dialCandidates) == 0 {
+		// 规则带有硬性地址族约束（ipv6_only / NAT64）而本机无 IPv6：以明确错误
+		// 失败，不要用 targetAddr 兜底 —— 那会静默走 IPv4 并掩盖配置不匹配。
+		if ruleRequiresIPv6(cr.rule) && !hasUsableIPv6() {
+			return ErrIPv6Required
+		}
 		dialCandidates = []string{cr.targetAddr}
 	}
 
@@ -225,6 +290,9 @@ func (p *ProxyServer) dialUpstream(cr *connectResult) error {
 	}
 
 	if len(dialCandidates) == 0 {
+		if ruleRequiresIPv6(cr.rule) && !hasUsableIPv6() {
+			return ErrIPv6Required
+		}
 		return errors.New("no valid NAT64 candidates available for dial")
 	}
 

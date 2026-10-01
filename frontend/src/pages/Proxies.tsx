@@ -234,7 +234,7 @@ const Proxies: React.FC = () => {
         </Box>
 
         {!ipv6Available && (
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, px: 1.5, py: 1, borderRadius: 2, bgcolor: 'rgba(239,68,68,0.05)', border: 1, borderColor: 'rgba(239,68,68,0.3)', color: 'error.main', minWidth: 0 }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, px: 1.5, py: 1, borderRadius: 2, bgcolor: 'rgba(245,158,11,0.05)', border: 1, borderColor: 'rgba(245,158,11,0.3)', color: 'warning.main', minWidth: 0 }}>
               <AlertCircle size={14} aria-hidden />
               <Typography variant="caption" sx={{ fontSize: 11, fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', py: 0.25, outline: '1px solid transparent' }}>
                 {t('network.ipv6_disabled_title')}：{t('network.ipv6_disabled_desc')}
