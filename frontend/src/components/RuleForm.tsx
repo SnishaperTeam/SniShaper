@@ -1,12 +1,12 @@
 import React, { useState, useEffect, useContext } from 'react';
 import {
-  Zap,
+  Bolt,
   Globe,
   Monitor,
   ChevronDown,
   ChevronUp,
   Plus,
-  Trash2,
+  Delete,
   Lock,
   Settings,
   AlertCircle
@@ -63,9 +63,9 @@ const RuleForm: React.FC<RuleFormProps> = ({ initialData, onSuccess, onCancel })
   const ipv6Option = (id: string) => id === 'prefer_ipv6' || id === 'ipv6_only';
 
   const MODES = [
-    { id: 'mitm', label: 'MITM', icon: <Zap size={14} />, desc: t('rules.modes.mitm') },
+    { id: 'mitm', label: 'MITM', icon: <Bolt size={14} />, desc: t('rules.modes.mitm') },
     { id: 'tls-rf', label: t('rules.display.fragment'), icon: <Monitor size={14} />, desc: t('rules.modes.tls-rf') },
-    { id: 'quic', label: 'QUIC', icon: <Zap size={14} />, desc: t('rules.modes.quic') },
+    { id: 'quic', label: 'QUIC', icon: <Bolt size={14} />, desc: t('rules.modes.quic') },
     { id: 'transparent', label: t('rules.display.transparent'), icon: <Monitor size={14} />, desc: t('rules.modes.transparent') },
     { id: 'migration', label: t('rules.display.migration'), icon: <Globe size={14} />, desc: t('rules.modes.migration') }
   ];
@@ -250,7 +250,7 @@ const RuleForm: React.FC<RuleFormProps> = ({ initialData, onSuccess, onCancel })
       <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: '1fr 1fr' }, gap: 3 }}>
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.75 }}>
           <Typography variant="caption" sx={{ ...sectionLabelSx, display: 'flex', alignItems: 'center', gap: 0.75 }}>
-            <Box component="span" sx={{ display: 'inline-flex', color: 'primary.main' }}><Zap size={10} /></Box>
+            <Box component="span" sx={{ display: 'inline-flex', color: 'primary.main' }}><Bolt size={10} /></Box>
             {t('rules.form.name')}
           </Typography>
           <TextField
@@ -331,7 +331,7 @@ const RuleForm: React.FC<RuleFormProps> = ({ initialData, onSuccess, onCancel })
               <Box key={i} sx={{ display: 'flex', alignItems: 'center', gap: 0.5, px: 1.25, py: 0.5, bgcolor: 'background.paper', border: 1, borderColor: 'divider', borderRadius: '999px', boxShadow: 1, transition: 'all 0.2s', '&:hover': { borderColor: 'error.main' } }}>
                 <Typography variant="caption" sx={{ fontSize: 11, fontWeight: 'bold' }}>{d}</Typography>
                 <IconButton type="button" size="small" onClick={() => handleRemoveDomain(i)} aria-label={t('rules.form.remove_domain')} sx={{ p: 0.25, color: 'text.secondary', '&:hover': { color: 'error.main' } }}>
-                  <Trash2 size={12} />
+                  <Delete size={12} />
                 </IconButton>
               </Box>
             ))

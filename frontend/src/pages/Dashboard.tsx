@@ -4,11 +4,10 @@ import {
   Square,
   Globe,
   Cpu,
-  ShieldCheck,
-  Zap,
+  Shield,
+  Bolt,
   ShieldAlert,
   Search,
-  Loader2,
   Download,
   Lock
 } from '../lib/icons';
@@ -498,14 +497,14 @@ const Dashboard: React.FC = () => {
         <Grid size={{ xs: 12, md: 4 }}>
           <Box className="ss-card-hover" sx={{ p: 3, bgcolor: 'background.paper', border: 1, borderColor: 'divider', borderRadius: '10%', boxShadow: 1, aspectRatio: '1 / 1' }}>
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 2 }}>
-              <Box sx={{ color: 'primary.main' }}><ShieldCheck size={20} /></Box>
+              <Box sx={{ color: 'primary.main' }}><Shield size={20} /></Box>
               <Typography variant="body2" sx={{ fontWeight: 'bold', color: 'text.secondary', letterSpacing: '-0.01em', textTransform: 'uppercase' }}>
                 {t('dashboard.cert_status')}
               </Typography>
             </Box>
             <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, p: 1.25, borderRadius: 2, border: 1, bgcolor: caStatus.Installed ? 'success.main' : 'error.main', color: caStatus.Installed ? 'success.contrastText' : 'error.contrastText', borderColor: caStatus.Installed ? 'success.light' : 'error.light', minWidth: 0 }}>
-                {caStatus.Installed ? <ShieldCheck size={18} /> : <ShieldAlert size={18} />}
+                {caStatus.Installed ? <Shield size={18} /> : <ShieldAlert size={18} />}
                 <Typography variant="caption" sx={{ fontWeight: 'bold', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '100%', py: 0.25, outline: '1px solid transparent' }}>
                   {caStatus.Installed ? t('dashboard.cert_installed') : t('dashboard.cert_not_installed')}
                 </Typography>
@@ -531,14 +530,14 @@ const Dashboard: React.FC = () => {
         <Grid size={{ xs: 12, md: 4 }}>
           <Box className="ss-card-hover" sx={{ p: 3, bgcolor: 'background.paper', border: 1, borderColor: 'divider', borderRadius: '10%', boxShadow: 1, aspectRatio: '1 / 1' }}>
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 2 }}>
-              <Box sx={{ color: 'primary.main' }}><ShieldCheck size={20} /></Box>
+              <Box sx={{ color: 'primary.main' }}><Shield size={20} /></Box>
               <Typography variant="body2" sx={{ fontWeight: 'bold', color: 'text.secondary', letterSpacing: '-0.01em', textTransform: 'uppercase' }}>
                 {t('dashboard.conn_info')}
               </Typography>
             </Box>
             <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, p: 1.25, bgcolor: 'primary.main', border: 1, borderColor: 'primary.main', borderRadius: 2, minWidth: 0 }}>
-                <Zap size={18} color="primary.contrastText" aria-hidden />
+                <Bolt size={18} color="primary.contrastText" aria-hidden />
                 <Typography variant="body2" sx={{ fontWeight: 'bold', color: 'primary.contrastText', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '100%', py: 0.25, outline: '1px solid transparent' }}>
                   127.0.0.1:{port}
                 </Typography>

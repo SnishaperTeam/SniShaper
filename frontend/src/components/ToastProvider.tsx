@@ -1,13 +1,13 @@
 import React, { useEffect, useState } from 'react';
 import { Box, Stack, IconButton, Typography, Paper } from '@mui/material';
 import { keyframes } from '@emotion/react';
-import { CheckCircle, Error, Info, X } from '../lib/icons';
+import { CheckCircle, AlertCircle, Info, X } from '../lib/icons';
 import { TOAST_EVENT, type ToastPayload } from '../lib/toast';
 import { useTranslation } from '../i18n/I18nContext';
 
 const ICONS = {
   success: CheckCircle,
-  error: Error,
+  error: AlertCircle,
   info: Info
 } as const;
 

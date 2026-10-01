@@ -4,28 +4,27 @@ import { Box, Drawer, IconButton, Tooltip, Typography, useColorScheme } from '@m
 import { Sun, Moon } from '../lib/icons';
 import logoUrl from '../assets/logo.svg';
 import {
-  LayoutDashboard,
-  ShieldCheck,
   Activity,
   FileText,
   Settings,
-  Workflow,
+  Shield,
+  RefreshCcw,
   Globe,
   Antenna,
   Info,
-  Zap,
+  Bolt,
 } from '../lib/icons';
 import { useTranslation } from '../i18n/I18nContext';
 
 const DRAWER_WIDTH = 240;
 
 const getNavItems = (t: any) => [
-  { path: '/dashboard', label: t('sidebar.dashboard'), icon: LayoutDashboard },
+  { path: '/dashboard', label: t('sidebar.dashboard'), icon: Activity },
   { path: '/proxies', label: t('sidebar.proxies'), icon: Globe },
-  { path: '/rules', label: t('sidebar.rules'), icon: ShieldCheck },
-  { path: '/routing', label: t('sidebar.routing'), icon: Workflow },
+  { path: '/rules', label: t('sidebar.rules'), icon: Shield },
+  { path: '/routing', label: t('sidebar.routing'), icon: RefreshCcw },
   { path: '/dns', label: t('sidebar.dns'), icon: Antenna },
-  { path: '/evolution', label: t('evolution.title'), icon: Zap },
+  { path: '/evolution', label: t('evolution.title'), icon: Bolt },
   { path: '/logs', label: t('sidebar.logs'), icon: FileText },
   { path: '/settings', label: t('sidebar.settings'), icon: Settings },
   { path: '/about', label: t('sidebar.about'), icon: Info },

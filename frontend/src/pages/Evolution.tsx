@@ -6,14 +6,13 @@ import {
   Activity,
   Bolt,
   Shield,
-  Public as NetworkIcon,
-  Error as ErrorIcon,
+  AlertCircle as ErrorIcon,
   CheckCircle,
   Cancel,
   ArrowForward,
-  Description,
+  FileText,
   CheckSquare,
-  Timer,
+  History,
   Wifi
 } from '../lib/icons';
 import {
@@ -75,7 +74,7 @@ const getMethodIcon = (method?: string) => {
   switch (method) {
     case 'direct': return <Globe size={16} />;
     case 'domain_fronting': return <Shield size={16} />;
-    case 'tls_fragment': return <NetworkIcon size={16} />;
+    case 'tls_fragment': return <Globe size={16} />;
     case 'ech': return <Bolt size={16} />;
     case 'quic': return <Activity size={16} />;
     default: return <ErrorIcon size={16} />;
@@ -256,7 +255,7 @@ const Evolution: React.FC = () => {
 
   const tabs = [
     { id: 'test' as TabType, label: t('evolution.tab_test'), icon: <Play size={16} />, count: undefined },
-    { id: 'rules' as TabType, label: t('evolution.tab_rules'), icon: <Description size={16} />, count: tempRules.length },
+    { id: 'rules' as TabType, label: t('evolution.tab_rules'), icon: <FileText size={16} />, count: tempRules.length },
     { id: 'results' as TabType, label: t('evolution.tab_results'), icon: <Activity size={16} />, count: results.length },
   ];
 
@@ -451,7 +450,7 @@ const Evolution: React.FC = () => {
                 <Box sx={{ p: 3, bgcolor: 'background.paper', border: 1, borderColor: 'divider', borderRadius: 2, boxShadow: 1 }}>
                   <Box sx={{ textAlign: 'center', py: 7 }}>
                     <Box sx={{ width: 64, height: 64, mx: 'auto', mb: 2, borderRadius: 2, bgcolor: 'action.hover', border: 1, borderColor: 'divider', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'text.disabled', opacity: 0.5 }}>
-                      <Description size={28} />
+                      <FileText size={28} />
                     </Box>
                     <Typography variant="body2" color="text.secondary" sx={{ fontWeight: 500 }}>{t('evolution.empty_rules')}</Typography>
                     <Typography variant="caption" sx={{ mt: 0.75, color: 'text.disabled' }}>{t('evolution.empty_rules_desc')}</Typography>
@@ -462,7 +461,7 @@ const Evolution: React.FC = () => {
                   <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                       <Box sx={{ color: 'primary.main', display: 'flex' }}>
-                        <Description size={16} />
+                        <FileText size={16} />
                       </Box>
                       <Typography variant="body2" sx={{ fontWeight: 900 }}>{t('evolution.temp_rules')}</Typography>
                       <Typography variant="caption" color="text.secondary" sx={{ bgcolor: 'action.hover', px: 1, py: 0.25, borderRadius: 0.75 }}>{tempRules.length}</Typography>
@@ -596,7 +595,7 @@ const Evolution: React.FC = () => {
                                 {result.reachable ? (
                                   <>
                                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, color: 'text.secondary' }}>
-                                      <Timer size={12} />
+                                      <History size={12} />
                                       <Typography variant="caption" color="text.secondary" sx={{ py: 0.25, outline: '1px solid transparent' }}>{t('evolution.delay', { ms: Math.round(result.delay / 1000000) })}</Typography>
                                     </Box>
                                     {result.best_ip && <Typography variant="caption" color="text.secondary" sx={{ py: 0.25, outline: '1px solid transparent' }}>{result.best_ip}</Typography>}

@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback, useDeferredValue } from 'react';
 import {
-  FileText, Trash2, Pause, Play, Search, ChevronsUp, Radio, ArrowDown, Download
+  FileText, Delete, Pause, Play, Search, ChevronsUp, Antenna, ArrowDown, Download
 } from '../lib/icons';
 import {
   ClearLogs, GetRecentLogs, IsLogCaptureEnabled,
@@ -182,7 +182,7 @@ const Logs: React.FC = () => {
         </Box>
         <Box sx={{ display: 'flex', gap: 1 }}>
           <Button onClick={handleToggleCapture} loading={isTogglingCapture}
-            color={captureEnabled ? 'error' : 'primary'} variant="contained" size="small" startIcon={<Radio size={14} />}>
+            color={captureEnabled ? 'error' : 'primary'} variant="contained" size="small" startIcon={<Antenna size={14} />}>
             {captureEnabled ? t('logs.stop_capture') : t('logs.capture')}
           </Button>
           <Button onClick={() => setIsPaused(!isPaused)} disabled={!captureEnabled}
@@ -193,7 +193,7 @@ const Logs: React.FC = () => {
             {t('logs.scroll_top')}
           </Button>
           <Button onClick={handleClear} variant="outlined" size="small"
-            sx={{ '&:hover': { bgcolor: 'rgba(239,68,68,0.1)', color: 'error.main' } }} startIcon={<Trash2 size={14} />}>
+            sx={{ '&:hover': { bgcolor: 'rgba(239,68,68,0.1)', color: 'error.main' } }} startIcon={<Delete size={14} />}>
             {t('logs.clear')}
           </Button>
           <Button onClick={handleExport} disabled={!captureEnabled || filteredLines.length === 0}
@@ -233,7 +233,7 @@ const Logs: React.FC = () => {
         <Box sx={{ flex: 1, overflowY: 'auto', overflowX: 'hidden' }}>
           {!captureEnabled ? (
             <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: 'text.secondary', opacity: 0.6, px: 4, textAlign: 'center' }}>
-              <Radio size={42} strokeWidth={1.5} aria-hidden />
+              <Antenna size={42} strokeWidth={1.5} aria-hidden />
               <Typography variant="caption" sx={{ mt: 2, fontWeight: 900, textTransform: 'uppercase', letterSpacing: '0.2em', fontSize: '0.75rem' }}>{t('logs.capture_disabled')}</Typography>
               <Typography variant="caption" sx={{ mt: 1.5, lineHeight: 1.6, maxWidth: 448, display: 'block' }}>{t('logs.capture_hint')}</Typography>
             </Box>

@@ -164,12 +164,6 @@ func (cm *CertManager) GetCertPool() *x509.CertPool {
 	return pool
 }
 
-func (cm *CertManager) GetCA() *x509.Certificate {
-	cm.certMu.RLock()
-	defer cm.certMu.RUnlock()
-	return cm.caCert
-}
-
 func (cm *CertManager) GetCACert() *x509.Certificate {
 	cm.certMu.RLock()
 	defer cm.certMu.RUnlock()

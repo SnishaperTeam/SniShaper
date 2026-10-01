@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Layers, Save } from '../lib/icons';
+import { Activity, Save } from '../lib/icons';
 import { AddNAT64Profile, UpdateNAT64Profile } from '../api/bindings';
 import { useTranslation } from '../i18n/I18nContext';
 import {
@@ -56,7 +56,7 @@ const NAT64ProfileForm: React.FC<NAT64ProfileFormProps> = ({ initialData, onSucc
       <Stack direction="column" spacing={3} sx={{ alignItems: 'stretch', color: 'text.primary' }}>
         <Box sx={{ p: 1.5, bgcolor: (theme) => alpha(theme.palette.primary.main, 0.05), border: 1, borderColor: (theme) => alpha(theme.palette.primary.main, 0.2), borderRadius: 2 }}>
           <Stack direction="row" spacing={1.5} sx={{ alignItems: 'center' }}>
-            <Layers size={24} color="primary.main" />
+            <Activity size={24} color="primary.main" />
             <Stack direction="column" spacing={0.25}>
               <Typography variant="body2" sx={{ fontWeight: 'bold', textTransform: 'uppercase', letterSpacing: '0.05em', color: 'primary.main' }}>
                 {formData.id ? t('proxies.edit_nat64') : t('proxies.add_nat64')}

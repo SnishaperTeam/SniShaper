@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useContext } from 'react';
 import {
-  Delete, Shield, Bolt, Lock, History, AddCircle, Public, Layers, AlertCircle
+  Delete, Shield, Bolt, Lock, History, AddCircle, Globe, Activity, AlertCircle
 } from '../lib/icons';
 import {
   GetECHProfiles, DeleteECHProfile, GetNAT64Profiles, DeleteNAT64Profile, TestNAT64Profile,
@@ -135,7 +135,7 @@ const Proxies: React.FC = () => {
       <Box sx={{ flexGrow: 1, minHeight: 0, overflowY: 'auto', overflowX: 'hidden', width: '100%', pb: 6 }}>
       <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, px: 0.5, color: 'text.secondary' }}>
-          <Public size={18} aria-hidden />
+          <Globe size={18} aria-hidden />
           <Typography variant="body2" sx={{ fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', display: 'flex', alignItems: 'center', gap: 1 }}>
             {t('proxies.migration_service')}
           </Typography>
@@ -225,7 +225,7 @@ const Proxies: React.FC = () => {
       <Box sx={{ mt: 5, display: 'flex', flexDirection: 'column', gap: 2 }}>
         <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', px: 0.5 }}>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, color: 'text.secondary' }}>
-            <Public size={18} aria-hidden />
+            <Globe size={18} aria-hidden />
             <Typography variant="body2" sx={{ fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em' }}>{t('proxies.nat64_management')}</Typography>
           </Box>
           <Button onClick={handleAddNAT64} variant="outlined" size="small" startIcon={<AddCircle size={14} />}>
@@ -246,7 +246,7 @@ const Proxies: React.FC = () => {
           {nat64Profiles.length === 0 ? (
             <Grid size={12}>
               <Box sx={{ py: 12, display: 'flex', flexDirection: 'column', alignItems: 'center', color: 'text.secondary', opacity: 0.7, bgcolor: 'background.paper', border: '1px dashed', borderColor: 'divider', borderRadius: 2 }}>
-                <Layers size={32} strokeWidth={1.5} />
+                <Activity size={32} strokeWidth={1.5} />
                 <Typography variant="body2" sx={{ mt: 1.5 }}>{t('proxies.no_nat64')}</Typography>
               </Box>
             </Grid>
@@ -264,12 +264,12 @@ const Proxies: React.FC = () => {
                 >
                   <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, minWidth: 0 }}>
                     <Box sx={{ width: 40, height: 40, borderRadius: 2, bgcolor: (theme) => alpha(theme.palette.primary.main, 0.1), color: 'primary.main', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                      <Public size={18} aria-hidden />
+                      <Globe size={18} aria-hidden />
                     </Box>
                     <Box sx={{ minWidth: 0 }}>
                       <Typography variant="body2" sx={{ fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '100%' }}>{p.name}</Typography>
                       <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, mt: 0.25, color: 'text.secondary', minWidth: 0 }}>
-                        <Layers size={10} aria-hidden />
+                        <Activity size={10} aria-hidden />
                         <Typography variant="caption" sx={{ fontSize: 10, fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '100%' }}>
                           {t('rules.form.prefix_label', { prefix: p.prefix })}
                         </Typography>

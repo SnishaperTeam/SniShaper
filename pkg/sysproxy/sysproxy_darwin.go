@@ -164,21 +164,12 @@ func DisableSystemProxy() error {
 	return SetSystemProxy(false, "")
 }
 
-func GetSystemProxyStatusSafe() (SystemProxyStatus, error) {
-	return GetSystemProxyStatus(), nil
-}
-
 var originalProxySettings *SystemProxyStatus
 
 func SaveOriginalProxySettings() error {
 	status := GetSystemProxyStatus()
 	originalProxySettings = &status
 	return nil
-}
-
-func SetOriginalProxySettings(status SystemProxyStatus) {
-	copy := status
-	originalProxySettings = &copy
 }
 
 func RestoreOriginalProxySettings() error {

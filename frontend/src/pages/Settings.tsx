@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
   ShieldAlert, Download, FolderOpen, RefreshCcw, Monitor, Anchor,
-  Cpu, Globe, BellRing, Activity, CloudLightning, Zap, Trash2,
+  Cpu, Globe, BellRing, Activity, Bolt, Delete,
   AlertCircle, Sun, Moon, Wifi, FileText, Settings as SettingsIcon
 } from '../lib/icons';
 import {
@@ -757,7 +757,7 @@ const Settings: React.FC<SettingsProps> = ({ cache, onCacheUpdate, currentThemeI
                           disabled={isCertBusy}
                           onClick={() => handleUninstallCert(cert.token)}
                         >
-                          <Trash2 size={16} />
+                          <Delete size={16} />
                           {t('common.delete')}
                         </Button>
                       </Box>
@@ -811,7 +811,7 @@ const Settings: React.FC<SettingsProps> = ({ cache, onCacheUpdate, currentThemeI
 
         <Grid size={12}>
           <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
-            <SectionHeader icon={<CloudLightning size={18} />} label={t('rules.form.cf_pool')}
+            <SectionHeader icon={<Bolt size={18} />} label={t('rules.form.cf_pool')}
               action={<Button size="small" variant="text" disabled={isCheckingHealth} onClick={handleHealthCheck}>
                 {isCheckingHealth ? t('ech_form.probing') : t('dns.test')}
               </Button>}
@@ -837,7 +837,7 @@ const Settings: React.FC<SettingsProps> = ({ cache, onCacheUpdate, currentThemeI
                       <Typography variant="caption" sx={{ fontWeight: 'bold', textTransform: 'uppercase', color: 'text.secondary', letterSpacing: '0.05em' }}>
                         {t('settings.ip_pool', { count: ipStats.length })}
                       </Typography>
-                      <Zap size={16} color="warning.main" />
+                      <Bolt size={16} color="warning.main" />
                     </Box>
                     <Grid container columns={{ xs: 1, sm: 2 }} spacing={1} sx={{ maxHeight: 400, overflowY: 'auto', px: 1, pb: 2 }}>
                       {ipStats.length === 0 ? (
@@ -881,7 +881,7 @@ const Settings: React.FC<SettingsProps> = ({ cache, onCacheUpdate, currentThemeI
             <SectionHeader icon={<FileText size={18} />} label={t('settings.tabs.logs')}
               action={<Button size="small" variant="outlined" disabled={isCleaningLogs} onClick={handleCleanLogs}>
                 <Box sx={{ display: 'flex', gap: 0.5, alignItems: 'center' }}>
-                  <Trash2 size={16} />
+                  <Delete size={16} />
                   {t('settings.logs.clean')}
                 </Box>
               </Button>}
