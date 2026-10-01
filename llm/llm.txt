@@ -1,0 +1,60 @@
+SniShaper — AI 代码导览（主索引）
+=====================================
+
+SniShaper 是 Windows 本地代理工具：ECH 注入、TLS-RF 分片、QUIC 连接重建、
+轻量服务器模式中继。前端 React 19 + Wails v3，后端 Go 1.27+。
+
+先读本文件建立地图，再按需打开对应的 llm_*.txt 看细节。
+
+
+一、构建与检查命令
+------------------
+  全量构建        .\build_windows.ps1 -Build all -Silent
+  仅后端          .\build_windows.ps1 -Build backend -Silent
+  仅前端          .\build_windows.ps1 -Build frontend -Silent
+  构建 + MSIX     .\build_windows.ps1 -Build all -Silent -BuildMsix
+  Go 编译检查     go build -tags with_gvisor ./...
+  前端类型检查    cd frontend && ./node_modules/.bin/tsc --noEmit   （权威；vite build 不做严格类型检查）
+  前端开发        cd frontend && npm run dev
+  测试            仓库没有统一测试框架，测试文件散在各包（*_test.go）与 test/ 目录
+
+
+二、目录地图 → 该读哪个文件
+---------------------------
+  main.go                 入口：Wails 应用、托盘、主窗口        → llm_app.txt
+  app/                    应用层：API 绑定、系统代理、自启、更新  → llm_app.txt
+  proxy/                  代理服务器核心（MITM/SOCKS5/分片/规则） → llm_proxy.txt
+  core/                   核心运行时：RPC、TUN（singtun）、提权   → llm_core.txt
+  cli/                    命令行 + TUI 面板（与 GUI 共用 app 层） → llm_core.txt
+  pkg/                    基础库（证书、CF IP 池、DoH、系统代理…）→ llm_pkg.txt
+  common/                 通用工具（配置路径、环形日志、打开文件）→ llm_pkg.txt
+  frontend/src/           React SPA，10 个页面                    → llm_frontend.txt
+  evolution/              规则进化测试（自动探测可用方案）        → llm_features.txt
+  rules/config.json       站点分组 / 上游 / DNS / ECH / NAT64    → llm_features.txt
+  config/settings.json    应用设置（端口、TUN、主题…）            → llm_features.txt
+  test/  tools/  docs/    测试与脚本                              → llm_features.txt
+  build_windows.ps1 等    构建 / 打包 / CI                        → llm_features.txt
+
+
+三、一次请求的数据流（记住这条主线）
+--------------------------------------
+  前端 React (HashRouter)
+    → Wails 绑定 frontend/src/api/bindings.ts（Call.ByName("snishaper/app.App.*")）
+    → app/app_api.go 的 *App 方法
+    → proxy.ProxyServer（HTTP 代理 + SOCKS5）按 RuleManager 匹配规则
+    → 按规则模式分流：mitm / transparent / tls-rf / quic / direct
+    → core/coreRuntime 经 singtun（pkg/singtun）跑 TUN 栈（可选 TUN 模式）
+
+  状态同步：后端 emitFrontendState() 发 app:state_changed 事件 → 前端刷新。
+
+
+四、文件清单
+------------
+  llm_app.txt       main.go、app/：窗口、托盘、API、自启、更新、系统代理
+  llm_proxy.txt     proxy/：代理服务器、规则引擎、TLS 分片、迁移模式
+  llm_core.txt      core/、cli/：核心进程 RPC、TUN、命令行与 TUI
+  llm_pkg.txt       pkg/、common/：证书、CF IP 池、DoH、系统代理、网络接口
+  llm_frontend.txt  frontend/：页面、组件、i18n、主题、绑定层
+  llm_features.txt  evolution/、rules/、config/、构建与测试脚本
+
+约定：改了代码后同步更新对应 llm_*.txt；i18n 文案必须 zh/en/ru 三份同步改。

@@ -140,7 +140,7 @@ func main() {
 	log.Printf("[startup] ShouldStartHidden=%v Hidden=%v", hidden, hidden)
 	mainWindow := wailsApp.Window.NewWithOptions(application.WebviewWindowOptions{
 		Name:             "main",
-		Title:            "snishaper",
+		Title:            "SniShaper",
 		Width:            1024,
 		Height:           768,
 		URL:              "/",

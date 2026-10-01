@@ -1,0 +1,61 @@
+llm_core.txt — 核心运行时与命令行（core/ + cli/）
+==================================================
+
+架构：同一份 exe 两种角色。
+  - GUI/CLI 进程 = 客户端（CoreClient），通过 RPC 控制
+  - core 进程 = 后端数据面：`exe core` 启动，监听 127.0.0.1:18933（net/rpc），
+    令牌鉴权（coreRPCToken，启动时随机生成、落盘给客户端读）
+  注意：mihomo 已弃用，TUN 数据面现在是自研 singtun（pkg/singtun）。
+
+
+core/ 文件说明
+--------------
+  core_api.go       RPC 服务端：coreService 注册 Core.* 方法 —— Authenticate、
+                    Ping、GetInfo、ReloadConfig/Certificate、Shutdown、
+                    StartProxy/StopProxy/IsProxyRunning、GetStats、
+                    StartTUN/StopTUN/GetTUNStatus、日志捕获、GetRouteEvents、
+                    SetProxyMode、SOCKS5 开关。RunCoreMain 是 core 角色入口。
+  core_runtime.go   ★ coreRuntime：进程内真正的运行器。
+                      newCoreRuntime 建 proxy.ProxyServer + singtun.Manager；
+                      start/shutdown、reloadConfig/reloadCertificate；
+                      startProxy/stopProxy、startTUN/stopTUN（含
+                      verifyTUNDataPlane 数据面自检、并发防抖：连点会卡 UI）；
+                      端口管理（EnsurePortAvailable，占用者名单
+                      "snishaper"/"usque"）、日志捕获环形缓冲、RouteEvent 队列。
+  core_client.go    CoreClient（客户端侧）：dial/Call、令牌管理、
+                    EnsureRunning（起 core 进程 → 轮询 Ping → Authenticate →
+                    恢复日志捕获与代理状态；可要求提权运行）、
+                    ReloadIfRunning、Start/StopProxy、Start/StopTUN、
+                    GetRouteEvents、SetProxyMode 等封装。
+  core_client_windows.go | _linux.go | _other.go
+                    startCoreProcess：Windows 分普通/提权（elevated）两种拉起。
+  core_admin_windows.go | _linux.go | _other.go
+                    IsProcessElevated / ElevateSelf（管理员权限检测与自提权；
+                    TUN、系统代理注册表写入需要）。
+
+
+cli/ 文件说明（命令行 + TUI）
+-----------------------------
+  main.go           入口与分发：dispatchCommand 路由子命令；无参数 → runTUI；
+                    start/stop 起停服务（PID 文件 snishaper.pid）、
+                    monitorCore 看护 core 进程。
+  tui.go            交互面板（tview 风格）：状态行、日志窗口、命令目录。
+  catalog.go        命令目录/帮助文本（分组：服务状态、代理、TUN、证书、
+                    规则与配置、更新、其他）。
+  commands.go       基础命令：proxy on/off、sysproxy on/off、status、logs、
+                    config、ca（证书安装/导出/重装）、版本。
+  service_commands.go mode/port/socks5/migration/evolution/autostart/diag/
+                    selfcheck 等服务类命令。
+  config_commands.go 配置 CRUD：sites/upstreams/dns/ech/nat64/cloudflare/
+                    route/stats/ipv6/update/logsadmin（JSON 参数进出，
+                    改完 reloadService 热重载 core）。
+  tun_commands.go   tun on/off/status/config；恢复标记（关机时是否该把
+                    系统代理还原）。
+  detached_*.go      平台差异：后台分离启动。
+
+
+常用 RPC 方法名（前端间接经 CoreClient 调用）
+---------------------------------------------
+  Core.Ping / Core.Authenticate / Core.GetInfo / Core.StartProxy /
+  Core.StopProxy / Core.StartTUN / Core.StopTUN / Core.GetTUNStatus /
+  Core.GetStats / Core.GetRecentLogs / Core.GetRouteEvents
