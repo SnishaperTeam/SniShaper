@@ -40,6 +40,18 @@ var fakeIPBypassSuffixes = []string{
 	".nettest.org",
 }
 
+// ncsiStaticIP is the address handed back for the Windows connectivity probe.
+//
+// NCSI only checks that dns.msftncsi.com resolves to a public address; the
+// value does not have to be reachable because the HTTP probe is answered by the
+// proxy itself (see proxy/ncsi.go). Answering locally keeps the adapter status
+// correct even when every upstream resolver is unreachable, which is the state
+// that matters most: if the user has no working DNS, reporting "no Internet"
+// is accurate but useless, and the tunnel is in fact carrying traffic.
+//
+// 131.107.255.255 is the address Microsoft publishes for this probe.
+const ncsiStaticIP = "131.107.255.255"
+
 // shouldBypassFakeIP reports whether a domain must be resolved for real.
 func shouldBypassFakeIP(domain string) bool {
 	name := strings.ToLower(strings.TrimSuffix(strings.TrimSpace(domain), "."))
@@ -68,6 +80,18 @@ func shouldBypassFakeIP(domain string) bool {
 		if strings.HasSuffix(name, suffix) {
 			return true
 		}
+	}
+	return false
+}
+
+// isNCSIProbe reports whether domain is one of the Windows connectivity names,
+// which are answered locally instead of being resolved upstream.
+func isNCSIProbe(domain string) bool {
+	name := strings.ToLower(strings.TrimSuffix(strings.TrimSpace(domain), "."))
+	switch name {
+	case "dns.msftncsi.com", "www.msftncsi.com", "msftncsi.com",
+		"www.msftconnecttest.com", "msftconnecttest.com":
+		return true
 	}
 	return false
 }

@@ -4252,22 +4252,27 @@
       }
     },
     {
-      "id": "1776998630568972800",
-      "name": "IIJ",
-      "url": "https://public.dns.iij.jp/dns-query",
-      "sni": "iij.jp",
-      "ips": [
-        "103.2.57.5"
-      ],
+      "id": "ali-doh",
+      "name": "AliDNS DoH",
+      "url": "https://223.5.5.5/dns-query",
       "ech_enabled": false,
       "ech_auto_update": false,
-      "quic": true,
+      "quic": false,
       "enabled": true,
       "cert_verify": {
-        "mode": "allow_names",
-        "names": [
-          "*.dns.iij.jp"
-        ]
+        "mode": "strict_real"
+      }
+    },
+    {
+      "id": "dnspod-doh",
+      "name": "DNSPod DoH",
+      "url": "https://doh.pub/dns-query",
+      "ech_enabled": false,
+      "ech_auto_update": false,
+      "quic": false,
+      "enabled": true,
+      "cert_verify": {
+        "mode": "strict_real"
       }
     }
   ],
