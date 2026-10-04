@@ -38,8 +38,6 @@ type ProxyDiagnostics struct {
 	ProxyRunning   bool                  `json:"proxy_running"`
 	ListenPort     int                   `json:"listen_port"`
 	ProxyMode      string                `json:"proxy_mode"`
-	Socks5Enabled  bool                  `json:"socks5_enabled"`
-	Socks5Port     string                `json:"socks5_port"`
 	SystemProxy    systemProxyDiagnostic `json:"system_proxy"`
 	TUN            proxyTUNDiagnostic    `json:"tun"`
 	IPv6Available  bool                  `json:"ipv6_available"`
@@ -75,16 +73,14 @@ type ProxySelfCheckResult struct {
 // best effort: values that need a running core fall back to their zero value.
 func (a *App) GetProxyDiagnostics() ProxyDiagnostics {
 	diag := ProxyDiagnostics{
-		Version:       VersionString(),
-		Platform:      runtime.GOOS + "/" + runtime.GOARCH,
-		Elevated:      core.IsProcessElevated(),
-		ProxyRunning:  a.IsProxyRunning(),
-		ListenPort:    a.GetListenPort(),
-		ProxyMode:     a.GetProxyMode(),
-		Socks5Enabled: a.GetSocks5Enabled(),
-		Socks5Port:    a.GetSocks5Port(),
-		CertPath:      a.certPath,
-		LogDir:        a.logDir,
+		Version:      VersionString(),
+		Platform:     runtime.GOOS + "/" + runtime.GOARCH,
+		Elevated:     core.IsProcessElevated(),
+		ProxyRunning: a.IsProxyRunning(),
+		ListenPort:   a.GetListenPort(),
+		ProxyMode:    a.GetProxyMode(),
+		CertPath:     a.certPath,
+		LogDir:       a.logDir,
 	}
 
 	c := core.NewCoreClient()
@@ -145,17 +141,9 @@ func (a *App) ProxySelfCheck() ProxySelfCheckResult {
 	listening := false
 	if ok, detail, elapsed := dialCheck(httpAddr, 2*time.Second); ok {
 		listening = true
-		result.Checks = append(result.Checks, DiagnosticCheck{Name: "http_listen", OK: true, Detail: "HTTP 端口 " + httpAddr + " 可连接", DurationMS: elapsed})
+		result.Checks = append(result.Checks, DiagnosticCheck{Name: "proxy_listen", OK: true, Detail: "代理端口 " + httpAddr + " 可连接（HTTP + SOCKS5）", DurationMS: elapsed})
 	} else {
-		result.Checks = append(result.Checks, DiagnosticCheck{Name: "http_listen", OK: false, Detail: detail, DurationMS: elapsed})
-	}
-
-	if a.GetSocks5Enabled() {
-		socksAddr := "127.0.0.1:" + a.GetSocks5Port()
-		ok, detail, elapsed := dialCheck(socksAddr, 2*time.Second)
-		result.Checks = append(result.Checks, DiagnosticCheck{Name: "socks5_listen", OK: ok, Detail: detailOr(detail, "SOCKS5 端口 "+socksAddr+" 可连接"), DurationMS: elapsed})
-	} else {
-		result.Checks = append(result.Checks, DiagnosticCheck{Name: "socks5_listen", OK: true, Skipped: true, Detail: "SOCKS5 未启用"})
+		result.Checks = append(result.Checks, DiagnosticCheck{Name: "proxy_listen", OK: false, Detail: detail, DurationMS: elapsed})
 	}
 
 	if listening {
