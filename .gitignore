@@ -117,3 +117,4 @@ reference/
 # IP scanner logs
 tools/logs/*
 !tools/logs/.gitkeep
+/.vs
