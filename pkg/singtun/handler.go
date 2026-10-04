@@ -341,8 +341,53 @@ func (h *Handler) resolveHost(destination M.Socksaddr) string {
 
 // NewPacketConnectionEx 处理新的 UDP 连接（非 DNS；DNS 由 NewDNSPacket 接管）
 func (h *Handler) NewPacketConnectionEx(ctx context.Context, conn N.PacketConn, source M.Socksaddr, destination M.Socksaddr, onClose N.CloseHandlerFunc) {
+	// sing-tun does not always divert DNS to NewDNSPacket: with AutoRoute on,
+	// a query to the TUN resolver arrives here as an ordinary UDP flow instead.
+	// Without this branch the query is forwarded upstream and never becomes a
+	// fake-ip, so the domain is lost before it reaches the proxy and
+	// domain-based rules stop matching. Answering it here keeps the fake-ip
+	// table populated.
+	if destination.Port == dnsPort {
+		h.serveDNSOverPacketConn(ctx, conn, source, destination, onClose)
+		return
+	}
 	h.forwardUDPDirect(ctx, conn, source, destination, onClose)
 }
+
+// dnsPort is the standard DNS service port.
+const dnsPort = 53
+
+// serveDNSOverPacketConn answers DNS queries that reached the generic packet
+// path rather than NewDNSPacket.
+func (h *Handler) serveDNSOverPacketConn(ctx context.Context, conn N.PacketConn, source M.Socksaddr, destination M.Socksaddr, onClose N.CloseHandlerFunc) {
+	go func() {
+		defer func() {
+			if onClose != nil {
+				onClose(nil)
+			}
+		}()
+
+		packet := buf.NewPacket()
+		defer packet.Release()
+
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			default:
+			}
+
+			conn.SetReadDeadline(time.Now().Add(dnsReadTimeout))
+			if _, err := conn.ReadPacket(packet); err != nil {
+				return
+			}
+			h.handleRawDNSPacket(packet.Bytes(), source, destination, conn)
+		}
+	}()
+}
+
+// dnsReadTimeout bounds how long the fallback DNS reader waits for a query.
+const dnsReadTimeout = 5 * time.Second
 
 // handleRawDNSPacket handles DNS packets delivered via NewDNSPacket.
 // Unlike handleDNS (which reads from a PacketConn), this receives the raw
