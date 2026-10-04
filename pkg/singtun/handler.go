@@ -335,6 +335,12 @@ func (h *Handler) resolveHost(destination M.Socksaddr) string {
 		h.logf(fmt.Sprintf("[sing-tun] WARNING: fake-ip %s has no domain mapping", addr))
 	}
 
+	// NCSI 探测地址是本地硬编码的公网 IP，不在 fake-ip 表里；没有这条反查，
+	// 代理只会看到裸 IP，认不出探测流量，网卡状态会一直显示"无 Internet"。
+	if domain, ok := lookupNCSIHost(addr); ok {
+		return domain
+	}
+
 	// 不是 fake-ip，返回原始地址
 	return addr.String()
 }
@@ -749,4 +755,9 @@ func (h *Handler) getPhysicalUDPAddr(wantIPv6 bool) net.IP {
 		return nil
 	}
 	return net.IP(binding.Address.AsSlice())
+}
+
+// ResolveHostForTest exposes resolveHost for probes and tests.
+func (h *Handler) ResolveHostForTest(addr netip.Addr) string {
+	return h.resolveHost(M.Socksaddr{Addr: addr})
 }

@@ -86,3 +86,22 @@ func TestNCSIStaticIPIsPublic(t *testing.T) {
 		t.Fatalf("ncsiStaticIP = %s is not a public address", addr)
 	}
 }
+
+// TestLookupNCSIHost pins the reverse mapping that lets the proxy recognise
+// the probe: Windows connects to the address DNS returned, so without this the
+// proxy would only see a bare IP and would not match the NCSI host.
+func TestLookupNCSIHost(t *testing.T) {
+	domain, ok := lookupNCSIHost(netip.MustParseAddr(ncsiStaticIP))
+	if !ok {
+		t.Fatal("lookupNCSIHost(ncsiStaticIP) not found")
+	}
+	if domain != "www.msftconnecttest.com" {
+		t.Fatalf("lookupNCSIHost = %q, want www.msftconnecttest.com", domain)
+	}
+	if _, ok := lookupNCSIHost(netip.MustParseAddr("1.1.1.1")); ok {
+		t.Fatal("lookupNCSIHost(1.1.1.1) = found, want not found")
+	}
+	if _, ok := lookupNCSIHost(netip.Addr{}); ok {
+		t.Fatal("lookupNCSIHost(invalid) = found, want not found")
+	}
+}

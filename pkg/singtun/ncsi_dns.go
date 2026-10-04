@@ -66,3 +66,19 @@ func (h *Handler) answerNCSIProbe(msg *dns.Msg, domain string, qtype uint16, des
 		h.logf("[sing-tun] failed to write NCSI answer: " + err.Error())
 	}
 }
+
+// ncsiStaticHosts maps the fixed probe address back to the hostname. Windows
+// connects to whatever address DNS returned, so without this the proxy would
+// only ever see 131.107.255.255 and could not recognise the probe.
+var ncsiStaticHosts = map[string]string{
+	ncsiStaticIP: "www.msftconnecttest.com",
+}
+
+// lookupNCSIHost returns the hostname behind the fixed probe address.
+func lookupNCSIHost(addr netip.Addr) (string, bool) {
+	if !addr.IsValid() {
+		return "", false
+	}
+	domain, ok := ncsiStaticHosts[addr.String()]
+	return domain, ok
+}
