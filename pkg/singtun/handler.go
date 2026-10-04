@@ -410,6 +410,19 @@ func (h *Handler) handleRawDNSPacket(payload []byte, source M.Socksaddr, destina
 		return
 	}
 
+	// Windows 判定网卡"有 Internet"时，NCSI 会把 dns.msftncsi.com 解析结果当作
+	// 连通性证据。fake-ip 段（198.18.0.0/15，RFC 2544 基准测试保留）不是公网地址，
+	// Windows 拿到后直接判定不可用，网卡就显示"无法访问互联网"，根本不会发出
+	// HTTP 探测。mihomo / sing-box 的 fake-ip-filter 默认收录这些域名正是为此。
+	//
+	// 所以这些域名必须走真实解析：拿到真实公网 IP，NCSI 的 HTTP 探测经隧道打到
+	// 微软服务器，拿到真正的 "Microsoft NCSI" 响应。
+	if shouldBypassFakeIP(domain) {
+		h.logf("[sing-tun] fake-ip bypass: " + domain)
+		h.handleDNSRealPacket(msg, domain, destination, writer)
+		return
+	}
+
 	var fakeIP netip.Addr
 	var isNew bool
 	if question.Qtype == dns.TypeA {
