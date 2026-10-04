@@ -1,11 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import {
-  Workflow,
-  ShieldCheck,
+  RefreshCcw,
+  Shield,
   Activity,
-  Share2,
+  Share,
   Power,
-  Zap
+  Bolt
 } from '../lib/icons';
 import {
   GetAutoRoutingConfig,
@@ -100,7 +100,7 @@ const Routing: React.FC = () => {
         <Box sx={{ flex: 1, overflowY: 'auto', p: 2, display: 'flex', flexWrap: 'wrap', alignContent: 'flex-start', gap: 1.5, position: 'relative' }}>
             {flows.length === 0 && (
                 <Box sx={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: 'text.secondary', opacity: 0.4 }}>
-                    <Share2 size={40} strokeWidth={1} />
+                    <Share size={40} strokeWidth={1} />
                     <Typography variant="caption" sx={{ mt: 1.5, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em' }}>{t('routing.waiting_traffic')}</Typography>
                 </Box>
             )}
@@ -124,7 +124,7 @@ const Routing: React.FC = () => {
       <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: '1fr 1fr', xl: 'repeat(3, 1fr)' }, gap: 4 }}>
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, px: 0.5 }}>
-                <Box sx={{ display: 'inline-flex', color: 'primary.main' }}><Workflow size={18} /></Box>
+                <Box sx={{ display: 'inline-flex', color: 'primary.main' }}><RefreshCcw size={18} /></Box>
                 <Typography variant="body2" sx={{ fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'text.secondary' }}>{t('routing.strategy')}</Typography>
              </Box>
              <Box sx={{ bgcolor: 'background.paper', border: 1, borderColor: 'divider', borderRadius: 2, p: 2, display: 'flex', flexDirection: 'column', gap: 3 }}>
@@ -133,7 +133,7 @@ const Routing: React.FC = () => {
                     <Box sx={{ display: 'grid', gridTemplateColumns: { xs: 'repeat(2, 1fr)', sm: 'repeat(4, 1fr)' }, gap: 1.5 }}>
                         {[
                             { id: '', label: t('routing.modes.off'), icon: Power, color: 'text.secondary' },
-                            { id: 'default', label: t('routing.modes.smart'), icon: Zap, color: 'success.main' }
+                            { id: 'default', label: t('routing.modes.smart'), icon: Bolt, color: 'success.main' }
                         ].map((opt) => {
                             const active = config.mode === opt.id;
                             return (
@@ -182,13 +182,13 @@ const Routing: React.FC = () => {
 
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, px: 0.5 }}>
-                <Box sx={{ display: 'inline-flex', color: 'success.main' }}><ShieldCheck size={18} /></Box>
+                <Box sx={{ display: 'inline-flex', color: 'success.main' }}><Shield size={18} /></Box>
                 <Typography variant="body2" sx={{ fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'text.secondary' }}>{t('routing.features')}</Typography>
              </Box>
              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
                 {[
-                    { icon: Zap, title: t('routing.feature_smart'), color: 'success.main', desc: t('routing.feature_smart_desc') },
-                    { icon: Activity, title: t('routing.feature_priority'), color: 'secondary.main', desc: t('routing.feature_priority_desc') }
+                    { icon: Bolt, title: t('routing.feature_smart'), color: 'success.main', desc: t('routing.feature_smart_desc') },
+                    { icon: RefreshCcw, title: t('routing.feature_priority'), color: 'secondary.main', desc: t('routing.feature_priority_desc') }
                 ].map((item, i) => (
                     <Box key={i} sx={{ p: 2, bgcolor: 'background.paper', border: 1, borderColor: 'divider', borderRadius: 2, display: 'flex', gap: 2, transition: 'border-color 0.15s', '&:hover': { borderColor: (theme) => alpha(theme.palette.primary.main, 0.4) } }}>
                         <Box sx={{ flexShrink: 0, width: 40, height: 40, borderRadius: 2, display: 'flex', alignItems: 'center', justifyContent: 'center', bgcolor: 'action.hover', color: item.color }}>

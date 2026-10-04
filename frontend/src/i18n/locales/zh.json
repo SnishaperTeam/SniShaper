@@ -52,6 +52,15 @@
     "proxy_stop": "停止代理",
     "sys_proxy": "系统代理",
     "tun_status": "TUN",
+    "outbound_interface": "出站网卡",
+    "outbound_interface_smart": "智能选择（推荐）",
+    "outbound_interface_hint": "TUN 出站流量绑定的物理网卡。智能模式会排除虚拟网卡，并按默认路由度量值挑选物理网卡。",
+    "outbound_interface_virtual": "虚拟",
+    "outbound_interface_own": "代理自身",
+    "outbound_interface_default": "默认路由",
+    "outbound_interface_auto_pick": "智能选中",
+    "outbound_interface_applied": "出站网卡已更新",
+    "outbound_interface_failed": "切换出站网卡失败",
     "core_status": "核心状态",
     "run_status": "运行状态",
     "work_mode": "工作模式",
@@ -81,6 +90,7 @@
       "kill_process_failed": "结束进程或重启失败",
       "sys_proxy_failed": "系统代理操作失败",
       "tun_starting": "TUN 启动中，请稍候...",
+      "tun_timeout": "TUN 启动超时，请查看日志。",
       "tun_stopped": "已关闭 TUN 路径。"
     },
     "port_occupied": {
@@ -340,8 +350,11 @@
     "ipv6_ok": "已检测到 IPv6",
     "ipv6_ok_desc": "当前网络存在全局 IPv6 地址，IPv6 相关功能（NAT64 映射、IPv6 DNS 策略、演进测试 IPv6 选项）可用。",
     "ipv6_disabled_title": "当前网络为纯 IPv4",
-    "ipv6_disabled_desc": "未检测到可用的全局 IPv6 地址。NAT64 配置、IPv6 优先/仅 IPv6 DNS 规则以及演进测试的 IPv6 选项已禁用且不可点击，检测到 IPv6 后将自动恢复。每 10 分钟自动检测一次，也可点击右侧按钮立即刷新。",
-    "ipv6_disabled": "纯 IPv4 网络：IPv6 相关功能（NAT64、IPv6 规则）已禁用",
+    "ipv6_disabled_desc": "未检测到可用的全局 IPv6 地址。NAT64 与 IPv6 DNS 策略仍可配置，但在纯 IPv4 网络下会直接连接失败（不会静默回退到 IPv4）。检测到 IPv6 后可正常生效。每 10 分钟自动检测一次，也可点击右侧按钮立即刷新。",
+    "ipv6_disabled": "纯 IPv4 网络：IPv6 相关规则（NAT64、IPv6 DNS）无法生效",
+    "ipv6_only_will_fail": "当前为纯 IPv4 网络，仅 IPv6 会连接失败",
+    "ipv6_nat64_will_fail": "当前为纯 IPv4 网络，NAT64 需要 IPv6 才能生效",
+    "ipv6_warn_suffix": "当前为纯 IPv4 环境，无法测试 IPv6 连通性",
     "ipv6_restored": "已检测到 IPv6：NAT64、IPv6 规则等功能已恢复"
   },
   "settings": {

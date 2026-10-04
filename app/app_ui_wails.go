@@ -158,7 +158,7 @@ func (a *App) ensureMainWindow() *application.WebviewWindow {
 	log.Printf("[window] creating main window")
 	w := wailsApp.Window.NewWithOptions(application.WebviewWindowOptions{
 		Name:             "main",
-		Title:            "snishaper",
+		Title:            "SniShaper",
 		Width:            1024,
 		Height:           768,
 		URL:              "/",

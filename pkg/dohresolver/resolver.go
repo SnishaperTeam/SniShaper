@@ -14,6 +14,8 @@ import (
 	"sync"
 	"time"
 
+	"snishaper/common"
+
 	"github.com/miekg/dns"
 	"github.com/quic-go/quic-go"
 	"github.com/quic-go/quic-go/http3"
@@ -22,13 +24,7 @@ import (
 	"snishaper/pkg/netiface"
 )
 
-type CertVerifyConfig struct {
-	Mode                  string   `json:"mode,omitempty"`
-	Names                 []string `json:"names,omitempty"`
-	Suffixes              []string `json:"suffixes,omitempty"`
-	SPKISHA256            []string `json:"spki_sha256,omitempty"`
-	AllowUnknownAuthority bool     `json:"allow_unknown_authority,omitempty"`
-}
+type CertVerifyConfig = common.CertVerifyConfig
 
 type DNSNode struct {
 	Name          string           `json:"name"`
@@ -108,6 +104,12 @@ func (r *FailoverResolver) getNodeClient(ctx context.Context, node DNSNode) (*ht
 		if len(echBytes) > 0 {
 			tlsConfig.EncryptedClientHelloConfigList = echBytes
 			tlsConfig.InsecureSkipVerify = false
+		} else if !node.CertVerify.AllowUnknownAuthority {
+			// 与主代理路径一致：默认仅校验证书链（不匹配主机名），
+			// 不再无验证放行；用户显式允许未知 CA 时保持原行为
+			tlsConfig.VerifyConnection = func(cs tls.ConnectionState) error {
+				return common.VerifyChainOnly(cs.PeerCertificates)
+			}
 		}
 		if rule.SniFake != "" {
 			tlsConfig.ServerName = rule.SniFake

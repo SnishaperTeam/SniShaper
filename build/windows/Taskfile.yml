@@ -1,0 +1,53 @@
+version: '3'
+
+includes:
+  common: ../Taskfile.yml
+
+tasks:
+  build:
+    desc: Builds the Windows GUI (pure Go, cross-compiles from any host)
+    summary: |
+      Usage: wails3 build GOOS=windows [ARCH=amd64|386|arm64] [DEV=true]
+                                       [EXTRA_TAGS=tag1,tag2] [BIN_DIR=path]
+      The version resource is regenerated from winres/winres.json with the
+      Package.appxmanifest version, the same way build_windows.ps1 does it.
+    deps:
+      - task: common:build:frontend
+        vars:
+          DEV:
+            ref: .DEV
+    cmds:
+      - task: common:seed:runtime
+      - |
+        set -e
+        TMP_JSON="winres/.winres.{{.TARGET_ARCH}}.json"
+        SYSO="rsrc_windows_{{.TARGET_ARCH}}.syso"
+        cleanup() { rm -f "$TMP_JSON" "$SYSO"; }
+        trap cleanup EXIT
+        if [ -n "{{.APPX_VERSION}}" ]; then
+          sed -e 's/"file_version": "[^"]*"/"file_version": "{{.APPX_VERSION}}"/g' \
+              -e 's/"product_version": "[^"]*"/"product_version": "{{.APPX_VERSION}}"/g' \
+              -e 's/"FileVersion": "[^"]*"/"FileVersion": "{{.APPX_VERSION}}"/g' \
+              -e 's/"ProductVersion": "[^"]*"/"ProductVersion": "{{.APPX_VERSION}}"/g' \
+              winres/winres.json > "$TMP_JSON"
+        else
+          cp winres/winres.json "$TMP_JSON"
+        fi
+        if command -v go-winres >/dev/null 2>&1; then
+          go-winres make --in "$TMP_JSON" --arch {{.TARGET_ARCH}} --out rsrc
+        else
+          go run github.com/tc-hib/go-winres@latest make --in "$TMP_JSON" --arch {{.TARGET_ARCH}} --out rsrc
+        fi
+        go build -tags '{{.BUILD_TAGS}}' -ldflags '{{.LD_FLAGS}}' {{.GO_FLAGS}} -o '{{.GUI_BIN}}' .
+    env:
+      GOOS: windows
+      GOARCH: '{{.TARGET_ARCH}}'
+      CGO_ENABLED: 0
+
+  run:
+    desc: Runs the built Windows GUI binary
+    preconditions:
+      - sh: test -f '{{.GUI_BIN}}'
+        msg: "Missing {{.GUI_BIN}} - run `wails3 build GOOS=windows` first."
+    cmds:
+      - '{{.GUI_BIN}}'

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import {
-  Plus, Search, Filter, Edit, OpenInNew, Trash2, Activity, Zap, RefreshCcw
+  Plus, Search, Filter, Edit, ExternalLink, Delete, Activity, Bolt, RefreshCcw
 } from '../lib/icons';
 import {
   GetSiteGroups, DeleteSiteGroup, ExportConfig, EventsOn, UpdateRules
@@ -91,7 +91,7 @@ const RuleItem: React.FC<{ group: any; onEdit: (group: any) => void; onDelete: (
           <Edit size={15} />
         </IconButton>
         <IconButton size="small" aria-label={t('rules.delete_rule_aria')} color="error" onClick={() => onDelete(group.id)}>
-          <Trash2 size={15} />
+          <Delete size={15} />
         </IconButton>
       </Box>
     </Box>
@@ -223,7 +223,7 @@ const Rules: React.FC = () => {
             {updatingRules ? t('rules.update_running') : t('rules.update_rules')}
           </Button>
           <Button onClick={handleExport} variant="outlined" size="small" aria-label={t('rules.export_aria')} sx={{ minWidth: 0, px: 1 }}>
-            <OpenInNew size={16} />
+            <ExternalLink size={16} />
           </Button>
           <Button onClick={handleAdd} variant="contained" color="primary" size="small" startIcon={<Plus size={16} strokeWidth={3} />}>
             {t('rules.add_rule')}
@@ -308,7 +308,7 @@ const Rules: React.FC = () => {
       <Modal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} title={editingGroup ? t('rules.edit_rule') : t('rules.create_rule')} maxWidth="42rem"
         footer={<>
           <Button type="button" onClick={() => setIsModalOpen(false)} variant="outlined" size="small">{t('common.cancel')}</Button>
-          <Button type="submit" form="rule-form" variant="contained" color="primary" size="small" startIcon={<Zap size={16} />}>{editingGroup ? t('common.save') : t('common.save')}</Button>
+          <Button type="submit" form="rule-form" variant="contained" color="primary" size="small" startIcon={<Bolt size={16} />}>{editingGroup ? t('common.save') : t('common.save')}</Button>
         </>}>
         <RuleForm initialData={editingGroup} onSuccess={() => { setIsModalOpen(false); loadData(); }} onCancel={() => setIsModalOpen(false)} />
       </Modal>

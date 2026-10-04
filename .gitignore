@@ -6,6 +6,9 @@ build/bin/
 *.msi
 *.syso
 
+# Wails v3 task runner checksum cache
+.task/
+
 # Go cache / temp
 .gocache/
 *.test
@@ -73,6 +76,7 @@ shaper-next/
 snishaper.zip
 Apppackage/
 blindtls-vercel/
+llm/
 
 # Custom ignores - added for mitmverify and cmd
 mitmverify.exe

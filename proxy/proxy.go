@@ -11,6 +11,7 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"net/netip"
 	"regexp"
 	"strings"
 	"sync"
@@ -73,25 +74,58 @@ type CloudflareConfig struct {
 }
 
 type TUNConfig struct {
-	Enabled     bool `json:"enabled"`
-	MTU         int  `json:"mtu,omitempty"`
-	DNSHijack   bool `json:"dns_hijack,omitempty"`
-	AutoRoute   bool `json:"auto_route,omitempty"`
-	StrictRoute bool `json:"strict_route,omitempty"`
-	// OutboundInterface 固定 TUN 出站网卡名（如 "WLAN"、"Ethernet"）。
-	// 留空表示自动：按系统默认路由 / 内核路由探测选择承载流量的物理网卡。
-	OutboundInterface string `json:"outbound_interface,omitempty"`
-	// OutboundInterfaceExclude 是逗号分隔的网卡名或 "name*" 前缀通配列表，
-	// 这些网卡永远不会被选作出站网卡（例如 "VMware*,vEthernet*"）。
-	OutboundInterfaceExclude string `json:"outbound_interface_exclude,omitempty"`
-	// Stack 是 TUN 网络栈：gvisor（纯用户态，兼容性最好）/ mixed（gvisor +
-	// 系统转发 TCP）/ system（内核态，需要 wintun 转发支持）。
-	Stack string `json:"stack,omitempty"`
-	// AdapterName 是虚拟网卡名称，留空使用默认名 "SniShaper"。
-	AdapterName string `json:"adapter_name,omitempty"`
-	// RouteExcludeAddress 是排除出 TUN 的网段列表（CIDR，逗号分隔）。
-	// 命中的流量走系统默认路由，不进隧道。
-	RouteExcludeAddress string `json:"route_exclude_address,omitempty"`
+	Enabled               bool     `json:"enabled"`
+	MTU                   int      `json:"mtu,omitempty"`
+	DNSHijack             bool     `json:"dns_hijack,omitempty"`
+	AutoRoute             bool     `json:"auto_route,omitempty"`
+	StrictRoute           bool     `json:"strict_route,omitempty"`
+	InterfaceName         string   `json:"interface_name,omitempty"`
+	ExcludeInterfaces     []string `json:"exclude_interface,omitempty"`
+	RouteExcludeAddresses []string `json:"route_exclude_address,omitempty"`
+}
+
+func (c TUNConfig) InterfaceConfig() netiface.Config {
+	return netiface.Config{
+		ExcludeInterfaces: c.ExcludeInterfaces,
+		ExcludeAddresses:  c.RouteExcludeAddresses,
+		ForceInterface:    c.InterfaceName,
+	}
+}
+
+func (c TUNConfig) RouteExcludePrefixes() ([]netip.Prefix, []netip.Prefix) {
+	var ipv4, ipv6 []netip.Prefix
+	for _, raw := range c.RouteExcludeAddresses {
+		value := strings.TrimSpace(raw)
+		if value == "" {
+			continue
+		}
+		if !strings.Contains(value, "/") {
+			if addr, err := netip.ParseAddr(value); err == nil {
+				bits := 32
+				if addr.Is6() {
+					bits = 128
+				}
+				prefix := netip.PrefixFrom(addr.Unmap(), bits)
+				if addr.Is6() {
+					ipv6 = append(ipv6, prefix)
+				} else {
+					ipv4 = append(ipv4, prefix)
+				}
+				continue
+			}
+		}
+		prefix, err := netip.ParsePrefix(value)
+		if err != nil {
+			continue
+		}
+		prefix = prefix.Masked()
+		if prefix.Addr().Is6() {
+			ipv6 = append(ipv6, prefix)
+		} else {
+			ipv4 = append(ipv4, prefix)
+		}
+	}
+	return ipv4, ipv6
 }
 
 type TUNStatus struct {
@@ -127,6 +161,8 @@ type SettingsConfig struct {
 	Theme                         string            `json:"theme,omitempty"`
 	CloudflareConfig              CloudflareConfig  `json:"cloudflare_config,omitempty"`
 	Socks5Enabled                 *bool             `json:"socks5_enabled,omitempty"`
+	Socks5Username                string            `json:"socks5_username,omitempty"`
+	Socks5Password                string            `json:"socks5_password,omitempty"`
 	MigrationEnabled              *bool             `json:"migration_enabled,omitempty"`
 	MigrationServer               string            `json:"migration_server,omitempty"`
 	UpdateChannel                 string            `json:"update_channel,omitempty"`
@@ -156,7 +192,6 @@ type Rule struct {
 	UseCFPool          bool             `json:"use_cf_pool"`
 	ECHDiscoveryDomain string           `json:"ech_discovery_domain,omitempty"`
 	ECHDoHUpstream     string           `json:"ech_doh_upstream,omitempty"`
-	FallbackMode       string           `json:"fallback_mode,omitempty"`
 	CertVerify         CertVerifyConfig `json:"cert_verify,omitempty"`
 	ECHAutoUpdate      bool             `json:"ech_auto_update"`
 	AutoRouted         bool             `json:"auto_routed,omitempty"`
@@ -178,7 +213,6 @@ type SiteGroup struct {
 	UseCFPool          bool             `json:"use_cf_pool"`
 	ECHDiscoveryDomain string           `json:"ech_discovery_domain,omitempty"`
 	ECHDoHUpstream     string           `json:"ech_doh_upstream,omitempty"`
-	FallbackMode       string           `json:"fallback_mode,omitempty"`
 	CertVerify         CertVerifyConfig `json:"cert_verify,omitempty"`
 	Website            string           `json:"website,omitempty"`
 	Enabled            bool             `json:"enabled"`
@@ -199,25 +233,27 @@ type Upstream struct {
 }
 
 type ProxyServer struct {
-	startStopMu   sync.Mutex
-	Server        *http.Server
-	listenAddr    string
-	socks5Addr    string
-	rules         *RuleManager
-	running       bool
-	mode          string
-	mu            sync.RWMutex
-	certCacheMu   sync.RWMutex
-	certCache     map[string]*tls.Certificate
-	Fingerprint   string
-	certGenerator CertGenerator
-	dohResolver   *dohresolver.FailoverResolver
-	cfPool        *cfpool.CloudflarePool
-	transport     *http.Transport
-	logCallback   func(string)
-	bytesDown     int64
-	bytesUp       int64
-	certBypassMap sync.Map
+	startStopMu       sync.Mutex
+	Server            *http.Server
+	listenAddr        string
+	socks5Addr        string
+	rules             *RuleManager
+	running           bool
+	mode              string
+	mu                sync.RWMutex
+	certCacheMu       sync.RWMutex
+	certCache         map[string]*tls.Certificate
+	certCacheOrder    []string // 证书缓存插入顺序，超限时按最老优先淘汰
+	certCleanupCancel context.CancelFunc
+	Fingerprint       string
+	certGenerator     CertGenerator
+	dohResolver       *dohresolver.FailoverResolver
+	cfPool            *cfpool.CloudflarePool
+	transport         *http.Transport
+	logCallback       func(string)
+	bytesDown         int64
+	bytesUp           int64
+	certBypassMap     sync.Map
 	// echRuntimeConfigs holds hot-patched ECH configs after server rejection
 	// (keyed by profile ID or "host:<name>"). Preferred over persisted profiles
 	// so a retry can take effect even when profile save fails or ID is empty.
@@ -237,14 +273,8 @@ type ProxyServer struct {
 	migrationCacheInitOnce sync.Once
 
 	// tunMode indicates TUN is active, outbound connections should bind physical NIC
-	tunMode bool
-
-	// outboundInterface forces TUN outbound traffic onto a named interface.
-	// Empty means auto-select via the system default route.
-	outboundInterface string
-	// outboundInterfaceExclude is a comma-separated list of interface names or
-	// "name*" prefix globs that must never be used for TUN outbound traffic.
-	outboundInterfaceExclude string
+	tunMode     bool
+	ifaceConfig netiface.Config
 }
 
 type dohProxyAdapter struct {
@@ -257,7 +287,7 @@ func (a *dohProxyAdapter) DialWithRule(ctx context.Context, network, addr string
 		ECHEnabled:    rule.ECHEnabled,
 		ECHProfileID:  rule.ECHProfileID,
 		ECHAutoUpdate: rule.ECHAutoUpdate,
-		CertVerify:    toProxyCertVerify(rule.CertVerify),
+		CertVerify:    rule.CertVerify,
 	}
 	return a.p.dialWithRule(ctx, network, addr, r)
 }
@@ -268,7 +298,7 @@ func (a *dohProxyAdapter) GetUConn(conn net.Conn, sni, verifyName string, rule d
 		ECHEnabled:    rule.ECHEnabled,
 		ECHProfileID:  rule.ECHProfileID,
 		ECHAutoUpdate: rule.ECHAutoUpdate,
-		CertVerify:    toProxyCertVerify(rule.CertVerify),
+		CertVerify:    rule.CertVerify,
 	}
 	return a.p.GetUConn(conn, sni, verifyName, r, allowUnknownAuthority, alpn, ech)
 }
@@ -279,7 +309,7 @@ func (a *dohProxyAdapter) ResolveRuleECHConfig(host string, rule dohresolver.Rul
 		ECHEnabled:    rule.ECHEnabled,
 		ECHProfileID:  rule.ECHProfileID,
 		ECHAutoUpdate: rule.ECHAutoUpdate,
-		CertVerify:    toProxyCertVerify(rule.CertVerify),
+		CertVerify:    rule.CertVerify,
 	}
 	return a.p.resolveRuleECHConfig(host, r)
 }
@@ -288,8 +318,8 @@ func (a *dohProxyAdapter) UpdateECHProfileConfig(profileID string, configBytes [
 	a.p.UpdateECHProfileConfig(profileID, configBytes)
 }
 
-// GetPhysicalBinding 返回与目标 IP 族匹配的网卡绑定信息（网卡 + 索引 + 源地址），
-// 供 QUIC 等需要绑定网卡索引绕过 TUN 的场景使用。
+// GetPhysicalBinding 返回与目标 IP 族匹配的出站网卡绑定信息（网卡 + 索引 + 源地址）。
+// DoH QUIC 用它把 UDP socket 绑到物理网卡，绕过 TUN 避免流量回环。
 func (a *dohProxyAdapter) GetPhysicalBinding(targetAddr string) (netiface.Binding, bool) {
 	binding, err := netiface.SelectForTarget(targetAddr, a.p.outboundInterfaceConfig(), a.p.netifaceLogf)
 	if err != nil {
@@ -298,21 +328,26 @@ func (a *dohProxyAdapter) GetPhysicalBinding(targetAddr string) (netiface.Bindin
 	return binding, true
 }
 
-// SetOutboundInterface 设置 TUN 出站网卡。iface 为空表示自动按默认路由选择；
-// exclude 为逗号分隔的网卡名或 "name*" 前缀通配列表。
-func (p *ProxyServer) SetOutboundInterface(iface string, exclude string) {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	p.outboundInterface = strings.TrimSpace(iface)
-	p.outboundInterfaceExclude = strings.TrimSpace(exclude)
-	netiface.InvalidateCache()
-}
-
 // SetTUNMode 设置 TUN 模式标记，启用后出站连接绑定物理网卡
 func (p *ProxyServer) SetTUNMode(enabled bool) {
+	cfg := netiface.Config{}
+	if enabled && p.rules != nil {
+		cfg = p.rules.GetTUNConfig().InterfaceConfig()
+	}
+
+	netiface.InvalidateCache()
+
 	p.mu.Lock()
-	defer p.mu.Unlock()
 	p.tunMode = enabled
+	p.ifaceConfig = cfg
+	p.mu.Unlock()
+}
+
+func (p *ProxyServer) outboundInterfaceConfig() netiface.Config {
+	p.mu.RLock()
+	cfg := p.ifaceConfig
+	p.mu.RUnlock()
+	return cfg
 }
 
 func NewProxyServer(addr string) *ProxyServer {
@@ -352,7 +387,7 @@ func NewProxyServer(addr string) *ProxyServer {
 				ECHAutoUpdate: node.ECHAutoUpdate,
 				QUIC:          node.QUIC,
 				Enabled:       node.Enabled,
-				CertVerify:    toDohCertVerify(node.CertVerify),
+				CertVerify:    node.CertVerify,
 			})
 		}
 		return nodes
@@ -379,6 +414,11 @@ func (p *ProxyServer) SetLogCallback(cb func(string)) {
 	p.logCallback = cb
 }
 
+// netifaceLogf adapts tracef to the plain func(string) logger netiface expects.
+func (p *ProxyServer) netifaceLogf(line string) {
+	p.tracef("%s", line)
+}
+
 func (p *ProxyServer) tracef(format string, args ...interface{}) {
 	p.mu.RLock()
 	cb := p.logCallback
@@ -390,27 +430,25 @@ func (p *ProxyServer) tracef(format string, args ...interface{}) {
 	}
 }
 
-// netifaceLogf adapts tracef to the plain func(string) logger netiface expects.
-func (p *ProxyServer) netifaceLogf(line string) {
-	p.tracef("%s", line)
-}
-
-func (p *ProxyServer) UpdateCloudflareConfig(cfg CloudflareConfig) {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-
-	if cfg.AutoUpdate {
-		p.updateCloudflareIPPoolLocked(cfg.PreferredIPs)
-	}
-}
-
+// UpdateCloudflareIPPool applies a set of Cloudflare IPs to the pool, creating
+// it on first use. It is the single entry point for every pool update: the GUI
+// startup path, the core runtime, the rules file watcher and the API refresh all
+// go through here. An empty list leaves an existing pool untouched.
+//
+// There used to be a second entry point gated on CloudflareConfig.AutoUpdate,
+// and the core runtime used that one. With auto-update off — the normal setup
+// for a user who pinned their own preferred IPs — that path never created the
+// pool, so every use_cf_pool rule silently fell back to DNS while the GUI copy
+// of the pool looked healthy. One entry point removes the chance of the two
+// copies disagreeing again. AutoUpdate now only governs whether fresh IPs are
+// pulled from the API.
 func (p *ProxyServer) UpdateCloudflareIPPool(ips []string) {
+	if len(ips) == 0 {
+		return
+	}
+
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	p.updateCloudflareIPPoolLocked(ips)
-}
-
-func (p *ProxyServer) updateCloudflareIPPoolLocked(ips []string) {
 	if p.cfPool == nil {
 		p.cfPool = cfpool.NewCloudflarePool(ips)
 		return
@@ -585,7 +623,9 @@ func (p *ProxyServer) Start() error {
 	p.mu.Unlock()
 
 	// Periodic cert cache cleanup (异步化运行，解决永久阻塞)
-	go p.certCacheCleanup(context.Background())
+	cleanupCtx, cleanupCancel := context.WithCancel(context.Background())
+	p.certCleanupCancel = cleanupCancel
+	go p.certCacheCleanup(cleanupCtx)
 
 	go func() {
 		defer func() {
@@ -620,7 +660,9 @@ func (p *ProxyServer) Start() error {
 	}()
 
 	if p.socks5Enabled {
-		p.startSocks5()
+		p.mu.Lock()
+		p.startSocks5Locked()
+		p.mu.Unlock()
 	}
 
 	return nil
@@ -636,6 +678,12 @@ func (p *ProxyServer) Stop() error {
 		return nil
 	}
 	p.running = false
+
+	// 停掉证书缓存清理协程，避免反复 Start/Stop 泄漏 goroutine
+	if p.certCleanupCancel != nil {
+		p.certCleanupCancel()
+		p.certCleanupCancel = nil
+	}
 
 	if p.socks5Tracker != nil {
 		_ = p.socks5Tracker.Close()
@@ -671,7 +719,7 @@ func (p *ProxyServer) SetSocks5Enabled(enabled bool) {
 	p.socks5Enabled = enabled
 	if p.running {
 		if enabled {
-			p.startSocks5()
+			p.startSocks5Locked()
 		} else {
 			if p.socks5Tracker != nil {
 				_ = p.socks5Tracker.Close()
@@ -807,7 +855,13 @@ func (c *socks5TrackedConn) Close() error {
 	return c.Conn.Close()
 }
 
-func (p *ProxyServer) startSocks5() {
+// startSocks5Locked 启动 SOCKS5 监听，调用方必须已持有 p.mu
+func (p *ProxyServer) startSocks5Locked() {
+	// 重复启用时先关闭旧监听，避免端口泄漏
+	if p.socks5Tracker != nil {
+		_ = p.socks5Tracker.Close()
+		p.socks5Tracker = nil
+	}
 	p.socks5Server = p.newSocks5Server()
 	socks5Ln, err := net.Listen("tcp", p.socks5Addr)
 	if err != nil {
@@ -815,14 +869,17 @@ func (p *ProxyServer) startSocks5() {
 		return
 	}
 	p.socks5Tracker = &socks5ConnTracker{Listener: socks5Ln}
+	addr := p.socks5Addr
+	server := p.socks5Server
+	tracker := p.socks5Tracker
 	go func() {
 		defer func() {
 			if r := recover(); r != nil {
 				log.Printf("[Proxy] panic in SOCKS5 server: %v", r)
 			}
 		}()
-		log.Printf("[Proxy] SOCKS5 server started on %s", p.socks5Addr)
-		if err := p.socks5Server.Serve(p.socks5Tracker); err != nil {
+		log.Printf("[Proxy] SOCKS5 server started on %s", addr)
+		if err := server.Serve(tracker); err != nil {
 			log.Printf("[Proxy] SOCKS5 server error: %v", err)
 		}
 	}()
@@ -1056,6 +1113,22 @@ func hostMatchesDomain(host, domain string) bool {
 	return strings.HasSuffix(host, "."+domain)
 }
 
+// domainRegexCache 缓存规则里的 ~ 正则，避免每个请求都重新编译
+var domainRegexCache sync.Map // pattern -> *regexp.Regexp，编译失败存 nil
+
+func getDomainRegex(pattern string) *regexp.Regexp {
+	if v, ok := domainRegexCache.Load(pattern); ok {
+		re, _ := v.(*regexp.Regexp)
+		return re
+	}
+	re, err := regexp.Compile(pattern)
+	if err != nil {
+		re = nil
+	}
+	domainRegexCache.Store(pattern, re)
+	return re
+}
+
 func domainMatchScore(host, domain string) int {
 	host = strings.ToLower(strings.TrimSpace(host))
 	domain = strings.ToLower(strings.TrimSpace(domain))
@@ -1068,8 +1141,8 @@ func domainMatchScore(host, domain string) int {
 		if pattern == "" {
 			return -1
 		}
-		re, err := regexp.Compile(pattern)
-		if err != nil {
+		re := getDomainRegex(pattern)
+		if re == nil {
 			return -1
 		}
 		if re.MatchString(host) {
@@ -1120,42 +1193,37 @@ func normalizeTUNConfig(cfg TUNConfig) TUNConfig {
 		cfg.MTU = 9000
 	}
 	cfg.StrictRoute = false
-	cfg.OutboundInterface = strings.TrimSpace(cfg.OutboundInterface)
-	cfg.OutboundInterfaceExclude = strings.TrimSpace(cfg.OutboundInterfaceExclude)
-	cfg.AdapterName = strings.TrimSpace(cfg.AdapterName)
-	cfg.RouteExcludeAddress = strings.TrimSpace(cfg.RouteExcludeAddress)
-
-	switch strings.ToLower(strings.TrimSpace(cfg.Stack)) {
-	case "system":
-		cfg.Stack = "system"
-	case "mixed":
-		cfg.Stack = "mixed"
-	case "", "gvisor":
-		// gvisor 是默认栈，也是唯一在所有平台都可用、不依赖 wintun 转发的栈。
-		cfg.Stack = "gvisor"
-	default:
-		cfg.Stack = "gvisor"
-	}
+	cfg.InterfaceName = strings.TrimSpace(cfg.InterfaceName)
+	cfg.ExcludeInterfaces = normalizeStringList(cfg.ExcludeInterfaces)
+	cfg.RouteExcludeAddresses = normalizeStringList(cfg.RouteExcludeAddresses)
 	return cfg
+}
+
+func normalizeStringList(values []string) []string {
+	if len(values) == 0 {
+		return nil
+	}
+	seen := make(map[string]struct{}, len(values))
+	out := make([]string, 0, len(values))
+	for _, raw := range values {
+		value := strings.TrimSpace(raw)
+		if value == "" {
+			continue
+		}
+		if _, ok := seen[value]; ok {
+			continue
+		}
+		seen[value] = struct{}{}
+		out = append(out, value)
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
 }
 
 func defaultDNSNodes() []DNSNode {
 	return []DNSNode{}
-}
-
-func halfClose(conn net.Conn) {
-	if tc, ok := conn.(*net.TCPConn); ok {
-		_ = tc.CloseWrite()
-		return
-	}
-	type closeWriter interface {
-		CloseWrite() error
-	}
-	if cw, ok := conn.(closeWriter); ok {
-		_ = cw.CloseWrite()
-		return
-	}
-	conn.Close()
 }
 
 func (p *ProxyServer) FetchECH(ctx context.Context, domain string, dohURL string) ([]byte, error) {

@@ -14,11 +14,21 @@ const (
 )
 
 // FakeIPStore 管理 fake-ip ↔ 域名的双向映射
+//
+// 容量上限：maps 若不设上限，长时间运行会随访问过的域名数无限增长——
+// addressCache 的键受 IP 范围限制会回绕覆盖，但 domainCache4/domainCache6
+// 每个新域名都会新增一条永不删除的条目，是真实的内存泄漏。
+// 超过上限时按 FIFO 淘汰最旧的域名（fake-ip 映射本就是短生命周期的访问缓存，
+// 淘汰后该域名会重新分配新 IP，不影响已建立连接）。
+const fakeIPStoreMaxEntries = 8192
+
 type FakeIPStore struct {
 	mu           sync.RWMutex
 	addressCache map[netip.Addr]string // IP → 域名
 	domainCache4 map[string]netip.Addr // 域名(IPv4) → IP
 	domainCache6 map[string]netip.Addr // 域名(IPv6) → IP
+	order4       []string              // domainCache4 的插入顺序，用于 FIFO 淘汰
+	order6       []string              // domainCache6 的插入顺序，用于 FIFO 淘汰
 	current4     netip.Addr            // IPv4 当前分配的 IP
 	last4        netip.Addr            // IPv4 范围最后一个 IP
 	range4       netip.Prefix          // IPv4 范围
@@ -43,6 +53,8 @@ func NewFakeIPStore() *FakeIPStore {
 		addressCache: make(map[netip.Addr]string),
 		domainCache4: make(map[string]netip.Addr),
 		domainCache6: make(map[string]netip.Addr),
+		order4:       make([]string, 0, fakeIPStoreMaxEntries/8),
+		order6:       make([]string, 0, fakeIPStoreMaxEntries/8),
 		current4:     startAddr4,
 		last4:        lastAddr4,
 		range4:       range4,
@@ -72,9 +84,17 @@ func (s *FakeIPStore) Create(domain string) (netip.Addr, bool) {
 		s.current4 = s.range4.Addr().Next().Next()
 	}
 
+	// IP 被重新分配：旧域名的正向映射必须一并失效，
+	// 否则该域名的 Create 会命中 domainCache4 返回过期 IP。
+	if previous, ok := s.addressCache[ip]; ok && previous != domain {
+		delete(s.domainCache4, previous)
+	}
+
 	// 存储双向映射
 	s.addressCache[ip] = domain
 	s.domainCache4[domain] = ip
+	s.order4 = append(s.order4, domain)
+	s.evict4Locked()
 
 	return ip, true
 }
@@ -99,11 +119,50 @@ func (s *FakeIPStore) CreateIPv6(domain string) (netip.Addr, bool) {
 		s.current6 = s.range6.Addr().Next().Next()
 	}
 
+	if previous, ok := s.addressCache[ip]; ok && previous != domain {
+		delete(s.domainCache6, previous)
+	}
+
 	// 存储双向映射
 	s.addressCache[ip] = domain
 	s.domainCache6[domain] = ip
+	s.order6 = append(s.order6, domain)
+	s.evict6Locked()
 
 	return ip, true
+}
+
+// evict4Locked 超出上限时按 FIFO 淘汰最旧的 IPv4 域名映射，调用方须持有写锁。
+func (s *FakeIPStore) evict4Locked() {
+	for len(s.order4) > fakeIPStoreMaxEntries {
+		oldest := s.order4[0]
+		s.order4 = s.order4[1:]
+		ip, ok := s.domainCache4[oldest]
+		if !ok {
+			continue
+		}
+		delete(s.domainCache4, oldest)
+		// 仅当该 IP 仍指向被淘汰的域名时才删（可能已被回绕覆盖给新域名）
+		if current, ok := s.addressCache[ip]; ok && current == oldest {
+			delete(s.addressCache, ip)
+		}
+	}
+}
+
+// evict6Locked 超出上限时按 FIFO 淘汰最旧的 IPv6 域名映射，调用方须持有写锁。
+func (s *FakeIPStore) evict6Locked() {
+	for len(s.order6) > fakeIPStoreMaxEntries {
+		oldest := s.order6[0]
+		s.order6 = s.order6[1:]
+		ip, ok := s.domainCache6[oldest]
+		if !ok {
+			continue
+		}
+		delete(s.domainCache6, oldest)
+		if current, ok := s.addressCache[ip]; ok && current == oldest {
+			delete(s.addressCache, ip)
+		}
+	}
 }
 
 // Lookup 通过假 IP 反查域名

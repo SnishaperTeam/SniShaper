@@ -44,6 +44,7 @@ type coreRuntime struct {
 	logCaptureMu      sync.RWMutex
 	logCaptureEnabled bool
 	proxyOpMu         sync.Mutex
+	tunOpMu           sync.Mutex
 	tunStateMu        sync.RWMutex
 	tunStarting       bool
 	tunStartErr       string
@@ -102,22 +103,22 @@ func (r *coreRuntime) start() error {
 		r.appendLog("[core] Failed to init cert manager: " + err.Error())
 	}
 	r.proxyServer.SetRuleManager(r.ruleManager)
-	r.proxyServer.UpdateCloudflareConfig(r.ruleManager.GetCloudflareConfig())
+	r.proxyServer.UpdateCloudflareIPPool(r.ruleManager.GetCloudflareConfig().PreferredIPs)
 	r.proxyServer.SetCertGenerator(r.certManager)
 	r.proxyServer.SetLogCallback(r.appendLog)
 	r.proxyServer.SetSocks5Enabled(r.ruleManager.GetSocks5Enabled())
 	r.ruleManager.InitAutoRouter(r.proxyServer.GetDoHResolver())
 
 	r.ruleManager.SetRouteEventCallback(func(domain, mode string) {
-	r.routeEventsMu.Lock()
-	defer r.routeEventsMu.Unlock()
-	r.routeEvents = append(r.routeEvents, RouteEvent{Domain: domain, Mode: mode})
-	if len(r.routeEvents) > 200 {
-		// Create new slice to release underlying array memory
-		newSlice := make([]RouteEvent, 100)
-		copy(newSlice, r.routeEvents[len(r.routeEvents)-100:])
-		r.routeEvents = newSlice
-	}
+		r.routeEventsMu.Lock()
+		defer r.routeEventsMu.Unlock()
+		r.routeEvents = append(r.routeEvents, RouteEvent{Domain: domain, Mode: mode})
+		if len(r.routeEvents) > 200 {
+			// Create new slice to release underlying array memory
+			newSlice := make([]RouteEvent, 100)
+			copy(newSlice, r.routeEvents[len(r.routeEvents)-100:])
+			r.routeEvents = newSlice
+		}
 	})
 
 	if stop, err := r.ruleManager.WatchRulesFile(func() {
@@ -163,7 +164,7 @@ func (r *coreRuntime) reloadConfig() error {
 		return err
 	}
 	r.proxyServer.SetRuleManager(r.ruleManager)
-	r.proxyServer.UpdateCloudflareConfig(r.ruleManager.GetCloudflareConfig())
+	r.proxyServer.UpdateCloudflareIPPool(r.ruleManager.GetCloudflareConfig().PreferredIPs)
 	r.proxyServer.SetCertGenerator(r.certManager)
 	r.proxyServer.SetSocks5Enabled(r.ruleManager.GetSocks5Enabled())
 	r.ruleManager.InitAutoRouter(r.proxyServer.GetDoHResolver())
@@ -302,6 +303,11 @@ func (r *coreRuntime) stopProxy() error {
 }
 
 func (r *coreRuntime) startTUN() (err error) {
+	// 串行化 start/stop：core_api 的 TUN 请求都在各自的 goroutine 里执行，
+	// 没有互斥时连点会并发进入 singtun.Manager 的锁，表现为界面长时间无响应。
+	r.tunOpMu.Lock()
+	defer r.tunOpMu.Unlock()
+
 	r.setTUNStartState(true, nil)
 	defer func() {
 		r.setTUNStartState(false, err)
@@ -338,14 +344,13 @@ func (r *coreRuntime) startTUN() (err error) {
 	// 网卡，必须让 netiface 重新扫描，否则可能把 TUN 自己选成出站网卡。
 	tunCfg := r.ruleManager.GetTUNConfig()
 	r.proxyServer.SetTUNMode(true)
-	r.proxyServer.SetOutboundInterface(tunCfg.OutboundInterface, tunCfg.OutboundInterfaceExclude)
 	netiface.InvalidateCache()
-	if binding, err := netiface.Select(netiface.FamilyIPv4, netiface.Config{}, r.appendLog); err == nil {
+	if binding, err := netiface.Select(netiface.FamilyIPv4, tunCfg.InterfaceConfig(), r.appendLog); err == nil {
 		r.appendLog("[core] TUN outbound interface: " + binding.Describe())
 	}
 	// TUN 数据面自检：通过 TUN 发送 DNS 查询，验证 gvisor 栈正常工作。
 	// 解决 gvisor 数据面静默失效时（网卡存在但流量不通）无任何错误日志的问题。
-	if err := verifyTUNDataPlane("198.18.0.1", 5*time.Second); err != nil {
+	if err := verifyTUNDataPlane("198.18.0.1", 2*time.Second); err != nil {
 		r.appendLog("[error] TUN data plane check failed: " + err.Error())
 	} else {
 		r.appendLog("[core] TUN data plane check passed")
@@ -401,6 +406,10 @@ func verifyTUNDataPlane(tunIP string, timeout time.Duration) error {
 }
 
 func (r *coreRuntime) stopTUN() error {
+	// 与 startTUN 共用一把锁，保证同一时刻只有一个 TUN 生命周期操作在跑。
+	r.tunOpMu.Lock()
+	defer r.tunOpMu.Unlock()
+
 	r.setTUNStartState(false, nil)
 	if r.nativeTUN == nil {
 		return fmt.Errorf("native TUN manager is not initialized")
@@ -420,7 +429,6 @@ func (r *coreRuntime) getTUNStatus() proxy.TUNStatus {
 	var status proxy.TUNStatus
 	if r.nativeTUN != nil {
 		status = r.nativeTUN.Status()
-		r.appendLog(fmt.Sprintf("[core] getTUNStatus: Running=%v, Message=%s", status.Running, status.Message))
 	} else {
 		status = proxy.TUNStatus{
 			Supported: false,
@@ -441,11 +449,6 @@ func (r *coreRuntime) getTUNStatus() proxy.TUNStatus {
 	}
 	status.Enabled = false
 	if starting {
-		if strings.TrimSpace(status.Message) == "" ||
-			strings.Contains(strings.ToLower(status.Message), "selected") ||
-			strings.Contains(strings.ToLower(status.Message), "not running") {
-			status.Message = "TUN startup in progress"
-		}
 		return status
 	}
 	if startErr != "" {

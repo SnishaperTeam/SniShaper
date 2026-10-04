@@ -69,10 +69,20 @@ func (w *socks5ResponseWriter) Hijack() (net.Conn, *bufio.ReadWriter, error) {
 }
 
 func (p *ProxyServer) newSocks5Server() *socks5.Server {
-	return socks5.NewServer(
+	opts := []socks5.Option{
 		socks5.WithLogger(socks5.NewLogger(log.New(&socks5LogWriter{proxy: p}, "[SOCKS5] ", log.LstdFlags))),
 		socks5.WithConnectHandle(p.handleSocks5Connect),
-	)
+	}
+	// 配置了用户名密码时启用认证，避免本机其他程序未授权使用代理
+	if p.rules != nil {
+		if user, pass := p.rules.GetSocks5Auth(); user != "" && pass != "" {
+			creds := socks5.StaticCredentials{user: pass}
+			opts = append(opts, socks5.WithAuthMethods([]socks5.Authenticator{
+				socks5.UserPassAuthenticator{Credentials: creds},
+			}))
+		}
+	}
+	return socks5.NewServer(opts...)
 }
 
 func (p *ProxyServer) handleSocks5Connect(ctx context.Context, writer io.Writer, req *socks5.Request) error {
@@ -89,9 +99,6 @@ func (p *ProxyServer) handleSocks5Connect(ctx context.Context, writer io.Writer,
 	matchHost := normalizeHost(host)
 	mode := p.GetMode()
 	rule := p.rules.matchRule(matchHost, mode)
-	if rule.SiteID != "" {
-		p.rules.incrementRuleHit(rule.SiteID)
-	}
 
 	clientConn := p.socks5Tracker.getConn(req.RemoteAddr.String())
 	if clientConn == nil {
@@ -118,7 +125,15 @@ func (p *ProxyServer) handleSocks5Connect(ctx context.Context, writer io.Writer,
 		}
 		defer conn.Close()
 		socks5.SendReply(writer, statute.RepSuccess, req.LocalAddr)
-		p.directTunnel(clientConn, conn)
+		// 与其他分支一致：带上 req.Reader 中已缓冲的客户端数据（如提前发来的 ClientHello），
+		// 直接裸 tunnel 会丢掉这些字节
+		hijackConn := &socks5HijackConn{
+			Conn:   clientConn,
+			reader: req.Reader,
+			writer: writer,
+		}
+		_ = hijackConn.SetDeadline(time.Time{})
+		p.directTunnel(hijackConn, conn)
 		return nil
 	}
 

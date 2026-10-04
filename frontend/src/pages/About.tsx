@@ -4,7 +4,7 @@ import { alpha } from '@mui/material/styles';
 import { useTranslation } from '../i18n/I18nContext';
 import {
   Globe, Link as LinkIcon, Users, Shield, Heart, RefreshCw,
-  Download, Sparkles, Zap, Lock, Code2, GitBranch, Megaphone, Map, ExternalLink,
+  Download, Sparkles, Bolt, Lock, Code2, RefreshCcw, Megaphone, Map, ExternalLink,
   FolderOpen, AlertCircle
 } from '../lib/icons';
 import logoUrl from '../assets/logo.svg';
@@ -184,7 +184,7 @@ const About: React.FC = () => {
 
   const features = [
     { icon: <Lock size={20} />, title: t('about.feature_ech'), desc: t('about.feature_ech_desc'), color: 'primary.main' },
-    { icon: <Zap size={20} />, title: t('about.feature_fast'), desc: t('about.feature_fast_desc'), color: 'success.main' },
+    { icon: <Bolt size={20} />, title: t('about.feature_fast'), desc: t('about.feature_fast_desc'), color: 'success.main' },
     { icon: <Code2 size={20} />, title: t('about.feature_open'), desc: t('about.feature_open_desc'), color: 'warning.main' },
   ];
 
@@ -197,7 +197,7 @@ const About: React.FC = () => {
     { icon: <Heart size={22} />, title: t('about.contributors'), value: 'mechrevo, dongzheyu, JetCPP-dongle', color: 'success.main', valueColor: 'text.primary' },
     { icon: <Users size={22} />, title: t('about.maintainers'), value: 'JetCPP Team, SniShaper Team', color: 'warning.main', valueColor: 'text.primary' },
     { icon: <Globe size={22} />, title: t('about.website'), value: 'jetcpp.ccwu.cc', color: 'primary.main', valueColor: 'primary.main', onClick: handleOpenWebsite },
-    { icon: <GitBranch size={22} />, title: 'GitHub', value: 'SnishaperTeam/SniShaper', color: 'text.primary', valueColor: 'text.primary', onClick: handleOpenGitHub },
+    { icon: <RefreshCcw size={22} />, title: 'GitHub', value: 'SnishaperTeam/SniShaper', color: 'text.primary', valueColor: 'text.primary', onClick: handleOpenGitHub },
     { icon: <Download size={22} />, title: t('about.latest_beta'), value: t('about.actions_build'), color: 'warning.main', valueColor: 'warning.main', onClick: handleOpenBeta },
   ];
 

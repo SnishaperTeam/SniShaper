@@ -4,8 +4,6 @@ import (
 	"net"
 	"path/filepath"
 	"strings"
-
-	"snishaper/pkg/dohresolver"
 )
 
 // gfwListCachePath returns the path of the local GFW list cache file,
@@ -76,26 +74,6 @@ func dedupeDialCandidates(candidates []string) []string {
 		out = append(out, candidate)
 	}
 	return out
-}
-
-func toProxyCertVerify(c dohresolver.CertVerifyConfig) CertVerifyConfig {
-	return CertVerifyConfig{
-		Mode:                  c.Mode,
-		Names:                 c.Names,
-		Suffixes:              c.Suffixes,
-		SPKISHA256:            c.SPKISHA256,
-		AllowUnknownAuthority: c.AllowUnknownAuthority,
-	}
-}
-
-func toDohCertVerify(c CertVerifyConfig) dohresolver.CertVerifyConfig {
-	return dohresolver.CertVerifyConfig{
-		Mode:                  c.Mode,
-		Names:                 c.Names,
-		Suffixes:              c.Suffixes,
-		SPKISHA256:            c.SPKISHA256,
-		AllowUnknownAuthority: c.AllowUnknownAuthority,
-	}
 }
 
 func normalizeDNSMode(mode string) string {

@@ -93,21 +93,9 @@ func NewApp() *App {
 		a.RefreshCloudflareIPPool()
 	})
 
-	// Initialize Cloudflare IP pool and trigger background health check on startup
-	cf := ruleManager.GetCloudflareConfig()
-	if len(cf.PreferredIPs) > 0 {
-		a.proxyServer.UpdateCloudflareIPPool(cf.PreferredIPs)
-		a.wg.Add(1)
-		go func() {
-			defer a.wg.Done()
-			select {
-			case <-time.After(1 * time.Second): // Wait for app to stabilize
-				a.proxyServer.TriggerCFHealthCheck()
-			case <-a.ctx.Done():
-				return
-			}
-		}()
-	}
+	// Initialize Cloudflare IP pool. ProxyServer.Start kicks off the pool's initial
+	// health check, so no extra trigger is needed here.
+	a.proxyServer.UpdateCloudflareIPPool(ruleManager.GetCloudflareConfig().PreferredIPs)
 
 	// Initialize auto router (needed for GFW list refresh even without core)
 	ruleManager.InitAutoRouter(a.proxyServer.GetDoHResolver())
@@ -366,6 +354,28 @@ func (a *App) SetSocks5Port(port string) error {
 	return nil
 }
 
+type Socks5AuthInfo struct {
+	Username string `json:"username"`
+	Password string `json:"password"`
+}
+
+func (a *App) GetSocks5Auth() Socks5AuthInfo {
+	username, password := a.ruleManager.GetSocks5Auth()
+	return Socks5AuthInfo{Username: username, Password: password}
+}
+
+func (a *App) SetSocks5Auth(username, password string) error {
+	a.appendLog(fmt.Sprintf("[action] SetSocks5Auth: user=%s", username))
+	a.ruleManager.SetSocks5Auth(username, password)
+	_ = a.ruleManager.SaveConfig()
+	// 正在运行的 SOCKS5 监听重启后才会套用新凭据
+	if a.proxyServer.IsSocks5Enabled() && a.proxyServer.IsRunning() {
+		a.proxyServer.SetSocks5Enabled(false)
+		a.proxyServer.SetSocks5Enabled(true)
+	}
+	return nil
+}
+
 func (a *App) GetProxyMode() string {
 	if a.core != nil {
 		return a.core.GetProxyMode()
@@ -409,95 +419,45 @@ func (a *App) GetTUNConfig() proxy.TUNConfig {
 	return a.ruleManager.GetTUNConfig()
 }
 
-// NetworkInterfaceInfo 描述一个可选的出站网卡，供设置页展示。
-type NetworkInterfaceInfo struct {
-	Name            string   `json:"name"`
-	Index           int      `json:"index"`
-	IPv4            []string `json:"ipv4"`
-	IPv6            []string `json:"ipv6"`
-	Physical        bool     `json:"physical"`
-	DefaultRoute    bool     `json:"default_route"`
-	Selected        bool     `json:"selected"`
-	CurrentOutbound bool     `json:"current_outbound"`
+// SetTUNInterfaceExclude 设置出站网卡排除列表（逗号分隔，支持 name* 通配）。
+func (a *App) SetTUNInterfaceExclude(exclude string) error {
+	a.appendLog("[action] SetTUNInterfaceExclude called")
+	cfg := a.ruleManager.GetTUNConfig()
+	cfg.ExcludeInterfaces = splitCommaList(exclude)
+	if err := a.ruleManager.UpdateTUNConfig(cfg); err != nil {
+		return err
+	}
+	netiface.InvalidateCache()
+	if a.core != nil {
+		a.core.ReloadIfRunning()
+	}
+	return nil
 }
 
-// ListNetworkInterfaces 返回本机网卡列表，附带物理/虚拟标记与默认路由归属。
-// 设置页用它渲染"出站网卡"下拉框：默认走智能选择（CurrentOutbound 为空），
-// 用户也可以手动指定某一块网卡。
-func (a *App) ListNetworkInterfaces() []NetworkInterfaceInfo {
-	descriptors := netiface.DescribeAll()
-	if len(descriptors) == 0 {
-		return []NetworkInterfaceInfo{}
-	}
-
-	cfg := a.ruleManager.GetTUNConfig()
-	preferred := strings.TrimSpace(cfg.OutboundInterface)
-
-	// 智能选择当前会落到哪块网卡，用于在下拉框里标注"当前生效"。
-	current := ""
-	for _, descriptor := range descriptors {
-		if descriptor.Physical && descriptor.DefaultRoute {
-			current = descriptor.Name
-			break
+// splitCommaList 解析逗号分隔的配置项，忽略空项。
+func splitCommaList(raw string) []string {
+	out := make([]string, 0)
+	for _, item := range strings.Split(raw, ",") {
+		if trimmed := strings.TrimSpace(item); trimmed != "" {
+			out = append(out, trimmed)
 		}
 	}
-
-	out := make([]NetworkInterfaceInfo, 0, len(descriptors))
-	for _, descriptor := range descriptors {
-		item := NetworkInterfaceInfo{
-			Name:         descriptor.Name,
-			Index:        descriptor.Index,
-			IPv4:         descriptor.IPv4,
-			IPv6:         descriptor.IPv6,
-			Physical:     descriptor.Physical,
-			DefaultRoute: descriptor.DefaultRoute,
-		}
-		item.Selected = preferred != "" && strings.EqualFold(preferred, descriptor.Name)
-		item.CurrentOutbound = item.Selected ||
-			(preferred == "" && descriptor.Name == current)
-		out = append(out, item)
+	if len(out) == 0 {
+		return nil
 	}
 	return out
 }
 
-// SetTUNOutboundInterface 设置 TUN 出站网卡。iface 为空表示恢复智能选择。
-func (a *App) SetTUNOutboundInterface(iface string) error {
-	a.appendLog("[action] SetTUNOutboundInterface called: " + iface)
-	cfg := a.ruleManager.GetTUNConfig()
-	cfg.OutboundInterface = strings.TrimSpace(iface)
-	if err := a.ruleManager.UpdateTUNConfig(cfg); err != nil {
-		return err
-	}
-	if a.core != nil {
-		a.core.ReloadIfRunning()
-	}
-	a.emitFrontendState()
-	return nil
-}
-
-// SetTUNOutboundInterfaceExclude 设置出站网卡排除列表（逗号分隔）。
-func (a *App) SetTUNOutboundInterfaceExclude(exclude string) error {
-	a.appendLog("[action] SetTUNOutboundInterfaceExclude called")
-	cfg := a.ruleManager.GetTUNConfig()
-	cfg.OutboundInterfaceExclude = strings.TrimSpace(exclude)
-	if err := a.ruleManager.UpdateTUNConfig(cfg); err != nil {
-		return err
-	}
-	if a.core != nil {
-		a.core.ReloadIfRunning()
-	}
-	return nil
-}
-
 func (a *App) UpdateTUNConfig(cfg proxy.TUNConfig) error {
 	a.appendLog("[action] UpdateTUNConfig called")
-	err := a.ruleManager.UpdateTUNConfig(cfg)
-	if err == nil {
-		if a.core != nil {
-			a.core.ReloadIfRunning()
-		}
+	if err := a.ruleManager.UpdateTUNConfig(cfg); err != nil {
+		return err
 	}
-	return err
+	netiface.InvalidateCache()
+	if a.core != nil {
+		a.core.ReloadIfRunning()
+	}
+	return nil
 }
 
 func (a *App) GetTUNStatus() proxy.TUNStatus {
@@ -508,6 +468,56 @@ func (a *App) GetTUNStatus() proxy.TUNStatus {
 		Running: false,
 		Message: "core_service_not_running",
 	}
+}
+
+func (a *App) GetNetworkInterfaces() []netiface.Descriptor {
+	cfg := a.ruleManager.GetTUNConfig()
+	descriptors := netiface.List(cfg.InterfaceConfig())
+	a.appendLog(fmt.Sprintf("[action] GetNetworkInterfaces: %d interface(s) listed", len(descriptors)))
+	return descriptors
+}
+
+func (a *App) SetTUNInterface(name string) error {
+	cfg := a.ruleManager.GetTUNConfig()
+	selected := strings.TrimSpace(name)
+	a.appendLog(fmt.Sprintf("[action] SetTUNInterface called: %q", selected))
+
+	if selected != "" {
+		known := false
+		for _, descriptor := range netiface.List(cfg.InterfaceConfig()) {
+			if strings.EqualFold(descriptor.Name, selected) || strconv.Itoa(descriptor.Index) == selected {
+				known = true
+				selected = descriptor.Name
+				break
+			}
+		}
+		if !known {
+			return fmt.Errorf("network interface not found: %s", selected)
+		}
+	}
+
+	if cfg.InterfaceName == selected {
+		return nil
+	}
+	cfg.InterfaceName = selected
+	if err := a.ruleManager.UpdateTUNConfig(cfg); err != nil {
+		return err
+	}
+	netiface.InvalidateCache()
+
+	if a.core == nil {
+		return nil
+	}
+	if !a.core.GetTUNStatus().Running {
+		a.appendLog("[action] SetTUNInterface: TUN not running, config saved only")
+		return nil
+	}
+
+	a.appendLog("[action] SetTUNInterface: restarting TUN to apply the new outbound interface")
+	if err := a.StopTUN(); err != nil {
+		a.appendLog("[warn] SetTUNInterface: StopTUN failed: " + err.Error())
+	}
+	return a.StartTUN()
 }
 
 func (a *App) StartTUN() error {
@@ -586,7 +596,7 @@ func (a *App) ImportConfig(content string) error {
 	a.appendLog("[action] ImportConfig called")
 	err := a.ruleManager.ImportConfig(content)
 	if err == nil {
-		a.proxyServer.UpdateCloudflareConfig(a.ruleManager.GetCloudflareConfig())
+		a.proxyServer.UpdateCloudflareIPPool(a.ruleManager.GetCloudflareConfig().PreferredIPs)
 		if a.core != nil {
 			a.core.ReloadIfRunning()
 		}
@@ -599,7 +609,7 @@ func (a *App) ImportConfigWithSummary(content string) (proxy.ImportSummary, erro
 	a.appendLog("[action] ImportConfigWithSummary called")
 	summary, err := a.ruleManager.ImportConfigWithSummary(content)
 	if err == nil {
-		a.proxyServer.UpdateCloudflareConfig(a.ruleManager.GetCloudflareConfig())
+		a.proxyServer.UpdateCloudflareIPPool(a.ruleManager.GetCloudflareConfig().PreferredIPs)
 		if a.core != nil {
 			a.core.ReloadIfRunning()
 		}
@@ -969,7 +979,7 @@ func (a *App) UpdateCloudflareConfig(cfg proxy.CloudflareConfig) error {
 
 	err := a.ruleManager.UpdateCloudflareConfig(cfg)
 	if err == nil {
-		a.proxyServer.UpdateCloudflareConfig(cfg)
+		a.proxyServer.UpdateCloudflareIPPool(cfg.PreferredIPs)
 		if a.core != nil {
 			a.core.ReloadIfRunning()
 		}
@@ -1343,7 +1353,7 @@ func (a *App) TestNAT64Profile(prefix string) (int64, error) {
 	var mappedIP string
 	for _, ip := range ips {
 		if ip.To4() != nil {
-			mapped, ok := mapNAT64AddrForTest(ip.String(), prefix)
+			mapped, ok := common.MapNAT64Addr(ip.String(), prefix)
 			if ok {
 				mappedIP = mapped
 				break
@@ -1365,39 +1375,6 @@ func (a *App) TestNAT64Profile(prefix string) (int64, error) {
 	defer conn.Close()
 
 	return time.Since(start).Milliseconds(), nil
-}
-
-func mapNAT64AddrForTest(ipStr string, prefix string) (string, bool) {
-	prefix = strings.TrimSpace(prefix)
-	if prefix == "" {
-		return ipStr, true
-	}
-	parsedIP := net.ParseIP(ipStr)
-	if parsedIP == nil {
-		return ipStr, true
-	}
-	ipv4 := parsedIP.To4()
-	if ipv4 == nil {
-		return ipStr, false
-	}
-
-	var prefixIP net.IP
-	if strings.Contains(prefix, "/") {
-		_, ipnet, err := net.ParseCIDR(prefix)
-		if err == nil && ipnet != nil {
-			prefixIP = ipnet.IP
-		}
-	} else {
-		prefixIP = net.ParseIP(prefix)
-	}
-
-	if prefixIP == nil || len(prefixIP) != 16 {
-		return ipStr, true
-	}
-	mappedIP := make(net.IP, 16)
-	copy(mappedIP, prefixIP[:12])
-	copy(mappedIP[12:], ipv4)
-	return mappedIP.String(), true
 }
 
 func (a *App) GetMigrationEnabled() bool {

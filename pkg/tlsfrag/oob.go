@@ -3,6 +3,7 @@
 package tlsfrag
 
 import (
+	"fmt"
 	"net"
 
 	"golang.org/x/sys/unix"
@@ -13,7 +14,7 @@ import (
 func SendWithOOB(conn net.Conn, data []byte, oob byte) error {
 	rawConn, err := GetRawConn(conn)
 	if err != nil {
-		return Wrap("get raw conn", err)
+		return fmt.Errorf("get raw conn: %w", err)
 	}
 
 	toSend := make([]byte, len(data)+1)
@@ -27,10 +28,10 @@ func SendWithOOB(conn net.Conn, data []byte, oob byte) error {
 	})
 
 	if err != nil {
-		return Wrap("rawConn.Write", err)
+		return fmt.Errorf("rawConn.Write: %w", err)
 	}
 	if innerErr != nil {
-		return Wrap("unix.Send (MSG_OOB)", innerErr)
+		return fmt.Errorf("unix.Send (MSG_OOB): %w", innerErr)
 	}
 	return nil
 }

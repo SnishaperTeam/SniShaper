@@ -1,0 +1,130 @@
+version: '3'
+
+tasks:
+  go:mod:tidy:
+    internal: true
+    run: once
+    cmds:
+      - go mod tidy
+
+  install:frontend:deps:
+    desc: Installs the frontend dependencies with the selected package manager
+    run: once
+    cmds:
+      - task: install:frontend:deps:{{.PACKAGE_MANAGER}}
+
+  install:frontend:deps:npm:
+    dir: frontend
+    sources:
+      - package.json
+      - package-lock.json
+    generates:
+      - node_modules
+    preconditions:
+      - sh: npm version
+        msg: "npm is not installed. It ships with Node: https://nodejs.org/en/download/"
+    cmds:
+      - npm install
+
+  install:frontend:deps:bun:
+    dir: frontend
+    sources:
+      - package.json
+      - bun.lock
+      - bun.lockb
+    generates:
+      - node_modules
+    preconditions:
+      - sh: bun --version
+        msg: "bun is not installed. Run with PACKAGE_MANAGER=npm instead."
+    cmds:
+      - bun install
+
+  build:frontend:
+    desc: Builds the frontend bundle into frontend/dist (embedded by main.go)
+    run: once
+    dir: frontend
+    sources:
+      - "**/*"
+      - exclude: node_modules/**/*
+    generates:
+      - dist/**/*
+    deps:
+      - task: install:frontend:deps
+    cmds:
+      - task: frontend:run
+        vars:
+          SCRIPT: build
+
+  frontend:run:
+    internal: true
+    cmds:
+      - task: frontend:run:{{.PACKAGE_MANAGER}}
+        vars:
+          SCRIPT: '{{.SCRIPT}}'
+
+  frontend:run:npm:
+    dir: frontend
+    cmds:
+      - npm run {{.SCRIPT}}
+
+  frontend:run:bun:
+    dir: frontend
+    cmds:
+      - bun run {{.SCRIPT}}
+
+  dev:frontend:
+    desc: Runs the Vite dev server that `wails3 dev` proxies to
+    deps:
+      - task: install:frontend:deps
+    cmds:
+      - task: frontend:dev:{{.PACKAGE_MANAGER}}
+
+  frontend:dev:npm:
+    dir: frontend
+    cmds:
+      - npm run dev -- --port {{.VITE_PORT}} --strictPort --host 127.0.0.1
+
+  frontend:dev:bun:
+    dir: frontend
+    cmds:
+      - bun run dev -- --port {{.VITE_PORT}} --strictPort --host 127.0.0.1
+
+  generate:icons:
+    desc: Regenerates build/windows/icon.ico from build/appicon.png
+    run: once
+    dir: build
+    sources:
+      - appicon.png
+    generates:
+      - windows/icon.ico
+    cmds:
+      - wails3 generate icons -input appicon.png -windowsfilename windows/icon.ico
+
+  update:build-assets:
+    desc: Regenerates the Wails build assets (plists, info.json, nfpm) from build/config.yml
+    summary: |
+      Only needed when a platform build consumes them; the Windows version
+      resource comes from winres/winres.json instead. Writes into build/.
+    dir: build
+    cmds:
+      - wails3 update build-assets -name "{{.APP_NAME}}" -binaryname "{{.APP_NAME}}" -config config.yml -dir .
+
+  seed:runtime:
+    desc: Seeds config/ and rules/ next to the built GUI binary
+    summary: |
+      Mirrors build.sh / build_windows.ps1: the rules folder is refreshed from
+      the repository copy on every build, the config folder is only seeded when
+      it is missing so the user's settings.json survives a rebuild.
+    cmds:
+      - |
+        set -e
+        mkdir -p '{{.GUI_BIN_DIR}}'
+        if [ -d rules ]; then
+          mkdir -p '{{.GUI_BIN_DIR}}/rules'
+          cp -R rules/. '{{.GUI_BIN_DIR}}/rules/'
+        fi
+        if [ -d config ] && [ ! -d '{{.GUI_BIN_DIR}}/config' ]; then
+          mkdir -p '{{.GUI_BIN_DIR}}/config'
+          cp -R config/. '{{.GUI_BIN_DIR}}/config/'
+        fi

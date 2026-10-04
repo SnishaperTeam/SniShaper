@@ -12,6 +12,7 @@ import (
 	"sync"
 	"time"
 
+	"snishaper/common"
 	"snishaper/pkg/dohresolver"
 	"snishaper/proxy"
 )
@@ -719,7 +720,7 @@ func (t *Tester) tryNAT64Fallback(domain string, resolvedIPs []string, config Te
 			continue
 		}
 		for _, ipStr := range v4IPs {
-			mapped, ok := mapNAT64Addr(ipStr, prefix)
+			mapped, ok := common.MapNAT64Addr(ipStr, prefix)
 			if !ok {
 				continue
 			}
@@ -743,41 +744,6 @@ func (t *Tester) tryNAT64Fallback(domain string, resolvedIPs []string, config Te
 		Error:     "NAT64映射后所有IP仍不可达",
 		Timestamp: start,
 	}, "", ""
-}
-
-// mapNAT64Addr 把 IPv4 地址映射进 NAT64 前缀（prefix[:12] + ipv4）。
-// 与 proxy/dialer.go、app 中的实现保持一致。
-func mapNAT64Addr(ipStr string, prefix string) (string, bool) {
-	prefix = strings.TrimSpace(prefix)
-	if prefix == "" {
-		return ipStr, true
-	}
-	parsedIP := net.ParseIP(ipStr)
-	if parsedIP == nil {
-		return ipStr, true
-	}
-	ipv4 := parsedIP.To4()
-	if ipv4 == nil {
-		return ipStr, false
-	}
-
-	var prefixIP net.IP
-	if strings.Contains(prefix, "/") {
-		_, ipnet, err := net.ParseCIDR(prefix)
-		if err == nil && ipnet != nil {
-			prefixIP = ipnet.IP
-		}
-	} else {
-		prefixIP = net.ParseIP(prefix)
-	}
-
-	if prefixIP == nil || len(prefixIP) != 16 {
-		return ipStr, true
-	}
-	mappedIP := make(net.IP, 16)
-	copy(mappedIP, prefixIP[:12])
-	copy(mappedIP[12:], ipv4)
-	return mappedIP.String(), true
 }
 
 // applyNAT64ToRule 给测试/生成的规则绑定 NAT64 配置，后续拨号时

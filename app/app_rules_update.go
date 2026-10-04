@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"crypto/sha1"
 	"crypto/sha256"
 	"crypto/tls"
 	"encoding/hex"
@@ -10,6 +11,8 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"os"
+	"strings"
 	"sync"
 	"time"
 
@@ -59,6 +62,25 @@ func (a *App) syncRemoteRules() RulesUpdateResult {
 	if err != nil {
 		a.appendLog("[rules-update] fetch failed: " + err.Error())
 		return RulesUpdateResult{Error: err.Error()}
+	}
+
+	// 校验下载内容与官方 GitHub API 报告的 git blob SHA 一致，
+	// 防止被篡改的镜像注入规则。SNISHAPER_ALLOW_UNVERIFIED_RULES=1
+	// 是给离线环境留的显式逃生舱。
+	if rulesIntegrityBypassEnabled() {
+		a.appendLog("[rules-update] WARNING: integrity verification bypassed via SNISHAPER_ALLOW_UNVERIFIED_RULES")
+	} else {
+		expectedSHA, shaErr := a.fetchOfficialRulesBlobSHA()
+		if shaErr != nil {
+			msg := "rules integrity check unavailable (official GitHub API): " + shaErr.Error()
+			a.appendLog("[rules-update] " + msg)
+			return RulesUpdateResult{Error: msg, Source: source}
+		}
+		if got := rulesBlobSHA(body); !strings.EqualFold(got, expectedSHA) {
+			msg := fmt.Sprintf("rules integrity check failed: expected blob sha %s, got %s", expectedSHA, got)
+			a.appendLog("[rules-update] " + msg)
+			return RulesUpdateResult{Error: msg, Source: source}
+		}
 	}
 
 	sum256 := sha256.Sum256(body)
@@ -116,6 +138,64 @@ func (a *App) syncRemoteRules() RulesUpdateResult {
 	a.appendLog(fmt.Sprintf("[rules-update] applied from %s: %d added, %d updated, %d kept local",
 		source, res.Added, res.Changed, res.Kept))
 	return res
+}
+
+// rulesIntegrityBypassEnabled reports whether the user explicitly opted out of
+// rules integrity verification.
+func rulesIntegrityBypassEnabled() bool {
+	return os.Getenv("SNISHAPER_ALLOW_UNVERIFIED_RULES") == "1"
+}
+
+// rulesBlobSHA computes the git blob hash of the rules file:
+// sha1("blob <size>\x00" + content). It matches the "sha" field GitHub's
+// contents API reports for the file.
+func rulesBlobSHA(body []byte) string {
+	h := sha1.New()
+	fmt.Fprintf(h, "blob %d\x00", len(body))
+	h.Write(body)
+	return hex.EncodeToString(h.Sum(nil))
+}
+
+// fetchOfficialRulesBlobSHA returns the git blob SHA of the upstream rules
+// file from the official GitHub contents API. Mirror responses are never
+// used here.
+func (a *App) fetchOfficialRulesBlobSHA() (string, error) {
+	apiURL := githubAPIBase + "/contents/rules/config.json"
+	client := &http.Client{
+		Timeout: 8 * time.Second,
+		Transport: &http.Transport{
+			TLSClientConfig: &tls.Config{MinVersion: tls.VersionTLS12},
+		},
+	}
+	req, err := http.NewRequest(http.MethodGet, apiURL, nil)
+	if err != nil {
+		return "", err
+	}
+	req.Header.Set("User-Agent", updateUserAgent)
+	req.Header.Set("Accept", "application/vnd.github+json")
+	resp, err := client.Do(req)
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("http status %d", resp.StatusCode)
+	}
+	body, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+	if err != nil {
+		return "", err
+	}
+	var payload struct {
+		SHA string `json:"sha"`
+	}
+	if err := json.Unmarshal(body, &payload); err != nil {
+		return "", err
+	}
+	sha := strings.ToLower(strings.TrimSpace(payload.SHA))
+	if sha == "" {
+		return "", fmt.Errorf("official GitHub API did not report a blob sha")
+	}
+	return sha, nil
 }
 
 // fetchRemoteRulesUpdatedAt reports when the remote rules file last changed,

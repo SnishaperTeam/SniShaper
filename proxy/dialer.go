@@ -9,42 +9,63 @@ import (
 	"strings"
 	"time"
 
-	utls "github.com/refraction-networking/utls"
-
+	"snishaper/common"
 	"snishaper/pkg/netiface"
+
+	utls "github.com/refraction-networking/utls"
 )
 
-func mapNAT64Addr(ipStr string, prefix string) (string, bool) {
-	prefix = strings.TrimSpace(prefix)
-	if prefix == "" {
-		return ipStr, true
-	}
-	parsedIP := net.ParseIP(ipStr)
-	if parsedIP == nil {
-		return ipStr, true
-	}
-	ipv4 := parsedIP.To4()
-	if ipv4 == nil {
-		return ipStr, false
-	}
 
-	var prefixIP net.IP
-	if strings.Contains(prefix, "/") {
-		_, ipnet, err := net.ParseCIDR(prefix)
-		if err == nil && ipnet != nil {
-			prefixIP = ipnet.IP
+
+// ErrIPv6Required 表明规则要求 IPv6，但当前网络无法提供可用的 IPv6 候选。
+// 这是一个配置与网络不匹配的错误（dns_mode = ipv6_only 或启用了 NAT64），
+// 而不是一次传输故障：它不会被静默降级为 IPv4，否则规则的地址族约束会被
+// 悄悄稀释，用户会以为 ipv6_only 生效了，实际走的是 IPv4。
+var ErrIPv6Required = errors.New("rule requires IPv6 but no usable IPv6 address was resolved (current network may be IPv4-only)")
+
+// hasUsableIPv6 判断本机是否存在可用于拨号的 IPv6 地址。它不依赖规则解析，
+// 用于在拨号前判断 ipv6_only / NAT64 这类硬约束是否可能成立，避免把一个
+// 配置错误拖成连接超时。与 app.checkIPv6Available 的区别：后者面向 UI 提示
+// （把 ULA 也算作 IPv6 网络），这里面向拨号可行性（必须有可路由的全局地址）。
+func hasUsableIPv6() bool {
+	ifaces, err := net.Interfaces()
+	if err != nil {
+		return false
+	}
+	for _, iface := range ifaces {
+		if iface.Flags&net.FlagUp == 0 || iface.Flags&net.FlagLoopback != 0 {
+			continue
 		}
-	} else {
-		prefixIP = net.ParseIP(prefix)
+		addrs, err := iface.Addrs()
+		if err != nil {
+			continue
+		}
+		for _, addr := range addrs {
+			var ip net.IP
+			switch v := addr.(type) {
+			case *net.IPNet:
+				ip = v.IP
+			case *net.IPAddr:
+				ip = v.IP
+			default:
+				continue
+			}
+			// 只认全局单播；ULA / link-local / loopback 都不能作为出站源地址。
+			if ip.To4() != nil || ip.IsLinkLocalUnicast() || ip.IsLoopback() || ip.IsUnspecified() || !ip.IsGlobalUnicast() {
+				continue
+			}
+			return true
+		}
 	}
+	return false
+}
 
-	if prefixIP == nil || len(prefixIP) != 16 {
-		return ipStr, true
+// ruleRequiresIPv6 报告该规则是否对地址族有硬约束（ipv6_only 或 NAT64）。
+func ruleRequiresIPv6(rule Rule) bool {
+	if strings.EqualFold(strings.TrimSpace(rule.DNSMode), "ipv6_only") {
+		return true
 	}
-	mappedIP := make(net.IP, 16)
-	copy(mappedIP, prefixIP[:12])
-	copy(mappedIP[12:], ipv4)
-	return mappedIP.String(), true
+	return rule.NAT64Enabled && strings.TrimSpace(rule.NAT64ProfileID) != ""
 }
 
 // orderIPsByDNSMode 按 dns_mode 对解析出的 IP 列表排序/过滤地址族：
@@ -113,7 +134,47 @@ func (p *ProxyServer) resolveDomainCandidates(ctx context.Context, host, port, d
 	return []string{net.JoinHostPort(host, port)}
 }
 
+// filterUnreachableFamily drops candidates whose address family cannot work on
+// this host. On an IPv4-only network every IPv6 candidate fails immediately with
+// "an unreachable network", and because the serial dial loops report only the
+// last error, those IPv6 failures used to mask the real reason an IPv4
+// candidate was rejected. Candidates whose family is viable are kept in order.
+func filterUnreachableFamily(candidates []string) []string {
+	if hasUsableIPv6() {
+		return candidates
+	}
+	out := make([]string, 0, len(candidates))
+	for _, addr := range candidates {
+		host, _, err := net.SplitHostPort(addr)
+		if err != nil {
+			out = append(out, addr)
+			continue
+		}
+		if ip := net.ParseIP(strings.Trim(host, "[]")); ip != nil && ip.To4() == nil {
+			continue
+		}
+		out = append(out, addr)
+	}
+	if len(out) == 0 {
+		return candidates
+	}
+	return out
+}
+
 func (p *ProxyServer) buildDialCandidates(ctx context.Context, targetHost, targetAddr string, rule Rule, effectiveMode string) []string {
+	// 字面 IP 目标（如 TUN 下浏览器 DoH 解析的真实 IP）：直接返回原地址保留端口
+	if isLiteralIP(targetHost) {
+		return []string{targetAddr}
+	}
+
+	// 硬性地址族约束（ipv6_only / NAT64）在纯 IPv4 网络上无法满足。这里提前
+	// 判定并返回空列表，让调用方以明确的配置错误失败，而不是把 targetAddr
+	// 兜底回去走系统解析 —— 那会在无 v6 网络上表现为无休止的连接超时。
+	if ruleRequiresIPv6(rule) && !hasUsableIPv6() {
+		p.tracef("[DNSMode] %s requires IPv6 but no usable IPv6 address exists, failing host=%s mode=%v", rule.DNSMode, targetHost, rule.NAT64Enabled)
+		return nil
+	}
+
 	// 提取目标地址的原始端口（域名/IP 目标通用），避免解析时被默认 443 改写。
 	origPort := portFromTargetAddr(targetAddr)
 	defaultPort := "443"
@@ -122,10 +183,6 @@ func (p *ProxyServer) buildDialCandidates(ctx context.Context, targetHost, targe
 		dialPort = defaultPort
 	}
 
-	// 字面 IP 目标（如 TUN 下浏览器 DoH 解析的真实 IP）：直接返回原地址保留端口
-	if isLiteralIP(targetHost) {
-		return []string{targetAddr}
-	}
 	resolvedUpstream := resolveRuleUpstream(targetHost, rule)
 	isWarpRoute := strings.EqualFold(strings.TrimSpace(rule.Upstream), "warp")
 
@@ -157,18 +214,21 @@ func (p *ProxyServer) buildDialCandidates(ctx context.Context, targetHost, targe
 		}
 
 		if rule.UseCFPool && p.CFPoolUsable() {
-			topIPs := p.cfPool.GetTopIPs(5)
-			if len(topIPs) > 0 {
-				prefs := make([]string, 0, len(topIPs))
-				for _, ip := range topIPs {
+			// 规则显式指定了 upstream 时它优先；upstream 为空/DIRECT 时 CF 池就是唯一
+			// 指定来源。取池中全部候选而非前若干个 —— 串行拨号需要足够的候选才能在个别
+			// IP 不可达时继续往下试。
+			poolIPs := p.cfPool.GetAllIPs()
+			if len(poolIPs) > 0 {
+				prefs := make([]string, 0, len(poolIPs))
+				for _, ip := range poolIPs {
 					prefs = append(prefs, net.JoinHostPort(ip, dialPort))
 				}
-				return dedupeDialCandidates(prefs)
+				return dedupeDialCandidates(filterUnreachableFamily(prefs))
 			}
 		}
 
 		if resolved := p.resolveDomainCandidates(ctx, targetHost, dialPort, rule.DNSMode); len(resolved) > 0 {
-			return resolved
+			return filterUnreachableFamily(resolved)
 		}
 	}
 
@@ -230,6 +290,11 @@ func (p *ProxyServer) dialUpstream(cr *connectResult) error {
 
 	dialCandidates := p.buildDialCandidates(context.Background(), cr.targetHost, cr.targetAddr, cr.rule, cr.effectiveMode)
 	if len(dialCandidates) == 0 {
+		// 规则带有硬性地址族约束（ipv6_only / NAT64）而本机无 IPv6：以明确错误
+		// 失败，不要用 targetAddr 兜底 —— 那会静默走 IPv4 并掩盖配置不匹配。
+		if ruleRequiresIPv6(cr.rule) && !hasUsableIPv6() {
+			return ErrIPv6Required
+		}
 		dialCandidates = []string{cr.targetAddr}
 	}
 
@@ -243,7 +308,7 @@ func (p *ProxyServer) dialUpstream(cr *connectResult) error {
 					host = candidate
 					port = "443"
 				}
-				mappedIP, ok := mapNAT64Addr(host, prefix)
+				mappedIP, ok := common.MapNAT64Addr(host, prefix)
 				if ok {
 					mapped = append(mapped, net.JoinHostPort(mappedIP, port))
 				} else {
@@ -255,6 +320,9 @@ func (p *ProxyServer) dialUpstream(cr *connectResult) error {
 	}
 
 	if len(dialCandidates) == 0 {
+		if ruleRequiresIPv6(cr.rule) && !hasUsableIPv6() {
+			return ErrIPv6Required
+		}
 		return errors.New("no valid NAT64 candidates available for dial")
 	}
 
@@ -268,7 +336,7 @@ func (p *ProxyServer) dialUpstream(cr *connectResult) error {
 	}
 
 	if len(dialCandidates) > 1 {
-		var lastErr error
+		var errs []error
 		for _, addr := range dialCandidates {
 			conn, err := dial("tcp", addr)
 			if err == nil {
@@ -288,9 +356,11 @@ func (p *ProxyServer) dialUpstream(cr *connectResult) error {
 					p.cfPool.ReportFailure(h)
 				}
 			}
-			lastErr = err
+			errs = append(errs, fmt.Errorf("%s: %w", addr, err))
 		}
-		return lastErr
+		// 汇总所有候选的失败原因：只返回最后一个会让不可达地址族的报错
+		// 覆盖掉真正的失败点，排障时看到的是误导性的错误。
+		return fmt.Errorf("all %d dial candidates failed: %w", len(errs), errors.Join(errs...))
 	}
 
 	conn, err := dial("tcp", cr.dialAddr)
@@ -310,7 +380,7 @@ func (p *ProxyServer) dialWithRule(ctx context.Context, network, addr string, ru
 		if prefix != "" {
 			host, port, err := net.SplitHostPort(addr)
 			if err == nil {
-				mappedIP, ok := mapNAT64Addr(host, prefix)
+				mappedIP, ok := common.MapNAT64Addr(host, prefix)
 				if ok {
 					addr = net.JoinHostPort(mappedIP, port)
 				}
@@ -341,13 +411,8 @@ func (p *ProxyServer) dialWithRule(ctx context.Context, network, addr string, ru
 				}
 			}
 		}
-		// 网卡选择与绑定：既设置本地源地址，也通过 Control 把 socket 绑到
-		// 网卡索引上。只设源地址不绑网卡时，内核仍可能按路由表把包送回 TUN。
-		if binding, ok := p.getPhysicalBinding(addr); ok {
-			if localAddr := binding.LocalTCPAddr(); localAddr != nil {
-				dialer.LocalAddr = localAddr
-			}
-			dialer.Control = binding.Control(netiface.FamilyOf(addr))
+		if localAddr := p.getPhysicalLocalAddr(addr); localAddr != nil {
+			dialer.LocalAddr = localAddr
 		}
 	}
 
@@ -362,44 +427,24 @@ const dohResolveCtxKey dohResolveCtxKeyType = 0
 // getPhysicalLocalAddr 根据目标地址的 IP 族选择对应的物理网卡本地地址
 // IPv4 目标 → 返回 IPv4 地址，IPv6 目标 → 返回 IPv6 地址
 // 避免绑定 IPv4 去连 IPv6（会导致 dial 失败 → 502）
-//
-// 网卡由 pkg/netiface 按系统默认路由选出，而不是按 net.Interfaces() 的枚举
-// 顺序取第一个可用地址：枚举顺序按接口索引排列，VMware / Hyper-V / WSL 这类
-// 虚拟网卡常常排在真正承载流量的网卡之前。
 func (p *ProxyServer) getPhysicalLocalAddr(targetAddr string) *net.TCPAddr {
-	binding, err := netiface.SelectForTarget(targetAddr, p.outboundInterfaceConfig(), p.netifaceLogf)
+	host, _, err := net.SplitHostPort(targetAddr)
 	if err != nil {
+		host = targetAddr
+	}
+	family := netiface.FamilyIPv4
+	if parsed := net.ParseIP(host); parsed != nil && parsed.To4() == nil {
+		family = netiface.FamilyIPv6
+	}
+
+	binding, err := netiface.Select(family, p.outboundInterfaceConfig(), func(line string) {
+		p.tracef("%s", line)
+	})
+	if err != nil {
+		p.tracef("[netiface] no physical outbound address for %s: %v", targetAddr, err)
 		return nil
 	}
 	return binding.LocalTCPAddr()
-}
-
-// getPhysicalBinding 返回目标地址族对应的网卡绑定信息（网卡 + 索引），
-// 供需要同时设置 socket 选项的场景使用。
-func (p *ProxyServer) getPhysicalBinding(targetAddr string) (netiface.Binding, bool) {
-	binding, err := netiface.SelectForTarget(targetAddr, p.outboundInterfaceConfig(), p.netifaceLogf)
-	if err != nil {
-		return netiface.Binding{}, false
-	}
-	return binding, true
-}
-
-// outboundInterfaceConfig 返回出站网卡选择配置。
-func (p *ProxyServer) outboundInterfaceConfig() netiface.Config {
-	p.mu.RLock()
-	defer p.mu.RUnlock()
-	var excluded []string
-	if p.outboundInterfaceExclude != "" {
-		for _, item := range strings.Split(p.outboundInterfaceExclude, ",") {
-			if trimmed := strings.TrimSpace(item); trimmed != "" {
-				excluded = append(excluded, trimmed)
-			}
-		}
-	}
-	return netiface.Config{
-		ForceInterface:    p.outboundInterface,
-		ExcludeInterfaces: excluded,
-	}
 }
 
 func (p *ProxyServer) DialWithRule(ctx context.Context, network, addr string, rule Rule) (net.Conn, error) {
@@ -504,6 +549,12 @@ func (p *ProxyServer) establishUpstreamConn(host string, rule Rule, dialCandidat
 		raceCtx, cancel := context.WithCancel(context.Background())
 		defer cancel()
 
+		// ECH 配置只解析一次，所有候选共用，避免每个候选都触发一次 DoH 查询
+		var sharedECH []byte
+		if rule.ECHEnabled {
+			sharedECH = p.resolveRuleECHConfig(host, rule)
+		}
+
 		for _, cand := range dialCandidates {
 			go func(addr string) {
 				// 1. TCP 拨号
@@ -517,10 +568,7 @@ func (p *ProxyServer) establishUpstreamConn(host string, rule Rule, dialCandidat
 				}
 
 				// 2. TLS 握手
-				var echBytes []byte
-				if rule.ECHEnabled {
-					echBytes = p.resolveRuleECHConfig(host, rule)
-				}
+				echBytes := sharedECH
 				allowInsecure := len(echBytes) == 0
 				uconn := p.GetUConn(tcpConn, rule.SniFake, host, rule, allowInsecure, initialALPN, echBytes)
 

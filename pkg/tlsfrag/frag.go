@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"io"
 	"net"
-	"strconv"
 	"strings"
 	"syscall"
 	"time"
@@ -189,10 +188,10 @@ func SendRecords(conn net.Conn, clientHello []byte, offset, length, records, seg
 	if records == 1 {
 		if oobex {
 			if err := SendWithOOB(conn, clientHello[:15], clientHello[15]); err != nil {
-				return Wrap("oob 1", err)
+				return fmt.Errorf("oob 1: %w", err)
 			}
 			if err := SendWithOOB(conn, clientHello[16:20], 0x0); err != nil {
-				return Wrap("oob 2", err)
+				return fmt.Errorf("oob 2: %w", err)
 			}
 			if interval > 0 {
 				time.Sleep(interval)
@@ -201,7 +200,7 @@ func SendRecords(conn net.Conn, clientHello []byte, offset, length, records, seg
 		}
 		if segments == 1 {
 			if _, err := conn.Write(clientHello); err != nil {
-				return Wrap("send remaining data", err)
+				return fmt.Errorf("send remaining data: %w", err)
 			}
 			return nil
 		}
@@ -214,11 +213,11 @@ func SendRecords(conn net.Conn, clientHello []byte, offset, length, records, seg
 		for i, packet := range packets {
 			if i == 0 && oob {
 				if err := SendWithOOB(conn, packet, 0x0); err != nil {
-					return Wrap("oob", err)
+					return fmt.Errorf("oob: %w", err)
 				}
 			} else {
 				if _, err := conn.Write(packet); err != nil {
-					return Wrap("write packet "+strconv.Itoa(i+1), err)
+					return fmt.Errorf("write packet %d: %w", i+1, err)
 				}
 			}
 			if interval > 0 {
@@ -241,7 +240,7 @@ func SendRecords(conn net.Conn, clientHello []byte, offset, length, records, seg
 			if i == 0 {
 				if oob {
 					if err := SendWithOOB(conn, chunk, 0x0); err != nil {
-						return Wrap("oob", err)
+						return fmt.Errorf("oob: %w", err)
 					}
 					if interval > 0 {
 						time.Sleep(interval)
@@ -249,16 +248,16 @@ func SendRecords(conn net.Conn, clientHello []byte, offset, length, records, seg
 				} else if oobex {
 					l := len(chunk)
 					if err := SendWithOOB(conn, chunk[:l-1], chunk[l-1]); err != nil {
-						return Wrap("oob 1", err)
+						return fmt.Errorf("oob 1: %w", err)
 					}
 				}
 			} else if i == 1 && oobex {
 				if err := SendWithOOB(conn, chunk, 0x0); err != nil {
-					return Wrap("oob 2", err)
+					return fmt.Errorf("oob 2: %w", err)
 				}
 			} else {
 				if _, err := conn.Write(chunk); err != nil {
-					return Wrap("write record "+strconv.Itoa(i+1), err)
+					return fmt.Errorf("write record %d: %w", i+1, err)
 				}
 				if interval > 0 {
 					time.Sleep(interval)
@@ -275,10 +274,10 @@ func SendRecords(conn net.Conn, clientHello []byte, offset, length, records, seg
 
 	if oobex {
 		if err := SendWithOOB(conn, merged[:15], merged[15]); err != nil {
-			return Wrap("oob 1", err)
+			return fmt.Errorf("oob 1: %w", err)
 		}
 		if err := SendWithOOB(conn, merged[16:20], 0x0); err != nil {
-			return Wrap("oob 2", err)
+			return fmt.Errorf("oob 2: %w", err)
 		}
 		if interval > 0 {
 			time.Sleep(interval)
@@ -299,11 +298,11 @@ func SendRecords(conn net.Conn, clientHello []byte, offset, length, records, seg
 		}
 		if i == 0 && oob {
 			if err := SendWithOOB(conn, merged[start:end], 0x0); err != nil {
-				return Wrap("oob", err)
+				return fmt.Errorf("oob: %w", err)
 			}
 		} else {
 			if _, err := conn.Write(merged[start:end]); err != nil {
-				return Wrap("write segment "+strconv.Itoa(i+1), err)
+				return fmt.Errorf("write segment %d: %w", i+1, err)
 			}
 		}
 		if interval > 0 {
@@ -356,26 +355,6 @@ func GetRawConn(conn net.Conn) (syscall.RawConn, error) {
 		return nil, errors.New("connection does not support raw access")
 	}
 	return rawConnProvider.SyscallConn()
-}
-
-type wrappedError struct {
-	msg   string
-	cause error
-}
-
-func (e *wrappedError) Error() string {
-	return e.msg + ": " + e.cause.Error()
-}
-
-func (e *wrappedError) Unwrap() error {
-	return e.cause
-}
-
-func Wrap(msg string, cause error) error {
-	return &wrappedError{
-		msg:   msg,
-		cause: cause,
-	}
 }
 
 func IsUseOfClosedConn(err error) bool {

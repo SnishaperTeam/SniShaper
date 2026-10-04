@@ -13,7 +13,7 @@ func (a *App) startRulesWatcher() {
 			a.appendLog("[watch] rules auto reload failed: " + err.Error())
 			return
 		}
-		a.proxyServer.UpdateCloudflareConfig(a.ruleManager.GetCloudflareConfig())
+		a.proxyServer.UpdateCloudflareIPPool(a.ruleManager.GetCloudflareConfig().PreferredIPs)
 		if a.core != nil {
 			a.core.ReloadIfRunning()
 		}

@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import {
-  Plus, Antenna, Edit3, Trash2, ChevronUp, ChevronDown,
-  Zap, CheckCircle2, Shield, Globe, AlertCircle
+  Plus, Antenna, Edit, Delete, ChevronUp, ChevronDown,
+  Bolt, CheckCircle, Shield, Globe, AlertCircle
 } from '../lib/icons';
 import {
   GetDNSNodes, AddDNSNode, UpdateDNSNode, DeleteDNSNode,
@@ -100,7 +100,7 @@ const DNSNodeItem: React.FC<{
           testResult.success ? (
             <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 0.25 }}>
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, color: 'success.main' }}>
-                <CheckCircle2 size={12} />
+                <CheckCircle size={12} />
                 <Typography variant="caption" sx={{ fontWeight: 900 }}>{testResult.latency}</Typography>
               </Box>
               <Typography variant="caption" color="text.secondary" sx={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 112 }}>{testResult.ips?.[0]}</Typography>
@@ -117,10 +117,10 @@ const DNSNodeItem: React.FC<{
       <Box sx={{ display: 'flex', gap: 0.5, flexShrink: 0 }}>
         <Button size="small" variant="text" onClick={() => onTest(node.id)} disabled={isTesting}>{t('dns.test')}</Button>
         <IconButton size="small" aria-label={t('common.edit')} onClick={() => onEdit(node)} sx={{ color: 'text.secondary', '&:hover': { bgcolor: 'action.hover', color: 'primary.main' } }}>
-          <Edit3 size={14} />
+          <Edit size={14} />
         </IconButton>
         <IconButton size="small" aria-label={t('common.delete')} color="error" onClick={() => onDelete(node.id)}>
-          <Trash2 size={14} />
+          <Delete size={14} />
         </IconButton>
       </Box>
     </Box>
@@ -314,7 +314,7 @@ const DNS: React.FC = () => {
           <Typography variant="h5" sx={{ fontWeight: 700, letterSpacing: '-0.02em' }}>{t('dns.title')}</Typography>
         </Box>
         <Box sx={{ display: 'flex', gap: 1 }}>
-          <Button onClick={handleTestAll} variant="outlined" size="small" startIcon={<Zap size={14} />}>{t('dns.test_all')}</Button>
+          <Button onClick={handleTestAll} variant="outlined" size="small" startIcon={<Bolt size={14} />}>{t('dns.test_all')}</Button>
           <Button onClick={handleAdd} variant="contained" color="primary" size="small" startIcon={<Plus size={16} strokeWidth={3} />}>{t('dns.add_node')}</Button>
         </Box>
       </Box>
