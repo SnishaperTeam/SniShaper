@@ -2,8 +2,10 @@ package proxy
 
 import (
 	"fmt"
+	"log"
 	"net"
 	"net/http"
+	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -71,10 +73,12 @@ func serveNCSIOverConnect(w http.ResponseWriter, matchHost, authority string) bo
 		return false
 	}
 	if _, port, err := net.SplitHostPort(authority); err != nil || port != "80" {
+		ncsiTrace("port check failed: authority=%q err=%v", authority, err)
 		return false
 	}
 	hijacker, ok := w.(http.Hijacker)
 	if !ok {
+		ncsiTrace("hijack unsupported")
 		return false
 	}
 	clientConn, rw, err := hijacker.Hijack()
@@ -105,12 +109,24 @@ func serveNCSIOverConnect(w http.ResponseWriter, matchHost, authority string) bo
 	}
 	expected := ncsiHosts[matchHost]
 	if !strings.EqualFold(path, "/"+expected) {
+		ncsiTrace("path mismatch: got=%q want=%q", path, "/"+expected)
 		return true
 	}
+	ncsiTrace("answering NCSI probe for %s%s", matchHost, path)
 
 	body := ncsiBody + "\n"
 	_, _ = fmt.Fprintf(rw, "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: %d\r\nCache-Control: no-cache\r\nConnection: close\r\n\r\n%s",
 		len(body), body)
 	_ = rw.Flush()
 	return true
+}
+
+// ncsiTrace reports probe handling details when diagnostics are enabled.
+var ncsiTraceEnabled = os.Getenv("SNISHAPER_NCSI_TRACE") != ""
+
+func ncsiTrace(format string, args ...any) {
+	if !ncsiTraceEnabled {
+		return
+	}
+	log.Printf("[ncsi] "+format, args...)
 }
