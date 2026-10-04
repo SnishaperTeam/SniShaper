@@ -1,6 +1,23 @@
 {
   "site_groups": [
     {
+      "id": "sg-windows-ncsi",
+      "name": "windows-ncsi",
+      "mode": "direct",
+      "domains": [
+        "www.msftconnecttest.com",
+        "msftconnecttest.com",
+        "dns.msftncsi.com",
+        "www.msftncsi.com",
+        "msftncsi.com"
+      ],
+      "ech_enabled": false,
+      "use_cf_pool": false,
+      "cert_verify": {},
+      "website": "Microsoft",
+      "enabled": true
+    },
+    {
       "id": "sg-1771319670672-3",
       "name": "amazon.co.jp",
       "mode": "tls-rf",

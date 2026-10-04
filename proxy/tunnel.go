@@ -25,12 +25,6 @@ func (p *ProxyServer) handleRequest(w http.ResponseWriter, req *http.Request) {
 
 	p.tracef("[Proxy] Request: %s -> %s (match: %s, runtime-mode: %s, rule-mode: %s)", req.Method, host, matchHost, mode, rule.Mode)
 
-	// Answer Windows connectivity probes locally so the adapter is not
-	// reported as "no Internet access" when they cannot reach upstream.
-	if handleNCSIProbe(w, req, matchHost) {
-		return
-	}
-
 	switch req.Method {
 	case http.MethodConnect:
 		p.handleConnect(w, req, rule)
@@ -50,12 +44,6 @@ func (p *ProxyServer) handleConnect(w http.ResponseWriter, req *http.Request, ru
 	if p.isSelfTarget(targetAuthority) {
 		log.Printf("[Connect] Rejected loopback request targeting proxy itself: %s", targetAuthority)
 		http.Error(w, "Loop detected: request targets the proxy itself", http.StatusForbidden)
-		return
-	}
-
-	// TUN wraps every TCP flow in CONNECT, so a plaintext NCSI probe on port 80
-	// arrives here too and needs the same local answer as the plain HTTP path.
-	if serveNCSIOverConnect(w, targetHost, targetAuthority) {
 		return
 	}
 
