@@ -136,14 +136,17 @@ func isDefaultExcluded(name string) bool {
 
 // Config tunes interface selection. The zero value is the production default.
 type Config struct {
-	// ExcludeNames drops interfaces whose name matches one of these entries.
-	// Comparison is case-insensitive; an entry may be a bare name or a
-	// "name*" prefix glob.
-	ExcludeNames []string
+	// ForceInterface pins selection to the named interface. Empty keeps
+	// automatic selection. An entry ending in "*" is a prefix glob.
+	ForceInterface string
 
-	// PreferNames forces selection to interfaces matching one of these entries,
-	// bypassing virtual-adapter demotion.
-	PreferNames []string
+	// ExcludeInterfaces drops interfaces whose name matches one of these
+	// entries. Comparison is case-insensitive; "name*" is a prefix glob.
+	ExcludeInterfaces []string
+
+	// ExcludeAddresses drops interfaces carrying an address inside one of these
+	// CIDR blocks or literal addresses.
+	ExcludeAddresses []string
 }
 
 // Binding is a resolved physical NIC to send outbound traffic through.
@@ -365,21 +368,18 @@ func collect(family int, cfg Config, views []interfaceView, routes map[int]uint3
 		if !view.Up || view.Loopback || IsOwnTunnel(view.Name) {
 			continue
 		}
-		if pattern, ok := matchesPattern(cfg.ExcludeNames, view.Name, view.Index); ok {
+		if pattern, ok := matchesPattern(cfg.ExcludeInterfaces, view.Name, view.Index); ok {
 			item.excluded = true
 			item.excludedBy = "exclude=" + pattern
 		}
-		// 内置黑名单：容器桥、虚拟机宿主网卡、隧道设备等纯软件接口。
-		// 这些网卡没有物理介质，走它们要么丢包要么把流量绕回隧道。
-		// 被用户显式指定（PreferNames）或 IncludeNames 命中时可以破例。
-		if isDefaultExcluded(view.Name) {
-			if _, forced := matchesPattern(cfg.PreferNames, view.Name, view.Index); !forced {
-				item.excluded = true
-				item.excludedBy = "builtin_blacklist"
-			}
-		}
-		if _, ok := matchesPattern(cfg.PreferNames, view.Name, view.Index); ok {
+		// 用户显式指定优先级最高，可以覆盖黑名单与降权。
+		if isForced(cfg.ForceInterface, view.Name, view.Index) {
 			item.preferred = true
+		} else if isDefaultExcluded(view.Name) {
+			// 内置黑名单：容器桥、虚拟机宿主网卡、隧道设备等纯软件接口。
+			// 这些网卡没有物理介质，走它们要么丢包要么把流量绕回隧道。
+			item.excluded = true
+			item.excludedBy = "builtin_blacklist"
 		}
 
 		item.virtual = IsVirtualAdapter(view.Name)
@@ -391,10 +391,49 @@ func collect(family int, cfg Config, views []interfaceView, routes map[int]uint3
 		if addr, ok := selectAddress(view, family); ok {
 			item.address = addr
 			item.usableSource = true
+			if prefix, hit := matchesAddress(cfg.ExcludeAddresses, addr); hit {
+				item.excluded = true
+				item.excludedBy = "exclude_address=" + prefix.String()
+			}
 		}
 		candidates = append(candidates, item)
 	}
 	return candidates
+}
+
+// isForced reports whether name is the interface the user pinned in config.
+func isForced(force string, name string, index int) bool {
+	force = strings.TrimSpace(force)
+	if force == "" {
+		return false
+	}
+	_, ok := matchesPattern([]string{force}, name, index)
+	return ok
+}
+
+// matchesAddress reports whether addr falls inside any configured address
+// exclusion, accepting both CIDR blocks and bare addresses.
+func matchesAddress(values []string, addr netip.Addr) (netip.Prefix, bool) {
+	for _, raw := range values {
+		trimmed := strings.TrimSpace(raw)
+		if trimmed == "" {
+			continue
+		}
+		if strings.Contains(trimmed, "/") {
+			prefix, err := netip.ParsePrefix(trimmed)
+			if err != nil {
+				continue
+			}
+			if prefix.Contains(addr) {
+				return prefix, true
+			}
+			continue
+		}
+		if literal, err := netip.ParseAddr(trimmed); err == nil && literal == addr {
+			return netip.PrefixFrom(literal, literal.BitLen()), true
+		}
+	}
+	return netip.Prefix{}, false
 }
 
 // rank orders candidates best-first. Preference order:
@@ -649,11 +688,26 @@ type Descriptor struct {
 	DefaultRoute bool
 	IPv4         []string
 	IPv6         []string
+	// Usable reports whether the adapter can carry traffic at all (up, not
+	// loopback, not our own tunnel).
+	Usable bool
+	// Selected reports whether the user pinned this adapter in config.
+	Selected bool
+	// Excluded reports whether the current config rules the adapter out, with
+	// ExcludeReason naming the rule.
+	Excluded      bool
+	ExcludeReason string
 }
 
-// DescribeAll returns a snapshot of every adapter with its addresses and
-// whether it owns a default route, for the settings page.
+// DescribeAll returns every adapter using the default (unfiltered) config.
 func DescribeAll() []Descriptor {
+	return List(Config{})
+}
+
+// List returns every adapter with its addresses, physical/virtual verdict,
+// default-route ownership, and whether the current config excludes it. The
+// settings page renders this to offer a manual interface choice.
+func List(cfg Config) []Descriptor {
 	current := loadSnapshot()
 
 	// An adapter owns a default route in either family.
@@ -661,6 +715,17 @@ func DescribeAll() []Descriptor {
 	for _, routes := range current.routes {
 		for index := range routes {
 			routeOwner[index] = true
+		}
+	}
+
+	excluded := make(map[int]string)
+	for _, family := range []int{FamilyIPv4, FamilyIPv6} {
+		for _, item := range collect(family, cfg, current.views, current.routes[family]) {
+			if item.excluded {
+				if _, seen := excluded[item.view.Index]; !seen {
+					excluded[item.view.Index] = item.excludedBy
+				}
+			}
 		}
 	}
 
@@ -672,6 +737,12 @@ func DescribeAll() []Descriptor {
 			Up:           view.Up,
 			Physical:     !IsVirtualAdapter(view.Name) && !IsOwnTunnel(view.Name) && !view.Loopback,
 			DefaultRoute: routeOwner[view.Index],
+			Usable:       view.Up && !view.Loopback && !IsOwnTunnel(view.Name),
+			Selected:     isForced(cfg.ForceInterface, view.Name, view.Index),
+		}
+		if reason, blocked := excluded[view.Index]; blocked {
+			item.Excluded = true
+			item.ExcludeReason = reason
 		}
 		for _, addr := range view.Addresses {
 			if addr.Is4() {
@@ -685,8 +756,8 @@ func DescribeAll() []Descriptor {
 	return out
 }
 
-// List returns every candidate with its score, for diagnostics.
-func List(cfg Config) []string {
+// Explain returns a per-family ranking trace for diagnostics and bug reports.
+func Explain(cfg Config) []string {
 	current := loadSnapshot()
 	out := make([]string, 0, len(current.views)*2)
 	for _, family := range []int{FamilyIPv4, FamilyIPv6} {
@@ -696,8 +767,9 @@ func List(cfg Config) []string {
 				addr = item.address.String()
 			}
 			out = append(out, fmt.Sprintf(
-				"family=%d interface=%s index=%d address=%s default_route=%t metric=%d virtual=%t",
-				family, item.view.Name, item.view.Index, addr, item.hasRoute, item.metric, item.virtual,
+				"family=%d interface=%s index=%d address=%s default_route=%t metric=%d virtual=%t excluded=%t by=%s",
+				family, item.view.Name, item.view.Index, addr, item.hasRoute, item.metric,
+				item.virtual, item.excluded, item.excludedBy,
 			))
 		}
 	}

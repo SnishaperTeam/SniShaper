@@ -126,13 +126,13 @@ func TestTunPrefixAddressesRejected(t *testing.T) {
 }
 
 // TestExcludeAndPreferNames covers the user-facing escape hatches.
-func TestExcludeAndPreferNames(t *testing.T) {
+func TestExcludeAndForceInterface(t *testing.T) {
 	views := []interfaceView{
 		{Index: 13, Name: "VMware Network Adapter VMnet8", Up: true, Addresses: addrs("192.168.230.1")},
 		{Index: 27, Name: "WLAN", Up: true, Addresses: addrs("192.168.1.6")},
 	}
 
-	cfg := Config{ExcludeNames: []string{"VMware*"}}
+	cfg := Config{ExcludeInterfaces: []string{"VMware*"}}
 	binding, ok := choose(collect(FamilyIPv4, cfg, views, map[int]uint32{13: 1, 27: 35}), netip.Addr{})
 	if !ok {
 		t.Fatal("expected a binding")
@@ -225,7 +225,7 @@ func TestExplicitPreferenceOverridesBlacklist(t *testing.T) {
 		{Index: 5, Name: "wg0", Up: true, Addresses: addrs("10.8.0.2")},
 		{Index: 27, Name: "WLAN", Up: true, Addresses: addrs("192.168.1.6")},
 	}
-	cfg := Config{PreferNames: []string{"wg0"}}
+	cfg := Config{ForceInterface: "wg0"}
 
 	binding, ok := choose(collect(FamilyIPv4, cfg, views, map[int]uint32{27: 35}), netip.Addr{})
 	if !ok {

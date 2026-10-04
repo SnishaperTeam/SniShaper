@@ -396,13 +396,9 @@ func (p *ProxyServer) outboundInterfaceConfig() netiface.Config {
 			}
 		}
 	}
-	var preferred []string
-	if p.outboundInterface != "" {
-		preferred = append(preferred, p.outboundInterface)
-	}
 	return netiface.Config{
-		ExcludeNames: excluded,
-		PreferNames:  preferred,
+		ForceInterface:    p.outboundInterface,
+		ExcludeInterfaces: excluded,
 	}
 }
 
