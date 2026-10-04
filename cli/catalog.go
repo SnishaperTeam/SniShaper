@@ -52,7 +52,8 @@ func commandCatalog() []commandGroup {
 				{"tun on", "启动 TUN（先关闭本程序设置的系统代理）"},
 				{"tun off", "停止 TUN（恢复之前关闭的系统代理）"},
 				{"tun status", "查看 TUN 状态"},
-				{"tun config [json]", "查看 / 修改 TUN 配置（mtu / dns_hijack / auto_route）"},
+				{"tun config [json]", "查看 / 修改 TUN 配置（mtu / dns_hijack / auto_route / outbound_interface / stack）"},
+				{"tun ifaces", "列出本机网卡（标注物理/虚拟、默认路由、自动选择结果）"},
 			},
 		},
 		{

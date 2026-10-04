@@ -6,9 +6,11 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"snishaper/core"
+	"snishaper/pkg/netiface"
 	"snishaper/pkg/sysproxy"
 	"snishaper/proxy"
 )
@@ -80,10 +82,49 @@ func opTunCommand(args []string, out cmdOut) int {
 		return tunStatus(out)
 	case "config":
 		return tunConfig(args[1:], out)
+	case "ifaces":
+		return tunInterfaces(out)
 	default:
-		out("用法: tun on|off|status|config [json]")
+		out("用法: tun on|off|status|config [json]|ifaces")
 		return 2
 	}
+}
+
+// tunInterfaces 列出本机网卡，标注物理/虚拟与默认路由归属，
+// 并显示自动选择当前会使用哪一块。
+func tunInterfaces(out cmdOut) int {
+	list := netiface.DescribeAll()
+	if len(list) == 0 {
+		out("未找到可用网卡")
+		return 1
+	}
+
+	selected := ""
+	for _, family := range []int{netiface.FamilyIPv4, netiface.FamilyIPv6} {
+		if binding, err := netiface.Select(family, netiface.Config{}, nil); err == nil {
+			selected = binding.InterfaceName
+			break
+		}
+	}
+
+	out(fmt.Sprintf("%-28s %-6s %-8s %-10s %s", "网卡", "索引", "类型", "默认路由", "地址"))
+	for _, item := range list {
+		kind := "虚拟"
+		if item.Physical {
+			kind = "物理"
+		}
+		route := "否"
+		if item.DefaultRoute {
+			route = "是"
+		}
+		marker := ""
+		if item.Name == selected {
+			marker = "  <= 自动选择"
+		}
+		addresses := append(append([]string{}, item.IPv4...), item.IPv6...)
+		out(fmt.Sprintf("%-28s %-6d %-8s %-10s %s%s", item.Name, item.Index, kind, route, strings.Join(addresses, ", "), marker))
+	}
+	return 0
 }
 
 func tunStart(out cmdOut) int {
@@ -202,6 +243,21 @@ func tunConfig(args []string, out cmdOut) int {
 	if payload.StrictRoute != nil {
 		current.StrictRoute = *payload.StrictRoute
 	}
+	if payload.OutboundInterface != nil {
+		current.OutboundInterface = *payload.OutboundInterface
+	}
+	if payload.OutboundInterfaceExclude != nil {
+		current.OutboundInterfaceExclude = *payload.OutboundInterfaceExclude
+	}
+	if payload.Stack != nil {
+		current.Stack = *payload.Stack
+	}
+	if payload.AdapterName != nil {
+		current.AdapterName = *payload.AdapterName
+	}
+	if payload.RouteExcludeAddress != nil {
+		current.RouteExcludeAddress = *payload.RouteExcludeAddress
+	}
 
 	if err := a.UpdateTUNConfig(current); err != nil {
 		out("保存 TUN 配置失败: " + err.Error())
@@ -216,9 +272,14 @@ func tunConfig(args []string, out cmdOut) int {
 // tunConfigPayload uses pointers so a partial update cannot silently switch
 // unset options off.
 type tunConfigPayload struct {
-	Enabled     *bool `json:"enabled,omitempty"`
-	MTU         *int  `json:"mtu,omitempty"`
-	DNSHijack   *bool `json:"dns_hijack,omitempty"`
-	AutoRoute   *bool `json:"auto_route,omitempty"`
-	StrictRoute *bool `json:"strict_route,omitempty"`
+	Enabled                 *bool   `json:"enabled,omitempty"`
+	MTU                     *int    `json:"mtu,omitempty"`
+	DNSHijack               *bool   `json:"dns_hijack,omitempty"`
+	AutoRoute               *bool   `json:"auto_route,omitempty"`
+	StrictRoute             *bool   `json:"strict_route,omitempty"`
+	OutboundInterface       *string `json:"outbound_interface,omitempty"`
+	OutboundInterfaceExclude *string `json:"outbound_interface_exclude,omitempty"`
+	Stack                   *string `json:"stack,omitempty"`
+	AdapterName             *string `json:"adapter_name,omitempty"`
+	RouteExcludeAddress     *string `json:"route_exclude_address,omitempty"`
 }

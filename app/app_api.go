@@ -25,6 +25,7 @@ import (
 	"snishaper/pkg/certmanager"
 	"snishaper/pkg/cfpool"
 	"snishaper/pkg/dohresolver"
+	"snishaper/pkg/netiface"
 	"snishaper/proxy"
 )
 
@@ -55,15 +56,15 @@ func NewApp() *App {
 	// before the resolver's node callback is used; otherwise DoH sees no nodes.
 	proxyServer.SetRuleManager(ruleManager)
 	a := &App{
-		ctx:               ctx,
-		cancel:            cancel,
-		proxyServer:       proxyServer,
-		ruleManager:       ruleManager,
-		certPath:          common.ConfigCertDir(execDir),
-		proxyMarkerPath:   common.ConfigProxyMarker(execDir),
-		launchedAtStartup: HasLaunchArg("--startup"),
+		ctx:                ctx,
+		cancel:             cancel,
+		proxyServer:        proxyServer,
+		ruleManager:        ruleManager,
+		certPath:           common.ConfigCertDir(execDir),
+		proxyMarkerPath:    common.ConfigProxyMarker(execDir),
+		launchedAtStartup:  HasLaunchArg("--startup"),
 		autoProxyAtStartup: HasLaunchArg("--autoproxy"),
-		core:              core.NewCoreClient(),
+		core:               core.NewCoreClient(),
 	}
 	a.proxyServer.SetSocks5Addr("127.0.0.1:" + socks5Port)
 
@@ -408,6 +409,86 @@ func (a *App) GetTUNConfig() proxy.TUNConfig {
 	return a.ruleManager.GetTUNConfig()
 }
 
+// NetworkInterfaceInfo 描述一个可选的出站网卡，供设置页展示。
+type NetworkInterfaceInfo struct {
+	Name            string   `json:"name"`
+	Index           int      `json:"index"`
+	IPv4            []string `json:"ipv4"`
+	IPv6            []string `json:"ipv6"`
+	Physical        bool     `json:"physical"`
+	DefaultRoute    bool     `json:"default_route"`
+	Selected        bool     `json:"selected"`
+	CurrentOutbound bool     `json:"current_outbound"`
+}
+
+// ListNetworkInterfaces 返回本机网卡列表，附带物理/虚拟标记与默认路由归属。
+// 设置页用它渲染"出站网卡"下拉框：默认走智能选择（CurrentOutbound 为空），
+// 用户也可以手动指定某一块网卡。
+func (a *App) ListNetworkInterfaces() []NetworkInterfaceInfo {
+	descriptors := netiface.DescribeAll()
+	if len(descriptors) == 0 {
+		return []NetworkInterfaceInfo{}
+	}
+
+	cfg := a.ruleManager.GetTUNConfig()
+	preferred := strings.TrimSpace(cfg.OutboundInterface)
+
+	// 智能选择当前会落到哪块网卡，用于在下拉框里标注"当前生效"。
+	current := ""
+	for _, descriptor := range descriptors {
+		if descriptor.Physical && descriptor.DefaultRoute {
+			current = descriptor.Name
+			break
+		}
+	}
+
+	out := make([]NetworkInterfaceInfo, 0, len(descriptors))
+	for _, descriptor := range descriptors {
+		item := NetworkInterfaceInfo{
+			Name:         descriptor.Name,
+			Index:        descriptor.Index,
+			IPv4:         descriptor.IPv4,
+			IPv6:         descriptor.IPv6,
+			Physical:     descriptor.Physical,
+			DefaultRoute: descriptor.DefaultRoute,
+		}
+		item.Selected = preferred != "" && strings.EqualFold(preferred, descriptor.Name)
+		item.CurrentOutbound = item.Selected ||
+			(preferred == "" && descriptor.Name == current)
+		out = append(out, item)
+	}
+	return out
+}
+
+// SetTUNOutboundInterface 设置 TUN 出站网卡。iface 为空表示恢复智能选择。
+func (a *App) SetTUNOutboundInterface(iface string) error {
+	a.appendLog("[action] SetTUNOutboundInterface called: " + iface)
+	cfg := a.ruleManager.GetTUNConfig()
+	cfg.OutboundInterface = strings.TrimSpace(iface)
+	if err := a.ruleManager.UpdateTUNConfig(cfg); err != nil {
+		return err
+	}
+	if a.core != nil {
+		a.core.ReloadIfRunning()
+	}
+	a.emitFrontendState()
+	return nil
+}
+
+// SetTUNOutboundInterfaceExclude 设置出站网卡排除列表（逗号分隔）。
+func (a *App) SetTUNOutboundInterfaceExclude(exclude string) error {
+	a.appendLog("[action] SetTUNOutboundInterfaceExclude called")
+	cfg := a.ruleManager.GetTUNConfig()
+	cfg.OutboundInterfaceExclude = strings.TrimSpace(exclude)
+	if err := a.ruleManager.UpdateTUNConfig(cfg); err != nil {
+		return err
+	}
+	if a.core != nil {
+		a.core.ReloadIfRunning()
+	}
+	return nil
+}
+
 func (a *App) UpdateTUNConfig(cfg proxy.TUNConfig) error {
 	a.appendLog("[action] UpdateTUNConfig called")
 	err := a.ruleManager.UpdateTUNConfig(cfg)
@@ -425,7 +506,7 @@ func (a *App) GetTUNStatus() proxy.TUNStatus {
 	}
 	return proxy.TUNStatus{
 		Running: false,
-		Message:   "core_service_not_running",
+		Message: "core_service_not_running",
 	}
 }
 
@@ -1042,9 +1123,9 @@ func (a *App) SetDNSNodePriority(id string, targetIndex int) error {
 }
 
 type DNSNodeTestResult struct {
-	Success bool   `json:"success"`
-	Latency int64  `json:"latency"`
-	Error   string `json:"error,omitempty"`
+	Success bool     `json:"success"`
+	Latency int64    `json:"latency"`
+	Error   string   `json:"error,omitempty"`
 	IPs     []string `json:"ips,omitempty"`
 }
 

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/netip"
 	"runtime"
+	"strings"
 	"sync"
 	"time"
 
@@ -12,19 +13,20 @@ import (
 	"github.com/sagernet/sing/common/control"
 
 	"snishaper/pkg/dohresolver"
+	"snishaper/pkg/netiface"
 	"snishaper/proxy"
 )
 
 // Manager 管理 sing-tun TUN 接口
 type Manager struct {
-	mu          sync.Mutex
-	tun         tun.Tun
-	stack       tun.Stack
-	handler     *Handler
-	options     tun.Options
-	running     bool
-	resolver    *dohresolver.FailoverResolver
-	logf        func(string)
+	mu       sync.Mutex
+	tun      tun.Tun
+	stack    tun.Stack
+	handler  *Handler
+	options  tun.Options
+	running  bool
+	resolver *dohresolver.FailoverResolver
+	logf     func(string)
 }
 
 // NewManager 创建新的 TUN 管理器
@@ -50,8 +52,38 @@ func (m *Manager) Start(cfg proxy.TUNConfig, proxyAddr string) error {
 		mtu = 9000
 	}
 
+	adapterName := strings.TrimSpace(cfg.AdapterName)
+	if adapterName == "" {
+		adapterName = "SniShaper"
+	}
+
+	stack := strings.ToLower(strings.TrimSpace(cfg.Stack))
+	if stack == "" {
+		stack = "gvisor"
+	}
+
+	// 排除网段：用户配置的网段 + 必需的 loopback 自环保护。
+	excludeV4 := []netip.Prefix{netip.MustParsePrefix("127.0.0.0/8")}
+	excludeV6 := []netip.Prefix{netip.MustParsePrefix("::1/128")}
+	for _, item := range strings.Split(cfg.RouteExcludeAddress, ",") {
+		trimmed := strings.TrimSpace(item)
+		if trimmed == "" {
+			continue
+		}
+		prefix, err := netip.ParsePrefix(trimmed)
+		if err != nil {
+			m.logf("[sing-tun] ignoring invalid route exclude address: " + trimmed)
+			continue
+		}
+		if prefix.Addr().Is4() {
+			excludeV4 = append(excludeV4, prefix.Masked())
+		} else {
+			excludeV6 = append(excludeV6, prefix.Masked())
+		}
+	}
+
 	m.options = tun.Options{
-		Name: "SniShaper",
+		Name: adapterName,
 		MTU:  uint32(mtu),
 		Inet4Address: []netip.Prefix{
 			netip.MustParsePrefix("198.18.0.1/16"),
@@ -76,14 +108,10 @@ func (m *Manager) Start(cfg proxy.TUNConfig, proxyAddr string) error {
 		},
 		// 启用 DNS 劫持，使用 fake-ip 模式
 		EXP_DisableDNSHijack: false,
-		// 自环防护：排除 loopback
-		Inet4RouteExcludeAddress: []netip.Prefix{
-			netip.MustParsePrefix("127.0.0.0/8"),
-		},
-		Inet6RouteExcludeAddress: []netip.Prefix{
-			netip.MustParsePrefix("::1/128"),
-		},
-		Logger: &singTunLogger{m.logf},
+		// 自环防护：排除 loopback 与用户配置的网段
+		Inet4RouteExcludeAddress: excludeV4,
+		Inet6RouteExcludeAddress: excludeV6,
+		Logger:                   &singTunLogger{m.logf},
 	}
 
 	// 创建 InterfaceMonitor (sing-tun 需要)
@@ -146,7 +174,7 @@ func (m *Manager) Start(cfg proxy.TUNConfig, proxyAddr string) error {
 	m.handler = NewHandler(proxyAddr, m.resolver, m.logf)
 
 	// 4. 创建网络栈
-	m.stack, err = tun.NewStack("gvisor", tun.StackOptions{
+	m.stack, err = tun.NewStack(stack, tun.StackOptions{
 		Context:    context.Background(),
 		Tun:        m.tun,
 		TunOptions: m.options,
@@ -170,6 +198,10 @@ func (m *Manager) Start(cfg proxy.TUNConfig, proxyAddr string) error {
 		m.tun.Close()
 		return fmt.Errorf("start stack failed: %w", err)
 	}
+
+	// TUN 网卡已出现，出站网卡候选列表随之改变：必须让 netiface 重新扫描，
+	// 否则可能仍按旧快照把流量绑到已失效的接口上。
+	netiface.InvalidateCache()
 
 	m.running = true
 	m.logf("[sing-tun] TUN started, running=true")

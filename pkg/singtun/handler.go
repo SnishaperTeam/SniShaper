@@ -19,6 +19,7 @@ import (
 	N "github.com/sagernet/sing/common/network"
 
 	"snishaper/pkg/dohresolver"
+	"snishaper/pkg/netiface"
 )
 
 // Handler 实现 sing-tun 的 Handler 接口
@@ -492,19 +493,27 @@ func (h *Handler) forwardUDPDirect(ctx context.Context, conn N.PacketConn, sourc
 		return
 	}
 
-	// 按目标地址族选择 udp4/udp6 与对应的物理网卡地址，避免绑定族不匹配
+	// 按目标地址族选择 udp4/udp6，避免绑定族不匹配
 	network := "udp4"
 	wantIPv6 := destination.Addr.Is6()
 	if wantIPv6 {
 		network = "udp6"
 	}
 
-	// 绑定物理网卡，避免 UDP 包进 TUN 形成循环
-	var laddr *net.UDPAddr
-	if bindIP := h.getPhysicalUDPAddr(wantIPv6); bindIP != nil {
-		laddr = &net.UDPAddr{IP: bindIP}
+	// 把 UDP socket 绑到承载默认路由的物理网卡，避免 UDP 包进 TUN 形成循环。
+	// 必须绑本地通配地址（0.0.0.0:0 / [::]:0）：绑具体目标地址会收不到回包，
+	// 网卡归属由 Control 里的 IP_UNICAST_IF / SO_BINDTODEVICE 指定。
+	destAddr := destination.String()
+	listenAddr := "0.0.0.0:0"
+	if wantIPv6 {
+		listenAddr = "[::]:0"
 	}
-	remoteConn, err := net.ListenUDP(network, laddr)
+	listener := &net.ListenConfig{}
+	if binding, ok := h.outboundBinding(destAddr); ok {
+		listener.Control = binding.Control(netiface.FamilyOf(destAddr))
+		h.logf("[sing-tun] UDP relay bound to " + binding.Describe())
+	}
+	pc, err := listener.ListenPacket(ctx, network, listenAddr)
 	if err != nil {
 		h.logf("[sing-tun] failed to create UDP conn: " + err.Error())
 		if onClose != nil {
@@ -512,9 +521,17 @@ func (h *Handler) forwardUDPDirect(ctx context.Context, conn N.PacketConn, sourc
 		}
 		return
 	}
+	remoteConn, ok := pc.(*net.UDPConn)
+	if !ok {
+		pc.Close()
+		err = fmt.Errorf("unexpected packet connection type %T", pc)
+		if onClose != nil {
+			onClose(err)
+		}
+		return
+	}
 
 	// 解析目标地址
-	destAddr := destination.String()
 	destUDPAddr, err := net.ResolveUDPAddr(network, destAddr)
 	if err != nil {
 		h.logf("[sing-tun] failed to resolve dest: " + err.Error())
@@ -673,42 +690,16 @@ func (h *Handler) dialProxy() (net.Conn, error) {
 	return net.DialTimeout("tcp", h.proxyAddr, 5*time.Second)
 }
 
-// getPhysicalUDPAddr 获取物理网卡对应地址族的地址（排除 TUN/Loopback）
-// wantIPv6=true 时返回 IPv6 地址，否则返回 IPv4 地址
-// 用于 forwardUDPDirect 绑定物理网卡，避免 UDP 包进 TUN 循环
-func (h *Handler) getPhysicalUDPAddr(wantIPv6 bool) net.IP {
-	interfaces, err := net.Interfaces()
+// outboundBinding 返回出站网卡绑定信息（网卡 + 索引 + 源地址）。
+//
+// 网卡由 pkg/netiface 按系统默认路由 + 内核路由探测选出，而不是按
+// net.Interfaces() 枚举顺序取第一个非 loopback 网卡：枚举顺序按接口索引排列，
+// VMware VMnet / Hyper-V vEthernet / WSL 等虚拟网卡常常排在真正承载流量的
+// 网卡之前，导致 UDP 出站绑到错误的网卡上。
+func (h *Handler) outboundBinding(targetAddr string) (netiface.Binding, bool) {
+	binding, err := netiface.SelectForTarget(targetAddr, netiface.Config{}, h.logf)
 	if err != nil {
-		return nil
+		return netiface.Binding{}, false
 	}
-	for _, iface := range interfaces {
-		if iface.Flags&net.FlagLoopback != 0 || iface.Flags&net.FlagUp == 0 {
-			continue
-		}
-		name := iface.Name
-		if strings.Contains(name, "SniShaper") || strings.Contains(name, "tun") || strings.Contains(name, "TAP") {
-			continue
-		}
-		addrs, err := iface.Addrs()
-		if err != nil || len(addrs) == 0 {
-			continue
-		}
-		for _, addr := range addrs {
-			ipNet, ok := addr.(*net.IPNet)
-			if !ok {
-				continue
-			}
-			if wantIPv6 {
-				if ipNet.IP.To4() != nil {
-					continue
-				}
-				return ipNet.IP
-			}
-			if ipNet.IP.To4() == nil {
-				continue
-			}
-			return ipNet.IP
-		}
-	}
-	return nil
+	return binding, true
 }

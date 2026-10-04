@@ -21,7 +21,8 @@ import {
   GetUpdateChannel, SetUpdateChannel,
   GetDownloadSource, SetDownloadSource,
   GetCustomDownloadSource, SetCustomDownloadSource,
-  MeasureDownloadSources
+  MeasureDownloadSources,
+  ListNetworkInterfaces, SetTUNOutboundInterface, SetTUNOutboundInterfaceExclude,
 } from '../api/bindings';
 import {
   Box, Button, TextField, Select, MenuItem, FormControl, InputLabel, Switch,
@@ -131,6 +132,43 @@ const Settings: React.FC<SettingsProps> = ({ cache, onCacheUpdate, currentThemeI
   const [customSource, setCustomSource] = useState<string>(cache.customDownloadSource || '');
   const [sourceResults, setSourceResults] = useState<any[]>([]);
   const [measuring, setMeasuring] = useState<boolean>(false);
+  const [ifaces, setIfaces] = useState<any[]>([]);
+  const [outboundIface, setOutboundIface] = useState<string>('');
+  const [outboundExclude, setOutboundExclude] = useState<string>('');
+  const [tunStack, setTunStack] = useState<string>('gvisor');
+  const [adapterName, setAdapterName] = useState<string>('');
+  const [routeExclude, setRouteExclude] = useState<string>('');
+
+  const loadIfaces = useCallback(async () => {
+    try {
+      const [list, cfg] = await Promise.all([ListNetworkInterfaces(), GetTUNConfig()]);
+      setIfaces(Array.isArray(list) ? list : []);
+      const pick = (obj: any, snake: string, pascal: string) => obj?.[snake] ?? obj?.[pascal] ?? '';
+      setOutboundIface(String(pick(cfg, 'outbound_interface', 'OutboundInterface') || ''));
+      setOutboundExclude(String(pick(cfg, 'outbound_interface_exclude', 'OutboundInterfaceExclude') || ''));
+      setTunStack(String(pick(cfg, 'stack', 'Stack') || 'gvisor'));
+      setAdapterName(String(pick(cfg, 'adapter_name', 'AdapterName') || ''));
+      setRouteExclude(String(pick(cfg, 'route_exclude_address', 'RouteExcludeAddress') || ''));
+    } catch {
+      /* ignore */
+    }
+  }, []);
+
+  useEffect(() => {
+    loadIfaces();
+  }, [loadIfaces]);
+
+  const saveTUNField = useCallback(async (patch: any, successKey?: string) => {
+    try {
+      const cfg = await GetTUNConfig();
+      const merged = { ...(cfg || {}), ...patch };
+      await UpdateTUNConfig(merged);
+      if (successKey) toast.success(t(successKey));
+      await loadIfaces();
+    } catch (err: any) {
+      toast.error(t('common.failed'), String(err));
+    }
+  }, [loadIfaces]);
 
   const measureSources = async () => {
     if (measuring) return;
@@ -661,6 +699,136 @@ const Settings: React.FC<SettingsProps> = ({ cache, onCacheUpdate, currentThemeI
                   label={t('settings.auto_update_rules.title')}
                   sx={{ gap: 1, marginLeft: 0, marginRight: 0 }}
                 />
+              </SettingRowInline>
+            </Box>
+          </Box>
+
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5, mt: 1.5 }}>
+            <SectionHeader icon={<Wifi size={18} />} label={t('settings.tabs.tun')} />
+
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+              <SettingRowInline
+                title={t('settings.tun.outbound_iface.title')}
+                desc={t('settings.tun.outbound_iface.desc')}
+                icon={<Wifi size={18} />}
+              >
+                <Box sx={{ width: 320, flexShrink: 0 }}>
+                  <FormControl fullWidth size="small">
+                    <InputLabel id="tun-outbound-iface-label">{t('settings.tun.outbound_iface.title')}</InputLabel>
+                    <Select
+                      labelId="tun-outbound-iface-label"
+                      id="tun-outbound-iface"
+                      value={outboundIface}
+                      label={t('settings.tun.outbound_iface.title')}
+                      onChange={(e) => {
+                        const value = String(e.target.value);
+                        setOutboundIface(value);
+                        SetTUNOutboundInterface(value).catch((err: any) => {
+                          toast.error(t('common.failed'), String(err));
+                        });
+                      }}
+                    >
+                      <MenuItem value="">{t('settings.tun.outbound_iface.auto')}</MenuItem>
+                      {ifaces.map((nic) => (
+                        <MenuItem key={`${nic.name}-${nic.index}`} value={nic.name}>
+                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, width: '100%' }}>
+                            <span>{nic.name}</span>
+                            <Typography variant="caption" color={nic.physical ? 'success.main' : 'text.secondary'}>
+                              {nic.physical ? t('settings.tun.outbound_iface.physical') : t('settings.tun.outbound_iface.virtual')}
+                            </Typography>
+                            {nic.default_route && (
+                              <Typography variant="caption" color="primary.main">
+                                {t('settings.tun.outbound_iface.default_route')}
+                              </Typography>
+                            )}
+                            {nic.current_outbound && (
+                              <Typography variant="caption" color="warning.main">
+                                {t('settings.tun.outbound_iface.in_use')}
+                              </Typography>
+                            )}
+                          </Box>
+                        </MenuItem>
+                      ))}
+                    </Select>
+                  </FormControl>
+                  <TextField
+                    size="small"
+                    fullWidth
+                    sx={{ mt: 1 }}
+                    label={t('settings.tun.outbound_exclude.label')}
+                    placeholder="VMware*,vEthernet*"
+                    value={outboundExclude}
+                    onChange={(e) => setOutboundExclude(e.target.value)}
+                    onBlur={() => {
+                      if (outboundExclude.trim() !== (tunConfig?.outbound_interface_exclude ?? tunConfig?.OutboundInterfaceExclude ?? '')) {
+                        SetTUNOutboundInterfaceExclude(outboundExclude.trim()).catch((err: any) => {
+                          toast.error(t('common.failed'), String(err));
+                        });
+                      }
+                    }}
+                  />
+                </Box>
+              </SettingRowInline>
+
+              <SettingRowInline
+                title={t('settings.tun.stack.title')}
+                desc={t('settings.tun.stack.desc')}
+                icon={<SettingsIcon size={18} />}
+              >
+                <Box sx={{ width: 220, flexShrink: 0 }}>
+                  <FormControl fullWidth size="small">
+                    <InputLabel id="tun-stack-label">{t('settings.tun.stack.title')}</InputLabel>
+                    <Select
+                      labelId="tun-stack-label"
+                      id="tun-stack"
+                      value={tunStack}
+                      label={t('settings.tun.stack.title')}
+                      onChange={(e) => {
+                        const value = String(e.target.value);
+                        setTunStack(value);
+                        saveTUNField({ stack: value });
+                      }}
+                    >
+                      <MenuItem value="gvisor">{t('settings.tun.stack.gvisor')}</MenuItem>
+                      <MenuItem value="mixed">{t('settings.tun.stack.mixed')}</MenuItem>
+                      <MenuItem value="system">{t('settings.tun.stack.system')}</MenuItem>
+                    </Select>
+                  </FormControl>
+                </Box>
+              </SettingRowInline>
+
+              <SettingRowInline
+                title={t('settings.tun.adapter_name.title')}
+                desc={t('settings.tun.adapter_name.desc')}
+                icon={<SettingsIcon size={18} />}
+              >
+                <Box sx={{ width: 220, flexShrink: 0 }}>
+                  <TextField
+                    size="small"
+                    fullWidth
+                    placeholder="SniShaper"
+                    value={adapterName}
+                    onChange={(e) => setAdapterName(e.target.value)}
+                    onBlur={() => saveTUNField({ adapter_name: adapterName.trim() })}
+                  />
+                </Box>
+              </SettingRowInline>
+
+              <SettingRowInline
+                title={t('settings.tun.route_exclude.title')}
+                desc={t('settings.tun.route_exclude.desc')}
+                icon={<Globe size={18} />}
+              >
+                <Box sx={{ width: 320, flexShrink: 0 }}>
+                  <TextField
+                    size="small"
+                    fullWidth
+                    placeholder="192.168.0.0/16,10.0.0.0/8"
+                    value={routeExclude}
+                    onChange={(e) => setRouteExclude(e.target.value)}
+                    onBlur={() => saveTUNField({ route_exclude_address: routeExclude.trim() })}
+                  />
+                </Box>
               </SettingRowInline>
             </Box>
           </Box>

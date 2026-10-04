@@ -354,7 +354,8 @@
       "security": "Security",
       "appearance": "UI & Theme",
       "startup": "Startup",
-      "logs": "Logs"
+      "logs": "Logs",
+      "tun": "TUN Virtual NIC"
     },
     "language": {
       "title": "Language",
@@ -464,6 +465,35 @@
       "measure": "Measure",
       "measuring": "Measuring...",
       "unreachable": "unreachable"
+    },
+    "tun": {
+      "outbound_iface": {
+        "title": "Outbound interface",
+        "desc": "Which NIC carries TUN outbound traffic. By default it is chosen automatically from the system default route, avoiding VMware / Hyper-V / container virtual adapters.",
+        "auto": "Smart (automatic)",
+        "physical": "physical",
+        "virtual": "virtual",
+        "default_route": "default route",
+        "in_use": "in use"
+      },
+      "outbound_exclude": {
+        "label": "Excluded interfaces (optional)"
+      },
+      "stack": {
+        "title": "TUN network stack",
+        "desc": "gvisor has the widest compatibility; mixed offloads TCP to the system; system is kernel-mode with the lowest overhead.",
+        "gvisor": "gvisor (userspace)",
+        "mixed": "mixed",
+        "system": "system (kernel)"
+      },
+      "adapter_name": {
+        "title": "Virtual adapter name",
+        "desc": "Name of the TUN virtual adapter. Leave empty to use the default name SniShaper."
+      },
+      "route_exclude": {
+        "title": "Excluded networks",
+        "desc": "These networks bypass the tunnel and follow the system default route. Comma-separated CIDRs."
+      }
     }
   },
   "evolution": {

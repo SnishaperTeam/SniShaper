@@ -19,10 +19,11 @@ import (
 
 	"snishaper/pkg/cfpool"
 	"snishaper/pkg/dohresolver"
+	"snishaper/pkg/netiface"
 
 	"github.com/miekg/dns"
-	"github.com/things-go/go-socks5"
 	utls "github.com/refraction-networking/utls"
+	"github.com/things-go/go-socks5"
 )
 
 // tunnelBufPool provides reusable 128KB buffers for tunnel data copying
@@ -77,6 +78,20 @@ type TUNConfig struct {
 	DNSHijack   bool `json:"dns_hijack,omitempty"`
 	AutoRoute   bool `json:"auto_route,omitempty"`
 	StrictRoute bool `json:"strict_route,omitempty"`
+	// OutboundInterface 固定 TUN 出站网卡名（如 "WLAN"、"Ethernet"）。
+	// 留空表示自动：按系统默认路由 / 内核路由探测选择承载流量的物理网卡。
+	OutboundInterface string `json:"outbound_interface,omitempty"`
+	// OutboundInterfaceExclude 是逗号分隔的网卡名或 "name*" 前缀通配列表，
+	// 这些网卡永远不会被选作出站网卡（例如 "VMware*,vEthernet*"）。
+	OutboundInterfaceExclude string `json:"outbound_interface_exclude,omitempty"`
+	// Stack 是 TUN 网络栈：gvisor（纯用户态，兼容性最好）/ mixed（gvisor +
+	// 系统转发 TCP）/ system（内核态，需要 wintun 转发支持）。
+	Stack string `json:"stack,omitempty"`
+	// AdapterName 是虚拟网卡名称，留空使用默认名 "SniShaper"。
+	AdapterName string `json:"adapter_name,omitempty"`
+	// RouteExcludeAddress 是排除出 TUN 的网段列表（CIDR，逗号分隔）。
+	// 命中的流量走系统默认路由，不进隧道。
+	RouteExcludeAddress string `json:"route_exclude_address,omitempty"`
 }
 
 type TUNStatus struct {
@@ -218,11 +233,18 @@ type ProxyServer struct {
 
 	// migrationCache holds persistent session tickets for migration mode,
 	// keyed by host name. Tickets are reused across requests until they fail.
-	migrationCache *migrationSessionCache
+	migrationCache         *migrationSessionCache
 	migrationCacheInitOnce sync.Once
 
 	// tunMode indicates TUN is active, outbound connections should bind physical NIC
 	tunMode bool
+
+	// outboundInterface forces TUN outbound traffic onto a named interface.
+	// Empty means auto-select via the system default route.
+	outboundInterface string
+	// outboundInterfaceExclude is a comma-separated list of interface names or
+	// "name*" prefix globs that must never be used for TUN outbound traffic.
+	outboundInterfaceExclude string
 }
 
 type dohProxyAdapter struct {
@@ -266,13 +288,24 @@ func (a *dohProxyAdapter) UpdateECHProfileConfig(profileID string, configBytes [
 	a.p.UpdateECHProfileConfig(profileID, configBytes)
 }
 
-// GetPhysicalBindAddr 返回与目标 IP 族匹配的物理网卡 IP（TUN 模式下绑物理网卡用）
-func (a *dohProxyAdapter) GetPhysicalBindAddr(targetAddr string) net.IP {
-	addr := a.p.getPhysicalLocalAddr(targetAddr)
-	if addr == nil {
-		return nil
+// GetPhysicalBinding 返回与目标 IP 族匹配的网卡绑定信息（网卡 + 索引 + 源地址），
+// 供 QUIC 等需要绑定网卡索引绕过 TUN 的场景使用。
+func (a *dohProxyAdapter) GetPhysicalBinding(targetAddr string) (netiface.Binding, bool) {
+	binding, err := netiface.SelectForTarget(targetAddr, a.p.outboundInterfaceConfig(), a.p.netifaceLogf)
+	if err != nil {
+		return netiface.Binding{}, false
 	}
-	return addr.IP
+	return binding, true
+}
+
+// SetOutboundInterface 设置 TUN 出站网卡。iface 为空表示自动按默认路由选择；
+// exclude 为逗号分隔的网卡名或 "name*" 前缀通配列表。
+func (p *ProxyServer) SetOutboundInterface(iface string, exclude string) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.outboundInterface = strings.TrimSpace(iface)
+	p.outboundInterfaceExclude = strings.TrimSpace(exclude)
+	netiface.InvalidateCache()
 }
 
 // SetTUNMode 设置 TUN 模式标记，启用后出站连接绑定物理网卡
@@ -297,10 +330,10 @@ func NewProxyServer(addr string) *ProxyServer {
 	}
 
 	p := &ProxyServer{
-		listenAddr:  addr,
-		certCache:   make(map[string]*tls.Certificate),
-		mode:        "direct",
-		transport:   transport,
+		listenAddr: addr,
+		certCache:  make(map[string]*tls.Certificate),
+		mode:       "direct",
+		transport:  transport,
 	}
 
 	p.dohResolver = dohresolver.NewFailoverResolver(&dohProxyAdapter{p: p}, func() []dohresolver.DNSNode {
@@ -319,7 +352,7 @@ func NewProxyServer(addr string) *ProxyServer {
 				ECHAutoUpdate: node.ECHAutoUpdate,
 				QUIC:          node.QUIC,
 				Enabled:       node.Enabled,
-				CertVerify: toDohCertVerify(node.CertVerify),
+				CertVerify:    toDohCertVerify(node.CertVerify),
 			})
 		}
 		return nodes
@@ -355,6 +388,11 @@ func (p *ProxyServer) tracef(format string, args ...interface{}) {
 	} else {
 		log.Printf(format, args...)
 	}
+}
+
+// netifaceLogf adapts tracef to the plain func(string) logger netiface expects.
+func (p *ProxyServer) netifaceLogf(line string) {
+	p.tracef("%s", line)
 }
 
 func (p *ProxyServer) UpdateCloudflareConfig(cfg CloudflareConfig) {
@@ -1082,6 +1120,22 @@ func normalizeTUNConfig(cfg TUNConfig) TUNConfig {
 		cfg.MTU = 9000
 	}
 	cfg.StrictRoute = false
+	cfg.OutboundInterface = strings.TrimSpace(cfg.OutboundInterface)
+	cfg.OutboundInterfaceExclude = strings.TrimSpace(cfg.OutboundInterfaceExclude)
+	cfg.AdapterName = strings.TrimSpace(cfg.AdapterName)
+	cfg.RouteExcludeAddress = strings.TrimSpace(cfg.RouteExcludeAddress)
+
+	switch strings.ToLower(strings.TrimSpace(cfg.Stack)) {
+	case "system":
+		cfg.Stack = "system"
+	case "mixed":
+		cfg.Stack = "mixed"
+	case "", "gvisor":
+		// gvisor 是默认栈，也是唯一在所有平台都可用、不依赖 wintun 转发的栈。
+		cfg.Stack = "gvisor"
+	default:
+		cfg.Stack = "gvisor"
+	}
 	return cfg
 }
 

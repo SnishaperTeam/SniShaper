@@ -354,7 +354,8 @@
       "security": "证书 & 安全",
       "appearance": "语言与主题",
       "startup": "启动与后台",
-      "logs": "日志管理"
+      "logs": "日志管理",
+      "tun": "TUN 虚拟网卡"
     },
     "language": {
       "title": "界面语言",
@@ -464,6 +465,35 @@
       "measure": "测速",
       "measuring": "测速中...",
       "unreachable": "不可达"
+    },
+    "tun": {
+      "outbound_iface": {
+        "title": "出站网卡",
+        "desc": "TUN 出站流量走哪块网卡。默认智能选择：按系统默认路由挑承载流量的物理网卡，避开 VMware / Hyper-V / 容器虚拟网卡。",
+        "auto": "智能选择（自动）",
+        "physical": "物理网卡",
+        "virtual": "虚拟网卡",
+        "default_route": "默认路由",
+        "in_use": "当前生效"
+      },
+      "outbound_exclude": {
+        "label": "排除网卡（可选）"
+      },
+      "stack": {
+        "title": "TUN 网络栈",
+        "desc": "gvisor 兼容性最好；mixed 走系统转发 TCP；system 为内核态，开销最低。",
+        "gvisor": "gvisor（用户态）",
+        "mixed": "mixed（混合）",
+        "system": "system（内核态）"
+      },
+      "adapter_name": {
+        "title": "虚拟网卡名称",
+        "desc": "TUN 虚拟网卡的名称，留空使用默认名 SniShaper。"
+      },
+      "route_exclude": {
+        "title": "排除网段",
+        "desc": "这些网段不经过隧道，直接走系统默认路由，逗号分隔的 CIDR。"
+      }
     }
   },
   "evolution": {

@@ -17,6 +17,7 @@ import (
 
 	"snishaper/common"
 	"snishaper/pkg/certmanager"
+	"snishaper/pkg/netiface"
 	"snishaper/pkg/singtun"
 	"snishaper/proxy"
 )
@@ -332,8 +333,16 @@ func (r *coreRuntime) startTUN() (err error) {
 		return err
 	}
 	r.appendLog("[core] native sing-tun started, status=" + fmt.Sprintf("%v", r.nativeTUN.Status().Running))
-	// 通知 ProxyServer 启用 TUN 模式，出站连接绑物理网卡
+	// 通知 ProxyServer 启用 TUN 模式，出站连接绑物理网卡。
+	// 出站网卡在 TUN 启动之后才配置：此时网卡列表已包含 SniShaper 自己的虚拟
+	// 网卡，必须让 netiface 重新扫描，否则可能把 TUN 自己选成出站网卡。
+	tunCfg := r.ruleManager.GetTUNConfig()
 	r.proxyServer.SetTUNMode(true)
+	r.proxyServer.SetOutboundInterface(tunCfg.OutboundInterface, tunCfg.OutboundInterfaceExclude)
+	netiface.InvalidateCache()
+	if binding, err := netiface.Select(netiface.FamilyIPv4, netiface.Config{}, r.appendLog); err == nil {
+		r.appendLog("[core] TUN outbound interface: " + binding.Describe())
+	}
 	// TUN 数据面自检：通过 TUN 发送 DNS 查询，验证 gvisor 栈正常工作。
 	// 解决 gvisor 数据面静默失效时（网卡存在但流量不通）无任何错误日志的问题。
 	if err := verifyTUNDataPlane("198.18.0.1", 5*time.Second); err != nil {
@@ -401,6 +410,8 @@ func (r *coreRuntime) stopTUN() error {
 	if err := r.nativeTUN.Stop(); err != nil {
 		return err
 	}
+	// TUN 网卡已消失，重新扫描网卡列表，避免下次出站仍引用已释放的接口索引。
+	netiface.InvalidateCache()
 	r.appendLog("[core] native sing-tun stopped")
 	return nil
 }

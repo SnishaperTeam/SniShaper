@@ -18,6 +18,8 @@ import (
 	"github.com/quic-go/quic-go"
 	"github.com/quic-go/quic-go/http3"
 	utls "github.com/refraction-networking/utls"
+
+	"snishaper/pkg/netiface"
 )
 
 type CertVerifyConfig struct {
@@ -55,9 +57,9 @@ type ProxyServer interface {
 	GetUConn(conn net.Conn, sni, verifyName string, rule Rule, allowUnknownAuthority bool, alpn string, ech []byte) *utls.UConn
 	ResolveRuleECHConfig(host string, rule Rule) []byte
 	UpdateECHProfileConfig(profileID string, configBytes []byte)
-	// GetPhysicalBindAddr 返回与目标地址 IP 族匹配的物理网卡 IP
-	// TUN 模式下用于绑定物理网卡绕过 TUN，避免 QUIC/UDP 流量被 TUN 捕获循环
-	GetPhysicalBindAddr(targetAddr string) net.IP
+	// GetPhysicalBinding 返回与目标地址 IP 族匹配的出站网卡绑定信息。
+	// TUN 模式下用于把 QUIC/UDP socket 绑到物理网卡，绕过 TUN 避免流量回环。
+	GetPhysicalBinding(targetAddr string) (netiface.Binding, bool)
 }
 
 type dnsCacheEntry struct {
@@ -128,20 +130,32 @@ func (r *FailoverResolver) getNodeClient(ctx context.Context, node DNSNode) (*ht
 			TLSClientConfig: tlsConfig,
 			Dial: func(ctx context.Context, _ string, tlsCfg *tls.Config, cfg *quic.Config) (*quic.Conn, error) {
 				for _, addr := range dialAddrs {
-					// TUN 模式下绑物理网卡，避免 QUIC/UDP 流量被 TUN 捕获循环
-					udpAddr, err := net.ResolveUDPAddr("udp", addr)
+					// TUN 模式下把 QUIC socket 绑到物理网卡，避免 UDP 流量被 TUN 捕获回环。
+					// 注意：QUIC 的 ListenPacket 必须绑本地通配地址（0.0.0.0:0 / [::]:0），
+					// 绑具体目标地址会收不到回包；网卡归属由 Control 里的
+					// IP_UNICAST_IF / SO_BINDTODEVICE 指定。
+					remote, err := net.ResolveUDPAddr("udp", addr)
 					if err != nil {
 						continue
 					}
-					var laddr *net.UDPAddr
-					if bindIP := r.proxy.GetPhysicalBindAddr(addr); bindIP != nil {
-						laddr = &net.UDPAddr{IP: bindIP}
+					listenAddr := "[::]:0"
+					if remote.IP.To4() != nil {
+						listenAddr = "0.0.0.0:0"
 					}
-					pc, err := net.ListenUDP("udp", laddr)
+					listener := &net.ListenConfig{}
+					if binding, ok := r.proxy.GetPhysicalBinding(addr); ok {
+						listener.Control = binding.Control(netiface.FamilyOf(addr))
+					}
+					pc, err := listener.ListenPacket(ctx, "udp", listenAddr)
 					if err != nil {
 						continue
 					}
-					conn, err := quic.Dial(ctx, pc, udpAddr, tlsCfg, cfg)
+					udpConn, ok := pc.(*net.UDPConn)
+					if !ok {
+						pc.Close()
+						continue
+					}
+					conn, err := quic.Dial(ctx, udpConn, remote, tlsCfg, cfg)
 					if err == nil {
 						return conn, nil
 					}

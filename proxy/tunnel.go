@@ -10,6 +10,8 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"snishaper/pkg/netiface"
 )
 
 func (p *ProxyServer) handleRequest(w http.ResponseWriter, req *http.Request) {
@@ -168,8 +170,11 @@ func (p *ProxyServer) directConnect(w http.ResponseWriter, req *http.Request) {
 	tunMode := p.tunMode
 	p.mu.RUnlock()
 	if tunMode {
-		if localAddr := p.getPhysicalLocalAddr(targetAddr); localAddr != nil {
-			dialer.LocalAddr = localAddr
+		if binding, ok := p.getPhysicalBinding(targetAddr); ok {
+			if localAddr := binding.LocalTCPAddr(); localAddr != nil {
+				dialer.LocalAddr = localAddr
+			}
+			dialer.Control = binding.Control(netiface.FamilyOf(targetAddr))
 		}
 	}
 

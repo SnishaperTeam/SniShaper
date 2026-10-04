@@ -10,6 +10,8 @@ import (
 	"time"
 
 	utls "github.com/refraction-networking/utls"
+
+	"snishaper/pkg/netiface"
 )
 
 func mapNAT64Addr(ipStr string, prefix string) (string, bool) {
@@ -339,8 +341,13 @@ func (p *ProxyServer) dialWithRule(ctx context.Context, network, addr string, ru
 				}
 			}
 		}
-		if localAddr := p.getPhysicalLocalAddr(addr); localAddr != nil {
-			dialer.LocalAddr = localAddr
+		// 网卡选择与绑定：既设置本地源地址，也通过 Control 把 socket 绑到
+		// 网卡索引上。只设源地址不绑网卡时，内核仍可能按路由表把包送回 TUN。
+		if binding, ok := p.getPhysicalBinding(addr); ok {
+			if localAddr := binding.LocalTCPAddr(); localAddr != nil {
+				dialer.LocalAddr = localAddr
+			}
+			dialer.Control = binding.Control(netiface.FamilyOf(addr))
 		}
 	}
 
@@ -355,87 +362,48 @@ const dohResolveCtxKey dohResolveCtxKeyType = 0
 // getPhysicalLocalAddr 根据目标地址的 IP 族选择对应的物理网卡本地地址
 // IPv4 目标 → 返回 IPv4 地址，IPv6 目标 → 返回 IPv6 地址
 // 避免绑定 IPv4 去连 IPv6（会导致 dial 失败 → 502）
+//
+// 网卡由 pkg/netiface 按系统默认路由选出，而不是按 net.Interfaces() 的枚举
+// 顺序取第一个可用地址：枚举顺序按接口索引排列，VMware / Hyper-V / WSL 这类
+// 虚拟网卡常常排在真正承载流量的网卡之前。
 func (p *ProxyServer) getPhysicalLocalAddr(targetAddr string) *net.TCPAddr {
-	host, _, err := net.SplitHostPort(targetAddr)
-	if err != nil {
-		host = targetAddr
-	}
-	targetIP := net.ParseIP(host)
-	wantIPv6 := targetIP != nil && targetIP.To4() == nil
-
-	interfaces, err := net.Interfaces()
+	binding, err := netiface.SelectForTarget(targetAddr, p.outboundInterfaceConfig(), p.netifaceLogf)
 	if err != nil {
 		return nil
 	}
-	for _, iface := range interfaces {
-		if iface.Flags&net.FlagLoopback != 0 || iface.Flags&net.FlagUp == 0 {
-			continue
-		}
-		name := iface.Name
-		if strings.Contains(name, "SniShaper") || strings.Contains(name, "tun") || strings.Contains(name, "TAP") {
-			continue
-		}
-		addrs, err := iface.Addrs()
-		if err != nil || len(addrs) == 0 {
-			continue
-		}
-		for _, addr := range addrs {
-			ipNet, ok := addr.(*net.IPNet)
-			if !ok {
-				continue
-			}
-			if wantIPv6 {
-				// IPv6 目标：跳过 IPv4 地址
-				if ipNet.IP.To4() != nil {
-					continue
-				}
-				// 跳过链路本地地址：绑定 fe80::（无 zone）在 macOS 上会报
-				// "bind: can't assign requested address"（曾导致 TUN 模式下
-				// 所有 IPv6 目标 502）；且链路本地源地址无法路由到全局目标。
-				// 应选用接口上的全局 IPv6 地址（SLAAC/2409:: 等）。
-				if ipNet.IP.IsLinkLocalUnicast() || ipNet.IP.IsLoopback() {
-					continue
-				}
-				return &net.TCPAddr{IP: ipNet.IP}
-			}
-			// IPv4 目标：跳过 IPv6 地址
-			if ipNet.IP.To4() == nil {
-				continue
-			}
-			return &net.TCPAddr{IP: ipNet.IP}
-		}
-	}
-	return nil
+	return binding.LocalTCPAddr()
 }
 
-// getPhysicalInterfaceAddr 获取物理网卡的 IPv4 地址（排除 TUN/Loopback）
-// 已废弃，保留向后兼容，新代码应使用 getPhysicalLocalAddr
-func (p *ProxyServer) getPhysicalInterfaceAddr() *net.TCPAddr {
-	interfaces, err := net.Interfaces()
+// getPhysicalBinding 返回目标地址族对应的网卡绑定信息（网卡 + 索引），
+// 供需要同时设置 socket 选项的场景使用。
+func (p *ProxyServer) getPhysicalBinding(targetAddr string) (netiface.Binding, bool) {
+	binding, err := netiface.SelectForTarget(targetAddr, p.outboundInterfaceConfig(), p.netifaceLogf)
 	if err != nil {
-		return nil
+		return netiface.Binding{}, false
 	}
-	for _, iface := range interfaces {
-		if iface.Flags&net.FlagLoopback != 0 || iface.Flags&net.FlagUp == 0 {
-			continue
-		}
-		name := iface.Name
-		if strings.Contains(name, "SniShaper") || strings.Contains(name, "tun") || strings.Contains(name, "TAP") {
-			continue
-		}
-		addrs, err := iface.Addrs()
-		if err != nil || len(addrs) == 0 {
-			continue
-		}
-		for _, addr := range addrs {
-			ipNet, ok := addr.(*net.IPNet)
-			if !ok || ipNet.IP.To4() == nil {
-				continue
+	return binding, true
+}
+
+// outboundInterfaceConfig 返回出站网卡选择配置。
+func (p *ProxyServer) outboundInterfaceConfig() netiface.Config {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+	var excluded []string
+	if p.outboundInterfaceExclude != "" {
+		for _, item := range strings.Split(p.outboundInterfaceExclude, ",") {
+			if trimmed := strings.TrimSpace(item); trimmed != "" {
+				excluded = append(excluded, trimmed)
 			}
-			return &net.TCPAddr{IP: ipNet.IP}
 		}
 	}
-	return nil
+	var preferred []string
+	if p.outboundInterface != "" {
+		preferred = append(preferred, p.outboundInterface)
+	}
+	return netiface.Config{
+		ExcludeNames: excluded,
+		PreferNames:  preferred,
+	}
 }
 
 func (p *ProxyServer) DialWithRule(ctx context.Context, network, addr string, rule Rule) (net.Conn, error) {
