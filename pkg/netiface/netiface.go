@@ -681,22 +681,25 @@ func SelectForTarget(addr string, cfg Config, logf func(string)) (Binding, error
 
 // Descriptor summarises one adapter for settings UIs.
 type Descriptor struct {
-	Name         string
-	Index        int
-	Up           bool
-	Physical     bool
-	DefaultRoute bool
-	IPv4         []string
-	IPv6         []string
+	Name         string   `json:"name"`
+	Index        int      `json:"index"`
+	Up           bool     `json:"up"`
+	Physical     bool     `json:"physical"`
+	DefaultRoute bool     `json:"default_route"`
+	IPv4         []string `json:"ipv4"`
+	IPv6         []string `json:"ipv6"`
 	// Usable reports whether the adapter can carry traffic at all (up, not
 	// loopback, not our own tunnel).
-	Usable bool
+	Usable bool `json:"usable"`
 	// Selected reports whether the user pinned this adapter in config.
-	Selected bool
+	Selected bool `json:"selected"`
+	// CurrentOutbound reports that automatic selection would pick this adapter,
+	// which is what the settings page labels as in use.
+	CurrentOutbound bool `json:"current_outbound"`
 	// Excluded reports whether the current config rules the adapter out, with
 	// ExcludeReason naming the rule.
-	Excluded      bool
-	ExcludeReason string
+	Excluded      bool   `json:"excluded"`
+	ExcludeReason string `json:"exclude_reason,omitempty"`
 }
 
 // DescribeAll returns every adapter using the default (unfiltered) config.
@@ -715,6 +718,16 @@ func List(cfg Config) []Descriptor {
 	for _, routes := range current.routes {
 		for index := range routes {
 			routeOwner[index] = true
+		}
+	}
+
+	// The adapter automatic selection would actually use, so the settings page
+	// can label it "in use" without repeating the ranking here.
+	autoIndex := -1
+	for _, family := range []int{FamilyIPv4, FamilyIPv6} {
+		if binding, ok := choose(collect(family, cfg, current.views, current.routes[family]), current.probes[family]); ok {
+			autoIndex = binding.InterfaceIndex
+			break
 		}
 	}
 
@@ -740,6 +753,7 @@ func List(cfg Config) []Descriptor {
 			Usable:       view.Up && !view.Loopback && !IsOwnTunnel(view.Name),
 			Selected:     isForced(cfg.ForceInterface, view.Name, view.Index),
 		}
+		item.CurrentOutbound = view.Index == autoIndex
 		if reason, blocked := excluded[view.Index]; blocked {
 			item.Excluded = true
 			item.ExcludeReason = reason
