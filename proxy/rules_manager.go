@@ -29,8 +29,6 @@ type RuleManager struct {
 	autoEnableProxyOnAutoStart    bool
 	autoEnableSysProxyOnAutoStart bool
 	autoUpdateRules               bool
-	socks5Enabled                 bool
-	socks5Port                    string
 	listenPort                    string
 	echProfiles                   []ECHProfile
 	nat64Profiles                 []NAT64Profile
@@ -308,9 +306,6 @@ func (rm *RuleManager) loadSettingsConfig() error {
 	if config.ListenPort != "" {
 		rm.listenPort = config.ListenPort
 	}
-	if config.Socks5Port != "" {
-		rm.socks5Port = config.Socks5Port
-	}
 	rm.autoRoutingConfig = config.AutoRouting
 	if config.Language != "" {
 		rm.language = config.Language
@@ -339,9 +334,6 @@ func (rm *RuleManager) loadSettingsConfig() error {
 	}
 	if config.AutoUpdateRules != nil {
 		rm.autoUpdateRules = *config.AutoUpdateRules
-	}
-	if config.Socks5Enabled != nil {
-		rm.socks5Enabled = *config.Socks5Enabled
 	}
 	if config.MigrationEnabled != nil {
 		rm.migrationEnabled = *config.MigrationEnabled
@@ -504,30 +496,6 @@ func (rm *RuleManager) GetListenPort() string {
 func (rm *RuleManager) SetListenPort(port string) {
 	rm.mu.Lock()
 	rm.listenPort = port
-	rm.mu.Unlock()
-}
-
-func (rm *RuleManager) GetSocks5Enabled() bool {
-	rm.mu.RLock()
-	defer rm.mu.RUnlock()
-	return rm.socks5Enabled
-}
-
-func (rm *RuleManager) SetSocks5Enabled(enabled bool) {
-	rm.mu.Lock()
-	rm.socks5Enabled = enabled
-	rm.mu.Unlock()
-}
-
-func (rm *RuleManager) GetSocks5Port() string {
-	rm.mu.RLock()
-	defer rm.mu.RUnlock()
-	return rm.socks5Port
-}
-
-func (rm *RuleManager) SetSocks5Port(port string) {
-	rm.mu.Lock()
-	rm.socks5Port = port
 	rm.mu.Unlock()
 }
 
@@ -862,10 +830,6 @@ func (rm *RuleManager) saveSettingsConfig() error {
 	if listenPort == "" {
 		listenPort = "8080"
 	}
-	socks5Port := rm.socks5Port
-	if socks5Port == "" {
-		socks5Port = "8081"
-	}
 	closeToTray := rm.closeToTray
 	hibernateOnClose := rm.hibernateOnClose
 	autoStart := rm.autoStart
@@ -873,13 +837,12 @@ func (rm *RuleManager) saveSettingsConfig() error {
 	autoEnableProxyOnAutoStart := rm.autoEnableProxyOnAutoStart
 	autoEnableSysProxyOnAutoStart := rm.autoEnableSysProxyOnAutoStart
 	autoUpdateRules := rm.autoUpdateRules
-	socks5Enabled := rm.socks5Enabled
 	migrationEnabled := rm.migrationEnabled
 	cloudflareConfig := rm.cloudflareConfig
 	tunConfig := normalizeTUNConfig(rm.tunConfig)
+
 	settings := SettingsConfig{
-		ListenPort:                 listenPort,
-		Socks5Port:                 socks5Port,
+		ListenPort: listenPort,
 
 		CloseToTray:                &closeToTray,
 		HibernateOnClose:           &hibernateOnClose,
@@ -893,7 +856,6 @@ func (rm *RuleManager) saveSettingsConfig() error {
 		TUN:                        tunConfig,
 		Language:                   rm.language,
 		Theme:                      rm.theme,
-		Socks5Enabled:              &socks5Enabled,
 		MigrationEnabled:           &migrationEnabled,
 		MigrationServer:            rm.migrationServer,
 		UpdateChannel:              rm.updateChannel,
@@ -905,11 +867,9 @@ func (rm *RuleManager) saveSettingsConfig() error {
 	if err != nil {
 		return err
 	}
-
 	if err := os.MkdirAll(filepath.Dir(rm.settingsPath), 0755); err != nil {
 		return err
 	}
-
 	if err := os.WriteFile(rm.settingsPath, data, 0644); err != nil {
 		return err
 	}

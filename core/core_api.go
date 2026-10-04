@@ -200,28 +200,6 @@ func (s *coreService) GetProxyMode(_ EmptyArgs, reply *StringReply) error {
 	return nil
 }
 
-func (s *coreService) SetSocks5Enabled(args BoolReply, _ *EmptyArgs) error {
-	s.runtime.proxyServer.SetSocks5Enabled(args.Value)
-	s.runtime.ruleManager.SetSocks5Enabled(args.Value)
-	return s.runtime.ruleManager.SaveConfig()
-}
-
-func (s *coreService) GetSocks5Enabled(_ EmptyArgs, reply *BoolReply) error {
-	reply.Value = s.runtime.proxyServer.IsSocks5Enabled()
-	return nil
-}
-
-func (s *coreService) GetSocks5Port(_ EmptyArgs, reply *StringReply) error {
-	reply.Value = s.runtime.ruleManager.GetSocks5Port()
-	return nil
-}
-
-func (s *coreService) SetSocks5Port(args StringReply, _ *EmptyArgs) error {
-	s.runtime.ruleManager.SetSocks5Port(args.Value)
-	s.runtime.proxyServer.SetSocks5Addr("127.0.0.1:" + args.Value)
-	return s.runtime.ruleManager.SaveConfig()
-}
-
 // RunCoreMain starts the core RPC server. Called from main when --core flag is present.
 func RunCoreMain() error {
 	// The core hosts the proxy, and its stderr goes nowhere when the desktop app
