@@ -10,7 +10,7 @@ import {
   GetAutoEnableProxyOnAutoStart, SetAutoEnableProxyOnAutoStart,
   GetAutoEnableSysProxyOnAutoStart, SetAutoEnableSysProxyOnAutoStart,
   GetAutoUpdateRules, SetAutoUpdateRules,
-  GetSocks5Port, SetSocks5Port, GetTUNConfig, UpdateTUNConfig, GetTUNStatus,
+  GetTUNConfig, UpdateTUNConfig, GetTUNStatus,
   OpenCertDir, RegenerateCert, GetCAInstallStatus, GetInstalledCerts,
   UninstallCert, ExportConfig, ImportConfigWithSummary,
   GetCloudflareConfig, UpdateCloudflareConfig, GetCloudflareIPStats,
@@ -108,7 +108,6 @@ const Settings: React.FC<SettingsProps> = ({ cache, onCacheUpdate, currentThemeI
   const { t, language, setLanguage: setI18nLanguage } = useTranslation();
   const { mode, setMode } = useColorScheme();
   const [port, setPort] = useState(String(cache.port ?? ''));
-  const [socks5Port, setSocks5Port] = useState(String(cache.socks5Port ?? '8081'));
   const [closeToTray, setCloseToTray] = useState(cache.closeToTray);
   const [autoStart, setAutoStart] = useState(cache.autoStart);
   const [showMainOnAutoStart, setShowMainOnAutoStart] = useState(cache.showMainOnAutoStart);
@@ -238,23 +237,7 @@ const Settings: React.FC<SettingsProps> = ({ cache, onCacheUpdate, currentThemeI
     }
     await SetListenPort(parsed);
     onCacheUpdate({ port: parsed });
-    toast.success(t('settings.notifications.updated'), `${t('settings.http_port')} ${parsed}`);
-  };
-
-  const handleSaveSocks5Port = async (val: string) => {
-    const normalized = val.trim();
-    const parsed = parseInt(normalized, 10);
-    if (!normalized || Number.isNaN(parsed) || parsed < 1 || parsed > 65535) {
-      setSocks5Port(String(cache.socks5Port ?? '8081'));
-      toast.error(t('common.failed'), t('settings.notifications.port_invalid'));
-      return;
-    }
-    setSocks5Port(normalized);
-    try {
-      await SetSocks5Port(normalized);
-      onCacheUpdate({ socks5Port: normalized });
-      toast.success(t('settings.notifications.updated'));
-    } catch (err: any) { toast.error(t('common.failed'), String(err)); }
+    toast.success(t('settings.notifications.updated'), `${t('settings.port_label')} ${parsed}`);
   };
 
   const handleToggleTray = async (val: boolean) => {
@@ -423,36 +406,19 @@ const Settings: React.FC<SettingsProps> = ({ cache, onCacheUpdate, currentThemeI
             <SectionHeader icon={<Anchor size={18} />} label={t('settings.tabs.general')} />
 
             <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
-              <SettingRowInline icon={<Monitor size={18} />} title={t('settings.port_title')}>
-                <Stack direction="row" spacing={1.5} sx={{ alignItems: 'flex-start' }}>
-                  <Stack direction="row" spacing={1} sx={{ alignItems: 'flex-start' }}>
-                    <TextField
-                      label={t('settings.http_port')}
-                      type="text"
-                      size="small"
-                      value={port}
-                      onChange={(e) => setPort(e.target.value.replace(/\D/g, '').slice(0, 5))}
-                      sx={{ width: 88, '& input': { fontSize: '0.875rem', textAlign: 'center' } }}
-                    />
-                    <Button size="small" variant="contained" color="primary" onClick={handleSavePort}>
-                      {t('common.apply')}
-                    </Button>
-                  </Stack>
-                  <Stack direction="row" spacing={1} sx={{ alignItems: 'flex-start' }}>
-                    <TextField
-                      label={t('settings.socks_port')}
-                      type="text"
-                      size="small"
-                      value={socks5Port}
-                      onChange={(e) => setSocks5Port(e.target.value.replace(/\D/g, '').slice(0, 5))}
-                      onBlur={(e) => handleSaveSocks5Port(e.target.value)}
-                      onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }}
-                      sx={{ width: 88, '& input': { fontSize: '0.875rem', textAlign: 'center' } }}
-                    />
-                    <Button size="small" variant="contained" color="primary" onClick={() => handleSaveSocks5Port(socks5Port)}>
-                      {t('common.apply')}
-                    </Button>
-                  </Stack>
+              <SettingRowInline icon={<Monitor size={18} />} title={t('settings.port_title')} desc={t('settings.port_desc')}>
+                <Stack direction="row" spacing={1.5} sx={{ alignItems: 'center' }}>
+                  <TextField
+                    label={t('settings.port_label')}
+                    type="text"
+                    size="small"
+                    value={port}
+                    onChange={(e) => setPort(e.target.value.replace(/\D/g, '').slice(0, 5))}
+                    sx={{ width: 120, '& input': { fontSize: '0.875rem', textAlign: 'center' } }}
+                  />
+                  <Button size="small" variant="contained" color="primary" onClick={handleSavePort}>
+                    {t('common.apply')}
+                  </Button>
                 </Stack>
               </SettingRowInline>
 
@@ -515,7 +481,7 @@ const Settings: React.FC<SettingsProps> = ({ cache, onCacheUpdate, currentThemeI
                       bgcolor: mode === 'light' ? 'primary.main' : 'transparent',
                       '&:hover': { color: 'text.primary' },
                     }}
-                    onClick={() => mode === 'dark' && setMode('light')}
+                    onClick={() => setMode('light')}
                     role="radio"
                     aria-checked={mode === 'light'}
                   >
@@ -540,12 +506,37 @@ const Settings: React.FC<SettingsProps> = ({ cache, onCacheUpdate, currentThemeI
                       bgcolor: mode === 'dark' ? 'primary.main' : 'transparent',
                       '&:hover': { color: 'text.primary' },
                     }}
-                    onClick={() => mode === 'light' && setMode('dark')}
+                    onClick={() => setMode('dark')}
                     role="radio"
                     aria-checked={mode === 'dark'}
                   >
                     <Moon size={14} />
                     {t('settings.appearance.dark')}
+                  </Box>
+                  <Box
+                    component="button"
+                    type="button"
+                    sx={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 0.25,
+                      px: 1.5,
+                      py: 0.75,
+                      fontSize: '0.75rem',
+                      fontWeight: 'bold',
+                      borderRadius: 1,
+                      border: 'none',
+                      cursor: 'pointer',
+                      color: mode === 'system' ? '#fff' : 'text.secondary',
+                      bgcolor: mode === 'system' ? 'primary.main' : 'transparent',
+                      '&:hover': { color: 'text.primary' },
+                    }}
+                    onClick={() => setMode('system')}
+                    role="radio"
+                    aria-checked={mode === 'system'}
+                  >
+                    <Monitor size={14} />
+                    {t('settings.appearance.system')}
                   </Box>
                 </Stack>
               </SettingRowInline>
