@@ -170,6 +170,10 @@ func (p *ProxyServer) directConnect(w http.ResponseWriter, req *http.Request) {
 		if localAddr := p.getPhysicalLocalAddr(targetAddr); localAddr != nil {
 			dialer.LocalAddr = localAddr
 		}
+		// 绑源地址不够，必须同时绑接口索引，否则内核仍可能把包送回 TUN。
+		if control := p.getPhysicalDialControl(targetAddr); control != nil {
+			dialer.Control = control
+		}
 	}
 
 	conn, err := dialer.Dial("tcp", targetAddr)

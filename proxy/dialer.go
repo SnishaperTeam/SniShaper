@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net"
 	"strings"
+	"syscall"
 	"time"
 
 	"snishaper/common"
@@ -414,6 +415,11 @@ func (p *ProxyServer) dialWithRule(ctx context.Context, network, addr string, ru
 		if localAddr := p.getPhysicalLocalAddr(addr); localAddr != nil {
 			dialer.LocalAddr = localAddr
 		}
+		// 只设 LocalAddr 不足以逃出 TUN：内核仍可能按路由表把包送回隧道。
+		// 必须同时用 Control 绑接口索引，这才是真正绕开隧道的那一步。
+		if control := p.getPhysicalDialControl(addr); control != nil {
+			dialer.Control = control
+		}
 	}
 
 	return dialer.DialContext(ctx, network, addr)
@@ -424,27 +430,63 @@ type dohResolveCtxKeyType int
 
 const dohResolveCtxKey dohResolveCtxKeyType = 0
 
-// getPhysicalLocalAddr 根据目标地址的 IP 族选择对应的物理网卡本地地址
-// IPv4 目标 → 返回 IPv4 地址，IPv6 目标 → 返回 IPv6 地址
-// 避免绑定 IPv4 去连 IPv6（会导致 dial 失败 → 502）
-func (p *ProxyServer) getPhysicalLocalAddr(targetAddr string) *net.TCPAddr {
+// outboundFamily 根据目标地址判定地址族。IPv6 字面量与 IPv4-mapped 形式都要
+// 正确识别，否则会用 IPv4 的网卡去连 IPv6 目标，直接 dial 失败。
+func outboundFamily(targetAddr string) int {
 	host, _, err := net.SplitHostPort(targetAddr)
 	if err != nil {
 		host = targetAddr
 	}
-	family := netiface.FamilyIPv4
+	host = strings.Trim(strings.TrimSpace(host), "[]")
 	if parsed := net.ParseIP(host); parsed != nil && parsed.To4() == nil {
-		family = netiface.FamilyIPv6
+		return netiface.FamilyIPv6
 	}
+	return netiface.FamilyIPv4
+}
 
-	binding, err := netiface.Select(family, p.outboundInterfaceConfig(), func(line string) {
+// physicalBinding 选出承担出站流量的物理网卡。
+func (p *ProxyServer) physicalBinding(targetAddr string) (netiface.Binding, bool) {
+	binding, err := netiface.Select(outboundFamily(targetAddr), p.outboundInterfaceConfig(), func(line string) {
 		p.tracef("%s", line)
 	})
 	if err != nil {
-		p.tracef("[netiface] no physical outbound address for %s: %v", targetAddr, err)
+		p.tracef("[netiface] no physical outbound binding for %s: %v", targetAddr, err)
+		return netiface.Binding{}, false
+	}
+	return binding, true
+}
+
+// getPhysicalLocalAddr 根据目标地址的 IP 族选择对应的物理网卡本地地址
+// IPv4 目标 → 返回 IPv4 地址，IPv6 目标 → 返回 IPv6 地址
+// 避免绑定 IPv4 去连 IPv6（会导致 dial 失败 → 502）
+func (p *ProxyServer) getPhysicalLocalAddr(targetAddr string) *net.TCPAddr {
+	binding, ok := p.physicalBinding(targetAddr)
+	if !ok {
 		return nil
 	}
 	return binding.LocalTCPAddr()
+}
+
+// getPhysicalDialControl 返回把出站 socket 钉死在物理网卡上的 Control hook。
+//
+// 这与 getPhysicalLocalAddr 是两件不同的事，缺一不可：
+//   - LocalAddr 只决定源地址从哪张网卡取；
+//   - Control 才能决定包从哪个接口发出。
+//
+// TUN 开启后默认路由指向隧道，只设源地址时内核仍可能按路由表把包送回 TUN，
+// 形成回环。Control 里设置的 IP_UNICAST_IF（Windows）/ SO_BINDTOIFINDEX
+// （Linux）才是真正绕开隧道的那一步。netiface.Binding.Control 已实现并
+// 有单测覆盖，此前代理出站从未调用它。
+func (p *ProxyServer) getPhysicalDialControl(targetAddr string) func(network, address string, c syscall.RawConn) error {
+	binding, ok := p.physicalBinding(targetAddr)
+	if !ok {
+		return nil
+	}
+	control := binding.Control(outboundFamily(targetAddr))
+	if control == nil {
+		p.tracef("[netiface] binding for %s carries no interface index, cannot pin the socket", targetAddr)
+	}
+	return control
 }
 
 func (p *ProxyServer) DialWithRule(ctx context.Context, network, addr string, rule Rule) (net.Conn, error) {

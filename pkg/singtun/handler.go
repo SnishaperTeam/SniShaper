@@ -10,6 +10,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 
 	"snishaper/common"
@@ -37,15 +38,24 @@ type Handler struct {
 	ifaceConfig netiface.Config
 	mu          sync.Mutex
 	live        map[net.Conn]struct{}
+	livePacket  map[N.PacketConn]struct{}
+	closed      bool
+	wg          sync.WaitGroup
 }
 
-func (h *Handler) track(c net.Conn) {
+// track 登记一个 TCP 连接。返回 false 表示 Handler 已关闭，调用方必须
+// 自行关闭该连接 —— 否则连接会落进已被清空的 map，变成无人回收的泄漏。
+func (h *Handler) track(c net.Conn) bool {
 	h.mu.Lock()
+	defer h.mu.Unlock()
+	if h.closed {
+		return false
+	}
 	if h.live == nil {
 		h.live = make(map[net.Conn]struct{})
 	}
 	h.live[c] = struct{}{}
-	h.mu.Unlock()
+	return true
 }
 
 func (h *Handler) untrack(c net.Conn) {
@@ -54,14 +64,41 @@ func (h *Handler) untrack(c net.Conn) {
 	h.mu.Unlock()
 }
 
+func (h *Handler) trackPacketConn(c N.PacketConn) bool {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	if h.closed {
+		return false
+	}
+	if h.livePacket == nil {
+		h.livePacket = make(map[N.PacketConn]struct{})
+	}
+	h.livePacket[c] = struct{}{}
+	return true
+}
+
+func (h *Handler) untrackPacketConn(c N.PacketConn) {
+	h.mu.Lock()
+	delete(h.livePacket, c)
+	h.mu.Unlock()
+}
+
 func (h *Handler) Close() {
 	h.mu.Lock()
+	h.closed = true
 	conns := h.live
+	packets := h.livePacket
 	h.live = nil
+	h.livePacket = nil
 	h.mu.Unlock()
 	for c := range conns {
 		c.Close()
 	}
+	for c := range packets {
+		_ = c.Close()
+	}
+	// 等所有转发 goroutine 真正退出，避免它们持有的 socket 与 buffer 滞留。
+	h.wg.Wait()
 }
 
 // NewHandler 创建新的 Handler
@@ -76,8 +113,18 @@ func NewHandler(proxyAddr string, resolver *dohresolver.FailoverResolver, logf f
 	return h
 }
 
+// interfaceConfig 读取当前出站网卡配置。forwardUDPDirect 与 forwardUDPDirect
+// 之外的转发路径会在数据面并发读取，因此必须走锁，不能直接读字段。
+func (h *Handler) interfaceConfig() netiface.Config {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	return h.ifaceConfig
+}
+
 func (h *Handler) SetInterfaceConfig(cfg netiface.Config) {
+	h.mu.Lock()
 	h.ifaceConfig = cfg
+	h.mu.Unlock()
 }
 
 func (h *Handler) JudgeFlow(network uint8, source netip.AddrPort, destination netip.AddrPort, firstPacket []byte) tun.FlowVerdict {
@@ -186,9 +233,22 @@ func (h *Handler) NewConnectionEx(ctx context.Context, conn net.Conn, source M.S
 	// （代理在 200 响应后可能立即发送 TLS ServerHello 等数据）
 	upstream = &bufferedConn{Conn: upstream, br: br}
 
+	// 先登记再起 goroutine：反过来的话，Close 可能在 track 之前跑完，
+	// 连接就会落进已清空的 map 里，Close 永远看不到它。
+	if !h.track(conn) || !h.track(upstream) {
+		h.untrack(conn)
+		h.untrack(upstream)
+		conn.Close()
+		upstream.Close()
+		if onClose != nil {
+			onClose(nil)
+		}
+		return
+	}
+
+	h.wg.Add(1)
 	go func() {
-		h.track(conn)
-		h.track(upstream)
+		defer h.wg.Done()
 		h.proxyConn(ctx, conn, upstream, onClose)
 		h.untrack(conn)
 		h.untrack(upstream)
@@ -339,9 +399,84 @@ func (h *Handler) resolveHost(destination M.Socksaddr) string {
 	return addr.String()
 }
 
-// NewPacketConnectionEx 处理新的 UDP 连接（非 DNS；DNS 由 NewDNSPacket 接管）
+// shouldHijackDNS 判定一条 TCP/UDP 流是否为 DNS。
+//
+// sing-tun 在 Windows/gVisor 下不做任何 DNS 劫持：Options.DNSServerAddress()
+// 只被 tun_linux.go 消费，EXP_DisableDNSHijack 只被 Linux 的 nftables 规则读取。
+// 因此 NewDNSPacket 在 Windows 上永远不会被调用，53 端口只能在这里接管。
+// mihomo 走的是同一条路（listener/sing_tun/dns.go 里的 ShouldHijackDns）。
+func shouldHijackDNS(destination M.Socksaddr) bool {
+	return destination.Port == 53
+}
+
+// NewPacketConnectionEx 处理新的 UDP 连接；53 端口由本层接管 DNS。
 func (h *Handler) NewPacketConnectionEx(ctx context.Context, conn N.PacketConn, source M.Socksaddr, destination M.Socksaddr, onClose N.CloseHandlerFunc) {
+	if shouldHijackDNS(destination) {
+		h.serveDNSOverPacketConn(ctx, conn, source, destination, onClose)
+		return
+	}
 	h.forwardUDPDirect(ctx, conn, source, destination, onClose)
+}
+
+type packetConnDNSWriter struct {
+	conn N.PacketConn
+}
+
+func (w *packetConnDNSWriter) WritePacket(buffer *buf.Buffer, destination M.Socksaddr) error {
+	defer buffer.Release()
+	return w.conn.WritePacket(buffer, destination)
+}
+
+const (
+	dnsRelayReadTimeout  = 5 * time.Second
+	dnsRelayWriteTimeout = 5 * time.Second
+)
+
+// serveDNSOverPacketConn 读取 UDP DNS 查询并把应答写回客户端。
+// 载荷交给 handleRawDNSPacket 统一处理，因此 fake-ip 分配与真实解析走同一条路径。
+func (h *Handler) serveDNSOverPacketConn(ctx context.Context, conn N.PacketConn, source M.Socksaddr, destination M.Socksaddr, onClose N.CloseHandlerFunc) {
+	if !h.trackPacketConn(conn) {
+		_ = conn.Close()
+		if onClose != nil {
+			onClose(nil)
+		}
+		return
+	}
+
+	h.wg.Add(1)
+	go func() {
+		defer h.wg.Done()
+		defer h.untrackPacketConn(conn)
+		defer func() {
+			_ = conn.Close()
+			if onClose != nil {
+				onClose(nil)
+			}
+		}()
+
+		writer := &packetConnDNSWriter{conn: conn}
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			default:
+			}
+
+			_ = conn.SetReadDeadline(time.Now().Add(dnsRelayReadTimeout))
+			packetBuf := buf.NewPacket()
+			_, err := conn.ReadPacket(packetBuf)
+			if err != nil {
+				packetBuf.Release()
+				if netErr, ok := err.(net.Error); ok && netErr.Timeout() {
+					continue
+				}
+				return
+			}
+			payload := append([]byte(nil), packetBuf.Bytes()...)
+			packetBuf.Release()
+			h.handleRawDNSPacket(payload, source, destination, writer)
+		}
+	}()
 }
 
 // handleRawDNSPacket handles DNS packets delivered via NewDNSPacket.
@@ -507,14 +642,38 @@ func (h *Handler) forwardUDPDirect(ctx context.Context, conn N.PacketConn, sourc
 		network = "udp6"
 	}
 
-	// 绑定物理网卡，避免 UDP 包进 TUN 形成循环
-	var laddr *net.UDPAddr
-	if bindIP := h.getPhysicalUDPAddr(wantIPv6); bindIP != nil {
-		laddr = &net.UDPAddr{IP: bindIP}
+	// 绑定物理网卡的**接口索引**，而不只是源地址：只设 LocalAddr 时内核
+	// 仍可能按路由表把包送回 TUN。netiface.Binding.Control 里的
+	// IP_UNICAST_IF（Windows）/ SO_BINDTOIFINDEX（Linux）才是绕开隧道的那一步。
+	// 地址必须绑本地通配（0.0.0.0 / ::），绑具体地址会收不到回包。
+	binding, err := netiface.Select(netifaceFamily(wantIPv6), h.interfaceConfig(), h.logf)
+	if err != nil {
+		h.logf("[sing-tun] no physical UDP binding: " + err.Error())
+		if onClose != nil {
+			onClose(err)
+		}
+		return
 	}
-	remoteConn, err := net.ListenUDP(network, laddr)
+	listenConfig := &net.ListenConfig{
+		Control: func(n, a string, c syscall.RawConn) error {
+			if control := binding.Control(netifaceFamily(wantIPv6)); control != nil {
+				return control(n, a, c)
+			}
+			return nil
+		},
+	}
+	packetConn, err := listenConfig.ListenPacket(context.Background(), network, ":0")
 	if err != nil {
 		h.logf("[sing-tun] failed to create UDP conn: " + err.Error())
+		if onClose != nil {
+			onClose(err)
+		}
+		return
+	}
+	remoteConn, ok := packetConn.(*net.UDPConn)
+	if !ok {
+		_ = packetConn.Close()
+		h.logf("[sing-tun] unexpected UDP socket type")
 		if onClose != nil {
 			onClose(err)
 		}
@@ -543,9 +702,22 @@ func (h *Handler) forwardUDPDirect(ctx context.Context, conn N.PacketConn, sourc
 	// ★ socket 生命周期必须跟随转发 goroutine：defer 放在 goroutine 内，
 	//   否则函数返回时 remoteConn 已被关闭，goroutine 的 WriteTo/ReadFrom
 	//   必然报 "use of closed network connection"（此前所有 UDP/QUIC 转发失败的根因）。
+	if !h.trackPacketConn(conn) {
+		remoteConn.Close()
+		_ = conn.Close()
+		if onClose != nil {
+			onClose(nil)
+		}
+		return
+	}
+
+	h.wg.Add(1)
 	go func() {
+		defer h.wg.Done()
 		defer remoteConn.Close()
+		defer h.untrackPacketConn(conn)
 		defer func() {
+			_ = conn.Close()
 			if onClose != nil {
 				onClose(nil)
 			}
@@ -635,6 +807,7 @@ func (h *Handler) proxyConn(ctx context.Context, client, upstream net.Conn, onCl
 	go func() {
 		io.Copy(upstream, client)
 		common.HalfClose(upstream)
+		done <- struct{}{}
 	}()
 	// upstream -> client
 	go func() {
@@ -657,9 +830,27 @@ func (h *Handler) proxyConn(ctx context.Context, client, upstream net.Conn, onCl
 
 	client.Close()
 	upstream.Close()
+
+	// 两个方向都发 done：只等一个会让另一个 io.Copy 带着 conn 引用滞留到
+	// 下一次 GC，反复启停时表现为内存增长。close 后最多再等 5 秒。
+	for i := 0; i < 2; i++ {
+		select {
+		case <-done:
+		case <-time.After(5 * time.Second):
+			i = 2
+		}
+	}
+
 	if onClose != nil {
 		onClose(nil)
 	}
+}
+
+func netifaceFamily(wantIPv6 bool) int {
+	if wantIPv6 {
+		return netiface.FamilyIPv6
+	}
+	return netiface.FamilyIPv4
 }
 
 // dialProxy 连接到代理服务器
@@ -667,20 +858,4 @@ func (h *Handler) proxyConn(ctx context.Context, client, upstream net.Conn, onCl
 // 无需绑定物理网卡。绑定物理网卡去连 loopback 反而可能失败或选错网卡。
 func (h *Handler) dialProxy() (net.Conn, error) {
 	return net.DialTimeout("tcp", h.proxyAddr, 5*time.Second)
-}
-
-// getPhysicalUDPAddr 获取物理网卡对应地址族的地址（排除 TUN/Loopback）
-// wantIPv6=true 时返回 IPv6 地址，否则返回 IPv4 地址
-// 用于 forwardUDPDirect 绑定物理网卡，避免 UDP 包进 TUN 循环
-func (h *Handler) getPhysicalUDPAddr(wantIPv6 bool) net.IP {
-	family := netiface.FamilyIPv4
-	if wantIPv6 {
-		family = netiface.FamilyIPv6
-	}
-	binding, err := netiface.Select(family, h.ifaceConfig, h.logf)
-	if err != nil {
-		h.logf("[sing-tun] no physical UDP bind address: " + err.Error())
-		return nil
-	}
-	return net.IP(binding.Address.AsSlice())
 }

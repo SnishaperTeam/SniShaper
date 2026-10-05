@@ -117,7 +117,21 @@ func (p *ProxyServer) handleSocks5Connect(ctx context.Context, writer io.Writer,
 			return fmt.Errorf("loop detected: %s targets the proxy itself", targetAddr)
 		}
 		p.tracef("[SOCKS5] direct mode, connecting directly")
-		conn, err := net.DialTimeout("tcp", targetAddr, 10*time.Second)
+		dialer := &net.Dialer{Timeout: 10 * time.Second}
+		// 与 dialWithRule / directConnect 同理：TUN 开启时必须把 socket
+		// 钉在物理网卡上，否则 DIRECT 出站会被隧道重新捕获形成回环。
+		p.mu.RLock()
+		tunMode := p.tunMode
+		p.mu.RUnlock()
+		if tunMode {
+			if localAddr := p.getPhysicalLocalAddr(targetAddr); localAddr != nil {
+				dialer.LocalAddr = localAddr
+			}
+			if control := p.getPhysicalDialControl(targetAddr); control != nil {
+				dialer.Control = control
+			}
+		}
+		conn, err := dialer.DialContext(ctx, "tcp", targetAddr)
 		if err != nil {
 			p.tracef("[SOCKS5] direct connect failed: %v", err)
 			socks5.SendReply(writer, statute.RepHostUnreachable, req.LocalAddr)
