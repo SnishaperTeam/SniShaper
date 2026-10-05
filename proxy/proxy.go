@@ -147,7 +147,6 @@ type ECHProfile struct {
 
 type SettingsConfig struct {
 	ListenPort                    string            `json:"listen_port"`
-	Socks5Port                    string            `json:"socks5_port,omitempty"`
 	CloseToTray                   *bool             `json:"close_to_tray,omitempty"`
 	HibernateOnClose              *bool             `json:"hibernate_on_close,omitempty"`
 	AutoStart                     *bool             `json:"auto_start,omitempty"`
@@ -160,9 +159,6 @@ type SettingsConfig struct {
 	Language                      string            `json:"language,omitempty"`
 	Theme                         string            `json:"theme,omitempty"`
 	CloudflareConfig              CloudflareConfig  `json:"cloudflare_config,omitempty"`
-	Socks5Enabled                 *bool             `json:"socks5_enabled,omitempty"`
-	Socks5Username                string            `json:"socks5_username,omitempty"`
-	Socks5Password                string            `json:"socks5_password,omitempty"`
 	MigrationEnabled              *bool             `json:"migration_enabled,omitempty"`
 	MigrationServer               string            `json:"migration_server,omitempty"`
 	UpdateChannel                 string            `json:"update_channel,omitempty"`
@@ -236,7 +232,6 @@ type ProxyServer struct {
 	startStopMu       sync.Mutex
 	Server            *http.Server
 	listenAddr        string
-	socks5Addr        string
 	rules             *RuleManager
 	running           bool
 	mode              string
@@ -258,13 +253,15 @@ type ProxyServer struct {
 	// (keyed by profile ID or "host:<name>"). Preferred over persisted profiles
 	// so a retry can take effect even when profile save fails or ID is empty.
 	echRuntimeConfigs sync.Map
-	socks5Enabled     bool
 	socks5Server      *socks5.Server
 	socks5Tracker     *socks5ConnTracker
 
-	// CF IP pool 刷新回调：当池过期时由 app 层注入
-	cfRefreshCallback func()
+	// 混合端口分发
+	mainListener net.Listener
+	httpChanLn   *chanListener
+	socks5ChanLn *chanListener
 
+	cfRefreshCallback func()
 	OnStop func(error)
 
 	// migrationCache holds persistent session tickets for migration mode,
@@ -272,7 +269,6 @@ type ProxyServer struct {
 	migrationCache         *migrationSessionCache
 	migrationCacheInitOnce sync.Once
 
-	// tunMode indicates TUN is active, outbound connections should bind physical NIC
 	tunMode     bool
 	ifaceConfig netiface.Config
 }
@@ -590,18 +586,11 @@ func (p *ProxyServer) Start() error {
 		return nil
 	}
 
-	srv := &http.Server{
-		Addr:         p.listenAddr,
-		Handler:      http.HandlerFunc(p.handleRequest),
-		ReadTimeout:  30 * time.Second,
-		WriteTimeout: 30 * time.Second,
-	}
-	listenAddr := p.listenAddr
-
 	if p.cfPool != nil {
 		p.cfPool.Start()
 	}
 
+	listenAddr := p.listenAddr
 	p.mu.Unlock()
 
 	ln, err := net.Listen("tcp", listenAddr)
@@ -612,13 +601,25 @@ func (p *ProxyServer) Start() error {
 		return fmt.Errorf("failed to listen on %s: %w", listenAddr, err)
 	}
 
-	p.mu.Lock()
-	if p.running {
-		p.mu.Unlock()
-		_ = ln.Close()
-		return nil
+	httpChanLn := newChanListener(ln.Addr())
+	socks5ChanLn := newChanListener(ln.Addr())
+
+	httpSrv := &http.Server{
+		Addr:         listenAddr,
+		Handler:      http.HandlerFunc(p.handleRequest),
+		ReadTimeout:  30 * time.Second,
+		WriteTimeout: 30 * time.Second,
 	}
-	p.Server = srv
+	socks5Srv := p.newSocks5Server()
+	socks5Tracker := &socks5ConnTracker{Listener: socks5ChanLn}
+
+	p.mu.Lock()
+	p.Server = httpSrv
+	p.mainListener = ln
+	p.httpChanLn = httpChanLn
+	p.socks5ChanLn = socks5ChanLn
+	p.socks5Server = socks5Srv
+	p.socks5Tracker = socks5Tracker
 	p.running = true
 	p.mu.Unlock()
 
@@ -634,21 +635,13 @@ func (p *ProxyServer) Start() error {
 			}
 		}()
 		log.Printf("[Proxy] HTTP server started on %s", listenAddr)
-
-		tl := &trackingListener{
-			Listener: ln,
-			proxy:    p,
-		}
-
-		serveErr := srv.Serve(tl)
-
+		serveErr := httpSrv.Serve(httpChanLn)
 		p.mu.Lock()
 		isUnexpected := serveErr != nil && serveErr != http.ErrServerClosed && p.running
-		if p.Server == srv {
+		if p.Server == httpSrv {
 			p.running = false
 		}
 		p.mu.Unlock()
-
 		if isUnexpected {
 			log.Printf("[Proxy] HTTP server stopped unexpectedly: %v", serveErr)
 			if p.OnStop != nil {
@@ -659,13 +652,79 @@ func (p *ProxyServer) Start() error {
 		}
 	}()
 
-	if p.socks5Enabled {
-		p.mu.Lock()
-		p.startSocks5Locked()
-		p.mu.Unlock()
-	}
+	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				log.Printf("[Proxy] panic in SOCKS5 server: %v", r)
+			}
+		}()
+		log.Printf("[Proxy] SOCKS5 server started on %s", listenAddr)
+		if serveErr := socks5Srv.Serve(socks5Tracker); serveErr != nil {
+			log.Printf("[Proxy] SOCKS5 server error: %v", serveErr)
+		}
+	}()
+
+	go p.serveMixed(ln)
 
 	return nil
+}
+
+func (p *ProxyServer) serveMixed(ln net.Listener) {
+	for {
+		conn, err := ln.Accept()
+		if err != nil {
+			return
+		}
+		go p.dispatchConn(conn)
+	}
+}
+
+func (p *ProxyServer) dispatchConn(conn net.Conn) {
+	defer func() {
+		if r := recover(); r != nil {
+			log.Printf("[Proxy] panic in dispatchConn: %v", r)
+			_ = conn.Close()
+		}
+	}()
+
+	br := bufio.NewReader(conn)
+	firstByte, err := br.Peek(1)
+	if err != nil {
+		_ = conn.Close()
+		return
+	}
+
+	wrapped := &peekedConn{Conn: conn, r: br}
+
+	p.mu.RLock()
+	httpChanLn := p.httpChanLn
+	socks5ChanLn := p.socks5ChanLn
+	p.mu.RUnlock()
+
+	if firstByte[0] == 0x05 && socks5ChanLn != nil {
+		select {
+		case socks5ChanLn.ch <- wrapped:
+		case <-socks5ChanLn.closed:
+			_ = conn.Close()
+		}
+		return
+	}
+
+	if httpChanLn != nil {
+		stat := &statConn{
+			Conn:      wrapped,
+			bytesDown: &p.bytesDown,
+			bytesUp:   &p.bytesUp,
+		}
+		select {
+		case httpChanLn.ch <- stat:
+		case <-httpChanLn.closed:
+			_ = conn.Close()
+		}
+		return
+	}
+
+	_ = conn.Close()
 }
 
 func (p *ProxyServer) Stop() error {
@@ -694,46 +753,75 @@ func (p *ProxyServer) Stop() error {
 		p.cfPool.Stop()
 	}
 
+	mainLn := p.mainListener
+	httpChanLn := p.httpChanLn
+	socks5ChanLn := p.socks5ChanLn
+	httpSrv := p.Server
+
+	p.mainListener = nil
+	p.httpChanLn = nil
+	p.socks5ChanLn = nil
+	p.Server = nil
+	p.mu.Unlock()
+
+	if mainLn != nil {
+		_ = mainLn.Close()
+	}
+	if httpChanLn != nil {
+		_ = httpChanLn.Close()
+	}
+	if socks5ChanLn != nil {
+		_ = socks5ChanLn.Close()
+	}
+
 	var err error
-	if p.Server != nil {
+	if httpSrv != nil {
 		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 		defer cancel()
-		err = p.Server.Shutdown(ctx)
-		p.Server = nil
+		err = httpSrv.Shutdown(ctx)
 	}
-	p.mu.Unlock()
 
 	p.tracef("[Proxy] Server stopped")
 	return err
 }
 
-func (p *ProxyServer) SetSocks5Addr(addr string) {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	p.socks5Addr = addr
+type chanListener struct {
+	ch     chan net.Conn
+	addr   net.Addr
+	closed chan struct{}
+	once   sync.Once
 }
 
-func (p *ProxyServer) SetSocks5Enabled(enabled bool) {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	p.socks5Enabled = enabled
-	if p.running {
-		if enabled {
-			p.startSocks5Locked()
-		} else {
-			if p.socks5Tracker != nil {
-				_ = p.socks5Tracker.Close()
-				p.socks5Tracker = nil
-			}
-		}
+func newChanListener(addr net.Addr) *chanListener {
+	return &chanListener{
+		ch:     make(chan net.Conn, 128),
+		addr:   addr,
+		closed: make(chan struct{}),
 	}
 }
 
-func (p *ProxyServer) IsSocks5Enabled() bool {
-	p.mu.RLock()
-	defer p.mu.RUnlock()
-	return p.socks5Enabled
+func (l *chanListener) Accept() (net.Conn, error) {
+	select {
+	case conn := <-l.ch:
+		return conn, nil
+	case <-l.closed:
+		return nil, net.ErrClosed
+	}
 }
+
+func (l *chanListener) Close() error {
+	l.once.Do(func() { close(l.closed) })
+	return nil
+}
+
+func (l *chanListener) Addr() net.Addr { return l.addr }
+
+type peekedConn struct {
+	net.Conn
+	r *bufio.Reader
+}
+
+func (c *peekedConn) Read(b []byte) (int, error) { return c.r.Read(b) }
 
 type trackingListener struct {
 	net.Listener
@@ -853,36 +941,6 @@ type socks5TrackedConn struct {
 func (c *socks5TrackedConn) Close() error {
 	c.tracker.unregister(c.RemoteAddr().String())
 	return c.Conn.Close()
-}
-
-// startSocks5Locked 启动 SOCKS5 监听，调用方必须已持有 p.mu
-func (p *ProxyServer) startSocks5Locked() {
-	// 重复启用时先关闭旧监听，避免端口泄漏
-	if p.socks5Tracker != nil {
-		_ = p.socks5Tracker.Close()
-		p.socks5Tracker = nil
-	}
-	p.socks5Server = p.newSocks5Server()
-	socks5Ln, err := net.Listen("tcp", p.socks5Addr)
-	if err != nil {
-		log.Printf("[Proxy] Failed to listen SOCKS5 on %s: %v", p.socks5Addr, err)
-		return
-	}
-	p.socks5Tracker = &socks5ConnTracker{Listener: socks5Ln}
-	addr := p.socks5Addr
-	server := p.socks5Server
-	tracker := p.socks5Tracker
-	go func() {
-		defer func() {
-			if r := recover(); r != nil {
-				log.Printf("[Proxy] panic in SOCKS5 server: %v", r)
-			}
-		}()
-		log.Printf("[Proxy] SOCKS5 server started on %s", addr)
-		if err := server.Serve(tracker); err != nil {
-			log.Printf("[Proxy] SOCKS5 server error: %v", err)
-		}
-	}()
 }
 
 func generateID() string {

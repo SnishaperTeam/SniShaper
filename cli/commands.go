@@ -29,19 +29,15 @@ func opRequireService(out cmdOut) *core.CoreClient {
 	return c
 }
 
-func listenAddrs() (httpPort, socksPort string) {
+func listenPort() string {
 	settingsPath, _ := settingsPaths()
 	rm := proxy.NewRuleManager(settingsPath, "")
 	_ = rm.LoadConfig()
-	httpPort = rm.GetListenPort()
-	if httpPort == "" {
-		httpPort = "8080"
+	port := rm.GetListenPort()
+	if port == "" {
+		port = "8080"
 	}
-	socksPort = rm.GetSocks5Port()
-	if socksPort == "" {
-		socksPort = "8081"
-	}
-	return httpPort, socksPort
+	return port
 }
 
 func opStartProxy(out cmdOut) int {
@@ -53,8 +49,7 @@ func opStartProxy(out cmdOut) int {
 		out("启动代理失败: " + err.Error())
 		return 1
 	}
-	httpPort, socksPort := listenAddrs()
-	out(fmt.Sprintf("代理已启动 (HTTP 127.0.0.1:%s / SOCKS5 127.0.0.1:%s)", httpPort, socksPort))
+	out(fmt.Sprintf("代理已启动 (HTTP/SOCKS5 混合端口 127.0.0.1:%s)", listenPort()))
 	return 0
 }
 
@@ -82,7 +77,7 @@ func opEnableSysProxy(out cmdOut) int {
 			return 1
 		}
 	}
-	httpPort, _ := listenAddrs()
+	httpPort := listenPort()
 	port, err := strconv.Atoi(httpPort)
 	if err != nil || port < 1 {
 		port = 8080
@@ -112,8 +107,7 @@ func opStatus(out cmdOut) int {
 		return 0
 	}
 	out(fmt.Sprintf("代理: %s", map[bool]string{true: "开", false: "关"}[c.IsProxyRunning()]))
-	httpPort, socksPort := listenAddrs()
-	out(fmt.Sprintf("HTTP: 127.0.0.1:%s    SOCKS5: 127.0.0.1:%s", httpPort, socksPort))
+	out(fmt.Sprintf("混合端口 (HTTP/SOCKS5): 127.0.0.1:%s", listenPort()))
 	out("模式: " + c.GetProxyMode())
 	ts := c.GetTUNStatus()
 	out(fmt.Sprintf("TUN: %s (%s)", map[bool]string{true: "开", false: "关"}[ts.Running], ts.Message))

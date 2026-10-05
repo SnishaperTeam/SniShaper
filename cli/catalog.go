@@ -42,7 +42,7 @@ func commandCatalog() []commandGroup {
 				{"port get|set <端口>", "查看 / 修改 HTTP 监听端口"},
 				{"port occupant [端口]", "查看端口被哪个进程占用"},
 				{"port kill <pid>", "结束占用端口的进程"},
-				{"socks5 status|on|off|port <端口>", "SOCKS5 开关与端口"},
+				{"socks5", "查看混合端口说明（SOCKS5 与 HTTP 共用端口）"},
 				{"migration status|on|off|server|test", "迁移模式与迁移服务器"},
 			},
 		},

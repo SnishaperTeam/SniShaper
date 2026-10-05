@@ -73,15 +73,6 @@ func (p *ProxyServer) newSocks5Server() *socks5.Server {
 		socks5.WithLogger(socks5.NewLogger(log.New(&socks5LogWriter{proxy: p}, "[SOCKS5] ", log.LstdFlags))),
 		socks5.WithConnectHandle(p.handleSocks5Connect),
 	}
-	// 配置了用户名密码时启用认证，避免本机其他程序未授权使用代理
-	if p.rules != nil {
-		if user, pass := p.rules.GetSocks5Auth(); user != "" && pass != "" {
-			creds := socks5.StaticCredentials{user: pass}
-			opts = append(opts, socks5.WithAuthMethods([]socks5.Authenticator{
-				socks5.UserPassAuthenticator{Credentials: creds},
-			}))
-		}
-	}
 	return socks5.NewServer(opts...)
 }
 

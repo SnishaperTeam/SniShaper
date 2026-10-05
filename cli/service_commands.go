@@ -135,53 +135,9 @@ func opPort(args []string, out cmdOut) int {
 }
 
 func opSocks5(args []string, out cmdOut) int {
-	if len(args) == 0 {
-		args = []string{"status"}
-	}
-
-	switch args[0] {
-	case "status":
-		a := configApp(out)
-		if a == nil {
-			return 1
-		}
-		state := "关"
-		if a.GetSocks5Enabled() {
-			state = "开"
-		}
-		out(fmt.Sprintf("SOCKS5: %s   监听: 127.0.0.1:%s", state, a.GetSocks5Port()))
-		return 0
-	case "on", "off":
-		a := configApp(out)
-		if a == nil {
-			return 1
-		}
-		enabled := args[0] == "on"
-		if err := a.SetSocks5Enabled(enabled); err != nil {
-			out("设置 SOCKS5 失败: " + err.Error())
-			return 1
-		}
-		out("SOCKS5 已" + map[bool]string{true: "开启", false: "关闭"}[enabled])
-		return 0
-	case "port":
-		if len(args) < 2 {
-			out("用法: socks5 port <端口>")
-			return 2
-		}
-		a := configApp(out)
-		if a == nil {
-			return 1
-		}
-		if err := a.SetSocks5Port(args[1]); err != nil {
-			out("设置 SOCKS5 端口失败: " + err.Error())
-			return 1
-		}
-		out("SOCKS5 端口已设为 " + args[1])
-		return 0
-	default:
-		out("用法: socks5 status|on|off|port <端口>")
-		return 2
-	}
+	out("SOCKS5 与 HTTP 共用混合端口，随代理启停，不再单独配置。")
+	out(fmt.Sprintf("混合端口: 127.0.0.1:%s", listenPort()))
+	return 0
 }
 
 func opMigration(args []string, out cmdOut) int {

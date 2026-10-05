@@ -45,15 +45,8 @@ func NewApp() *App {
 		port = "8080"
 	}
 
-	socks5Port := ruleManager.GetSocks5Port()
-	if socks5Port == "" {
-		socks5Port = "8081"
-	}
-
 	ctx, cancel := context.WithCancel(context.Background())
 	proxyServer := proxy.NewProxyServer("127.0.0.1:" + port)
-	// The evolution tester uses this app-level resolver. Bind the rule manager
-	// before the resolver's node callback is used; otherwise DoH sees no nodes.
 	proxyServer.SetRuleManager(ruleManager)
 	a := &App{
 		ctx:                ctx,
@@ -66,29 +59,7 @@ func NewApp() *App {
 		autoProxyAtStartup: HasLaunchArg("--autoproxy"),
 		core:               core.NewCoreClient(),
 	}
-	a.proxyServer.SetSocks5Addr("127.0.0.1:" + socks5Port)
 
-	// Auto-restart when proxy server stops unexpectedly
-	a.proxyServer.OnStop = func(err error) {
-		a.appendLog("[error] Proxy server stopped unexpectedly: " + err.Error())
-		a.UpdateTrayMenu()
-		a.RunSafeAsync("proxy auto-restart", func() {
-			time.Sleep(2 * time.Second)
-			a.proxyOpMu.Lock()
-			defer a.proxyOpMu.Unlock()
-			if !a.proxyServer.IsRunning() {
-				if err2 := a.proxyServer.Start(); err2 != nil {
-					a.appendLog("[error] Proxy auto-restart failed: " + err2.Error())
-				} else {
-					a.appendLog("[action] Proxy auto-restarted successfully")
-				}
-				a.UpdateTrayMenu()
-				a.emitFrontendState()
-			}
-		})
-	}
-
-	// Set CF pool refresh callback — called async when pool is stale (>1 day)
 	a.proxyServer.SetCFRefreshCallback(func() {
 		a.RefreshCloudflareIPPool()
 	})
@@ -97,7 +68,6 @@ func NewApp() *App {
 	// health check, so no extra trigger is needed here.
 	a.proxyServer.UpdateCloudflareIPPool(ruleManager.GetCloudflareConfig().PreferredIPs)
 
-	// Initialize auto router (needed for GFW list refresh even without core)
 	ruleManager.InitAutoRouter(a.proxyServer.GetDoHResolver())
 
 	return a
@@ -132,28 +102,6 @@ func (a *App) StartProxy() error {
 		if err := a.SetListenPort(availablePort); err != nil {
 			a.appendLog("[warn] Failed to update config with new port: " + err.Error())
 		}
-	}
-
-	a.proxyServer.SetSocks5Enabled(true)
-	a.ruleManager.SetSocks5Enabled(true)
-	_ = a.ruleManager.SaveConfig()
-
-	socks5OriginalPort := a.ruleManager.GetSocks5Port()
-	if socks5OriginalPort == "" {
-		socks5OriginalPort = "8081"
-	}
-	socks5PortNum, err := strconv.Atoi(socks5OriginalPort)
-	if err == nil {
-		socks5Available, err := proxy.EnsurePortAvailable(socks5PortNum, []string{"snishaper", "usque"})
-		if err != nil {
-			a.appendLog(fmt.Sprintf("[warn] SOCKS5 port probe failed: %v, using original port", err))
-			socks5Available = socks5PortNum
-		}
-		if socks5Available != socks5PortNum {
-			a.appendLog(fmt.Sprintf("[info] SOCKS5 port %d was occupied. Switched to %d.", socks5PortNum, socks5Available))
-			a.ruleManager.SetSocks5Port(strconv.Itoa(socks5Available))
-		}
-		a.proxyServer.SetSocks5Addr(fmt.Sprintf("127.0.0.1:%d", socks5Available))
 	}
 
 	a.syncCFPoolNAT64Prefix()
@@ -322,59 +270,6 @@ func (a *App) RevealMainWindow() {
 	a.showMainWindow()
 }
 
-func (a *App) GetSocks5Enabled() bool {
-	return a.ruleManager.GetSocks5Enabled()
-}
-
-func (a *App) SetSocks5Enabled(enabled bool) error {
-	a.appendLog(fmt.Sprintf("[action] SetSocks5Enabled: %v", enabled))
-	a.proxyServer.SetSocks5Enabled(enabled)
-	a.ruleManager.SetSocks5Enabled(enabled)
-	_ = a.ruleManager.SaveConfig()
-	if a.core != nil {
-		var empty core.EmptyArgs
-		_ = a.core.Call("Core.SetSocks5Enabled", core.BoolReply{Value: enabled}, &empty)
-	}
-	return nil
-}
-
-func (a *App) GetSocks5Port() string {
-	return a.ruleManager.GetSocks5Port()
-}
-
-func (a *App) SetSocks5Port(port string) error {
-	a.appendLog(fmt.Sprintf("[action] SetSocks5Port: %s", port))
-	a.ruleManager.SetSocks5Port(port)
-	_ = a.ruleManager.SaveConfig()
-	a.proxyServer.SetSocks5Addr("127.0.0.1:" + port)
-	if a.core != nil {
-		var empty core.EmptyArgs
-		_ = a.core.Call("Core.SetSocks5Port", core.StringReply{Value: port}, &empty)
-	}
-	return nil
-}
-
-type Socks5AuthInfo struct {
-	Username string `json:"username"`
-	Password string `json:"password"`
-}
-
-func (a *App) GetSocks5Auth() Socks5AuthInfo {
-	username, password := a.ruleManager.GetSocks5Auth()
-	return Socks5AuthInfo{Username: username, Password: password}
-}
-
-func (a *App) SetSocks5Auth(username, password string) error {
-	a.appendLog(fmt.Sprintf("[action] SetSocks5Auth: user=%s", username))
-	a.ruleManager.SetSocks5Auth(username, password)
-	_ = a.ruleManager.SaveConfig()
-	// 正在运行的 SOCKS5 监听重启后才会套用新凭据
-	if a.proxyServer.IsSocks5Enabled() && a.proxyServer.IsRunning() {
-		a.proxyServer.SetSocks5Enabled(false)
-		a.proxyServer.SetSocks5Enabled(true)
-	}
-	return nil
-}
 
 func (a *App) GetProxyMode() string {
 	if a.core != nil {
