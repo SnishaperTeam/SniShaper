@@ -8,15 +8,16 @@ import (
 	"time"
 
 	"github.com/wailsapp/wails/v3/pkg/application"
+	"github.com/wailsapp/wails/v3/pkg/events"
 )
 
 // The runtime adds the tray icon once and never re-adds it: its own icon update
 // reports a failed Shell_NotifyIcon and rolls back instead of registering the
 // icon again. The shell drops icons for reasons the app cannot observe (a
-// display or session change, a shell glitch, or a notification area that simply
-// forgets the icon), so the app owns the tray lifecycle: it builds the tray at
-// startup and rebuilds it whenever the window goes away or a long interval
-// passes.
+// display or session change, a shell glitch, a sleep/resume cycle, or a
+// notification area that simply forgets the icon), so the app owns the tray
+// lifecycle: it builds the tray at startup and rebuilds it on system resume,
+// on session unlock, when the window goes away, and after a long interval.
 
 const (
 	trayRebuildMinInterval = 3 * time.Second
@@ -34,17 +35,29 @@ type trayHolder struct {
 
 var tray trayHolder
 
-// BuildSystemTray creates the tray icon and starts the periodic refresh. It must
-// be called before the runtime starts, so the tray is registered while the app
-// is still starting up.
+// BuildSystemTray creates the tray icon, starts the periodic refresh loop,
+// and wires up the two recovery hooks that rebuild the icon after the shell
+// drops it: system resume (SystemDidWake) and user session unlock
+// (WTS_SESSION_UNLOCK, Windows only). It must be called before the runtime
+// starts, so the tray is registered while the app is still starting up.
 func (a *App) BuildSystemTray(wailsApp *application.App, icon []byte) {
 	tray.mu.Lock()
 	tray.app = wailsApp
 	tray.icon = icon
 	tray.mu.Unlock()
 
+	a.startSessionWatcher()
 	a.buildSystemTray()
 	go a.trayRefreshLoop()
+
+	wailsApp.Event.OnApplicationEvent(events.Common.SystemDidWake, func(_ *application.ApplicationEvent) {
+		if isSessionLocked() {
+			log.Printf("[tray] system resumed while locked, deferring rebuild to session unlock")
+			return
+		}
+		log.Printf("[tray] system resumed (not locked), rebuilding tray")
+		a.RebuildSystemTray()
+	})
 }
 
 func (a *App) buildSystemTray() {

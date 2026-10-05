@@ -109,6 +109,13 @@ func main() {
 			UniqueID: "com.snishaper.desktop",
 			OnSecondInstanceLaunch: func(data application.SecondInstanceData) {
 				log.Printf("[single-instance] OnSecondInstanceLaunch args=%v", data.Args)
+				for _, arg := range data.Args {
+					if arg == "--tray-rebuild" {
+						log.Printf("[single-instance] tray rebuild requested by second launch")
+						a.RebuildSystemTray()
+						return
+					}
+				}
 				a.RevealMainWindow()
 			},
 			ExitCode: 0,
