@@ -10,6 +10,19 @@
 
 ---
 
+## 姊妹项目：FlowWeaver
+
+[**FlowWeaver**](https://github.com/SnishaperTeam/FlowWeaver) 是本项目的全功能分支，由原作者主导开发，两者**并行维护**：
+
+| | SniShaper（本仓库） | [FlowWeaver](https://github.com/SnishaperTeam/FlowWeaver) |
+|---|---|---|
+| 定位 | 轻量级代理服务端 | 功能全面的客户端 / 网关 |
+| 核心能力 | ECH 注入、TLS 分片、会话迁移 | Clash 订阅适配、全协议节点、WireGuard、TUN 网关 |
+
+两者代码库独立，可各自演进；订阅与规则文件格式兼容。如果你需要**机场订阅导入、多协议节点选择或 WireGuard 隧道**，请使用 FlowWeaver。
+
+---
+
 ## 特性
 
 - **多模式代理**：MITM（中间人）、Transparent（透传）、TLS-RF（TLS 分片）、QUIC、Migration（会话迁移）、Direct（直连）等多种模式覆盖不同网站的场景。
