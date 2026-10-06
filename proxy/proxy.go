@@ -84,10 +84,16 @@ type TUNConfig struct {
 	RouteExcludeAddresses []string `json:"route_exclude_address,omitempty"`
 }
 
+// InterfaceConfig 把 TUN 设置转换为出站网卡选择配置。
+//
+// 注意：RouteExcludeAddresses **不能**参与网卡选择。它是"不要把这些网段路由进
+// TUN"的路由排除（例如把内网 192.168.0.0/16 留在物理网卡上），而 netiface 的
+// ExcludeAddresses 语义是"持有这些地址的网卡不得作为出站网卡"。两者混用时，
+// 用户为放行内网而填的 192.168.0.0/16 会把唯一一张家用路由网卡直接排除掉，
+// 表现为 TUN 启动后所有出站连接失败。
 func (c TUNConfig) InterfaceConfig() netiface.Config {
 	return netiface.Config{
 		ExcludeInterfaces: c.ExcludeInterfaces,
-		ExcludeAddresses:  c.RouteExcludeAddresses,
 		ForceInterface:    c.InterfaceName,
 	}
 }
@@ -1247,9 +1253,21 @@ func domainMatchScore(host, domain string) int {
 }
 
 func normalizeTUNConfig(cfg TUNConfig) TUNConfig {
+	// MTU 必须夹在合理区间：sing-tun 的 gvisor 栈会按 MTU 预分配包缓冲，
+	// 过小（如 1）在 gvisor 内部直接产生不可用的分片，过大（如 65535）会让
+	// 每个包都按最大尺寸走缓冲池，长时间运行后内存显著膨胀。
 	if cfg.MTU <= 0 {
 		cfg.MTU = 9000
 	}
+	if cfg.MTU < 576 {
+		cfg.MTU = 576
+	}
+	if cfg.MTU > 9000 {
+		cfg.MTU = 9000
+	}
+	// StrictRoute 在 Windows 上会让 sing-tun 丢弃所有未被显式放行的流量，
+	// 而 Wintun 场景下系统总会追加若干无法枚举的路由，结果是 TUN 起来后
+	// 全网不通。这里固定关闭，不再让配置值静默失真。
 	cfg.StrictRoute = false
 	cfg.InterfaceName = strings.TrimSpace(cfg.InterfaceName)
 	cfg.ExcludeInterfaces = normalizeStringList(cfg.ExcludeInterfaces)

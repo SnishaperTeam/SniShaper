@@ -122,7 +122,9 @@ func isDefaultExcluded(name string) bool {
 	if IsOwnTunnel(name) {
 		return true
 	}
-	if _, ok := matchesPattern(DefaultExcludedNames, name, 0); ok {
+	// 传 -1 关闭"纯数字 pattern 视为接口索引"的语义：黑名单是按名称匹配的，
+	// 不应因为某个条目碰巧是数字（如 "0"）而匹配到索引 0 的网卡。
+	if _, ok := matchesPattern(DefaultExcludedNames, name, -1); ok {
 		return true
 	}
 	lowered := strings.ToLower(name)
@@ -630,6 +632,11 @@ var (
 	cacheTime time.Time
 )
 
+var (
+	selectedLogMu      sync.Mutex
+	lastSelectedLogKey string
+)
+
 // InvalidateCache drops the cached routing snapshot. Call it after the TUN is
 // started or stopped, since the adapter set changes at those points.
 func InvalidateCache() {
@@ -637,6 +644,9 @@ func InvalidateCache() {
 	cache = nil
 	cacheTime = time.Time{}
 	cacheMu.Unlock()
+	selectedLogMu.Lock()
+	lastSelectedLogKey = ""
+	selectedLogMu.Unlock()
 }
 
 // loadSnapshot returns a fresh-enough view of adapters, default routes and the
@@ -662,6 +672,9 @@ func loadSnapshot() *snapshot {
 
 // Select returns the physical NIC that owns the default route for family,
 // preferring an interface with a usable source address.
+//
+// logf 只在选择结果发生变化时调用：数据面上每条出站连接都会走一次 Select，
+// 逐次打印会在高 QPS 下把日志缓冲刷满，真正的故障信息反而被冲掉。
 func Select(family int, cfg Config, logf func(string)) (Binding, error) {
 	current := loadSnapshot()
 	binding, ok := choose(collect(family, cfg, current.views, current.routes[family]), current.probes[family])
@@ -669,9 +682,22 @@ func Select(family int, cfg Config, logf func(string)) (Binding, error) {
 		return Binding{}, fmt.Errorf("no usable outbound interface for family %d", family)
 	}
 	if logf != nil {
-		logf("[netiface] selected " + binding.Describe())
+		describeIfChanged(family, binding, logf)
 	}
 	return binding, nil
+}
+
+// describeIfChanged 仅在选择结果与上次不同时记录日志。
+func describeIfChanged(family int, binding Binding, logf func(string)) {
+	key := fmt.Sprintf("%d|%s|%d", family, binding.InterfaceName, binding.InterfaceIndex)
+	selectedLogMu.Lock()
+	if lastSelectedLogKey == key {
+		selectedLogMu.Unlock()
+		return
+	}
+	lastSelectedLogKey = key
+	selectedLogMu.Unlock()
+	logf("[netiface] selected " + binding.Describe())
 }
 
 // SelectForTarget picks the family from addr and then selects a binding.

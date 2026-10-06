@@ -136,7 +136,9 @@ func (r *coreRuntime) shutdown() {
 		r.rulesWatchStop = nil
 	}
 	if r.nativeTUN != nil {
-		_ = r.nativeTUN.Stop()
+		//进程退出路径用 Shutdown：这是唯一允许终态关闭 Handler 的地方，
+		// 可确保 TUN 停止后残留派发的连接也无法再生效。
+		_ = r.nativeTUN.Shutdown()
 	}
 	_ = r.proxyServer.Stop()
 	r.appendLog("[core] runtime stopped")
@@ -324,9 +326,10 @@ func (r *coreRuntime) startTUN() (err error) {
 		err = fmt.Errorf("proxy listen port is empty")
 		return err
 	}
+	tunCfg := r.ruleManager.GetTUNConfig()
 	r.appendLog("[core] startTUN: calling nativeTUN.Start with proxy=" + "127.0.0.1:" + listenPort)
 	proxyAddr := "127.0.0.1:" + listenPort
-	if err = r.nativeTUN.Start(r.ruleManager.GetTUNConfig(), proxyAddr); err != nil {
+	if err = r.nativeTUN.Start(tunCfg, proxyAddr); err != nil {
 		r.appendLog("[core] startTUN: nativeTUN.Start failed: " + err.Error())
 		return err
 	}
@@ -334,15 +337,16 @@ func (r *coreRuntime) startTUN() (err error) {
 	// 通知 ProxyServer 启用 TUN 模式，出站连接绑物理网卡。
 	// 出站网卡在 TUN 启动之后才配置：此时网卡列表已包含 SniShaper 自己的虚拟
 	// 网卡，必须让 netiface 重新扫描，否则可能把 TUN 自己选成出站网卡。
-	tunCfg := r.ruleManager.GetTUNConfig()
+	// 注意 SetTUNMode 必须在 Start 成功之后：Start 失败时 TUN 并不存在，
+	// 此时打开 TUN 模式会让所有出站连接去找一张并不存在的网卡。
 	r.proxyServer.SetTUNMode(true)
 	netiface.InvalidateCache()
-	if binding, err := netiface.Select(netiface.FamilyIPv4, tunCfg.InterfaceConfig(), r.appendLog); err == nil {
+	if binding, selErr := netiface.Select(netiface.FamilyIPv4, tunCfg.InterfaceConfig(), r.appendLog); selErr == nil {
 		r.appendLog("[core] TUN outbound interface: " + binding.Describe())
 	}
 	// TUN 数据面自检：通过 TUN 发送 DNS 查询，验证 gvisor 栈正常工作。
 	// 解决 gvisor 数据面静默失效时（网卡存在但流量不通）无任何错误日志的问题。
-	if err := verifyTUNDataPlane("198.18.0.1", 2*time.Second); err != nil {
+	if err := verifyTUNDataPlane(singtun.TUNGateway4(), 2*time.Second); err != nil {
 		r.appendLog("[error] TUN data plane check failed: " + err.Error())
 	} else {
 		r.appendLog("[core] TUN data plane check passed")
@@ -406,11 +410,14 @@ func (r *coreRuntime) stopTUN() error {
 	if r.nativeTUN == nil {
 		return fmt.Errorf("native TUN manager is not initialized")
 	}
-	// 通知 ProxyServer 退出 TUN 模式
-	r.proxyServer.SetTUNMode(false)
+	// 顺序要求：必须先停 TUN 再退出 TUN 模式。
+	// 反过来的话，设备还在、默认路由还指向隧道，但出站 socket 已经不再绑物理网卡，
+	// 这段时间内所有出站流量都会被 TUN 重新捕获，形成自激回环。
 	if err := r.nativeTUN.Stop(); err != nil {
 		return err
 	}
+	// 通知 ProxyServer 退出 TUN 模式
+	r.proxyServer.SetTUNMode(false)
 	// TUN 网卡已消失，重新扫描网卡列表，避免下次出站仍引用已释放的接口索引。
 	netiface.InvalidateCache()
 	r.appendLog("[core] native sing-tun stopped")

@@ -95,32 +95,64 @@ func (h *Handler) untrackPacketConn(c N.PacketConn) {
 	}
 }
 
+// Close 终止 Handler：置 closed 后拒绝新连接并回收全部存量连接。
+// 这是终态，调用后 Handler 不可复用。
 func (h *Handler) Close() {
 	h.mu.Lock()
 	h.closed = true
-	conns := make([]net.Conn, 0, len(h.live))
-	for c := range h.live {
-		conns = append(conns, c)
-	}
-	packets := make([]N.PacketConn, 0, len(h.livePacket))
-	for c := range h.livePacket {
-		packets = append(packets, c)
-	}
 	h.mu.Unlock()
-	for _, c := range conns {
-		c.Close()
-	}
-	for _, c := range packets {
-		_ = c.Close()
-	}
-	// 等所有转发 goroutine 真正退出，避免它们持有的 socket 与 buffer 滞留。
-	// 注意不能在 Wait 之前清空 live/livePacket：untrack 依赖 map 里的条目
-	// 决定是否 wg.Done，先清空会让计数永远无法归零。
-	h.wg.Wait()
+	h.Release()
 	h.mu.Lock()
 	h.live = nil
 	h.livePacket = nil
 	h.mu.Unlock()
+}
+
+// Release 回收全部存量连接并等待转发 goroutine 退出，但不复用 closed 标记。
+// Manager 的 releaseLocked 走这条路径：设备已关闭但 Handler 语义上仍可继续
+// 接收派发，Start 失败回滚时也无需重建 Handler。
+//
+// 因为不置 closed，snapshot 之后仍可能有新连接被 track，所以按轮次收敛：
+// 每轮重新快照并关闭，直到某一轮快照为空。
+func (h *Handler) Release() {
+	for {
+		h.mu.Lock()
+		conns := make([]net.Conn, 0, len(h.live))
+		for c := range h.live {
+			conns = append(conns, c)
+		}
+		packets := make([]N.PacketConn, 0, len(h.livePacket))
+		for c := range h.livePacket {
+			packets = append(packets, c)
+		}
+		h.mu.Unlock()
+
+		for _, c := range conns {
+			c.Close()
+		}
+		for _, c := range packets {
+			_ = c.Close()
+		}
+
+		// 等所有转发 goroutine 真正退出，避免它们持有的 socket 与 buffer 滞留。
+		// 注意不能在 Wait 之前清空 live/livePacket：untrack 依赖 map 里的条目
+		// 决定是否 wg.Done，先清空会让计数永远无法归零。
+		// untrack 是先 delete 再 Done，因此 Wait 返回时本轮快照的条目必然已清空。
+		h.wg.Wait()
+
+		h.mu.Lock()
+		remaining := len(h.live) + len(h.livePacket)
+		closed := h.closed
+		h.mu.Unlock()
+		if remaining == 0 || closed {
+			// closed 时不会再有新的 track 进来，remaining 必将在下一轮归零。
+			if remaining == 0 {
+				return
+			}
+			h.wg.Wait()
+			return
+		}
+	}
 }
 
 // NewHandler 创建新的 Handler
@@ -521,6 +553,11 @@ func (w *dnsStreamWriter) WritePacket(buffer *buf.Buffer, destination M.Socksadd
 	out[0] = byte(len(payload) >> 8)
 	out[1] = byte(len(payload))
 	copy(out[2:], payload)
+	// 必须设写超时：客户端停止读取时，若查询应答写不进去，
+	// Write 会永久阻塞，serveDNSOverStream 的 goroutine 与 Handler.wg 一起挂死。
+	if err := w.conn.SetWriteDeadline(time.Now().Add(dnsRelayWriteTimeout)); err != nil {
+		return err
+	}
 	_, err := w.conn.Write(out)
 	return err
 }
@@ -536,6 +573,7 @@ func (w *packetConnDNSWriter) WritePacket(buffer *buf.Buffer, destination M.Sock
 const (
 	dnsRelayReadTimeout  = 5 * time.Second
 	dnsRelayWriteTimeout = 5 * time.Second
+	dnsResolveTimeout    = 5 * time.Second
 )
 
 // serveDNSOverPacketConn 读取 UDP DNS 查询并把应答写回客户端。
@@ -583,6 +621,52 @@ func (h *Handler) serveDNSOverPacketConn(ctx context.Context, conn N.PacketConn,
 	}()
 }
 
+// ipv6EgressTTL 是 IPv6 出口探测结果的缓存时长。
+const ipv6EgressTTL = 30 * time.Second
+
+var (
+	ipv6EgressMu   sync.Mutex
+	ipv6EgressAt   time.Time
+	ipv6EgressOK   bool
+	ipv6EgressDone bool
+)
+
+// ipv6EgressAvailable 报告当前是否存在可用的 IPv6 出口。
+//
+// 用于 AAAA 抑制：没有 IPv6 出口时若仍分配 fd65:198:18::/64 的 fake-ip，
+// 客户端会先尝试 IPv6 并在超时后回退 IPv4，白白拖慢首连。
+func ipv6EgressAvailable(ifaceCfg netiface.Config, logf func(string)) bool {
+	ipv6EgressMu.Lock()
+	defer ipv6EgressMu.Unlock()
+	if ipv6EgressDone && time.Since(ipv6EgressAt) < ipv6EgressTTL {
+		return ipv6EgressOK
+	}
+	_, err := netiface.Select(netiface.FamilyIPv6, ifaceCfg, nil)
+	ipv6EgressOK = err == nil
+	ipv6EgressDone = true
+	ipv6EgressAt = time.Now()
+	if !ipv6EgressOK && logf != nil {
+		logf("[sing-tun] no usable IPv6 egress, AAAA answers will be suppressed")
+	}
+	return ipv6EgressOK
+}
+
+// invalidateIPv6Egress 强制下次 AAAA 查询重新探测 IPv6 出口。
+func invalidateIPv6Egress() {
+	ipv6EgressMu.Lock()
+	ipv6EgressDone = false
+	ipv6EgressMu.Unlock()
+}
+
+// packEmptyReply 以 NOERROR + 空应答回应查询，让客户端立刻判定该类型无记录
+// 并回退到另一种地址族，而不是等超时。
+func packEmptyReply(msg *dns.Msg) ([]byte, error) {
+	resp := new(dns.Msg)
+	resp.SetReply(msg)
+	resp.RecursionAvailable = true
+	return resp.Pack()
+}
+
 // handleRawDNSPacket handles DNS packets delivered via NewDNSPacket.
 // Unlike handleDNS (which reads from a PacketConn), this receives the raw
 // payload and a PacketWriter for responses.
@@ -602,6 +686,12 @@ func (h *Handler) handleRawDNSPacket(payload []byte, source M.Socksaddr, destina
 	if question.Qtype != dns.TypeA && question.Qtype != dns.TypeAAAA {
 		h.handleDNSRealPacket(msg, domain, destination, writer)
 		return
+	}
+
+	if question.Qtype == dns.TypeAAAA && !ipv6EgressAvailable(h.interfaceConfig(), h.logf) {
+		if h.serveEmptyReply(msg, destination, writer) {
+			return
+		}
 	}
 
 	var fakeIP netip.Addr
@@ -653,6 +743,22 @@ func (h *Handler) handleRawDNSPacket(payload []byte, source M.Socksaddr, destina
 	}
 }
 
+// serveEmptyReply 以 NOERROR 空应答回应查询，返回是否已成功写回。
+func (h *Handler) serveEmptyReply(msg *dns.Msg, destination M.Socksaddr, writer N.PacketWriter) bool {
+	respBytes, err := packEmptyReply(msg)
+	if err != nil {
+		h.logf("[sing-tun] failed to pack empty DNS reply: " + err.Error())
+		return false
+	}
+	respBuf := buf.NewPacket()
+	respBuf.Write(respBytes)
+	if err := writer.WritePacket(respBuf, destination); err != nil {
+		h.logf("[sing-tun] failed to write empty DNS reply: " + err.Error())
+		return false
+	}
+	return true
+}
+
 // serveDNSFailure 以 QR=1 的 SERVFAIL 应答客户端。
 // 不能直接改查询报文的 Rcode 再 Pack：那会得到 QR=0 的废包，客户端会丢弃并重试。
 func (h *Handler) serveDNSFailure(msg *dns.Msg, destination M.Socksaddr, writer N.PacketWriter) {
@@ -678,7 +784,12 @@ func (h *Handler) handleDNSRealPacket(msg *dns.Msg, domain string, destination M
 		h.serveDNSFailure(msg, destination, writer)
 		return
 	}
-	ips, err := h.resolver.ResolveIPs(context.Background(), domain)
+	// 必须带超时：DoH 上游可能长时间不响应，无超时的解析会永久占住
+	// serveDNSOverStream / serveDNSOverPacketConn 的 goroutine，
+	// 使该 TCP/53 连接既读不进下一个查询也无法退出（Handler.Close 也会被拖住）。
+	ctx, cancel := context.WithTimeout(context.Background(), dnsResolveTimeout)
+	defer cancel()
+	ips, err := h.resolver.ResolveIPs(ctx, domain)
 	if err != nil {
 		h.logf("[sing-tun] DNS resolve failed for " + domain + ": " + err.Error())
 		h.serveDNSFailure(msg, destination, writer)
@@ -835,76 +946,81 @@ func (h *Handler) forwardUDPDirect(ctx context.Context, conn N.PacketConn, sourc
 		var wg sync.WaitGroup
 		wg.Add(2)
 
-		// 方向一：客户端 → 上游
-		go func() {
-			defer wg.Done()
-			for {
-				select {
-				case <-ctx.Done():
-					remoteConn.Close() // 解除另一方向阻塞
-					return
-				default:
-				}
+stopped := make(chan struct{})
+	var stopOnce sync.Once
+	stop := func() {
+		stopOnce.Do(func() { close(stopped) })
+	}
 
-				conn.SetReadDeadline(time.Now().Add(udpIdleTimeout))
-				packetBuf := buf.NewPacket()
-				_, err := conn.ReadPacket(packetBuf)
-				if err != nil {
-					packetBuf.Release()
-					if netErr, ok := err.(net.Error); ok && netErr.Timeout() {
-						continue // 客户端暂时空闲，等待会话由 sing-tun NAT 回收
-					}
-					// 客户端关闭/会话结束 → 关闭上游 socket，结束整个转发流
-					remoteConn.Close()
-					return
-				}
+	// 方向一：客户端 → 上游
+	go func() {
+		defer wg.Done()
+		defer stop()
+		for {
+			select {
+			case <-stopped:
+				return
+			case <-ctx.Done():
+				return
+			default:
+			}
 
-				_, err = remoteConn.WriteTo(packetBuf.Bytes(), destUDPAddr)
+			conn.SetReadDeadline(time.Now().Add(udpIdleTimeout))
+			packetBuf := buf.NewPacket()
+			_, err := conn.ReadPacket(packetBuf)
+			if err != nil {
 				packetBuf.Release()
-				if err != nil {
-					h.logf("[sing-tun] failed to forward UDP: " + err.Error())
-					remoteConn.Close()
-					return
+				if netErr, ok := err.(net.Error); ok && netErr.Timeout() {
+					continue // 客户端暂时空闲，等待会话由 sing-tun NAT 回收
 				}
+				return
 			}
-		}()
 
-		// 方向二：上游 → 客户端（独立持续读取，QUIC 多包响应不会丢失）
-		go func() {
-			defer wg.Done()
-			responseBuf := make([]byte, 65535)
-			for {
-				select {
-				case <-ctx.Done():
-					return
-				default:
-				}
-
-				remoteConn.SetReadDeadline(time.Now().Add(udpIdleTimeout))
-				n, _, err := remoteConn.ReadFrom(responseBuf)
-				if err != nil {
-					if netErr, ok := err.(net.Error); ok && netErr.Timeout() {
-						continue // 上游暂时无数据（QUIC 静默期），等待方向一关闭 socket
-					}
-					// 上游 socket 被关闭 / 上游不可达 → 关闭并结束，确保方向一也及时退出
-					remoteConn.Close()
-					return
-				}
-
-				responsePacket := buf.NewPacket()
-				responsePacket.Write(responseBuf[:n])
-				// WritePacket 的 dest 是响应包的源地址（远端服务器），不是目标（应用）
-				// 所有权随 WritePacket 转移，由 gvisor 背压写端负责 Release
-				if err := conn.WritePacket(responsePacket, destination); err != nil {
-					h.logf("[sing-tun] failed to write UDP response: " + err.Error())
-					remoteConn.Close()
-					return
-				}
+			_, err = remoteConn.WriteTo(packetBuf.Bytes(), destUDPAddr)
+			packetBuf.Release()
+			if err != nil {
+				h.logf("[sing-tun] failed to forward UDP: " + err.Error())
+				return
 			}
-		}()
-
-		wg.Wait()
+		}
 	}()
+
+	// 方向二：上游 → 客户端（独立持续读取，QUIC 多包响应不会丢失）
+	go func() {
+		defer wg.Done()
+		defer stop()
+		responseBuf := make([]byte, 65535)
+		for {
+			select {
+			case <-stopped:
+				return
+			case <-ctx.Done():
+				return
+			default:
+			}
+
+			remoteConn.SetReadDeadline(time.Now().Add(udpIdleTimeout))
+			n, _, err := remoteConn.ReadFrom(responseBuf)
+			if err != nil {
+				if netErr, ok := err.(net.Error); ok && netErr.Timeout() {
+					continue // 上游暂时无数据（QUIC 静默期），等待另一方向结束
+				}
+				return
+			}
+
+			responsePacket := buf.NewPacket()
+			responsePacket.Write(responseBuf[:n])
+			// WritePacket 的 dest 是响应包的源地址（远端服务器），不是目标（应用）
+			// 所有权随 WritePacket 转移，由 gvisor 背压写端负责 Release
+			if err := conn.WritePacket(responsePacket, destination); err != nil {
+				h.logf("[sing-tun] failed to write UDP response: " + err.Error())
+				return
+			}
+		}
+	}()
+
+	wg.Wait()
+}()
 }
 
 // proxyConn 双向复制数据，正确处理 TCP 半关闭
@@ -924,12 +1040,16 @@ func (h *Handler) proxyConn(ctx context.Context, client, upstream net.Conn, onCl
 		done <- struct{}{}
 	}()
 
-	// 等待第一个方向结束
+	// 等待第一个方向结束。已消费一个 done，剩余待收数量必须相应扣减，
+	// 否则下面的收尾循环会永远等不到第二个信号，每次关闭都白等 5 秒。
+	pending := 2
 	select {
 	case <-done:
+		pending--
 		// 第一个方向结束，等待第二个方向（有超时防悬挂，也监听 ctx 外部取消）
 		select {
 		case <-done:
+			pending--
 		case <-time.After(30 * time.Second):
 		case <-ctx.Done():
 		}
@@ -941,11 +1061,11 @@ func (h *Handler) proxyConn(ctx context.Context, client, upstream net.Conn, onCl
 
 	// 两个方向都发 done：只等一个会让另一个 io.Copy 带着 conn 引用滞留到
 	// 下一次 GC，反复启停时表现为内存增长。close 后最多再等 5 秒。
-	for i := 0; i < 2; i++ {
+	for ; pending > 0; pending-- {
 		select {
 		case <-done:
 		case <-time.After(5 * time.Second):
-			i = 2
+			pending = 0
 		}
 	}
 

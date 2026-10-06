@@ -40,6 +40,10 @@ func isReservedFakeIP(addr netip.Addr, reserved []netip.Addr) bool {
 	return false
 }
 
+// TUNGateway4 返回 TUN 的 IPv4 网关地址。它是 TUN 地址的唯一来源，
+// 外部（如 core 的数据面自检）必须经此读取，不得再硬编码 "198.18.0.1"。
+func TUNGateway4() string { return tunGateway4 }
+
 func firstAllocatable(prefix netip.Prefix, reserved []netip.Addr) netip.Addr {
 	addr := prefix.Addr().Next()
 	for isReservedFakeIP(addr, reserved) {

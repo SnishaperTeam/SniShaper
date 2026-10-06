@@ -23,12 +23,21 @@ var (
 	procSetupDiCallClassInstaller    = setupapiDLL.NewProc("SetupDiCallClassInstaller")
 )
 
+// matchesSniShaperAdapter 判断某个网卡设备是否由 SniShaper 自己创建。
+//
+// 必须严格限定在本项目创建的适配器上：sing-tun 与 sing-box / mihomo 共用同一套
+// Wintun 驱动，设备描述同样含 "sing-tun"。若仅凭描述匹配，用户同时运行
+// sing-box 时，SniShaper 每次启停都会把对方的网卡删掉。
+// 判定依据是本项目独有的名称（SniShaper 网卡名）或 wintun 描述 + SniShaper 友好名。
 func matchesSniShaperAdapter(desc string, friendly string) bool {
 	d := strings.ToLower(desc)
 	f := strings.ToLower(friendly)
-	if strings.Contains(d, "sing-tun") || strings.Contains(d, "snishaper") || strings.Contains(f, "snishaper") {
+	// 本项目自有命名（网卡片 / 友好名 / 描述）
+	if strings.Contains(d, "snishaper") || strings.Contains(f, "snishaper") {
 		return true
 	}
+	// Wintun 驱动 + 本项目友好名：驱动描述已漂移为 "sing-tun Tunnel"，
+	// 因此必须同时要求友好名为 SniShaper，避免误删其他 sing-tun 用户的网卡。
 	return strings.Contains(d, "wintun") && f == "snishaper"
 }
 

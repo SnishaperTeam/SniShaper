@@ -424,13 +424,16 @@ func (a *App) StartTUN() error {
 
 	// Disable managed system proxy before TUN to avoid port/resource conflicts
 	status := a.GetSystemProxyStatus()
+	restoreSysProxy := false
 	if status.Enabled && a.isManagedSystemProxy(status) {
 		a.appendLog("[action] StartTUN: disabling managed system proxy before TUN")
 		if err := a.applySystemProxy(false, 0); err != nil {
 			a.appendLog("[warn] StartTUN: failed to disable system proxy: " + err.Error())
+		} else {
+			restoreSysProxy = true
 		}
-		a.tunRestoreSysProxy = true
 	}
+	a.setTUNRestoreSysProxy(restoreSysProxy)
 
 	captureEnabled := a.IsLogCaptureEnabled()
 
@@ -441,6 +444,15 @@ func (a *App) StartTUN() error {
 		}
 		if err != nil {
 			a.appendLog("[error] StartTUN failed: " + err.Error())
+			// 启动失败必须把系统代理还原回去：此前已为 TUN 关闭，
+			// 若不复原，用户会同时失去 TUN 与系统代理两条通路，表现为彻底断网。
+			// StartTUN 是异步 RPC，此处 err 为 nil 时仍需用实际状态复核。
+			if a.GetTUNStatus().Running {
+				a.restoreSysProxyAfterTUN()
+			} else {
+				a.appendLog("[warn] StartTUN: TUN not running, restoring managed system proxy")
+				a.restoreSysProxyAfterTUN()
+			}
 		}
 		a.emitFrontendState()
 	})
@@ -458,17 +470,33 @@ func (a *App) StopTUN() error {
 	}
 
 	// Restore system proxy if it was disabled for TUN
-	if a.tunRestoreSysProxy {
-		a.tunRestoreSysProxy = false
-		port := a.GetListenPort()
-		a.appendLog(fmt.Sprintf("[action] StopTUN: restoring managed system proxy on :%d", port))
-		if err2 := a.applySystemProxy(true, port); err2 != nil {
-			a.appendLog("[error] StopTUN: failed to restore system proxy: " + err2.Error())
-		}
-	}
+	a.restoreSysProxyAfterTUN()
 
 	a.emitFrontendState()
 	return err
+}
+
+func (a *App) setTUNRestoreSysProxy(value bool) {
+	a.tunSysProxyMu.Lock()
+	a.tunRestoreSysProxy = value
+	a.tunSysProxyMu.Unlock()
+}
+
+// restoreSysProxyAfterTUN 在 TUN 停止或启动失败后还原被临时关闭的系统代理。
+// 读改写必须持锁：tunRestoreSysProxy 同时被调用方与 StartTUN 的异步 goroutine 访问。
+func (a *App) restoreSysProxyAfterTUN() {
+	a.tunSysProxyMu.Lock()
+	shouldRestore := a.tunRestoreSysProxy
+	a.tunRestoreSysProxy = false
+	a.tunSysProxyMu.Unlock()
+	if !shouldRestore {
+		return
+	}
+	port := a.GetListenPort()
+	a.appendLog(fmt.Sprintf("[action] restoring managed system proxy on :%d", port))
+	if err := a.applySystemProxy(true, port); err != nil {
+		a.appendLog("[error] failed to restore system proxy: " + err.Error())
+	}
 }
 
 func (a *App) ExportCert() string {

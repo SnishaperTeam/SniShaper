@@ -149,6 +149,15 @@ func (s *coreService) StartTUN(_ EmptyArgs, _ *EmptyArgs) error {
 
 func (s *coreService) StopTUN(_ EmptyArgs, _ *EmptyArgs) error {
 	go func() {
+		// StopTUN 与 StartTUN 一样需要 recover：释放路径要动 Wintun 设备与
+		// gvisor 栈，两者都可能 panic，缺了保护会连带整个 core 子进程退出，
+		// 表现为 GUI 侧所有 RPC 一起断连。
+		defer func() {
+			if rec := recover(); rec != nil {
+				s.runtime.appendLog("[core] StopTUN panic: " + fmt.Sprint(rec))
+				s.runtime.appendLog(string(debug.Stack()))
+			}
+		}()
 		if err := s.runtime.stopTUN(); err != nil {
 			s.runtime.appendLog("[core] StopTUN failed: " + err.Error())
 		}

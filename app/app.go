@@ -66,6 +66,7 @@ type App struct {
 	launchedAtStartup   bool
 	autoProxyAtStartup  bool
 	core                *core.CoreClient
+	tunSysProxyMu       sync.Mutex // 保护 tunRestoreSysProxy：调用方与 StartTUN 异步 goroutine 并发访问
 	tunRestoreSysProxy  bool
 	pendingShow         bool
 	pendingUpdateMu     sync.Mutex
