@@ -11,16 +11,21 @@ import (
 
 // bindInterface pins a socket to an interface index using the BSD bound-if
 // options. Unlike Linux there is no SO_BINDTOIFINDEX, so the index is passed
-// directly to IP_BOUND_IF / IPV6_BOUND_IF at the IP layer.
-func bindInterface(fd uintptr, index int) error {
+// directly to IP_BOUND_IF / IPV6_BOUND_IF at the IP layer. The option must
+// match the socket family: setting IPV6_BOUND_IF on an AF_INET socket (or the
+// reverse) fails and would abort every controlled dial.
+func bindInterface(fd uintptr, index int, family int) error {
 	if index <= 0 {
 		return fmt.Errorf("invalid interface index %d", index)
 	}
+	if family == FamilyIPv6 {
+		if err := unix.SetsockoptInt(int(fd), unix.IPPROTO_IPV6, unix.IPV6_BOUND_IF, index); err != nil {
+			return fmt.Errorf("bind IPv6 interface %d: %w", index, err)
+		}
+		return nil
+	}
 	if err := unix.SetsockoptInt(int(fd), unix.IPPROTO_IP, unix.IP_BOUND_IF, index); err != nil {
 		return fmt.Errorf("bind IPv4 interface %d: %w", index, err)
-	}
-	if err := unix.SetsockoptInt(int(fd), unix.IPPROTO_IPV6, unix.IPV6_BOUND_IF, index); err != nil {
-		return fmt.Errorf("bind IPv6 interface %d: %w", index, err)
 	}
 	return nil
 }
@@ -34,7 +39,7 @@ func (b Binding) Control(family int) func(network, address string, c syscall.Raw
 	return func(network, address string, c syscall.RawConn) error {
 		var sockErr error
 		err := c.Control(func(fd uintptr) {
-			sockErr = bindInterface(fd, index)
+			sockErr = bindInterface(fd, index, family)
 		})
 		if err != nil {
 			return err

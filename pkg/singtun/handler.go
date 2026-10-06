@@ -45,6 +45,8 @@ type Handler struct {
 
 // track 登记一个 TCP 连接。返回 false 表示 Handler 已关闭，调用方必须
 // 自行关闭该连接 —— 否则连接会落进已被清空的 map，变成无人回收的泄漏。
+// wg.Add 必须在锁内与 track 同步完成：若在 track 返回后再 Add，
+// Close 可能已经进入 wg.Wait，Add 会触发 "concurrent Add and Wait" panic。
 func (h *Handler) track(c net.Conn) bool {
 	h.mu.Lock()
 	defer h.mu.Unlock()
@@ -55,13 +57,18 @@ func (h *Handler) track(c net.Conn) bool {
 		h.live = make(map[net.Conn]struct{})
 	}
 	h.live[c] = struct{}{}
+	h.wg.Add(1)
 	return true
 }
 
 func (h *Handler) untrack(c net.Conn) {
 	h.mu.Lock()
+	_, ok := h.live[c]
 	delete(h.live, c)
 	h.mu.Unlock()
+	if ok {
+		h.wg.Done()
+	}
 }
 
 func (h *Handler) trackPacketConn(c N.PacketConn) bool {
@@ -74,31 +81,46 @@ func (h *Handler) trackPacketConn(c N.PacketConn) bool {
 		h.livePacket = make(map[N.PacketConn]struct{})
 	}
 	h.livePacket[c] = struct{}{}
+	h.wg.Add(1)
 	return true
 }
 
 func (h *Handler) untrackPacketConn(c N.PacketConn) {
 	h.mu.Lock()
+	_, ok := h.livePacket[c]
 	delete(h.livePacket, c)
 	h.mu.Unlock()
+	if ok {
+		h.wg.Done()
+	}
 }
 
 func (h *Handler) Close() {
 	h.mu.Lock()
 	h.closed = true
-	conns := h.live
-	packets := h.livePacket
-	h.live = nil
-	h.livePacket = nil
+	conns := make([]net.Conn, 0, len(h.live))
+	for c := range h.live {
+		conns = append(conns, c)
+	}
+	packets := make([]N.PacketConn, 0, len(h.livePacket))
+	for c := range h.livePacket {
+		packets = append(packets, c)
+	}
 	h.mu.Unlock()
-	for c := range conns {
+	for _, c := range conns {
 		c.Close()
 	}
-	for c := range packets {
+	for _, c := range packets {
 		_ = c.Close()
 	}
 	// 等所有转发 goroutine 真正退出，避免它们持有的 socket 与 buffer 滞留。
+	// 注意不能在 Wait 之前清空 live/livePacket：untrack 依赖 map 里的条目
+	// 决定是否 wg.Done，先清空会让计数永远无法归零。
 	h.wg.Wait()
+	h.mu.Lock()
+	h.live = nil
+	h.livePacket = nil
+	h.mu.Unlock()
 }
 
 // NewHandler 创建新的 Handler
@@ -137,6 +159,20 @@ func (h *Handler) NewDNSPacket(payload []byte, source M.Socksaddr, destination M
 
 // NewConnectionEx 处理新的 TCP 连接
 func (h *Handler) NewConnectionEx(ctx context.Context, conn net.Conn, source M.Socksaddr, destination M.Socksaddr, onClose N.CloseHandlerFunc) {
+	if shouldHijackDNS(destination) {
+		h.serveDNSOverStream(ctx, conn, source, destination, onClose)
+		return
+	}
+
+	if !h.track(conn) {
+		_ = conn.Close()
+		if onClose != nil {
+			onClose(nil)
+		}
+		return
+	}
+	trackedConn := conn
+
 	// 查找真实域名（fake-ip 反查）
 	targetHost := h.resolveHost(destination)
 
@@ -157,12 +193,15 @@ func (h *Handler) NewConnectionEx(ctx context.Context, conn net.Conn, source M.S
 	upstream, err := h.dialProxy()
 	if err != nil {
 		h.logf("[sing-tun] failed to connect to proxy: " + err.Error())
-		conn.Close()
+		_ = conn.Close()
+		h.untrack(trackedConn)
 		if onClose != nil {
 			onClose(err)
 		}
 		return
 	}
+
+	_ = upstream.SetDeadline(time.Now().Add(15 * time.Second))
 
 	// 发送 CONNECT 请求 (使用域名，不是 IP)
 	// 用 net.JoinHostPort 正确处理 IPv6 地址（自动加方括号）
@@ -171,8 +210,9 @@ func (h *Handler) NewConnectionEx(ctx context.Context, conn net.Conn, source M.S
 	h.logf(fmt.Sprintf("[sing-tun] CONNECT request: %q", connectReq))
 	if _, err := upstream.Write([]byte(connectReq)); err != nil {
 		h.logf("[sing-tun] failed to send CONNECT: " + err.Error())
-		conn.Close()
-		upstream.Close()
+		_ = conn.Close()
+		_ = upstream.Close()
+		h.untrack(trackedConn)
 		if onClose != nil {
 			onClose(err)
 		}
@@ -184,8 +224,9 @@ func (h *Handler) NewConnectionEx(ctx context.Context, conn net.Conn, source M.S
 	statusLine, err := br.ReadString('\n')
 	if err != nil {
 		h.logf("[sing-tun] failed to read CONNECT response: " + err.Error())
-		conn.Close()
-		upstream.Close()
+		_ = conn.Close()
+		_ = upstream.Close()
+		h.untrack(trackedConn)
 		if onClose != nil {
 			onClose(err)
 		}
@@ -204,8 +245,9 @@ func (h *Handler) NewConnectionEx(ctx context.Context, conn net.Conn, source M.S
 		}
 		h.logf("[sing-tun] CONNECT failed: " + errMsg)
 		err := fmt.Errorf("proxy connect failed: %s", statusLine)
-		conn.Close()
-		upstream.Close()
+		_ = conn.Close()
+		_ = upstream.Close()
+		h.untrack(trackedConn)
 		if onClose != nil {
 			onClose(err)
 		}
@@ -217,8 +259,9 @@ func (h *Handler) NewConnectionEx(ctx context.Context, conn net.Conn, source M.S
 		line, err := br.ReadString('\n')
 		if err != nil {
 			h.logf("[sing-tun] failed to read CONNECT headers: " + err.Error())
-			conn.Close()
-			upstream.Close()
+			_ = conn.Close()
+			_ = upstream.Close()
+			h.untrack(trackedConn)
 			if onClose != nil {
 				onClose(err)
 			}
@@ -229,28 +272,27 @@ func (h *Handler) NewConnectionEx(ctx context.Context, conn net.Conn, source M.S
 		}
 	}
 
+	_ = upstream.SetDeadline(time.Time{})
+
 	// 用 bufio.Reader 包装 upstream，确保 br 中已缓冲的隧道数据不丢失
 	// （代理在 200 响应后可能立即发送 TLS ServerHello 等数据）
 	upstream = &bufferedConn{Conn: upstream, br: br}
 
 	// 先登记再起 goroutine：反过来的话，Close 可能在 track 之前跑完，
 	// 连接就会落进已清空的 map 里，Close 永远看不到它。
-	if !h.track(conn) || !h.track(upstream) {
-		h.untrack(conn)
-		h.untrack(upstream)
-		conn.Close()
-		upstream.Close()
+	if !h.track(upstream) {
+		_ = conn.Close()
+		_ = upstream.Close()
+		h.untrack(trackedConn)
 		if onClose != nil {
 			onClose(nil)
 		}
 		return
 	}
 
-	h.wg.Add(1)
 	go func() {
-		defer h.wg.Done()
 		h.proxyConn(ctx, conn, upstream, onClose)
-		h.untrack(conn)
+		h.untrack(trackedConn)
 		h.untrack(upstream)
 	}()
 }
@@ -418,12 +460,76 @@ func (h *Handler) NewPacketConnectionEx(ctx context.Context, conn N.PacketConn, 
 	h.forwardUDPDirect(ctx, conn, source, destination, onClose)
 }
 
+const dnsStreamIdleTimeout = 30 * time.Second
+
+// dnsStreamWriter 把 DNS 应答按 RFC 7766 写回 TCP 流：2 字节大端长度前缀 + 载荷。
+func (h *Handler) serveDNSOverStream(ctx context.Context, conn net.Conn, source M.Socksaddr, destination M.Socksaddr, onClose N.CloseHandlerFunc) {
+	if !h.track(conn) {
+		_ = conn.Close()
+		if onClose != nil {
+			onClose(nil)
+		}
+		return
+	}
+
+	go func() {
+		defer func() {
+			_ = conn.Close()
+			if onClose != nil {
+				onClose(nil)
+			}
+		}()
+		defer h.untrack(conn)
+
+		writer := &dnsStreamWriter{conn: conn}
+		lenBuf := make([]byte, 2)
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			default:
+			}
+
+			_ = conn.SetReadDeadline(time.Now().Add(dnsStreamIdleTimeout))
+			if _, err := io.ReadFull(conn, lenBuf); err != nil {
+				return
+			}
+			length := int(lenBuf[0])<<8 | int(lenBuf[1])
+			if length == 0 {
+				return
+			}
+			payload := make([]byte, length)
+			if _, err := io.ReadFull(conn, payload); err != nil {
+				return
+			}
+			h.handleRawDNSPacket(payload, source, destination, writer)
+		}
+	}()
+}
+
+type dnsStreamWriter struct {
+	conn net.Conn
+}
+
+func (w *dnsStreamWriter) WritePacket(buffer *buf.Buffer, destination M.Socksaddr) error {
+	defer buffer.Release()
+	payload := buffer.Bytes()
+	if len(payload) > 0xFFFF {
+		return fmt.Errorf("DNS over TCP response too large: %d bytes", len(payload))
+	}
+	out := make([]byte, 2+len(payload))
+	out[0] = byte(len(payload) >> 8)
+	out[1] = byte(len(payload))
+	copy(out[2:], payload)
+	_, err := w.conn.Write(out)
+	return err
+}
+
 type packetConnDNSWriter struct {
 	conn N.PacketConn
 }
 
 func (w *packetConnDNSWriter) WritePacket(buffer *buf.Buffer, destination M.Socksaddr) error {
-	defer buffer.Release()
 	return w.conn.WritePacket(buffer, destination)
 }
 
@@ -443,9 +549,7 @@ func (h *Handler) serveDNSOverPacketConn(ctx context.Context, conn N.PacketConn,
 		return
 	}
 
-	h.wg.Add(1)
 	go func() {
-		defer h.wg.Done()
 		defer h.untrackPacketConn(conn)
 		defer func() {
 			_ = conn.Close()
@@ -537,12 +641,7 @@ func (h *Handler) handleRawDNSPacket(payload []byte, source M.Socksaddr, destina
 		})
 	}
 
-	respBytes, err := msg.Pack()
-	if err != nil {
-		h.logf("[sing-tun] failed to pack DNS response: " + err.Error())
-		return
-	}
-	respBytes, err = resp.Pack()
+	respBytes, err := resp.Pack()
 	if err != nil {
 		h.logf("[sing-tun] failed to pack DNS response: " + err.Error())
 		return
@@ -550,26 +649,39 @@ func (h *Handler) handleRawDNSPacket(payload []byte, source M.Socksaddr, destina
 	respBuf := buf.NewPacket()
 	respBuf.Write(respBytes)
 	if err := writer.WritePacket(respBuf, destination); err != nil {
-		respBuf.Release()
 		h.logf("[sing-tun] failed to write DNS response: " + err.Error())
+	}
+}
+
+// serveDNSFailure 以 QR=1 的 SERVFAIL 应答客户端。
+// 不能直接改查询报文的 Rcode 再 Pack：那会得到 QR=0 的废包，客户端会丢弃并重试。
+func (h *Handler) serveDNSFailure(msg *dns.Msg, destination M.Socksaddr, writer N.PacketWriter) {
+	resp := new(dns.Msg)
+	resp.SetReply(msg)
+	resp.RecursionAvailable = true
+	resp.Rcode = dns.RcodeServerFailure
+	respBytes, packErr := resp.Pack()
+	if packErr != nil {
+		return
+	}
+	respBuf := buf.NewPacket()
+	respBuf.Write(respBytes)
+	if writeErr := writer.WritePacket(respBuf, destination); writeErr != nil {
+		h.logf("[sing-tun] failed to write DNS error response: " + writeErr.Error())
 	}
 }
 
 // handleDNSRealPacket resolves non-A/AAAA queries via DoH
 func (h *Handler) handleDNSRealPacket(msg *dns.Msg, domain string, destination M.Socksaddr, writer N.PacketWriter) {
+	if h.resolver == nil {
+		h.logf("[sing-tun] DNS resolve unavailable for " + domain + ": no resolver configured")
+		h.serveDNSFailure(msg, destination, writer)
+		return
+	}
 	ips, err := h.resolver.ResolveIPs(context.Background(), domain)
 	if err != nil {
 		h.logf("[sing-tun] DNS resolve failed for " + domain + ": " + err.Error())
-		msg.Rcode = dns.RcodeServerFailure
-		respBytes, packErr := msg.Pack()
-		if packErr != nil {
-			return
-		}
-		respBuf := buf.NewPacket()
-		respBuf.Write(respBytes)
-		if writeErr := writer.WritePacket(respBuf, destination); writeErr != nil {
-			respBuf.Release()
-		}
+		h.serveDNSFailure(msg, destination, writer)
 		return
 	}
 
@@ -613,7 +725,6 @@ func (h *Handler) handleDNSRealPacket(msg *dns.Msg, domain string, destination M
 	respBuf := buf.NewPacket()
 	respBuf.Write(respBytes)
 	if err := writer.WritePacket(respBuf, destination); err != nil {
-		respBuf.Release()
 		h.logf("[sing-tun] failed to write DNS response: " + err.Error())
 	}
 }
@@ -711,9 +822,7 @@ func (h *Handler) forwardUDPDirect(ctx context.Context, conn N.PacketConn, sourc
 		return
 	}
 
-	h.wg.Add(1)
 	go func() {
-		defer h.wg.Done()
 		defer remoteConn.Close()
 		defer h.untrackPacketConn(conn)
 		defer func() {
@@ -787,7 +896,6 @@ func (h *Handler) forwardUDPDirect(ctx context.Context, conn N.PacketConn, sourc
 				// WritePacket 的 dest 是响应包的源地址（远端服务器），不是目标（应用）
 				// 所有权随 WritePacket 转移，由 gvisor 背压写端负责 Release
 				if err := conn.WritePacket(responsePacket, destination); err != nil {
-					responsePacket.Release()
 					h.logf("[sing-tun] failed to write UDP response: " + err.Error())
 					remoteConn.Close()
 					return

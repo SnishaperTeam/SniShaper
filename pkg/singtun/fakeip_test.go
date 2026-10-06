@@ -2,6 +2,7 @@ package singtun
 
 import (
 	"fmt"
+	"net/netip"
 	"testing"
 )
 
@@ -51,6 +52,36 @@ func TestFakeIPStoreContainsRespectsFamily(t *testing.T) {
 	}
 	if !store.Contains(v6) {
 		t.Fatalf("Contains(%s) = false; want true", v6)
+	}
+}
+
+// TUN 网关与 DNS 地址绝不能进入 fake-ip 池，否则分配到 198.18.0.2 的域名
+// 会与 DNS 劫持入口冲突，产生 "fake-ip has no domain mapping" 刷屏。
+func TestFakeIPStoreSkipsReservedAddresses(t *testing.T) {
+	store := NewFakeIPStore()
+
+	gateway4 := netip.MustParseAddr("198.18.0.1")
+	dns4 := netip.MustParseAddr("198.18.0.2")
+	gateway6 := netip.MustParseAddr("fd65:198:18::1")
+	dns6 := netip.MustParseAddr("fd65:198:18::2")
+
+	first, _ := store.Create("first.example.com.")
+	if first == gateway4 || first == dns4 {
+		t.Fatalf("first allocation collided with reserved TUN address: %s", first)
+	}
+
+	sixth, _ := store.CreateIPv6("first-v6.example.com.")
+	if sixth == gateway6 || sixth == dns6 {
+		t.Fatalf("first IPv6 allocation collided with reserved TUN address: %s", sixth)
+	}
+
+	for _, reserved := range []netip.Addr{gateway4, dns4, gateway6, dns6} {
+		if store.Contains(reserved) {
+			t.Fatalf("reserved TUN address %s must not be treated as fake-ip", reserved)
+		}
+		if _, ok := store.Lookup(reserved); ok {
+			t.Fatalf("reserved TUN address %s must not resolve to a domain", reserved)
+		}
 	}
 }
 

@@ -13,6 +13,41 @@ const (
 	fakeIPv6Prefix = "fd65:198:18::/64"
 )
 
+const (
+	tunGateway4 = "198.18.0.1"
+	tunDNS4     = "198.18.0.2"
+	tunGateway6 = "fd65:198:18::1"
+	tunDNS6     = "fd65:198:18::2"
+)
+
+var (
+	reservedFakeIP4 = []netip.Addr{
+		netip.MustParseAddr(tunGateway4),
+		netip.MustParseAddr(tunDNS4),
+	}
+	reservedFakeIP6 = []netip.Addr{
+		netip.MustParseAddr(tunGateway6),
+		netip.MustParseAddr(tunDNS6),
+	}
+)
+
+func isReservedFakeIP(addr netip.Addr, reserved []netip.Addr) bool {
+	for _, r := range reserved {
+		if addr == r {
+			return true
+		}
+	}
+	return false
+}
+
+func firstAllocatable(prefix netip.Prefix, reserved []netip.Addr) netip.Addr {
+	addr := prefix.Addr().Next()
+	for isReservedFakeIP(addr, reserved) {
+		addr = addr.Next()
+	}
+	return addr
+}
+
 // FakeIPStore 管理 fake-ip ↔ 域名的双向映射
 //
 // 容量上限：maps 若不设上限，长时间运行会随访问过的域名数无限增长——
@@ -30,23 +65,21 @@ type FakeIPStore struct {
 	order4       []string              // domainCache4 的插入顺序，用于 FIFO 淘汰
 	order6       []string              // domainCache6 的插入顺序，用于 FIFO 淘汰
 	current4     netip.Addr            // IPv4 当前分配的 IP
+	first4       netip.Addr            // IPv4 第一个可分配地址（跳过保留地址）
 	last4        netip.Addr            // IPv4 范围最后一个 IP
 	range4       netip.Prefix          // IPv4 范围
 	current6     netip.Addr            // IPv6 当前分配的 IP
+	first6       netip.Addr            // IPv6 第一个可分配地址（跳过保留地址）
 	last6        netip.Addr            // IPv6 范围最后一个 IP
 	range6       netip.Prefix          // IPv6 范围
 }
 
 // NewFakeIPStore 创建新的 fake-ip 存储
 func NewFakeIPStore() *FakeIPStore {
-	// IPv4 范围
 	range4 := netip.MustParsePrefix(fakeIPv4Prefix)
-	startAddr4 := range4.Addr().Next().Next()
 	lastAddr4 := broadcastAddr(range4)
 
-	// IPv6 范围
 	range6 := netip.MustParsePrefix(fakeIPv6Prefix)
-	startAddr6 := range6.Addr().Next().Next()
 	lastAddr6 := broadcastAddr(range6)
 
 	return &FakeIPStore{
@@ -55,10 +88,12 @@ func NewFakeIPStore() *FakeIPStore {
 		domainCache6: make(map[string]netip.Addr),
 		order4:       make([]string, 0, fakeIPStoreMaxEntries/8),
 		order6:       make([]string, 0, fakeIPStoreMaxEntries/8),
-		current4:     startAddr4,
+		current4:     firstAllocatable(range4, reservedFakeIP4),
+		first4:       firstAllocatable(range4, reservedFakeIP4),
 		last4:        lastAddr4,
 		range4:       range4,
-		current6:     startAddr6,
+		current6:     firstAllocatable(range6, reservedFakeIP6),
+		first6:       firstAllocatable(range6, reservedFakeIP6),
 		last6:        lastAddr6,
 		range6:       range6,
 	}
@@ -81,7 +116,7 @@ func (s *FakeIPStore) Create(domain string) (netip.Addr, bool) {
 
 	// 环形回绕
 	if !s.range4.Contains(s.current4) || s.current4 == s.last4 {
-		s.current4 = s.range4.Addr().Next().Next()
+		s.current4 = s.first4
 	}
 
 	// IP 被重新分配：旧域名的正向映射必须一并失效，
@@ -116,7 +151,7 @@ func (s *FakeIPStore) CreateIPv6(domain string) (netip.Addr, bool) {
 
 	// 环形回绕
 	if !s.range6.Contains(s.current6) || s.current6 == s.last6 {
-		s.current6 = s.range6.Addr().Next().Next()
+		s.current6 = s.first6
 	}
 
 	if previous, ok := s.addressCache[ip]; ok && previous != domain {
@@ -177,7 +212,13 @@ func (s *FakeIPStore) Lookup(ip netip.Addr) (string, bool) {
 // Contains 检查 IP 是否在 fake-ip 范围内
 func (s *FakeIPStore) Contains(ip netip.Addr) bool {
 	if ip.Is4() {
+		if isReservedFakeIP(ip, reservedFakeIP4) {
+			return false
+		}
 		return s.range4.Contains(ip)
+	}
+	if isReservedFakeIP(ip, reservedFakeIP6) {
+		return false
 	}
 	return s.range6.Contains(ip)
 }
@@ -203,5 +244,10 @@ func broadcastAddr(prefix netip.Prefix) netip.Addr {
 		}
 		return netip.AddrFrom4(b)
 	}
-	return addr // IPv6 暂不处理
+	b := addr.As16()
+	mask := net.CIDRMask(prefix.Bits(), 128)
+	for i := 0; i < 16; i++ {
+		b[i] = b[i] | ^mask[i]
+	}
+	return netip.AddrFrom16(b)
 }

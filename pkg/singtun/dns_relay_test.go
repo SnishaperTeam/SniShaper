@@ -2,6 +2,7 @@ package singtun
 
 import (
 	"context"
+	"io"
 	"net"
 	"net/netip"
 	"runtime"
@@ -9,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/miekg/dns"
 	"github.com/sagernet/sing/common/buf"
 	M "github.com/sagernet/sing/common/metadata"
 	N "github.com/sagernet/sing/common/network"
@@ -77,6 +79,16 @@ func TestHandlerCloseUnblocksTrackedConn(t *testing.T) {
 		handler.Close()
 	}()
 
+	go func() {
+		buf := make([]byte, 64)
+		for {
+			if _, err := client.Read(buf); err != nil {
+				handler.untrack(client)
+				return
+			}
+		}
+	}()
+
 	select {
 	case <-done:
 	case <-time.After(5 * time.Second):
@@ -89,9 +101,6 @@ func TestServeDNSOverPacketConnExitsOnClose(t *testing.T) {
 	defer handler.Close()
 
 	conn := newBlockingPacketConn()
-	if !handler.trackPacketConn(conn) {
-		t.Fatal("trackPacketConn must succeed before the relay starts")
-	}
 
 	destination := M.SocksaddrFrom(netip.MustParseAddr("198.18.0.2"), 53)
 	source := M.SocksaddrFrom(netip.MustParseAddr("198.18.0.1"), 40000)
@@ -135,6 +144,84 @@ func TestServeDNSOverPacketConnCycleDoesNotLeak(t *testing.T) {
 
 	if after > before+6 {
 		t.Fatalf("goroutines grew from %d to %d across 50 DNS relay cycles", before, after)
+	}
+}
+
+func TestServeDNSOverStreamAnswersQuery(t *testing.T) {
+	handler := NewHandler("127.0.0.1:1", nil, func(string) {})
+	defer handler.Close()
+
+	client, server := net.Pipe()
+	defer client.Close()
+	defer server.Close()
+
+	destination := M.SocksaddrFrom(netip.MustParseAddr("198.18.0.2"), 53)
+	source := M.SocksaddrFrom(netip.MustParseAddr("198.18.0.1"), 40000)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	handler.serveDNSOverStream(ctx, server, source, destination, nil)
+
+	msg := new(dns.Msg)
+	msg.Id = 4321
+	msg.RecursionDesired = true
+	msg.Question = []dns.Question{{Name: "stream.example.com.", Qtype: dns.TypeA, Qclass: dns.ClassINET}}
+	query, err := msg.Pack()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	_ = client.SetReadDeadline(time.Now().Add(5 * time.Second))
+	if _, err := client.Write([]byte{0, byte(len(query))}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := client.Write(query); err != nil {
+		t.Fatal(err)
+	}
+
+	hdr := make([]byte, 2)
+	if _, err := io.ReadFull(client, hdr); err != nil {
+		t.Fatal(err)
+	}
+	respLen := int(hdr[0])<<8 | int(hdr[1])
+	if respLen == 0 {
+		t.Fatal("empty DNS over TCP response")
+	}
+	respPayload := make([]byte, respLen)
+	if _, err := io.ReadFull(client, respPayload); err != nil {
+		t.Fatal(err)
+	}
+
+	resp := new(dns.Msg)
+	if err := resp.Unpack(respPayload); err != nil {
+		t.Fatal(err)
+	}
+	if !resp.Response {
+		t.Fatal("QR bit not set in DNS over TCP response")
+	}
+	if resp.Id != msg.Id {
+		t.Fatalf("response id mismatch: %d != %d", resp.Id, msg.Id)
+	}
+	if len(resp.Answer) != 1 {
+		t.Fatalf("expected exactly one fake-ip answer, got %d", len(resp.Answer))
+	}
+	if resp.Answer[0].Header().Name != "stream.example.com." {
+		t.Fatalf("unexpected answer name: %s", resp.Answer[0].Header().Name)
+	}
+	answer, ok := resp.Answer[0].(*dns.A)
+	if !ok {
+		t.Fatalf("expected A answer, got type %d", resp.Answer[0].Header().Rrtype)
+	}
+	addr, valid := netip.AddrFromSlice(answer.A)
+	if !valid {
+		t.Fatalf("answer %s is not a valid address", answer.A)
+	}
+	if !handler.fakeIP.Contains(addr) {
+		t.Fatalf("answer %s is outside the fake-ip range", addr)
+	}
+	if answer.A.Equal(net.ParseIP("198.18.0.2")) {
+		t.Fatal("fake-ip must not collide with the TUN DNS address")
 	}
 }
 

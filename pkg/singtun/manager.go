@@ -49,6 +49,9 @@ func (m *Manager) Start(cfg proxy.TUNConfig, proxyAddr string) (err error) {
 	if err = m.waitReleasingLocked(); err != nil {
 		return err
 	}
+	if m.running {
+		return nil
+	}
 
 	released := false
 	defer func() {
@@ -67,21 +70,21 @@ func (m *Manager) Start(cfg proxy.TUNConfig, proxyAddr string) (err error) {
 	}
 
 	m.options = tun.Options{
-		Name: "SniShaper",
-		MTU:  uint32(mtu),
+		Name:        "SniShaper",
+		MTU:         uint32(mtu),
 		Inet4Address: []netip.Prefix{
-			netip.MustParsePrefix("198.18.0.1/16"),
+			netip.MustParsePrefix(fakeIPv4Prefix),
 		},
-		Inet4Gateway: netip.MustParseAddr("198.18.0.1"),
+		Inet4Gateway: netip.MustParseAddr(tunGateway4),
 		Inet6Address: []netip.Prefix{
-			netip.MustParsePrefix("fd65:198:18::1/64"),
+			netip.MustParsePrefix(fakeIPv6Prefix),
 		},
-		Inet6Gateway: netip.MustParseAddr("fd65:198:18::1"),
+		Inet6Gateway: netip.MustParseAddr(tunGateway6),
 		AutoRoute:    cfg.AutoRoute,
 		StrictRoute:  cfg.StrictRoute,
 		DNSAddress: []netip.Addr{
-			netip.MustParseAddr("198.18.0.2"),
-			netip.MustParseAddr("fd65:198:18::2"),
+			netip.MustParseAddr(tunDNS4),
+			netip.MustParseAddr(tunDNS6),
 		},
 		EXP_DisableDNSHijack: false,
 		Inet4RouteExcludeAddress: append(
@@ -95,39 +98,37 @@ func (m *Manager) Start(cfg proxy.TUNConfig, proxyAddr string) (err error) {
 		Logger: &singTunLogger{m.logf},
 	}
 
-	if cfg.AutoRoute {
-		stageStart := time.Now()
-		ifaceFinder := control.NewDefaultInterfaceFinder()
-		if err := ifaceFinder.Update(); err != nil {
-			m.logf("[sing-tun] failed to update interface finder: " + err.Error())
-		}
-		m.options.InterfaceFinder = ifaceFinder
-		m.logf("[sing-tun] start: interface finder updated in " + time.Since(stageStart).String())
+	stageStart := time.Now()
+	ifaceFinder := control.NewDefaultInterfaceFinder()
+	if err := ifaceFinder.Update(); err != nil {
+		m.logf("[sing-tun] failed to update interface finder: " + err.Error())
+	}
+	m.options.InterfaceFinder = ifaceFinder
+	m.logf("[sing-tun] start: interface finder updated in " + time.Since(stageStart).String())
 
-		networkMonitor, err := tun.NewNetworkUpdateMonitor(&singTunLogger{m.logf})
-		if err != nil {
-			m.logf("[sing-tun] failed to create network monitor: " + err.Error())
+	networkMonitor, err := tun.NewNetworkUpdateMonitor(&singTunLogger{m.logf})
+	if err != nil {
+		m.logf("[sing-tun] failed to create network monitor: " + err.Error())
+	} else {
+		if err := networkMonitor.Start(); err != nil {
+			m.logf("[sing-tun] failed to start network monitor: " + err.Error())
+			networkMonitor.Close()
 		} else {
-			if err := networkMonitor.Start(); err != nil {
-				m.logf("[sing-tun] failed to start network monitor: " + err.Error())
-				networkMonitor.Close()
+			m.networkMonitor = networkMonitor
+			ifaceMonitor, err := tun.NewDefaultInterfaceMonitor(networkMonitor, &singTunLogger{m.logf}, tun.DefaultInterfaceMonitorOptions{
+				InterfaceFinder: ifaceFinder,
+			})
+			if err != nil {
+				m.logf("[sing-tun] failed to create interface monitor: " + err.Error())
 			} else {
-				m.networkMonitor = networkMonitor
-				ifaceMonitor, err := tun.NewDefaultInterfaceMonitor(networkMonitor, &singTunLogger{m.logf}, tun.DefaultInterfaceMonitorOptions{
-					InterfaceFinder: ifaceFinder,
-				})
-				if err != nil {
-					m.logf("[sing-tun] failed to create interface monitor: " + err.Error())
+				if err := ifaceMonitor.Start(); err != nil {
+					m.logf("[sing-tun] failed to start interface monitor: " + err.Error())
+					ifaceMonitor.Close()
+					networkMonitor.Close()
+					m.networkMonitor = nil
 				} else {
-					if err := ifaceMonitor.Start(); err != nil {
-						m.logf("[sing-tun] failed to start interface monitor: " + err.Error())
-						ifaceMonitor.Close()
-						networkMonitor.Close()
-						m.networkMonitor = nil
-					} else {
-						m.ifaceMonitor = ifaceMonitor
-						m.options.InterfaceMonitor = ifaceMonitor
-					}
+					m.ifaceMonitor = ifaceMonitor
+					m.options.InterfaceMonitor = ifaceMonitor
 				}
 			}
 		}
@@ -194,6 +195,7 @@ func (m *Manager) Start(cfg proxy.TUNConfig, proxyAddr string) (err error) {
 
 func newTunWithRetry(options tun.Options, logf func(string)) (tun.Tun, error) {
 	maxRetry := 3
+	cleanupStaleAdapters(logf)
 	var lastErr error
 	for i := 0; i < maxRetry; i++ {
 		attemptStart := time.Now()
@@ -206,6 +208,7 @@ func newTunWithRetry(options tun.Options, logf func(string)) (tun.Tun, error) {
 			return nil, fmt.Errorf("create tun failed: %w", err)
 		}
 		logf("[sing-tun] tun.New slow failure, retrying " + fmt.Sprint(i+1) + "/" + fmt.Sprint(maxRetry) + ": " + err.Error())
+		cleanupStaleAdapters(logf)
 	}
 	return nil, fmt.Errorf("create tun failed after %d attempts: %w", maxRetry, lastErr)
 }
@@ -245,6 +248,7 @@ func (m *Manager) releaseLocked() {
 		}
 		m.tun = nil
 		m.logf("[sing-tun] release: tun close stage done in " + time.Since(start).String())
+		cleanupStaleAdapters(m.logf)
 	}
 	if m.ifaceMonitor != nil {
 		start := time.Now()
