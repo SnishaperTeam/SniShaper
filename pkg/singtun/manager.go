@@ -32,6 +32,11 @@ type Manager struct {
 	ifaceConfig    netiface.Config
 	networkMonitor tun.NetworkUpdateMonitor
 	ifaceMonitor   tun.DefaultInterfaceMonitor
+
+	// 测试注入点（lifecycle_test.go）：设备创建工厂与残留网卡清理函数。
+	// nil 时使用真实实现（tun.New / cleanupStaleAdapters），生产路径不受影响。
+	newTunFn        func(options tun.Options) (tun.Tun, error)
+	cleanAdaptersFn func(logf func(string)) int
 }
 
 func NewManager(resolver *dohresolver.FailoverResolver, logf func(string)) *Manager {
@@ -49,20 +54,28 @@ func (m *Manager) Start(cfg proxy.TUNConfig, proxyAddr string) (err error) {
 	if m.running {
 		return nil
 	}
-	if err = m.waitReleasingLocked(); err != nil {
-		return err
-	}
-	if m.running {
-		return nil
-	}
 
-	released := false
+	// creating 标记本次 Start 是否已开始创建资源：只有创建中途失败才需要
+	// releaseLocked 回滚。残留清理阶段失败（如等待上次释放超时）时尚未创建
+	// 任何新资源，且可能仍有并发释放在进行，此时不能叠加 releaseLocked
+	// （会与在途释放竞争同一批资源、提前清掉 releasing 标记）。
+	creating := false
 	defer func() {
-		if err == nil || released {
+		if err == nil || !creating {
 			return
 		}
 		m.releaseLocked()
 	}()
+
+	// [US1] 显式残留清理阶段（设计决策 D7）：先清理上次运行的残留资源与
+	// 遗留虚拟网卡，全部完成才开始创建新设备。反复启停或崩溃后重启时，
+	// 残留不再累积到设备创建阶段才暴露。
+	var alreadyRunning bool
+	alreadyRunning, err = m.cleanupResidualsLocked()
+	if err != nil || alreadyRunning {
+		return err
+	}
+	creating = true
 
 	netiface.InvalidateCache()
 	m.ifaceConfig = cfg.InterfaceConfig()
@@ -155,7 +168,15 @@ func (m *Manager) Start(cfg proxy.TUNConfig, proxyAddr string) (err error) {
 			return fmt.Errorf("create tun failed (tried utun0..utun127): %w", lastErr)
 		}
 	} else {
-		if m.tun, err = newTunWithRetry(m.options, m.logf); err != nil {
+		newTun := m.newTunFn
+		if newTun == nil {
+			// tun.New 在 Windows 上返回具体类型 *tun.WinTun，这里包一层
+			// 转成 tun.Tun 接口，与注入的测试工厂签名一致。
+			newTun = func(options tun.Options) (tun.Tun, error) {
+				return tun.New(options)
+			}
+		}
+		if m.tun, err = newTunWithRetry(m.options, m.logf, newTun); err != nil {
 			return err
 		}
 	}
@@ -191,19 +212,60 @@ func (m *Manager) Start(cfg proxy.TUNConfig, proxyAddr string) (err error) {
 	m.logger.Info("start: stack.Start completed", "elapsed", time.Since(stackUpStart).String())
 
 	m.running = true
-	released = true
 	netiface.InvalidateCache()
 	m.logger.Info("TUN started, running=true")
 	return nil
 }
 
-func newTunWithRetry(options tun.Options, logf func(string)) (tun.Tun, error) {
+// cleanupResidualsLocked 是 Start 的显式残留清理阶段（US1，设计决策 D7）。
+//
+// 顺序：等待上一次释放完成（waitReleasingLocked，12s 上限维持）→ 若进程内
+// 仍有残留资源（上次 Start 回滚未尽 / Stop 关闭超时遗留）执行一次
+// releaseLocked → 清理本项目遗留的虚拟网卡 → 输出阶段耗时与移除数量日志。
+//
+// 强杀进程后的遗留网卡没有进程内状态可回收，只能在此用系统 API 移除；
+// matchesSniShaperAdapter 的严格匹配保证绝不误删 sing-box / mihomo 的设备。
+// 返回 alreadyRunning=true 表示等待释放期间另一路 Start 已完成启动，
+// 调用方应直接视为启动成功（幂等语义）。
+func (m *Manager) cleanupResidualsLocked() (alreadyRunning bool, err error) {
+	start := time.Now()
+	if err := m.waitReleasingLocked(); err != nil {
+		return false, err
+	}
+	if m.running {
+		return true, nil
+	}
+	if m.hasResidualsLocked() {
+		m.logger.Warn("startup residual cleanup: previous instance resources still present, releasing")
+		m.releaseLocked()
+	}
+	clean := m.cleanAdaptersFn
+	if clean == nil {
+		clean = cleanupStaleAdapters
+	}
+	removed := clean(m.logf)
+	m.logger.Info("startup residual cleanup done",
+		"removed_adapters", removed,
+		"elapsed", time.Since(start).String())
+	return false, nil
+}
+
+// hasResidualsLocked 报告进程内是否仍有上次实例的资源（与 Stop 的
+// 残留判断保持同一口径：不能只看 running，Start 中途失败时 running
+// 仍为 false 但资源可能已分配）。
+func (m *Manager) hasResidualsLocked() bool {
+	return m.tun != nil || m.stack != nil || m.handler != nil ||
+		m.ifaceMonitor != nil || m.networkMonitor != nil
+}
+
+func newTunWithRetry(options tun.Options, logf func(string), newTun func(tun.Options) (tun.Tun, error)) (tun.Tun, error) {
 	maxRetry := 3
-	cleanupStaleAdapters(logf)
+	// 遗留网卡的首次清理已提升为 Start 的显式阶段（cleanupResidualsLocked，US1）；
+	// 这里仅保留创建失败重试之间的防御性清理，移除数量只进日志。
 	var lastErr error
 	for i := 0; i < maxRetry; i++ {
 		attemptStart := time.Now()
-		t, err := tun.New(options)
+		t, err := newTun(options)
 		if err == nil {
 			return t, nil
 		}
