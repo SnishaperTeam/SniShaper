@@ -3,6 +3,7 @@ package singtun
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"net/netip"
 	"runtime"
 	"sync"
@@ -27,6 +28,7 @@ type Manager struct {
 	releasing      atomic.Bool
 	resolver       *dohresolver.FailoverResolver
 	logf           func(string)
+	logger         *slog.Logger
 	ifaceConfig    netiface.Config
 	networkMonitor tun.NetworkUpdateMonitor
 	ifaceMonitor   tun.DefaultInterfaceMonitor
@@ -36,6 +38,7 @@ func NewManager(resolver *dohresolver.FailoverResolver, logf func(string)) *Mana
 	return &Manager{
 		resolver: resolver,
 		logf:     logf,
+		logger:   newBridgedLogger(logf),
 	}
 }
 
@@ -95,34 +98,34 @@ func (m *Manager) Start(cfg proxy.TUNConfig, proxyAddr string) (err error) {
 			[]netip.Prefix{netip.MustParsePrefix("::1/128")},
 			routeExcludePrefixes(cfg, true, m.logf)...,
 		),
-		Logger: &singTunLogger{m.logf},
+		Logger: &singTunLogger{m.logger},
 	}
 
 	stageStart := time.Now()
 	ifaceFinder := control.NewDefaultInterfaceFinder()
 	if err := ifaceFinder.Update(); err != nil {
-		m.logf("[sing-tun] failed to update interface finder: " + err.Error())
+		m.logger.Error("failed to update interface finder", "error", err)
 	}
 	m.options.InterfaceFinder = ifaceFinder
-	m.logf("[sing-tun] start: interface finder updated in " + time.Since(stageStart).String())
+	m.logger.Info("start: interface finder updated", "elapsed", time.Since(stageStart).String())
 
-	networkMonitor, err := tun.NewNetworkUpdateMonitor(&singTunLogger{m.logf})
+	networkMonitor, err := tun.NewNetworkUpdateMonitor(&singTunLogger{m.logger})
 	if err != nil {
-		m.logf("[sing-tun] failed to create network monitor: " + err.Error())
+		m.logger.Warn("failed to create network monitor", "error", err)
 	} else {
 		if err := networkMonitor.Start(); err != nil {
-			m.logf("[sing-tun] failed to start network monitor: " + err.Error())
+			m.logger.Warn("failed to start network monitor", "error", err)
 			networkMonitor.Close()
 		} else {
 			m.networkMonitor = networkMonitor
-			ifaceMonitor, err := tun.NewDefaultInterfaceMonitor(networkMonitor, &singTunLogger{m.logf}, tun.DefaultInterfaceMonitorOptions{
+			ifaceMonitor, err := tun.NewDefaultInterfaceMonitor(networkMonitor, &singTunLogger{m.logger}, tun.DefaultInterfaceMonitorOptions{
 				InterfaceFinder: ifaceFinder,
 			})
 			if err != nil {
-				m.logf("[sing-tun] failed to create interface monitor: " + err.Error())
+				m.logger.Warn("failed to create interface monitor", "error", err)
 			} else {
 				if err := ifaceMonitor.Start(); err != nil {
-					m.logf("[sing-tun] failed to start interface monitor: " + err.Error())
+					m.logger.Warn("failed to start interface monitor", "error", err)
 					ifaceMonitor.Close()
 					networkMonitor.Close()
 					m.networkMonitor = nil
@@ -143,7 +146,7 @@ func (m *Manager) Start(cfg proxy.TUNConfig, proxyAddr string) (err error) {
 			t, e := tun.New(m.options)
 			if e == nil {
 				m.tun = t
-				m.logf("[sing-tun] created macOS TUN interface: " + m.options.Name)
+				m.logger.Info("created macOS TUN interface", "name", m.options.Name)
 				break
 			}
 			lastErr = e
@@ -156,7 +159,7 @@ func (m *Manager) Start(cfg proxy.TUNConfig, proxyAddr string) (err error) {
 			return err
 		}
 	}
-	m.logf("[sing-tun] start: tun.New completed in " + time.Since(tunStart).String())
+	m.logger.Info("start: tun.New completed", "elapsed", time.Since(tunStart).String())
 
 	m.handler = NewHandler(proxyAddr, m.resolver, m.logf)
 	m.handler.SetInterfaceConfig(cfg.InterfaceConfig())
@@ -168,29 +171,29 @@ func (m *Manager) Start(cfg proxy.TUNConfig, proxyAddr string) (err error) {
 		TunOptions: m.options,
 		Handler:    m.handler,
 		UDPTimeout: 60 * time.Second,
-		Logger:     &singTunLogger{m.logf},
+		Logger:     &singTunLogger{m.logger},
 	})
 	if err != nil {
 		return fmt.Errorf("create stack failed: %w", err)
 	}
-	m.logf("[sing-tun] start: NewStack completed in " + time.Since(stackStart).String())
+	m.logger.Info("start: NewStack completed", "elapsed", time.Since(stackStart).String())
 
 	routeStart := time.Now()
 	if err = m.tun.Start(); err != nil {
 		return fmt.Errorf("start tun failed: %w", err)
 	}
-	m.logf("[sing-tun] start: tun.Start (routes+dns) completed in " + time.Since(routeStart).String())
+	m.logger.Info("start: tun.Start (routes+dns) completed", "elapsed", time.Since(routeStart).String())
 
 	stackUpStart := time.Now()
 	if err = m.stack.Start(); err != nil {
 		return fmt.Errorf("start stack failed: %w", err)
 	}
-	m.logf("[sing-tun] start: stack.Start completed in " + time.Since(stackUpStart).String())
+	m.logger.Info("start: stack.Start completed", "elapsed", time.Since(stackUpStart).String())
 
 	m.running = true
 	released = true
 	netiface.InvalidateCache()
-	m.logf("[sing-tun] TUN started, running=true")
+	m.logger.Info("TUN started, running=true")
 	return nil
 }
 
@@ -236,42 +239,42 @@ func (m *Manager) releaseLocked() {
 	// 连接当场被关，客户端看到的是无意义的快速 RST 而不是干净的停止。
 	if m.stack != nil {
 		start := time.Now()
-		m.logf("[sing-tun] release: closing stack (detaches dispatcher)")
+		m.logger.Info("release: closing stack (detaches dispatcher)")
 		m.stack.Close()
 		m.stack = nil
-		m.logf("[sing-tun] release: stack closed in " + time.Since(start).String())
+		m.logger.Info("release: stack closed", "elapsed", time.Since(start).String())
 	}
 	if m.handler != nil {
 		start := time.Now()
-		m.logf("[sing-tun] release: releasing handler")
+		m.logger.Info("release: releasing handler")
 		m.handler.Release()
-		m.logf("[sing-tun] release: handler released in " + time.Since(start).String())
+		m.logger.Info("release: handler released", "elapsed", time.Since(start).String())
 		m.handler = nil
 	}
 	if m.tun != nil {
 		start := time.Now()
-		m.logf("[sing-tun] release: closing tun")
+		m.logger.Info("release: closing tun")
 		if closeWithTimeout("tun", m.tun.Close, 10*time.Second, m.logf) {
 			dumpGoroutines(m.logf)
 		}
 		m.tun = nil
-		m.logf("[sing-tun] release: tun close stage done in " + time.Since(start).String())
+		m.logger.Info("release: tun close stage done", "elapsed", time.Since(start).String())
 		cleanupStaleAdapters(m.logf)
 	}
 	if m.ifaceMonitor != nil {
 		start := time.Now()
-		m.logf("[sing-tun] release: closing interface monitor")
+		m.logger.Info("release: closing interface monitor")
 		m.ifaceMonitor.Close()
 		m.ifaceMonitor = nil
 		m.options.InterfaceMonitor = nil
-		m.logf("[sing-tun] release: interface monitor closed in " + time.Since(start).String())
+		m.logger.Info("release: interface monitor closed", "elapsed", time.Since(start).String())
 	}
 	if m.networkMonitor != nil {
 		start := time.Now()
-		m.logf("[sing-tun] release: closing network monitor")
+		m.logger.Info("release: closing network monitor")
 		m.networkMonitor.Close()
 		m.networkMonitor = nil
-		m.logf("[sing-tun] release: network monitor closed in " + time.Since(start).String())
+		m.logger.Info("release: network monitor closed", "elapsed", time.Since(start).String())
 	}
 	invalidateIPv6Egress()
 	m.running = false
@@ -373,7 +376,7 @@ func (m *Manager) Stop() error {
 
 	m.releaseLocked()
 	netiface.InvalidateCache()
-	m.logf("[sing-tun] TUN stopped")
+	m.logger.Info("TUN stopped")
 	return nil
 }
 
@@ -388,7 +391,7 @@ func (m *Manager) Shutdown() error {
 	}
 	m.releaseLocked()
 	netiface.InvalidateCache()
-	m.logf("[sing-tun] TUN shutdown complete")
+	m.logger.Info("TUN shutdown complete")
 	return nil
 }
 
