@@ -569,5 +569,14 @@ func (a *App) ShouldStartHidden() bool {
 }
 
 func (a *App) ShouldAutoEnableProxyOnAutoStart() bool {
-	return (a.launchedAtStartup || a.autoProxyAtStartup) && a.GetAutoEnableProxyOnAutoStart()
+	if !a.GetAutoEnableProxyOnAutoStart() {
+		return false
+	}
+	// CLI and TUI are attended launches: they only auto-enable the proxy when
+	// asked to on the command line. The GUI applies the setting to every
+	// launch, so a double-click behaves like auto-start.
+	if a.cliMode {
+		return a.launchedAtStartup || a.autoProxyAtStartup
+	}
+	return true
 }
