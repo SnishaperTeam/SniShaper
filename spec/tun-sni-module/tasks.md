@@ -54,9 +54,9 @@ description: "Task list for TUN SNI module evolution"
 
 ### Implementation for User Story 1
 
-- [ ] T003 [US1] `Manager.Start` 前置 `cleanupResiduals` 显式阶段：等待上次释放完成（现有 `waitReleasingLocked` 12s 上限维持）→ 若仍有残留资源执行一次 `releaseLocked` → 输出阶段耗时日志；整体仍在现有 defer 回滚保护内（`pkg/singtun/manager.go`）
-- [ ] T004 [P] [US1] 残留网卡清理从 `newTunWithRetry` 内部提升至清理阶段：`cleanupStaleAdapters` 返回移除数量并记入启动日志，`adapter_other.go` 保持 no-op 对齐签名（`pkg/singtun/adapter_windows.go`、`pkg/singtun/adapter_other.go`）
-- [ ] T005 [US1] 生命周期单测：重复 Start 幂等（running 时直接成功）、清理阶段先于 tun.New 执行的顺序断言（可注入 fake tun 工厂或以日志顺序断言）（`pkg/singtun/lifecycle_test.go`）
+- [X] T003 [US1] `Manager.Start` 前置 `cleanupResiduals` 显式阶段：等待上次释放完成（现有 `waitReleasingLocked` 12s 上限维持）→ 若仍有残留资源执行一次 `releaseLocked` → 输出阶段耗时日志；整体仍在现有 defer 回滚保护内（`pkg/singtun/manager.go`）
+- [X] T004 [P] [US1] 残留网卡清理从 `newTunWithRetry` 内部提升至清理阶段：`cleanupStaleAdapters` 返回移除数量并记入启动日志，`adapter_other.go` 保持 no-op 对齐签名（`pkg/singtun/adapter_windows.go`、`pkg/singtun/adapter_other.go`）
+- [X] T005 [US1] 生命周期单测：重复 Start 幂等（running 时直接成功）、清理阶段先于 tun.New 执行的顺序断言（可注入 fake tun 工厂或以日志顺序断言）（`pkg/singtun/lifecycle_test.go`）
 
 **Checkpoint**: 强杀进程后重启，日志可见"残留清理"阶段及移除数量，启动成功
 
