@@ -23,6 +23,12 @@ They keep separate codebases and evolve independently. Subscription and rule fil
 
 ---
 
+## Community
+
+Join the QQ group **[Snishaper and FlowWeaver building](https://qm.qq.com/q/GtBOkAOiME)** to talk directly with SniShaper and FlowWeaver users and developers, report issues and send suggestions.
+
+---
+
 ## Features
 
 - **Multi-Mode Proxy**: MITM (man-in-the-middle), Transparent, TLS-RF (TLS fragmentation), QUIC, Migration (session migration), Direct — covering a wide range of site scenarios.

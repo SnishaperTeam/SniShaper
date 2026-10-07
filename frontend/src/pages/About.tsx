@@ -106,6 +106,7 @@ const About: React.FC = () => {
   const handleOpenBeta = () => OpenURL('https://github.com/SnishaperTeam/SniShaper/actions');
   const handleOpenAdaptation = () => OpenURL('https://github.com/SnishaperTeam/SniShaper/issues/95');
   const handleOpenDevPlan = () => OpenURL('https://github.com/SnishaperTeam/SniShaper/issues/36');
+  const handleOpenQQGroup = () => OpenURL('https://qm.qq.com/q/GtBOkAOiME');
 
   const handleCheckUpdate = async () => {
     if (checkingUpdate) return;
@@ -189,8 +190,9 @@ const About: React.FC = () => {
   ];
 
   const communityCards = [
-    { onClick: handleOpenAdaptation, icon: <Megaphone size={24} />, title: t('about.site_adaptation'), desc: t('about.site_adaptation_desc'), action: t('about.participate_now'), color: 'primary.main' },
-    { onClick: handleOpenDevPlan, icon: <Map size={24} />, title: t('about.development_plan'), desc: t('about.development_plan_desc'), action: t('about.view_plan'), color: 'success.main' },
+    { onClick: handleOpenAdaptation, icon: <Megaphone size={24} />, title: t('about.site_adaptation'), desc: t('about.site_adaptation_desc'), action: t('about.participate_now'), color: 'primary.main', full: false },
+    { onClick: handleOpenDevPlan, icon: <Map size={24} />, title: t('about.development_plan'), desc: t('about.development_plan_desc'), action: t('about.view_plan'), color: 'success.main', full: false },
+    { onClick: handleOpenQQGroup, icon: <Users size={24} />, title: t('about.qq_group'), desc: t('about.qq_group_desc'), action: t('about.join_group'), color: 'warning.main', full: true },
   ];
 
   const infoCards = [
@@ -255,7 +257,7 @@ const About: React.FC = () => {
           </Typography>
           <Grid container spacing={2.5}>
             {communityCards.map((c, i) => (
-              <Grid key={i} size={{ xs: 12, md: 6 }}>
+              <Grid key={i} size={{ xs: 12, md: c.full ? 12 : 6 }}>
                 <Box
                   role="button"
                   tabIndex={0}
@@ -346,6 +348,7 @@ const About: React.FC = () => {
           )}
           <Button onClick={handleOpenWebsite} variant="outlined" size="large" startIcon={<Globe size={18} />}>{t('about.website')}</Button>
           <Button onClick={handleOpenGitHub} variant="outlined" size="large" startIcon={<LinkIcon size={18} />}>GitHub</Button>
+          <Button onClick={handleOpenQQGroup} variant="outlined" size="large" startIcon={<Users size={18} />}>{t('about.qq_group')}</Button>
         </Box>
 
         <Box component="footer" sx={{ textAlign: 'center', pb: 2 }}>
