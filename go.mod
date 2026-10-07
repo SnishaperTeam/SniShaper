@@ -14,8 +14,7 @@ require (
 	github.com/sagernet/sing-tun v0.9.6
 	github.com/things-go/go-socks5 v0.1.3
 	github.com/vishvananda/netlink v1.3.1
-	github.com/wailsapp/wails/v3 v3.0.0-beta.26
-	golang.org/x/net v0.59.0
+	github.com/wailsapp/wails/v3 v3.0.0-beta.27
 	golang.org/x/sys v0.48.0
 )
 
@@ -53,6 +52,7 @@ require (
 	go4.org/netipx v0.0.0-20231129151722-fdeea329fbba // indirect
 	golang.org/x/crypto v0.57.0 // indirect
 	golang.org/x/exp v0.0.0-20260410095643-746e56fc9e2f // indirect
+	golang.org/x/net v0.59.0 // indirect
 	golang.org/x/sync v0.23.0 // indirect
 	golang.org/x/term v0.46.0 // indirect
 	golang.org/x/text v0.42.0 // indirect
