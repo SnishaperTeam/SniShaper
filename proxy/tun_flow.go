@@ -137,3 +137,24 @@ func (p *ProxyServer) PlanTUNFlow(flow TUNFlow) TUNFlowPlan {
 		Notes:          notes,
 	}
 }
+
+// SNIRewriteDecisionForTUN 返回 TUN 流的 SNI 重写决策（US4，供
+// singtun Handler.SetSNIDecider 注入）：
+//   - matched=true：host 命中了启用的规则（~ 正则 / 后缀域名，非法正则安全跳过）；
+//     rewriteTo 为该规则 TrimSpace 后的 sni_fake，空串表示只匹配不重写。
+//   - matched=false：未命中 / 规则被禁用 / 规则管理器未初始化。
+//
+// 匹配模式传 "tun"：matchRule 的 mode 参数仅影响 transparent 降级 MITM 的
+// 逻辑，"tun" 不触发该降级；SNI 重写与规则出站模式正交。
+// 未命中时 matchRule 返回零值 Rule（Domain 为空）——domainMatchScore 对空
+// Domain 恒返回 -1，故真实命中规则的 Domain 必非空，以 rule.Domain 区分。
+func (p *ProxyServer) SNIRewriteDecisionForTUN(host string) (rewriteTo string, matched bool) {
+	if p.rules == nil {
+		return "", false
+	}
+	rule := p.rules.matchRule(host, "tun")
+	if rule.Domain == "" {
+		return "", false
+	}
+	return strings.TrimSpace(rule.SniFake), true
+}
