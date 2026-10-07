@@ -69,10 +69,10 @@ description: "Task list for TUN SNI module evolution"
 
 ### Implementation for User Story 2
 
-- [ ] T006 [US2] `closeWithTimeout` 硬上限：超时后再等硬上限（30s），到顶记录泄漏告警并继续后续清理（不再无限期 `<-done`）；中文注释说明"残留设备由下次启动 cleanupResiduals 兜底"的设计转移（`pkg/singtun/manager.go`）
-- [ ] T007 [US2] `Handler.Release` 收敛上限：快照循环最多 5 轮，每轮记录剩余连接数，到顶记告警返回（`pkg/singtun/handler.go`）
-- [ ] T008 [US2] 启停 instrumentation：各阶段边界记录进程 RSS 与 Handler 存活连接数/包连接数（debug 级），供定位数十 GB 尖峰（`pkg/singtun/manager.go`、`pkg/singtun/handler.go`）
-- [ ] T009 [US2] 有界关闭单测：以可注入的挂死 Close 验证 Stop 在上限内返回且继续执行后续清理；Stop/Shutdown 幂等（连续调用不报错不重复清理）（`pkg/singtun/lifecycle_test.go`）
+- [X] T006 [US2] `closeWithTimeout` 硬上限：超时后再等硬上限（30s），到顶记录泄漏告警并继续后续清理（不再无限期 `<-done`）；中文注释说明"残留设备由下次启动 cleanupResiduals 兜底"的设计转移（`pkg/singtun/manager.go`）
+- [X] T007 [US2] `Handler.Release` 收敛上限：快照循环最多 5 轮，每轮记录剩余连接数，到顶记告警返回（`pkg/singtun/handler.go`）
+- [X] T008 [US2] 启停 instrumentation：各阶段边界记录进程 RSS 与 Handler 存活连接数/包连接数（debug 级），供定位数十 GB 尖峰（`pkg/singtun/manager.go`、`pkg/singtun/handler.go`）
+- [X] T009 [US2] 有界关闭单测：以可注入的挂死 Close 验证 Stop 在上限内返回且继续执行后续清理；Stop/Shutdown 幂等（连续调用不报错不重复清理）（`pkg/singtun/lifecycle_test.go`）
 
 **Checkpoint**: 连续启停 ≥20 次，RSS 无单调增长，单次启停无 GB 级尖峰，全程 UI 可响应
 
