@@ -155,14 +155,22 @@ func (a *App) RebuildSystemTray() {
 			tray.mu.Unlock()
 		}()
 
-		// Build the replacement first and drop the old icon afterwards: a window
-		// with no tray icon cannot be brought back, so the gap must not exist.
+		// Build the replacement before dropping the old one: the tray must never be
+		// left with no icon, because a window without one cannot be recovered by the
+		// user. The Destroy is delayed by a short sleep rather than issued in the
+		// same frame, because the Windows notification area does not repaint on its
+		// own when NIM_ADD and NIM_DELETE land together, leaving the stale icon
+		// visible next to the new one until the user hovers over it.
 		application.InvokeSync(func() {
 			a.buildSystemTray()
-			if old != nil {
-				old.Destroy()
-			}
 		})
+
+		if old != nil {
+			time.Sleep(300 * time.Millisecond)
+			application.InvokeSync(func() {
+				old.Destroy()
+			})
+		}
 
 		tray.mu.Lock()
 		rebuilt := tray.current != nil && tray.current != old
