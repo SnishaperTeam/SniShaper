@@ -7,10 +7,9 @@ currently being supported with security updates.
 
 | Version | Supported |
 | ------- |-----------|
+| 1.29.x   | ✅️        |
 | 1.28.x   | ✅️        |
-| 1.27.x   | ✅️        |
-| 1.26.x   | ✅️        |
-| < 1.26   | ❌️        |
+| < 1.28   | ❌️        |
 
 ## Reporting a Vulnerability
 
