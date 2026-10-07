@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"log/slog"
 	"net"
 	"net/netip"
 	"strconv"
@@ -35,6 +36,7 @@ type Handler struct {
 	resolver    *dohresolver.FailoverResolver
 	fakeIP      *FakeIPStore
 	logf        func(string)
+	logger      *slog.Logger
 	ifaceConfig netiface.Config
 	mu          sync.Mutex
 	live        map[net.Conn]struct{}
@@ -162,8 +164,9 @@ func NewHandler(proxyAddr string, resolver *dohresolver.FailoverResolver, logf f
 		resolver:  resolver,
 		fakeIP:    NewFakeIPStore(),
 		logf:      logf,
+		logger:    newBridgedLogger(logf),
 	}
-	h.logf("[sing-tun] Handler created, proxy: " + proxyAddr)
+	h.logger.Info("Handler created", "proxy", proxyAddr)
 	return h
 }
 
@@ -212,19 +215,19 @@ func (h *Handler) NewConnectionEx(ctx context.Context, conn net.Conn, source M.S
 	// 导致规则按域名匹配失效。此时从 TLS ClientHello 嗅探 SNI 重建域名。
 	if net.ParseIP(targetHost) != nil {
 		if sni, c := h.sniffTLSSNI(conn); sni != "" {
-			h.logf("[sing-tun] SNI sniffed: " + sni + " (was IP " + targetHost + ")")
+			h.logger.Info("SNI sniffed", "sni", sni, "was_ip", targetHost)
 			targetHost = sni
 			conn = c
 		}
 	}
-	h.logf(fmt.Sprintf("[sing-tun] TCP %s -> %s (resolved: %s)", source.String(), destination.String(), targetHost))
+	h.logger.Debug("TCP flow", "source", source.String(), "destination", destination.String(), "resolved", targetHost)
 
 	// 连接到 ProxyServer
 	// loopback (127.0.0.0/8) 已被 Inet4RouteExcludeAddress 排除出 TUN，
 	// 连接 127.0.0.1 不会进 TUN，无需绑定物理网卡。
 	upstream, err := h.dialProxy()
 	if err != nil {
-		h.logf("[sing-tun] failed to connect to proxy: " + err.Error())
+		h.logger.Warn("failed to connect to proxy", "error", err)
 		_ = conn.Close()
 		h.untrack(trackedConn)
 		if onClose != nil {
@@ -239,9 +242,9 @@ func (h *Handler) NewConnectionEx(ctx context.Context, conn net.Conn, source M.S
 	// 用 net.JoinHostPort 正确处理 IPv6 地址（自动加方括号）
 	target := net.JoinHostPort(targetHost, strconv.Itoa(int(destination.Port)))
 	connectReq := "CONNECT " + target + " HTTP/1.1\r\nHost: " + target + "\r\n\r\n"
-	h.logf(fmt.Sprintf("[sing-tun] CONNECT request: %q", connectReq))
+	h.logger.Debug("CONNECT request", "request", connectReq)
 	if _, err := upstream.Write([]byte(connectReq)); err != nil {
-		h.logf("[sing-tun] failed to send CONNECT: " + err.Error())
+		h.logger.Warn("failed to send CONNECT", "error", err)
 		_ = conn.Close()
 		_ = upstream.Close()
 		h.untrack(trackedConn)
@@ -255,7 +258,7 @@ func (h *Handler) NewConnectionEx(ctx context.Context, conn net.Conn, source M.S
 	br := bufio.NewReader(upstream)
 	statusLine, err := br.ReadString('\n')
 	if err != nil {
-		h.logf("[sing-tun] failed to read CONNECT response: " + err.Error())
+		h.logger.Warn("failed to read CONNECT response", "error", err)
 		_ = conn.Close()
 		_ = upstream.Close()
 		h.untrack(trackedConn)
@@ -265,7 +268,7 @@ func (h *Handler) NewConnectionEx(ctx context.Context, conn net.Conn, source M.S
 		return
 	}
 	statusLine = strings.TrimRight(statusLine, "\r\n")
-	h.logf(fmt.Sprintf("[sing-tun] CONNECT response: %q", statusLine))
+	h.logger.Debug("CONNECT response", "status", statusLine)
 
 	// 解析状态码（不能用子串匹配 "200"，状态行其他字段也可能包含 "200"）
 	if !isHTTPSuccess(statusLine) {
@@ -275,7 +278,7 @@ func (h *Handler) NewConnectionEx(ctx context.Context, conn net.Conn, source M.S
 		if len(rest) > 0 {
 			errMsg += "\r\n" + string(rest)
 		}
-		h.logf("[sing-tun] CONNECT failed: " + errMsg)
+		h.logger.Warn("CONNECT failed", "detail", errMsg)
 		err := fmt.Errorf("proxy connect failed: %s", statusLine)
 		_ = conn.Close()
 		_ = upstream.Close()
@@ -290,7 +293,7 @@ func (h *Handler) NewConnectionEx(ctx context.Context, conn net.Conn, source M.S
 	for {
 		line, err := br.ReadString('\n')
 		if err != nil {
-			h.logf("[sing-tun] failed to read CONNECT headers: " + err.Error())
+			h.logger.Warn("failed to read CONNECT headers", "error", err)
 			_ = conn.Close()
 			_ = upstream.Close()
 			h.untrack(trackedConn)
@@ -466,7 +469,7 @@ func (h *Handler) resolveHost(destination M.Socksaddr) string {
 			return domain
 		}
 		// fake-ip 在范围内但反查失败（映射丢失），记录警告
-		h.logf(fmt.Sprintf("[sing-tun] WARNING: fake-ip %s has no domain mapping", addr))
+		h.logger.Warn("fake-ip has no domain mapping", "addr", addr.String())
 	}
 
 	// 不是 fake-ip，返回原始地址
@@ -673,7 +676,7 @@ func packEmptyReply(msg *dns.Msg) ([]byte, error) {
 func (h *Handler) handleRawDNSPacket(payload []byte, source M.Socksaddr, destination M.Socksaddr, writer N.PacketWriter) {
 	msg := new(dns.Msg)
 	if err := msg.Unpack(payload); err != nil {
-		h.logf("[sing-tun] failed to parse DNS packet: " + err.Error())
+		h.logger.Warn("failed to parse DNS packet", "error", err)
 		return
 	}
 
@@ -702,7 +705,7 @@ func (h *Handler) handleRawDNSPacket(payload []byte, source M.Socksaddr, destina
 		fakeIP, isNew = h.fakeIP.CreateIPv6(domain)
 	}
 	if isNew {
-		h.logf(fmt.Sprintf("[sing-tun] fake-ip: %s -> %s (type: %d)", domain, fakeIP, question.Qtype))
+		h.logger.Debug("fake-ip allocated", "domain", domain, "fake_ip", fakeIP.String(), "qtype", question.Qtype)
 	}
 
 	resp := new(dns.Msg)
@@ -733,13 +736,13 @@ func (h *Handler) handleRawDNSPacket(payload []byte, source M.Socksaddr, destina
 
 	respBytes, err := resp.Pack()
 	if err != nil {
-		h.logf("[sing-tun] failed to pack DNS response: " + err.Error())
+		h.logger.Warn("failed to pack DNS response", "error", err)
 		return
 	}
 	respBuf := buf.NewPacket()
 	respBuf.Write(respBytes)
 	if err := writer.WritePacket(respBuf, destination); err != nil {
-		h.logf("[sing-tun] failed to write DNS response: " + err.Error())
+		h.logger.Warn("failed to write DNS response", "error", err)
 	}
 }
 
@@ -747,13 +750,13 @@ func (h *Handler) handleRawDNSPacket(payload []byte, source M.Socksaddr, destina
 func (h *Handler) serveEmptyReply(msg *dns.Msg, destination M.Socksaddr, writer N.PacketWriter) bool {
 	respBytes, err := packEmptyReply(msg)
 	if err != nil {
-		h.logf("[sing-tun] failed to pack empty DNS reply: " + err.Error())
+		h.logger.Warn("failed to pack empty DNS reply", "error", err)
 		return false
 	}
 	respBuf := buf.NewPacket()
 	respBuf.Write(respBytes)
 	if err := writer.WritePacket(respBuf, destination); err != nil {
-		h.logf("[sing-tun] failed to write empty DNS reply: " + err.Error())
+		h.logger.Warn("failed to write empty DNS reply", "error", err)
 		return false
 	}
 	return true
@@ -773,14 +776,14 @@ func (h *Handler) serveDNSFailure(msg *dns.Msg, destination M.Socksaddr, writer 
 	respBuf := buf.NewPacket()
 	respBuf.Write(respBytes)
 	if writeErr := writer.WritePacket(respBuf, destination); writeErr != nil {
-		h.logf("[sing-tun] failed to write DNS error response: " + writeErr.Error())
+		h.logger.Warn("failed to write DNS error response", "error", writeErr)
 	}
 }
 
 // handleDNSRealPacket resolves non-A/AAAA queries via DoH
 func (h *Handler) handleDNSRealPacket(msg *dns.Msg, domain string, destination M.Socksaddr, writer N.PacketWriter) {
 	if h.resolver == nil {
-		h.logf("[sing-tun] DNS resolve unavailable for " + domain + ": no resolver configured")
+		h.logger.Warn("DNS resolve unavailable: no resolver configured", "domain", domain)
 		h.serveDNSFailure(msg, destination, writer)
 		return
 	}
@@ -791,7 +794,7 @@ func (h *Handler) handleDNSRealPacket(msg *dns.Msg, domain string, destination M
 	defer cancel()
 	ips, err := h.resolver.ResolveIPs(ctx, domain)
 	if err != nil {
-		h.logf("[sing-tun] DNS resolve failed for " + domain + ": " + err.Error())
+		h.logger.Warn("DNS resolve failed", "domain", domain, "error", err)
 		h.serveDNSFailure(msg, destination, writer)
 		return
 	}
@@ -830,13 +833,13 @@ func (h *Handler) handleDNSRealPacket(msg *dns.Msg, domain string, destination M
 
 	respBytes, err := resp.Pack()
 	if err != nil {
-		h.logf("[sing-tun] failed to pack DNS response: " + err.Error())
+		h.logger.Warn("failed to pack DNS response", "error", err)
 		return
 	}
 	respBuf := buf.NewPacket()
 	respBuf.Write(respBytes)
 	if err := writer.WritePacket(respBuf, destination); err != nil {
-		h.logf("[sing-tun] failed to write DNS response: " + err.Error())
+		h.logger.Warn("failed to write DNS response", "error", err)
 	}
 }
 
@@ -870,7 +873,7 @@ func (h *Handler) forwardUDPDirect(ctx context.Context, conn N.PacketConn, sourc
 	// 地址必须绑本地通配（0.0.0.0 / ::），绑具体地址会收不到回包。
 	binding, err := netiface.Select(netifaceFamily(wantIPv6), h.interfaceConfig(), h.logf)
 	if err != nil {
-		h.logf("[sing-tun] no physical UDP binding: " + err.Error())
+		h.logger.Warn("no physical UDP binding", "error", err)
 		if onClose != nil {
 			onClose(err)
 		}
@@ -886,7 +889,7 @@ func (h *Handler) forwardUDPDirect(ctx context.Context, conn N.PacketConn, sourc
 	}
 	packetConn, err := listenConfig.ListenPacket(context.Background(), network, ":0")
 	if err != nil {
-		h.logf("[sing-tun] failed to create UDP conn: " + err.Error())
+		h.logger.Warn("failed to create UDP conn", "error", err)
 		if onClose != nil {
 			onClose(err)
 		}
@@ -895,7 +898,7 @@ func (h *Handler) forwardUDPDirect(ctx context.Context, conn N.PacketConn, sourc
 	remoteConn, ok := packetConn.(*net.UDPConn)
 	if !ok {
 		_ = packetConn.Close()
-		h.logf("[sing-tun] unexpected UDP socket type")
+		h.logger.Warn("unexpected UDP socket type")
 		if onClose != nil {
 			onClose(err)
 		}
@@ -906,7 +909,7 @@ func (h *Handler) forwardUDPDirect(ctx context.Context, conn N.PacketConn, sourc
 	destAddr := destination.String()
 	destUDPAddr, err := net.ResolveUDPAddr(network, destAddr)
 	if err != nil {
-		h.logf("[sing-tun] failed to resolve dest: " + err.Error())
+		h.logger.Warn("failed to resolve dest", "error", err)
 		remoteConn.Close()
 		if onClose != nil {
 			onClose(err)
@@ -979,7 +982,7 @@ stopped := make(chan struct{})
 			_, err = remoteConn.WriteTo(packetBuf.Bytes(), destUDPAddr)
 			packetBuf.Release()
 			if err != nil {
-				h.logf("[sing-tun] failed to forward UDP: " + err.Error())
+				h.logger.Warn("failed to forward UDP", "error", err)
 				return
 			}
 		}
@@ -1013,7 +1016,7 @@ stopped := make(chan struct{})
 			// WritePacket 的 dest 是响应包的源地址（远端服务器），不是目标（应用）
 			// 所有权随 WritePacket 转移，由 gvisor 背压写端负责 Release
 			if err := conn.WritePacket(responsePacket, destination); err != nil {
-				h.logf("[sing-tun] failed to write UDP response: " + err.Error())
+				h.logger.Warn("failed to write UDP response", "error", err)
 				return
 			}
 		}
