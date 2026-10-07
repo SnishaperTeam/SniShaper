@@ -24,10 +24,6 @@ This project provides cross-platform support: **Windows and Linux** share the sa
 
 Download `snishaper-windows-amd64.7z` (portable) or the MSIX installer from the [latest release](https://github.com/SnishaperTeam/SniShaper/releases), then extract / install and run `snishaper.exe`. The app requests admin elevation (required for TUN mode). If elevation fails, TUN is unavailable but other features work normally.
 
-<a href="https://apps.microsoft.com/detail/9n11mrrsfs8n" target="_self">
-<img src="https://get.microsoft.com/images/en-us%20dark.svg" width="200"/>
-</a>
-
 ### Linux
 
 Download `snishaper-linux-amd64.tar.gz` from the [latest release](https://github.com/SnishaperTeam/SniShaper/releases), then extract and run:

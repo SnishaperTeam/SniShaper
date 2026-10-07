@@ -24,10 +24,6 @@
 
 Скачайте `snishaper-windows-amd64.7z` (портативная версия) или MSIX-установщик из [последнего релиза](https://github.com/SnishaperTeam/SniShaper/releases), распакуйте / установите и запустите `snishaper.exe`. Приложение автоматически запрашивает права администратора (требуются для TUN). Если повышение прав не удалось, TUN недоступен, но остальные функции работают.
 
-<a href="https://apps.microsoft.com/detail/9n11mrrsfs8n" target="_self">
-<img src="https://get.microsoft.com/images/ru-ru%20dark.svg" width="200"/>
-</a>
-
 ### Linux
 
 Скачайте `snishaper-linux-amd64.tar.gz` из [последнего релиза](https://github.com/SnishaperTeam/SniShaper/releases), распакуйте и запустите:
