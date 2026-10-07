@@ -7,6 +7,7 @@ import (
 	"runtime"
 	"sync/atomic"
 	"syscall"
+	"time"
 	"unsafe"
 )
 
@@ -24,6 +25,8 @@ var (
 	procDestroyWindow                    = user32Session.NewProc("DestroyWindow")
 	procUnregisterClassW                 = user32Session.NewProc("UnregisterClassW")
 	procGetModuleHandleW                 = kernel32Session.NewProc("GetModuleHandleW")
+	procRegisterWindowMessageW           = user32Session.NewProc("RegisterWindowMessageW")
+	procChangeWindowMessageFilterEx      = user32Session.NewProc("ChangeWindowMessageFilterEx")
 	procWTSRegisterSessionNotification   = wtsapi32Session.NewProc("WTSRegisterSessionNotification")
 	procWTSUnRegisterSessionNotification = wtsapi32Session.NewProc("WTSUnRegisterSessionNotification")
 )
@@ -33,8 +36,6 @@ const (
 	wtsSessionLock       = 0x7
 	wtsSessionUnlock     = 0x8
 	notifyForThisSession = 0
-	// HWND_MESSAGE = (HWND)-3
-	hwndMessage = ^uintptr(2)
 )
 
 const sessionWatcherClassName = "SniShaperSessionWatcher_v1"
@@ -68,17 +69,28 @@ var (
 	sessionWatcherWndProc = syscall.NewCallback(sessionWatcherProc)
 	sessionWatcherApp     *App
 	sessionLocked         atomic.Bool
+	taskbarCreatedMsg     uint32
 )
 
-// startSessionWatcher 启动 message-only window 监听 WTS_SESSION_UNLOCK。
-// 用户解锁瞬间触发托盘重建，覆盖"锁屏期间 shell 丢弃图标"的场景。
+// startSessionWatcher starts a hidden window that listens for the shell
+// events that make the tray icon disappear:
+//
+//   - WM_WTSSESSION_CHANGE / WTS_SESSION_UNLOCK — the icon registered while
+//     the session was locked is discarded when the user logs in.
+//   - TaskbarCreated — explorer.exe crash or restart rebuilds the shell and
+//     drops every tray icon along with it.
+//
+// The window is a normal top-level window created without WS_VISIBLE, so it
+// never shows on screen but does receive HWND_BROADCAST messages. A
+// message-only window would not: broadcasts are not delivered to message-only
+// windows, which is why the class is not created with HWND_MESSAGE.
 func (a *App) startSessionWatcher() {
 	sessionWatcherApp = a
 	go runSessionWatcher()
 }
 
 func runSessionWatcher() {
-	// 消息循环必须绑定到固定 OS 线程
+	// The message loop must stay on a single OS thread.
 	runtime.LockOSThread()
 	defer runtime.UnlockOSThread()
 
@@ -99,13 +111,23 @@ func runSessionWatcher() {
 	}
 	defer procUnregisterClassW.Call(uintptr(unsafe.Pointer(className)), hInstance)
 
+	// Register the "TaskbarCreated" broadcast message id. explorer.exe sends
+	// it to every top-level window whenever it (re)starts.
+	if taskbarCreatedMsg == 0 {
+		name, _ := syscall.UTF16PtrFromString("TaskbarCreated")
+		id, _, _ := procRegisterWindowMessageW.Call(uintptr(unsafe.Pointer(name)))
+		taskbarCreatedMsg = uint32(id)
+	}
+
+	// Parent = 0 (desktop) so the window is a normal top-level window and
+	// receives broadcasts. No WS_VISIBLE flag, so it stays hidden.
 	hwnd, _, err := procCreateWindowExW.Call(
 		0,
 		uintptr(unsafe.Pointer(className)),
 		uintptr(unsafe.Pointer(windowName)),
 		0,
 		0, 0, 0, 0,
-		hwndMessage,
+		0,
 		0, hInstance, 0,
 	)
 	if hwnd == 0 {
@@ -114,13 +136,21 @@ func runSessionWatcher() {
 	}
 	defer procDestroyWindow.Call(hwnd)
 
+	// TaskbarCreated is broadcast by explorer.exe, which runs at a lower
+	// integrity level than this elevated app. UIPI blocks the message by
+	// default, so explicitly allow it through. WM_WTSSESSION_CHANGE comes
+	// from the system session manager and is not subject to UIPI.
+	if taskbarCreatedMsg != 0 {
+		procChangeWindowMessageFilterEx.Call(hwnd, uintptr(taskbarCreatedMsg), msgfltAllow, 0)
+	}
+
 	if ret, _, err := procWTSRegisterSessionNotification.Call(hwnd, notifyForThisSession); ret == 0 {
 		log.Printf("[tray-session] WTSRegisterSessionNotification failed: %v", err)
 		return
 	}
 	defer procWTSUnRegisterSessionNotification.Call(hwnd)
 
-	log.Printf("[tray-session] watching for session unlock (hwnd=%x)", hwnd)
+	log.Printf("[tray-session] watching for session unlock and taskbar creation (hwnd=%x)", hwnd)
 
 	var msg winMsg
 	for {
@@ -133,7 +163,7 @@ func runSessionWatcher() {
 	}
 }
 
-// sessionWatcherProc 拦截 WM_WTSSESSION_CHANGE 的 WTS_SESSION_UNLOCK。
+// sessionWatcherProc handles the two shell events that drop tray icons.
 func sessionWatcherProc(hwnd, msg, wParam, lParam uintptr) uintptr {
 	defer func() {
 		if r := recover(); r != nil {
@@ -155,12 +185,35 @@ func sessionWatcherProc(hwnd, msg, wParam, lParam uintptr) uintptr {
 		}
 	}
 
+	// explorer.exe broadcasts TaskbarCreated every time the shell starts or
+	// restarts, but the notification area is not ready to accept new
+	// registrations the instant the broadcast fires. There is no "ready"
+	// signal to wait for, so retry a few times. The intervals are wider
+	// than RebuildSystemTray's own debounce window so each retry actually
+	// runs; otherwise the debounce would silently drop the middle attempts.
+	if taskbarCreatedMsg != 0 && msg == uintptr(taskbarCreatedMsg) {
+		log.Printf("[tray-session] taskbar created (explorer restart), scheduling rebuilds")
+		if app := sessionWatcherApp; app != nil {
+			go func() {
+				for _, d := range []time.Duration{
+					1 * time.Second,
+					4 * time.Second,
+					12 * time.Second,
+				} {
+					time.Sleep(d)
+					app.RebuildSystemTray()
+				}
+			}()
+		}
+	}
+
 	ret, _, _ := procDefWindowProcW.Call(hwnd, msg, wParam, lParam)
 	return ret
 }
 
-// isSessionLocked 报告当前会话是否处于锁屏状态。
-// 状态未知时返回 false：宁可多重建一次，也不要因状态误判而漏掉重建。
+// isSessionLocked reports whether the current session is locked. The zero
+// value is false: when the state is unknown, prefer rebuilding once too many
+// rather than skipping a rebuild that was actually needed.
 func isSessionLocked() bool {
 	return sessionLocked.Load()
 }
