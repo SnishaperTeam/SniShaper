@@ -30,6 +30,7 @@ type Manager struct {
 	logf           func(string)
 	logger         *slog.Logger
 	ifaceConfig    netiface.Config
+	sniDecider     func(sni string) (rewriteTo string, matched bool)
 	networkMonitor tun.NetworkUpdateMonitor
 	ifaceMonitor   tun.DefaultInterfaceMonitor
 
@@ -41,8 +42,8 @@ type Manager struct {
 	// 关闭路径的等待上限（设计决策 D6）：closeTimeout 为首次等待，
 	// closeHardCap 为超时后的硬上限，到顶即记泄漏告警并继续后续清理。
 	// 单测注入小值验证有界返回。
-	closeTimeout  time.Duration
-	closeHardCap  time.Duration
+	closeTimeout time.Duration
+	closeHardCap time.Duration
 }
 
 func NewManager(resolver *dohresolver.FailoverResolver, logf func(string)) *Manager {
@@ -52,6 +53,19 @@ func NewManager(resolver *dohresolver.FailoverResolver, logf func(string)) *Mana
 		logger:       newBridgedLogger(logf),
 		closeTimeout: 10 * time.Second,
 		closeHardCap: 30 * time.Second,
+	}
+}
+
+// SetSNIDecider 设置 SNI 重写决策回调（US4，设计决策 D11）。
+// nil 回调 = 保持现状（不重写）。字段持久保存，Start 重建 Handler 时
+// 重新注入；若调用时 Handler 已在运行则立即热更新，两种时序都正确。
+func (m *Manager) SetSNIDecider(fn func(sni string) (rewriteTo string, matched bool)) {
+	m.mu.Lock()
+	m.sniDecider = fn
+	h := m.handler
+	m.mu.Unlock()
+	if h != nil {
+		h.SetSNIDecider(fn)
 	}
 }
 
@@ -95,8 +109,8 @@ func (m *Manager) Start(cfg proxy.TUNConfig, proxyAddr string) (err error) {
 	}
 
 	m.options = tun.Options{
-		Name:        "SniShaper",
-		MTU:         uint32(mtu),
+		Name: "SniShaper",
+		MTU:  uint32(mtu),
 		Inet4Address: []netip.Prefix{
 			netip.MustParsePrefix(fakeIPv4Prefix),
 		},
@@ -194,6 +208,9 @@ func (m *Manager) Start(cfg proxy.TUNConfig, proxyAddr string) (err error) {
 
 	m.handler = NewHandler(proxyAddr, m.resolver, m.logf)
 	m.handler.SetInterfaceConfig(cfg.InterfaceConfig())
+	// SNI 重写决策注入（US4）：Handler 每次重建（Start）都重新注入当前
+	// 决策回调；SetSNIDecider 未调用过时为 nil，等同现状不重写。
+	m.handler.SetSNIDecider(m.sniDecider)
 
 	stackStart := time.Now()
 	m.stack, err = tun.NewStack("gvisor", tun.StackOptions{
