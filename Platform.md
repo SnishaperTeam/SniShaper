@@ -24,10 +24,6 @@
 
 下载 [最新版本](https://github.com/SnishaperTeam/SniShaper/releases) 中的 `snishaper-windows-amd64.7z`（便携版）或 MSIX 安装包，解压 / 安装后运行 `snishaper.exe`。程序会自动请求管理员权限（TUN 模式需要），如拒绝则 TUN 功能不可用但其他功能正常。
 
-<a href="https://apps.microsoft.com/detail/9n11mrrsfs8n" target="_self">
-<img src="https://get.microsoft.com/images/zh-cn%20dark.svg" width="200"/>
-</a>
-
 ### Linux
 
 从 [最新版本](https://github.com/SnishaperTeam/SniShaper/releases) 下载 `snishaper-linux-amd64.tar.gz`，解压后运行：
