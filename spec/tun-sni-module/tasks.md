@@ -85,9 +85,9 @@ description: "Task list for TUN SNI module evolution"
 
 ### Implementation for User Story 3
 
-- [ ] T010 [P] [US3] 新增解析模块：`ParseClientHelloRecord(record []byte) (SNIInfo, error)` 纯函数（SNI 提取、ECH 扩展检测、全部边界长度校验、畸形返回 Err 不 panic）+ `SniffClientHello(conn, timeout) (SNIInfo, net.Conn)`（bufio 包装、超时恢复 deadline、返回连接保证回放）（`pkg/singtun/sni_parser.go`）
-- [ ] T011 [P] [US3] 解析单测：标准 ClientHello、record 头与 body 分片到达、非握手记录、截断 body、长度字段越界、空 server_name 列表、含 ECH 扩展（外层 SNI + HasECH）、非 TLS 首字节；全部断言不 panic（`pkg/singtun/sni_parser_test.go`）
-- [ ] T012 [US3] Handler 切换到新解析模块：替换内联 `sniffSNIFromReader`，行为兼容（超时/非 TLS 返回空 SNI + 包装连接）（`pkg/singtun/handler.go`）
+- [X] T010 [P] [US3] 新增解析模块：`ParseClientHelloRecord(record []byte) (SNIInfo, error)` 纯函数（SNI 提取、ECH 扩展检测、全部边界长度校验、畸形返回 Err 不 panic）+ `SniffClientHello(conn, timeout) (SNIInfo, net.Conn)`（bufio 包装、超时恢复 deadline、返回连接保证回放）（`pkg/singtun/sni_parser.go`）
+- [X] T011 [P] [US3] 解析单测：标准 ClientHello、record 头与 body 分片到达、非握手记录、截断 body、长度字段越界、空 server_name 列表、含 ECH 扩展（外层 SNI + HasECH）、非 TLS 首字节；全部断言不 panic（`pkg/singtun/sni_parser_test.go`）
+- [X] T012 [US3] Handler 切换到新解析模块：替换内联 `sniffSNIFromReader`，行为兼容（超时/非 TLS 返回空 SNI + 包装连接）（`pkg/singtun/handler.go`）
 
 **Checkpoint**: `go test ./pkg/singtun/ -run SNI` 全绿，Handler 嗅探行为与切换前一致
 

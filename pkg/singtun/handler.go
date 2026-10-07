@@ -388,98 +388,21 @@ func (c *bufferedConn) CloseWrite() error {
 }
 
 // sniffTLSSNI 从 TLS ClientHello 中嗅探 SNI 域名。
-// 返回的 net.Conn 总是包装后的 bufferedConn，保证已读字节不丢失。
-// 非 TLS 或超时（客户端迟迟不发包）返回空 SNI。
+// T012：切换到独立解析模块 sni_parser（ECH 检测/分片到达/畸形安全）。
+// 行为与旧内联实现兼容：非 TLS / 超时返回空 SNI；返回的连接总是包装后的，
+// 已读字节经 prefixConn 完整回放——旧实现经 bufio 消费后不回放，会把整个
+// ClientHello 丢掉不发给上游，这是 US3 明确要求修复的丢字节缺陷。
 func (h *Handler) sniffTLSSNI(conn net.Conn) (string, net.Conn) {
-	br := bufio.NewReader(conn)
-	_ = conn.SetReadDeadline(time.Now().Add(3 * time.Second))
-	defer conn.SetReadDeadline(time.Time{})
-
-	sni := sniffSNIFromReader(br)
-	return sni, &bufferedConn{Conn: conn, br: br}
-}
-
-// sniffSNIFromReader 读取并解析 TLS ClientHello 的 SNI 扩展
-func sniffSNIFromReader(br *bufio.Reader) string {
-	// record header: type(1) + version(2) + length(2)
-	hdr := make([]byte, 5)
-	if _, err := io.ReadFull(br, hdr); err != nil {
-		return ""
+	info, wrapped := SniffClientHello(conn, 3*time.Second)
+	if info.Err != nil {
+		h.logger.Debug("SNI sniff failed", "error", info.Err.Error())
 	}
-	if hdr[0] != 0x16 { // not TLS handshake
-		return ""
+	if info.HasECH {
+		// D4：ECH 存在时 inner SNI 加密不可见，用外层 SNI 参与规则匹配
+		// 并在日志中标记；重写决策层会据此跳过重写。
+		h.logger.Info("SNI sniffed with ECH present, using outer SNI for rule matching", "sni", info.SNI)
 	}
-	bodyLen := int(hdr[3])<<8 | int(hdr[4])
-	if bodyLen < 4 || bodyLen > 1<<14 {
-		return ""
-	}
-	body := make([]byte, bodyLen)
-	if _, err := io.ReadFull(br, body); err != nil {
-		return ""
-	}
-	// handshake header: msgType(1) + length(3)
-	if len(body) < 4 || body[0] != 0x01 { // not ClientHello
-		return ""
-	}
-	// ClientHello: version(2) + random(32) + sessionID...
-	p := 4 + 2 + 32
-	if p >= len(body) {
-		return ""
-	}
-	sidLen := int(body[p])
-	p++
-	if p+sidLen > len(body) {
-		return ""
-	}
-	p += sidLen
-	if p+2 > len(body) {
-		return ""
-	}
-	cipherLen := int(body[p])<<8 | int(body[p+1])
-	p += 2
-	if p+cipherLen > len(body) {
-		return ""
-	}
-	p += cipherLen
-	if p >= len(body) {
-		return ""
-	}
-	compLen := int(body[p])
-	p++
-	if p+compLen > len(body) {
-		return ""
-	}
-	p += compLen
-	if p+2 > len(body) {
-		return ""
-	}
-	extLen := int(body[p])<<8 | int(body[p+1])
-	p += 2
-	if p+extLen > len(body) {
-		return ""
-	}
-	end := p + extLen
-	for p+4 <= end {
-		extType := int(body[p])<<8 | int(body[p+1])
-		extDataLen := int(body[p+2])<<8 | int(body[p+3])
-		p += 4
-		if p+extDataLen > end {
-			return ""
-		}
-		if extType == 0 { // server_name
-			data := body[p : p+extDataLen]
-			// listLength(2) + nameType(1) + nameLen(2) + name
-			if len(data) >= 5 && data[2] == 0 {
-				nameLen := int(data[3])<<8 | int(data[4])
-				if 5+nameLen <= len(data) {
-					return string(data[5 : 5+nameLen])
-				}
-			}
-			return ""
-		}
-		p += extDataLen
-	}
-	return ""
+	return info.SNI, wrapped
 }
 
 // resolveHost 解析目标地址的真实域名
