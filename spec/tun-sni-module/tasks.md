@@ -117,7 +117,7 @@ description: "Task list for TUN SNI module evolution"
 
 ### Implementation for User Story 5
 
-- [ ] T018 [US5] 日志条目补全：启停各阶段（含耗时）、残留清理移除数量、SNI 嗅探结果（含 ECH 标记）、重写决策（原 SNI → 新 SNI）、有界关闭的超时/泄漏告警，全部经 slog 分级输出；确认不输出完整域名以外的敏感内容（`pkg/singtun/manager.go`、`pkg/singtun/handler.go`）
+- [X] T018 [US5] 日志条目补全：启停各阶段（含耗时）、残留清理移除数量、SNI 嗅探结果（含 ECH 标记）、重写决策（原 SNI → 新 SNI）、有界关闭的超时/泄漏告警，全部经 slog 分级输出；确认不输出完整域名以外的敏感内容（`pkg/singtun/manager.go`、`pkg/singtun/handler.go`）
 
 **Checkpoint**: 各级别日志条目可凭日志复盘一次完整启停 + 重写决策
 
@@ -127,8 +127,8 @@ description: "Task list for TUN SNI module evolution"
 
 **Purpose**: 全量回归与代码质量收尾
 
-- [ ] T019 全量回归与质量检查：`go vet ./pkg/singtun/... ./proxy/... ./core/...`、`go build -tags with_gvisor ./...`、`go test ./pkg/... ./proxy/...`；确认关键设计决策有中文注释（残留清理兜底关系、ECH 不重写理由、惰性嗅探条件）；无调试残留（仓库根目录）
-- [ ] T020 前端类型回归：`cd frontend && ./node_modules/.bin/tsc --noEmit`（确认后端签名未变故前端零影响；若失败仅限与本特性无关的既有问题则记录说明）（`frontend/`）
+- [X] T019 全量回归与质量检查：`go vet ./pkg/singtun/... ./proxy/... ./core/...`、`go build -tags with_gvisor ./...`、`go test ./pkg/... ./proxy/...`；确认关键设计决策有中文注释（残留清理兜底关系、ECH 不重写理由、惰性嗅探条件）；无调试残留（仓库根目录）
+- [X] T020 前端类型回归：`cd frontend && ./node_modules/.bin/tsc --noEmit`（确认后端签名未变故前端零影响；若失败仅限与本特性无关的既有问题则记录说明）（`frontend/`）
 
 ---
 
