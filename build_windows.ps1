@@ -217,6 +217,20 @@ try {
 $ProjectRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
 Set-Location $ProjectRoot
 
+# ---------------------------------------------------------------------------
+# Go module proxy (overridable via env)
+# Comma-separated fallback list: Go walks it left to right and falls through
+# on 404/410, so a mirror that is unreachable from the current network (or
+# rate-limited) does not fail the build. goproxy.cn is listed first because
+# it is the fastest from mainland China, proxy.golang.org is the canonical
+# upstream and also serves as the fallback outside China.
+# CI overrides this with the official source only (see the workflows).
+# ---------------------------------------------------------------------------
+if (-not $env:GOPROXY) {
+    $env:GOPROXY = 'https://goproxy.cn,https://proxy.golang.org,direct'
+}
+Write-Host "[build] GOPROXY=$env:GOPROXY"
+
 # Kill any running snishaper instances before build
 Get-Process -Name "snishaper" -ErrorAction SilentlyContinue | ForEach-Object {
     Write-Host "[build] Killing snishaper process (PID: $($_.Id))..." -ForegroundColor Yellow
