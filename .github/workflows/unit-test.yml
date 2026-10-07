@@ -19,6 +19,13 @@ concurrency:
   group: unit-test-${{ github.ref }}
   cancel-in-progress: true
 
+# GitHub-hosted runners reach the canonical module proxy directly, so CI uses
+# the official source only. The build scripts default to a mirror-first
+# fallback list for users behind networks where proxy.golang.org is
+# unreachable; an explicit GOPROXY here overrides that default.
+env:
+  GOPROXY: https://proxy.golang.org,direct
+
 jobs:
   generate:
     name: Generate & run unit tests

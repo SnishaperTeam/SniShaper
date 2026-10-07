@@ -49,6 +49,13 @@ on:
 permissions:
   contents: write
 
+# GitHub-hosted runners reach the canonical module proxy directly, so CI uses
+# the official source only. The build scripts default to a mirror-first
+# fallback list for users behind networks where proxy.golang.org is
+# unreachable; an explicit GOPROXY here overrides that default.
+env:
+  GOPROXY: https://proxy.golang.org,direct
+
 jobs:
   check:
     name: Check and Resolve

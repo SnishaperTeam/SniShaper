@@ -85,8 +85,14 @@ set -euo pipefail
 cd "$(dirname "$0")"
 
 # ---------- Go module proxy (overridable via env) ----------
+# Comma-separated fallback list: Go walks it left to right and falls through
+# on 404/410, so a mirror that is unreachable from the current network (or
+# rate-limited) does not fail the build. goproxy.cn is listed first because
+# it is the fastest from mainland China, proxy.golang.org is the canonical
+# upstream and also serves as the fallback outside China.
+# CI overrides this with the official source only (see the workflows).
 if [ -z "${GOPROXY:-}" ]; then
-    export GOPROXY="https://goproxy.cn,direct"
+    export GOPROXY="https://goproxy.cn,https://proxy.golang.org,direct"
 fi
 
 # ===========================================================================
