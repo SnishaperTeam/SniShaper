@@ -240,14 +240,14 @@ func TestRouteExcludePrefixesDropsSelfOverlapIPv6(t *testing.T) {
 func TestCloseWithTimeoutWaitsForShutdownToFinish(t *testing.T) {
 	var finished atomic.Bool
 	release := make(chan struct{})
-	returned := make(chan bool, 1)
+	returned := make(chan closeOutcome, 1)
 
 	go func() {
 		returned <- closeWithTimeout("test", func() error {
 			<-release
 			finished.Store(true)
 			return nil
-		}, 50*time.Millisecond, func(string) {})
+		}, 50*time.Millisecond, 5*time.Second, func(string) {})
 	}()
 
 	select {
@@ -259,8 +259,8 @@ func TestCloseWithTimeoutWaitsForShutdownToFinish(t *testing.T) {
 	close(release)
 
 	select {
-	case timedOut := <-returned:
-		if !timedOut {
+	case outcome := <-returned:
+		if outcome != closeLate {
 			t.Fatal("closeWithTimeout must report the timeout it observed")
 		}
 		if !finished.Load() {
@@ -272,17 +272,41 @@ func TestCloseWithTimeoutWaitsForShutdownToFinish(t *testing.T) {
 }
 
 func TestCloseWithTimeoutReturnsImmediatelyOnFastShutdown(t *testing.T) {
-	done := make(chan bool, 1)
+	done := make(chan closeOutcome, 1)
 	go func() {
-		done <- closeWithTimeout("test", func() error { return nil }, 5*time.Second, func(string) {})
+		done <- closeWithTimeout("test", func() error { return nil }, 5*time.Second, 30*time.Second, func(string) {})
 	}()
 
 	select {
-	case timedOut := <-done:
-		if timedOut {
+	case outcome := <-done:
+		if outcome != closeClean {
 			t.Fatal("a shutdown that finishes within the timeout must not be reported as timed out")
 		}
 	case <-time.After(3 * time.Second):
 		t.Fatal("closeWithTimeout did not return for a fast shutdown")
+	}
+}
+
+// TestCloseWithTimeoutGivesUpAtHardCap 验证 D6：shutdown 挂死时，
+// closeWithTimeout 在 timeout+hardCap 到顶后必须返回 closeLeaked，
+// 不再无限期等待（这是旧实现整机冻结的根因）。
+func TestCloseWithTimeoutGivesUpAtHardCap(t *testing.T) {
+	started := make(chan struct{})
+	done := make(chan closeOutcome, 1)
+	go func() {
+		done <- closeWithTimeout("test", func() error {
+			close(started)
+			select {} // 永久挂死，模拟 wintun Close 卡住
+		}, 30*time.Millisecond, 100*time.Millisecond, func(string) {})
+	}()
+	<-started
+
+	select {
+	case outcome := <-done:
+		if outcome != closeLeaked {
+			t.Fatalf("expected closeLeaked when shutdown never returns, got %v", outcome)
+		}
+	case <-time.After(3 * time.Second):
+		t.Fatal("closeWithTimeout must give up at the hard cap instead of blocking forever")
 	}
 }

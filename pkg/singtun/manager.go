@@ -37,13 +37,21 @@ type Manager struct {
 	// nil 时使用真实实现（tun.New / cleanupStaleAdapters），生产路径不受影响。
 	newTunFn        func(options tun.Options) (tun.Tun, error)
 	cleanAdaptersFn func(logf func(string)) int
+
+	// 关闭路径的等待上限（设计决策 D6）：closeTimeout 为首次等待，
+	// closeHardCap 为超时后的硬上限，到顶即记泄漏告警并继续后续清理。
+	// 单测注入小值验证有界返回。
+	closeTimeout  time.Duration
+	closeHardCap  time.Duration
 }
 
 func NewManager(resolver *dohresolver.FailoverResolver, logf func(string)) *Manager {
 	return &Manager{
-		resolver: resolver,
-		logf:     logf,
-		logger:   newBridgedLogger(logf),
+		resolver:     resolver,
+		logf:         logf,
+		logger:       newBridgedLogger(logf),
+		closeTimeout: 10 * time.Second,
+		closeHardCap: 30 * time.Second,
 	}
 }
 
@@ -76,6 +84,7 @@ func (m *Manager) Start(cfg proxy.TUNConfig, proxyAddr string) (err error) {
 		return err
 	}
 	creating = true
+	m.logMemSnapshot("start: post-cleanup")
 
 	netiface.InvalidateCache()
 	m.ifaceConfig = cfg.InterfaceConfig()
@@ -181,6 +190,7 @@ func (m *Manager) Start(cfg proxy.TUNConfig, proxyAddr string) (err error) {
 		}
 	}
 	m.logger.Info("start: tun.New completed", "elapsed", time.Since(tunStart).String())
+	m.logMemSnapshot("start: post-tun-create")
 
 	m.handler = NewHandler(proxyAddr, m.resolver, m.logf)
 	m.handler.SetInterfaceConfig(cfg.InterfaceConfig())
@@ -210,6 +220,7 @@ func (m *Manager) Start(cfg proxy.TUNConfig, proxyAddr string) (err error) {
 		return fmt.Errorf("start stack failed: %w", err)
 	}
 	m.logger.Info("start: stack.Start completed", "elapsed", time.Since(stackUpStart).String())
+	m.logMemSnapshot("start: post-stack-start")
 
 	m.running = true
 	netiface.InvalidateCache()
@@ -239,15 +250,20 @@ func (m *Manager) cleanupResidualsLocked() (alreadyRunning bool, err error) {
 		m.logger.Warn("startup residual cleanup: previous instance resources still present, releasing")
 		m.releaseLocked()
 	}
-	clean := m.cleanAdaptersFn
-	if clean == nil {
-		clean = cleanupStaleAdapters
-	}
+	clean := m.adapterCleaner()
 	removed := clean(m.logf)
 	m.logger.Info("startup residual cleanup done",
 		"removed_adapters", removed,
 		"elapsed", time.Since(start).String())
 	return false, nil
+}
+
+// adapterCleaner 返回残留网卡清理函数（测试可注入，默认真实实现）。
+func (m *Manager) adapterCleaner() func(logf func(string)) int {
+	if m.cleanAdaptersFn != nil {
+		return m.cleanAdaptersFn
+	}
+	return cleanupStaleAdapters
 }
 
 // hasResidualsLocked 报告进程内是否仍有上次实例的资源（与 Stop 的
@@ -295,6 +311,7 @@ func (m *Manager) waitReleasingLocked() error {
 func (m *Manager) releaseLocked() {
 	m.releasing.Store(true)
 	defer m.releasing.Store(false)
+	m.logMemSnapshot("release: begin")
 
 	// 顺序要求：先摘掉数据面（stack），再关 handler，最后才关设备。
 	// 反过来先关 handler，stack 仍会把新流量派发进来，track 被 closed 拒绝后
@@ -316,12 +333,20 @@ func (m *Manager) releaseLocked() {
 	if m.tun != nil {
 		start := time.Now()
 		m.logger.Info("release: closing tun")
-		if closeWithTimeout("tun", m.tun.Close, 10*time.Second, m.logf) {
+		outcome := closeWithTimeout("tun", m.tun.Close, m.closeTimeout, m.closeHardCap, m.logf)
+		if outcome != closeClean {
 			dumpGoroutines(m.logf)
 		}
 		m.tun = nil
 		m.logger.Info("release: tun close stage done", "elapsed", time.Since(start).String())
-		cleanupStaleAdapters(m.logf)
+		if outcome == closeLeaked {
+			// D6 设计转移：硬上限到顶时 Close 仍在运行，此刻删适配器会与它
+			// 抢占同一设备句柄。残留网卡交由下次启动的 cleanupResiduals
+			// 显式清理阶段兜底，本次 Stop 到此为止（有界返回，不冻结）。
+			m.logger.Warn("release: tun close leaked, skipping adapter cleanup; residuals will be reclaimed on next startup")
+		} else {
+			m.adapterCleaner()(m.logf)
+		}
 	}
 	if m.ifaceMonitor != nil {
 		start := time.Now()
@@ -340,13 +365,48 @@ func (m *Manager) releaseLocked() {
 	}
 	invalidateIPv6Egress()
 	m.running = false
+	m.logMemSnapshot("release: end")
 }
 
-// closeWithTimeout 在独立 goroutine 中执行 shutdown，最多等待 timeout。
-// 超时后仍会等待该 goroutine 真正结束再返回：调用方随后要清理 Wintun 适配器，
-// 而适配器删除会与仍在运行的 Close 抢占同一个设备句柄。
-// 返回值表示是否发生过超时（供调用方决定是否 dump goroutine）。
-func closeWithTimeout(name string, shutdown func() error, timeout time.Duration, logf func(string)) bool {
+// logMemSnapshot 记录启停各阶段边界的进程内存与 Handler 存活连接数
+// （debug 级）。设计决策 D8：内存尖峰根因以 instrumentation 实测数据
+// 为准，不做猜测性重构；本快照用于定位启停循环中的无上限增长点。
+func (m *Manager) logMemSnapshot(stage string) {
+	var ms runtime.MemStats
+	runtime.ReadMemStats(&ms)
+	tcp, udp := 0, 0
+	if h := m.handler; h != nil {
+		tcp, udp = h.liveCounts()
+	}
+	m.logger.Debug("lifecycle mem snapshot",
+		"stage", stage,
+		"sys_mb", int64(ms.Sys>>20),
+		"heap_mb", int64(ms.HeapAlloc>>20),
+		"live_tcp", tcp,
+		"live_udp", udp,
+	)
+}
+
+// closeOutcome 区分 closeWithTimeout 的三种结果，调用方据此决定是否
+// 继续适配器删除等后续清理。
+type closeOutcome int
+
+const (
+	closeClean  closeOutcome = iota // Close 在 timeout 内返回
+	closeLate                       // 超时后在硬上限内返回
+	closeLeaked                     // 硬上限到顶仍未返回（泄漏，调用方继续其余清理）
+)
+
+// closeWithTimeout 在独立 goroutine 中执行 shutdown，最多等待 timeout；
+// 超时后再等硬上限 hardCap，到顶即记泄漏告警并返回（设计决策 D6）。
+//
+// 设计转移说明：旧实现"超时后仍无限期等 Close 返回"，理由是随后的适配器
+// 删除不能与在途 Close 抢占同一设备句柄——但这正是 wintun Close 挂死时
+// Stop 持锁、整机冻结的直接根因。现在硬上限到顶后直接返回：泄漏的 Close
+// goroutine 通过告警暴露，残留设备交由下次启动的 cleanupResiduals 显式
+// 清理阶段兜底（US1）；调用方在 closeLeaked 时跳过适配器删除以避免与
+// 仍在运行的 Close 竞争句柄。
+func closeWithTimeout(name string, shutdown func() error, timeout, hardCap time.Duration, logf func(string)) closeOutcome {
 	done := make(chan struct{})
 	start := time.Now()
 	go func() {
@@ -360,20 +420,22 @@ func closeWithTimeout(name string, shutdown func() error, timeout time.Duration,
 			logf("[sing-tun] release: " + name + " close error: " + err.Error())
 		}
 	}()
-	timedOut := false
 	select {
 	case <-done:
 		logf("[sing-tun] release: " + name + " closed in " + time.Since(start).String())
-		return false
+		return closeClean
 	case <-time.After(timeout):
-		timedOut = true
-		logf("[sing-tun] release: " + name + " close timed out after " + timeout.String() + ", waiting for it to finish")
+		logf("[sing-tun] release: " + name + " close timed out after " + timeout.String() + ", waiting up to hard cap " + hardCap.String())
 	}
-	// 超时不是放弃：必须等 Close 真正返回，否则随后的适配器删除会与它竞争。
-	// 这里不再设上限——Close 泄漏属于必须暴露的故障，不该被静默吞掉。
-	<-done
-	logf("[sing-tun] release: " + name + " close finally returned after " + time.Since(start).String())
-	return timedOut
+	// 硬上限等待：到顶即放弃（D6），不再无限期阻塞调用方。
+	select {
+	case <-done:
+		logf("[sing-tun] release: " + name + " close finally returned after " + time.Since(start).String())
+		return closeLate
+	case <-time.After(hardCap):
+		logf("[sing-tun:warn] release: " + name + " close LEAKED: hard cap " + (timeout + hardCap).String() + " exceeded, continuing cleanup; residual device will be reclaimed by next startup cleanup")
+		return closeLeaked
+	}
 }
 
 func dumpGoroutines(logf func(string)) {

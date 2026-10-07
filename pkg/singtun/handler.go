@@ -110,14 +110,19 @@ func (h *Handler) Close() {
 	h.mu.Unlock()
 }
 
+// releaseMaxRounds 是 Release 快照收敛循环的最大轮次（设计决策 D6）。
+// Release 不置 closed，理论上新连接可能在快照间隙持续进入；无上限的
+// 收敛循环在极端场景下会让 Stop 永不返回。到顶后记录剩余连接数并返回。
+const releaseMaxRounds = 5
+
 // Release 回收全部存量连接并等待转发 goroutine 退出，但不复用 closed 标记。
 // Manager 的 releaseLocked 走这条路径：设备已关闭但 Handler 语义上仍可继续
 // 接收派发，Start 失败回滚时也无需重建 Handler。
 //
 // 因为不置 closed，snapshot 之后仍可能有新连接被 track，所以按轮次收敛：
-// 每轮重新快照并关闭，直到某一轮快照为空。
+// 每轮重新快照并关闭，直到某一轮快照为空；最多 releaseMaxRounds 轮（D6）。
 func (h *Handler) Release() {
-	for {
+	for round := 1; round <= releaseMaxRounds; round++ {
 		h.mu.Lock()
 		conns := make([]net.Conn, 0, len(h.live))
 		for c := range h.live {
@@ -146,15 +151,34 @@ func (h *Handler) Release() {
 		remaining := len(h.live) + len(h.livePacket)
 		closed := h.closed
 		h.mu.Unlock()
-		if remaining == 0 || closed {
-			// closed 时不会再有新的 track 进来，remaining 必将在下一轮归零。
-			if remaining == 0 {
-				return
-			}
-			h.wg.Wait()
+		if remaining == 0 {
 			return
 		}
+		if closed {
+			// closed 后不会再有新 track，剩余条目必将在下一轮归零；
+			// 继续循环收敛而不是原地无限 Wait（D6：关闭路径全部有界）。
+			h.logger.Debug("handler release: closed with remaining entries, draining",
+				"round", round, "remaining", remaining)
+			continue
+		}
+		// 未 closed 仍有剩余：快照间隙有新连接进入，进入下一轮前记录剩余数。
+		h.logger.Warn("handler release round finished with remaining entries",
+			"round", round, "remaining", remaining)
 	}
+	// 轮次上限到顶仍未收敛（D6）：记告警后返回。剩余连接由其自身转发
+	// goroutine 结束时释放，随 Handler 生命周期终结回收。
+	h.mu.Lock()
+	remaining := len(h.live) + len(h.livePacket)
+	h.mu.Unlock()
+	h.logger.Warn("handler release exceeded max rounds, giving up",
+		"rounds", releaseMaxRounds, "remaining", remaining)
+}
+
+// liveCounts 返回当前存活的 TCP 连接数与 UDP 会话数（启停 instrumentation 用）。
+func (h *Handler) liveCounts() (tcp, udp int) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	return len(h.live), len(h.livePacket)
 }
 
 // NewHandler 创建新的 Handler

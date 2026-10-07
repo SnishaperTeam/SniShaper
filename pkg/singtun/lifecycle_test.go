@@ -2,6 +2,7 @@ package singtun
 
 import (
 	"errors"
+	"io"
 	"runtime"
 	"strings"
 	"sync"
@@ -138,5 +139,95 @@ func TestStartWaitsForOngoingRelease(t *testing.T) {
 		}
 	case <-time.After(5 * time.Second):
 		t.Fatal("Start did not proceed after the previous release finished")
+	}
+}
+
+// fakeTun 实现 tun.Tun 接口，Close 行为可注入（挂死/计数），
+// 供有界关闭与幂等测试使用。
+type fakeTun struct {
+	closeFn func() error
+}
+
+func (f *fakeTun) Read(p []byte) (int, error)           { return 0, io.EOF }
+func (f *fakeTun) Write(p []byte) (int, error)          { return 0, io.EOF }
+func (f *fakeTun) Name() (string, error)                { return "fake", nil }
+func (f *fakeTun) Start() error                         { return nil }
+func (f *fakeTun) Close() error                         { return f.closeFn() }
+func (f *fakeTun) UpdateRouteOptions(tun.Options) error { return nil }
+
+// TestStopIsBoundedWhenTunCloseHangs 验证 US2 验收场景 3（D6）：
+// 底层设备 Close 挂死时，Stop 必须在 timeout+hardCap 到顶后返回，
+// 完成其余清理且不冻结主流程。
+func TestStopIsBoundedWhenTunCloseHangs(t *testing.T) {
+	m := NewManager(nil, func(string) {})
+	m.closeTimeout = 30 * time.Millisecond
+	m.closeHardCap = 100 * time.Millisecond
+	cleaned := 0
+	m.cleanAdaptersFn = func(func(string)) int { cleaned++; return 0 }
+
+	m.tun = &fakeTun{closeFn: func() error { select {} }}
+	m.handler = NewHandler("127.0.0.1:1", nil, func(string) {})
+	m.running = true
+
+	done := make(chan error, 1)
+	start := time.Now()
+	go func() { done <- m.Stop() }()
+
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatalf("Stop must succeed even when tun.Close hangs, got %v", err)
+		}
+		if elapsed := time.Since(start); elapsed > 3*time.Second {
+			t.Fatalf("Stop must be bounded even when tun.Close hangs, took %v", elapsed)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("Stop did not return while tun.Close hung")
+	}
+	if m.tun != nil {
+		t.Fatal("Stop must clear the tun reference even on hung Close")
+	}
+	if cleaned != 0 {
+		t.Fatal("adapter cleanup must be skipped when the close leaked (handle race, D6)")
+	}
+}
+
+// TestStopAndShutdownAreIdempotent 验证 FR-004：
+// Stop/Shutdown 可重复调用，不报错也不重复清理。
+func TestStopAndShutdownAreIdempotent(t *testing.T) {
+	m := NewManager(nil, func(string) {})
+	m.closeTimeout = time.Second
+	m.closeHardCap = 2 * time.Second
+	m.cleanAdaptersFn = func(func(string)) int { return 0 }
+
+	// 空实例：直接返回成功。
+	for i := 0; i < 2; i++ {
+		if err := m.Stop(); err != nil {
+			t.Fatalf("Stop on an idle manager must be a no-op, got %v", err)
+		}
+		if err := m.Shutdown(); err != nil {
+			t.Fatalf("Shutdown on an idle manager must be a no-op, got %v", err)
+		}
+	}
+
+	// 带资源的实例：第一次 Stop 清理一次，后续调用不再触碰资源。
+	closeCount := 0
+	m.tun = &fakeTun{closeFn: func() error { closeCount++; return nil }}
+	m.handler = NewHandler("127.0.0.1:1", nil, func(string) {})
+	m.running = true
+
+	if err := m.Stop(); err != nil {
+		t.Fatalf("Stop failed: %v", err)
+	}
+	for i := 0; i < 2; i++ {
+		if err := m.Stop(); err != nil {
+			t.Fatalf("repeated Stop must succeed, got %v", err)
+		}
+		if err := m.Shutdown(); err != nil {
+			t.Fatalf("Shutdown after Stop must succeed, got %v", err)
+		}
+	}
+	if closeCount != 1 {
+		t.Fatalf("resources must be cleaned exactly once, tun closed %d times", closeCount)
 	}
 }
