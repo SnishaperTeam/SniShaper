@@ -23,6 +23,12 @@
 
 ---
 
+## 交流群组
+
+欢迎加入 QQ 群 **[Snishaper and FlowWeaver building](https://qm.qq.com/q/GtBOkAOiME)**，与 SniShaper 与 FlowWeaver 的用户和开发者直接交流、反馈问题与提交建议。
+
+---
+
 ## 特性
 
 - **多模式代理**：MITM（中间人）、Transparent（透传）、TLS-RF（TLS 分片）、QUIC、Migration（会话迁移）、Direct（直连）等多种模式覆盖不同网站的场景。
