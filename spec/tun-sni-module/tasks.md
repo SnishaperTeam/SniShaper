@@ -103,8 +103,8 @@ description: "Task list for TUN SNI module evolution"
 - [X] T013 [US4] 重写模块：`RewriteClientHelloSNI(record []byte, newSNI string) ([]byte, error)`——定位 server_name 扩展、替换名称、重算 server_name 扩展内层长度/扩展列表长度/握手长度/记录长度；检测到 ECH 返回明确错误（调用方跳过重写）；非法输入返回错误不 panic（`pkg/singtun/sni_rewrite.go`）
 - [X] T014 [P] [US4] 重写单测：等长替换、变长（变短/变长）、各层长度重算正确性、ECH record 拒绝、自洽校验（重写结果再次解析 SNI == 新值且结构完整）（`pkg/singtun/sni_rewrite_test.go`）
 - [X] T015 [P] [US4] ProxyServer 决策方法：`SNIRewriteDecisionForTUN(host string) (rewriteTo string, matched bool)`——包装 `matchRule` 并提取 `SniFake`；补充 `~` 正则匹配与非法正则跳过的单测（`proxy/proxy.go`，测试入 `proxy/rules_sni_decision_test.go`）
-- [ ] T016 [US4] Handler 集成：`SetSNIDecider(fn func(sni string) (rewriteTo string, matched bool))` 注入；惰性嗅探（目标为 IP 或已知域名规则含 SniFake 时才读首包）；重写经 `prefixConn`（前缀字节先于底层连接数据）注入转发路径；ECH 流量跳过重写仅记录决策日志；回调为 nil 时行为等同现状（`pkg/singtun/handler.go`）
-- [ ] T017 [US4] 装配点注入：`core_runtime.go` 在创建 nativeTUN 后经 Manager/Handler 注入 `proxyServer.SNIRewriteDecisionForTUN` 回调（`core/core_runtime.go`）
+- [X] T016 [US4] Handler 集成：`SetSNIDecider(fn func(sni string) (rewriteTo string, matched bool))` 注入；惰性嗅探（目标为 IP 或已知域名规则含 SniFake 时才读首包）；重写经 `prefixConn`（前缀字节先于底层连接数据）注入转发路径；ECH 流量跳过重写仅记录决策日志；回调为 nil 时行为等同现状（`pkg/singtun/handler.go`）
+- [X] T017 [US4] 装配点注入：`core_runtime.go` 在创建 nativeTUN 后经 Manager/Handler 注入 `proxyServer.SNIRewriteDecisionForTUN` 回调（`core/core_runtime.go`）
 
 **Checkpoint**: 本地代理端收到命中规则流量的 ClientHello SNI 为 SniFake 值；未命中流量与原始流量逐字节一致（单测断言 prefixConn 行为）
 

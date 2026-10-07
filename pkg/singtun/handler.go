@@ -38,6 +38,7 @@ type Handler struct {
 	logf        func(string)
 	logger      *slog.Logger
 	ifaceConfig netiface.Config
+	sniDecider  func(sni string) (rewriteTo string, matched bool)
 	mu          sync.Mutex
 	live        map[net.Conn]struct{}
 	livePacket  map[N.PacketConn]struct{}
@@ -208,6 +209,27 @@ func (h *Handler) SetInterfaceConfig(cfg netiface.Config) {
 	h.mu.Unlock()
 }
 
+// SetSNIDecider 设置 SNI 重写决策回调（US4，设计决策 D11）。
+// 回调返回 matched=true 且 rewriteTo 非空时，TUN 路径对命中的 TLS 流执行
+// ClientHello SNI 重写；nil 回调 = 保持现状（仅 IP 场景嗅探，不重写）。
+// 必须在 Start 建立数据面前设置（Manager.Start 在创建 Handler 后注入）。
+func (h *Handler) SetSNIDecider(fn func(sni string) (rewriteTo string, matched bool)) {
+	h.mu.Lock()
+	h.sniDecider = fn
+	h.mu.Unlock()
+}
+
+// sniDecide 线程安全地执行当前决策回调；未设置时视为未命中。
+func (h *Handler) sniDecide(sni string) (rewriteTo string, matched bool) {
+	h.mu.Lock()
+	fn := h.sniDecider
+	h.mu.Unlock()
+	if fn == nil {
+		return "", false
+	}
+	return fn(sni)
+}
+
 func (h *Handler) JudgeFlow(network uint8, source netip.AddrPort, destination netip.AddrPort, firstPacket []byte) tun.FlowVerdict {
 	return tun.FlowVerdict{Action: tun.ActionAccept}
 }
@@ -234,14 +256,39 @@ func (h *Handler) NewConnectionEx(ctx context.Context, conn net.Conn, source M.S
 
 	// 查找真实域名（fake-ip 反查）
 	targetHost := h.resolveHost(destination)
+	rawConn := conn // 嗅探前的原始连接：重写注入需包装 rawConn（原始字节已被嗅探消费）
 
-	// 浏览器可能用 DoH/系统缓存解析出真实 IP（绕过 TUN 的 fake-ip 劫持），
-	// 导致规则按域名匹配失效。此时从 TLS ClientHello 嗅探 SNI 重建域名。
-	if net.ParseIP(targetHost) != nil {
-		if sni, c := h.sniffTLSSNI(conn); sni != "" {
-			h.logger.Info("SNI sniffed", "sni", sni, "was_ip", targetHost)
-			targetHost = sni
-			conn = c
+	// 惰性嗅探（设计决策 D5）：仅在必要时读取首包——
+	//   a) targetHost 是 IP（fake-ip 反查失败/被绕过，需嗅探 SNI 重建域名）；或
+	//   b) 决策器对当前域名给出非空重写目标（重写必须要 ClientHello）。
+	// 其余流量不碰首包，保持零开销直通。
+	needSniff := net.ParseIP(targetHost) != nil
+	if !needSniff {
+		if rewriteTo, matched := h.sniDecide(targetHost); matched && rewriteTo != "" {
+			needSniff = true
+		}
+	}
+	if needSniff {
+		info, c := h.sniffTLSSNI(conn)
+		conn = c
+		if info.SNI != "" && info.SNI != targetHost {
+			h.logger.Info("SNI sniffed", "sni", info.SNI, "previous", targetHost)
+			targetHost = info.SNI
+		}
+		// SNI 重写（US4，设计决策 D3/D4）：决策命中且给出非空目标、成功嗅探出
+		// ClientHello、且无 ECH（ECH 下改写外层 SNI 会破坏 HPKE 封装一致性，
+		// 仅用外层 SNI 参与匹配）时，重写记录经 prefixConn 注入——包装
+		// rawConn 而非嗅探返回的包装，避免原始 ClientHello 重复发给上游。
+		rewriteTo, matched := h.sniDecide(targetHost)
+		if matched && rewriteTo != "" && info.SNI != "" {
+			if info.HasECH {
+				h.logger.Info("SNI rewrite skipped: ECH present (D4)", "sni", info.SNI)
+			} else if rewritten, err := RewriteClientHelloSNI(info.Record, rewriteTo); err != nil {
+				h.logger.Warn("SNI rewrite skipped", "sni", info.SNI, "error", err.Error())
+			} else {
+				h.logger.Info("SNI rewritten", "from", info.SNI, "to", rewriteTo)
+				conn = &prefixConn{Conn: rawConn, prefix: rewritten}
+			}
 		}
 	}
 	h.logger.Debug("TCP flow", "source", source.String(), "destination", destination.String(), "resolved", targetHost)
@@ -389,20 +436,20 @@ func (c *bufferedConn) CloseWrite() error {
 
 // sniffTLSSNI 从 TLS ClientHello 中嗅探 SNI 域名。
 // T012：切换到独立解析模块 sni_parser（ECH 检测/分片到达/畸形安全）。
-// 行为与旧内联实现兼容：非 TLS / 超时返回空 SNI；返回的连接总是包装后的，
+// 非 TLS / 超时：info.SNI 为空、Err 记录原因，返回的连接总是包装后的，
 // 已读字节经 prefixConn 完整回放——旧实现经 bufio 消费后不回放，会把整个
 // ClientHello 丢掉不发给上游，这是 US3 明确要求修复的丢字节缺陷。
-func (h *Handler) sniffTLSSNI(conn net.Conn) (string, net.Conn) {
+func (h *Handler) sniffTLSSNI(conn net.Conn) (SNIInfo, net.Conn) {
 	info, wrapped := SniffClientHello(conn, 3*time.Second)
 	if info.Err != nil {
 		h.logger.Debug("SNI sniff failed", "error", info.Err.Error())
 	}
 	if info.HasECH {
-		// D4：ECH 存在时 inner SNI 加密不可见，用外层 SNI 参与规则匹配
-		// 并在日志中标记；重写决策层会据此跳过重写。
-		h.logger.Info("SNI sniffed with ECH present, using outer SNI for rule matching", "sni", info.SNI)
+		// D4：ECH 存在时 inner SNI 加密不可见，外层 SNI 用于规则匹配；
+		// Debug 级避免每个 ECH 流刷屏，重写跳过路径另有 Info 日志。
+		h.logger.Debug("SNI sniffed with ECH present, outer SNI used for matching", "sni", info.SNI)
 	}
-	return info.SNI, wrapped
+	return info, wrapped
 }
 
 // resolveHost 解析目标地址的真实域名
@@ -896,81 +943,81 @@ func (h *Handler) forwardUDPDirect(ctx context.Context, conn N.PacketConn, sourc
 		var wg sync.WaitGroup
 		wg.Add(2)
 
-stopped := make(chan struct{})
-	var stopOnce sync.Once
-	stop := func() {
-		stopOnce.Do(func() { close(stopped) })
-	}
+		stopped := make(chan struct{})
+		var stopOnce sync.Once
+		stop := func() {
+			stopOnce.Do(func() { close(stopped) })
+		}
 
-	// 方向一：客户端 → 上游
-	go func() {
-		defer wg.Done()
-		defer stop()
-		for {
-			select {
-			case <-stopped:
-				return
-			case <-ctx.Done():
-				return
-			default:
-			}
+		// 方向一：客户端 → 上游
+		go func() {
+			defer wg.Done()
+			defer stop()
+			for {
+				select {
+				case <-stopped:
+					return
+				case <-ctx.Done():
+					return
+				default:
+				}
 
-			conn.SetReadDeadline(time.Now().Add(udpIdleTimeout))
-			packetBuf := buf.NewPacket()
-			_, err := conn.ReadPacket(packetBuf)
-			if err != nil {
+				conn.SetReadDeadline(time.Now().Add(udpIdleTimeout))
+				packetBuf := buf.NewPacket()
+				_, err := conn.ReadPacket(packetBuf)
+				if err != nil {
+					packetBuf.Release()
+					if netErr, ok := err.(net.Error); ok && netErr.Timeout() {
+						continue // 客户端暂时空闲，等待会话由 sing-tun NAT 回收
+					}
+					return
+				}
+
+				_, err = remoteConn.WriteTo(packetBuf.Bytes(), destUDPAddr)
 				packetBuf.Release()
-				if netErr, ok := err.(net.Error); ok && netErr.Timeout() {
-					continue // 客户端暂时空闲，等待会话由 sing-tun NAT 回收
+				if err != nil {
+					h.logger.Warn("failed to forward UDP", "error", err)
+					return
 				}
-				return
 			}
+		}()
 
-			_, err = remoteConn.WriteTo(packetBuf.Bytes(), destUDPAddr)
-			packetBuf.Release()
-			if err != nil {
-				h.logger.Warn("failed to forward UDP", "error", err)
-				return
-			}
-		}
-	}()
-
-	// 方向二：上游 → 客户端（独立持续读取，QUIC 多包响应不会丢失）
-	go func() {
-		defer wg.Done()
-		defer stop()
-		responseBuf := make([]byte, 65535)
-		for {
-			select {
-			case <-stopped:
-				return
-			case <-ctx.Done():
-				return
-			default:
-			}
-
-			remoteConn.SetReadDeadline(time.Now().Add(udpIdleTimeout))
-			n, _, err := remoteConn.ReadFrom(responseBuf)
-			if err != nil {
-				if netErr, ok := err.(net.Error); ok && netErr.Timeout() {
-					continue // 上游暂时无数据（QUIC 静默期），等待另一方向结束
+		// 方向二：上游 → 客户端（独立持续读取，QUIC 多包响应不会丢失）
+		go func() {
+			defer wg.Done()
+			defer stop()
+			responseBuf := make([]byte, 65535)
+			for {
+				select {
+				case <-stopped:
+					return
+				case <-ctx.Done():
+					return
+				default:
 				}
-				return
-			}
 
-			responsePacket := buf.NewPacket()
-			responsePacket.Write(responseBuf[:n])
-			// WritePacket 的 dest 是响应包的源地址（远端服务器），不是目标（应用）
-			// 所有权随 WritePacket 转移，由 gvisor 背压写端负责 Release
-			if err := conn.WritePacket(responsePacket, destination); err != nil {
-				h.logger.Warn("failed to write UDP response", "error", err)
-				return
+				remoteConn.SetReadDeadline(time.Now().Add(udpIdleTimeout))
+				n, _, err := remoteConn.ReadFrom(responseBuf)
+				if err != nil {
+					if netErr, ok := err.(net.Error); ok && netErr.Timeout() {
+						continue // 上游暂时无数据（QUIC 静默期），等待另一方向结束
+					}
+					return
+				}
+
+				responsePacket := buf.NewPacket()
+				responsePacket.Write(responseBuf[:n])
+				// WritePacket 的 dest 是响应包的源地址（远端服务器），不是目标（应用）
+				// 所有权随 WritePacket 转移，由 gvisor 背压写端负责 Release
+				if err := conn.WritePacket(responsePacket, destination); err != nil {
+					h.logger.Warn("failed to write UDP response", "error", err)
+					return
+				}
 			}
-		}
+		}()
+
+		wg.Wait()
 	}()
-
-	wg.Wait()
-}()
 }
 
 // proxyConn 双向复制数据，正确处理 TCP 半关闭
