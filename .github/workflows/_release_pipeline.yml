@@ -396,8 +396,38 @@ jobs:
           Write-Host "::endgroup::"
           Write-Host "::notice::Unsigned package ready: $unsignedPath"
 
-      - name: Create 7z archive
-        run: 7z a -mx=9 snishaper-windows-amd64.7z .\build\bin\gui\Windows\x64\*
+      - name: Create 7z archives (every built architecture)
+        shell: pwsh
+        run: |
+          # One portable archive per Windows GUI architecture the build
+          # scripts produced, so the release set matches the build matrix
+          # (windows x64/x86/arm64) instead of x64 only.
+          $ErrorActionPreference = 'Stop'
+          $guiRoot = Join-Path $env:GITHUB_WORKSPACE 'build/bin/gui/Windows'
+          $archFileNames = @{
+            'x64'   = 'snishaper-windows-amd64.7z'
+            'x86'   = 'snishaper-windows-386.7z'
+            'arm64' = 'snishaper-windows-arm64.7z'
+          }
+          $packed = @()
+          foreach ($arch in @('x64', 'x86', 'arm64')) {
+            $dir = Join-Path $guiRoot $arch
+            if (-not (Test-Path (Join-Path $dir 'snishaper.exe'))) {
+              Write-Host "::warning::no Windows GUI payload for '$arch'; skipping its portable archive"
+              continue
+            }
+            $archive = $archFileNames[$arch]
+            Write-Host "::group::7z a $archive (windows/$arch)"
+            7z a -mx=9 $archive (Join-Path $dir '*')
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+            Write-Host "::endgroup::"
+            $packed += $arch
+          }
+          if ($packed.Count -eq 0) {
+            Write-Host "::error::no Windows GUI architecture was packaged"
+            exit 1
+          }
+          Write-Host "::notice::portable archives: $($packed -join ', ')"
 
       - name: Create cert install batch
         shell: pwsh
@@ -505,11 +535,35 @@ jobs:
           Copy-Item $msix.FullName $assetsDir\ -ErrorAction Stop
           $unsigned = Get-ChildItem -Path $pkgDir -File -Filter 'unsigned_*' | Select-Object -First 1
           if ($unsigned) { Copy-Item $unsigned.FullName $assetsDir\ -ErrorAction Stop }
-          Copy-Item (Join-Path $root 'snishaper-windows-amd64.7z') $assetsDir\ -ErrorAction Stop
-          $bundle = Get-ChildItem -Path $root -Filter '*_x64*.7z' -ErrorAction SilentlyContinue | Where-Object { $_.Name -ne 'snishaper-windows-amd64.7z' } | Select-Object -First 1
+
+          # Portable 7z: one per built Windows GUI architecture.
+          $portables = Get-ChildItem -Path $root -File -Filter 'snishaper-windows-*.7z' -ErrorAction SilentlyContinue
+          if (-not $portables) {
+            Write-Host "::error::no Windows portable archive produced"
+            exit 1
+          }
+          foreach ($p in $portables) {
+            Copy-Item $p.FullName $assetsDir\ -ErrorAction Stop
+            Write-Host "::notice::staged portable $($p.Name)"
+          }
+
+          # Signed MSIX bundle archive (named after the MSIX, contains
+          # devcert.pfx + install.bat + signing password).
+          $bundle = Get-ChildItem -Path $root -Filter '*_x64*.7z' -ErrorAction SilentlyContinue |
+                    Where-Object { $_.Name -notlike 'snishaper-windows-*' } | Select-Object -First 1
           if ($bundle) { Copy-Item $bundle.FullName $assetsDir\ -ErrorAction Stop }
-          $setupExe = Get-ChildItem -Path (Join-Path $root 'installer') -Filter '*.exe' -ErrorAction SilentlyContinue | Select-Object -First 1
-          if ($setupExe) { Copy-Item $setupExe.FullName $assetsDir\ -ErrorAction Stop }
+
+          # Inno Setup installers: one per built architecture.
+          $setups = Get-ChildItem -Path (Join-Path $root 'installer') -Filter '*.exe' -ErrorAction SilentlyContinue
+          if (-not $setups) {
+            Write-Host "::error::no Inno Setup installer produced"
+            exit 1
+          }
+          foreach ($s in $setups) {
+            Copy-Item $s.FullName $assetsDir\ -ErrorAction Stop
+            Write-Host "::notice::staged installer $($s.Name)"
+          }
+
           if (Test-Path (Join-Path $root 'devcert.pfx')) { Copy-Item (Join-Path $root 'devcert.pfx') $assetsDir\ }
           if (Test-Path (Join-Path $root 'install.bat')) { Copy-Item (Join-Path $root 'install.bat') $assetsDir\ }
 
@@ -527,12 +581,20 @@ jobs:
   # Linux build (ubuntu-26.04): portable tar.gz via build.sh.
   # ------------------------------------------------------------------
   build-linux:
-    name: Build Linux (${{ inputs.channel }})
+    name: Build Linux/${{ matrix.arch }} (${{ inputs.channel }})
     needs: check
     if: needs.check.outputs.skip != 'true'
-    runs-on: ubuntu-26.04
+    runs-on: ${{ matrix.runner }}
     permissions:
       contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-26.04
+            arch: x64
+          - runner: ubuntu-26.04-arm
+            arch: arm64
     steps:
       - name: Checkout full history
         uses: actions/checkout@v7
@@ -575,24 +637,30 @@ jobs:
         run: |
           set -euo pipefail
           chmod +x build.sh
-          echo "::group::build.sh --ci --platform linux --arch x64 --type gui --install-deps"
-          ./build.sh --ci --platform linux --arch x64 --type gui --install-deps
+          echo "::group::build.sh --ci --platform linux --arch ${{ matrix.arch }} --type gui --install-deps"
+          ./build.sh --ci --platform linux --arch "${{ matrix.arch }}" --type gui --install-deps 2>&1 | tee build.log
           echo "::endgroup::"
-          test -f build/bin/gui/Linux/x64/SniShaper && echo "::notice::build/bin/gui/Linux/x64/SniShaper ready"
+          BIN="build/bin/gui/Linux/${{ matrix.arch }}/SniShaper"
+          test -f "$BIN" || { echo "::error::$BIN missing"; exit 1; }
+          file "$BIN"
+          if grep -Eqi 'aarch64-linux-gnu|osxcross' build.log; then
+            echo "::error::cross toolchain detected in a CI build"
+            exit 1
+          fi
 
       - name: Create tar.gz archive
         run: |
           set -euo pipefail
-          ARCHIVE="snishaper-linux-amd64.tar.gz"
-          tar -czf "$ARCHIVE" -C build/bin/gui/Linux/x64 .
+          ARCHIVE="snishaper-linux-${{ matrix.arch }}.tar.gz"
+          tar -czf "$ARCHIVE" -C "build/bin/gui/Linux/${{ matrix.arch }}" .
           ls -lh "$ARCHIVE"
           echo "::notice::$ARCHIVE ready"
 
       - name: Upload Linux artifacts
         uses: actions/upload-artifact@v7
         with:
-          name: linux-artifacts
-          path: snishaper-linux-amd64.tar.gz
+          name: linux-artifacts-${{ matrix.arch }}
+          path: snishaper-linux-${{ matrix.arch }}.tar.gz
           retention-days: 3
 
   # ------------------------------------------------------------------
@@ -735,11 +803,12 @@ jobs:
           name: windows-artifacts
           path: staging
 
-      - name: Download Linux artifacts
+      - name: Download Linux artifacts (every architecture)
         uses: actions/download-artifact@v8
         with:
-          name: linux-artifacts
+          pattern: linux-artifacts-*
           path: staging
+          merge-multiple: true
 
       - name: Download CLI artifacts
         uses: actions/download-artifact@v8
@@ -946,39 +1015,72 @@ jobs:
           [void]$sb.AppendLine("| File | Purpose | MD5 |")
           [void]$sb.AppendLine("|------|---------|-----|")
 
-          function Add-AssetRow($file, $purpose) {
-            if (-not $file) { return }
+          # Purpose text is derived from the file name, so any architecture the
+          # build scripts add shows up here automatically. Nothing is
+          # hard-coded to a single architecture.
+          function Get-AssetPurpose([string]$name) {
+            switch -Regex ($name) {
+                '^dongle\.Snishaper_.*\.7z$' {
+                    return 'Signed bundle: mixed-architecture MSIX package + signing certificate (devcert.pfx) + install.bat + signing password, for one-click sideload'
+                }
+                '^unsigned_.*\.msix(bundle)?$' {
+                    return 'Unsigned mixed-architecture MSIX package for Microsoft Partner Center submission (re-signed by Microsoft on upload)'
+                }
+                '^Snishaper-.*-(x64|x86|386|arm64)Setup\.exe$' {
+                    $a = $Matches[1]
+                    $label = switch ($a) { 'x64' { 'x64' } 'x86' { 'x86 (32-bit)' } '386' { 'x86 (32-bit)' } 'arm64' { 'ARM64' } default { $a } }
+                    return "Windows installer (Inno Setup, $label): classic guided installation with license and desktop shortcut, for regular users"
+                }
+                '^snishaper-windows-(amd64|386|arm64)\.7z$' {
+                    $a = $Matches[1]
+                    $label = switch ($a) { 'amd64' { 'x64' } '386' { 'x86 (32-bit)' } 'arm64' { 'ARM64' } default { $a } }
+                    return "Windows portable build ($label): extract and run snishaper.exe directly, no installation required"
+                }
+                '^snishaper-linux-(amd64|arm64|x64)\.tar\.gz$' {
+                    $a = $Matches[1]
+                    $label = if ($a -eq 'amd64') { 'amd64' } elseif ($a -eq 'x64') { 'x64' } else { 'ARM64' }
+                    return "Linux portable build ($label): extract and run ./SniShaper, requires GTK4/WebKitGTK runtime"
+                }
+                '^snishaper-cli-(windows|linux|darwin)-(amd64|arm64|386)\.7z$' {
+                    $os = $Matches[1]
+                    $a = $Matches[2]
+                    $osLabel = switch ($os) { 'windows' { 'Windows' } 'linux' { 'Linux' } 'darwin' { 'macOS' } default { $os } }
+                    $archLabel = switch ($a) { 'amd64' { 'x64' } '386' { 'x86 (32-bit)' } 'arm64' { 'ARM64' } default { $a } }
+                    $exe = if ($os -eq 'windows') { 'snishaper.exe' } else { './snishaper' }
+                    return "CLI (headless): $osLabel $archLabel, extract and run $exe, includes config/ and rules/ seed files"
+                }
+                default { return 'Release artifact' }
+            }
+          }
+
+          # Fixed order: installers, signed bundle, unsigned MSIX, Windows
+          # portables, Linux portables, then every CLI target by name.
+          $ordered = @()
+          $ordered += Get-ChildItem -Path $assetsDir -File -Filter '*-Setup.exe' -ErrorAction SilentlyContinue
+          $ordered += Get-ChildItem -Path $assetsDir -File -Filter 'dongle.*.7z' -ErrorAction SilentlyContinue
+          $ordered += Get-ChildItem -Path $assetsDir -File -Filter 'unsigned_*.msix*' -ErrorAction SilentlyContinue
+          $ordered += Get-ChildItem -Path $assetsDir -File -Filter 'snishaper-windows-*.7z' -ErrorAction SilentlyContinue | Sort-Object Name
+          $ordered += Get-ChildItem -Path $assetsDir -File -Filter 'snishaper-linux-*.tar.gz' -ErrorAction SilentlyContinue | Sort-Object Name
+          $ordered += Get-ChildItem -Path $assetsDir -File -Filter 'snishaper-cli-*.7z' -ErrorAction SilentlyContinue | Sort-Object Name
+
+          $listed = @{}
+          foreach ($file in $ordered) {
+            if (-not $file -or $listed.ContainsKey($file.Name)) { continue }
+            $listed[$file.Name] = $true
             $md5 = (Get-FileHash -LiteralPath $file.FullName -Algorithm MD5).Hash.ToLowerInvariant()
             $sizeMB = [Math]::Round($file.Length / 1MB, 1)
-            [void]$sb.AppendLine("| $($file.Name) | $purpose (Size: $sizeMB MB) | $md5 |")
+            [void]$sb.AppendLine("| $($file.Name) | $(Get-AssetPurpose $file.Name) (Size: $sizeMB MB) | $md5 |")
           }
 
-          $bundle = Get-ChildItem -Path $assetsDir -Filter '*_x64*.7z' -ErrorAction SilentlyContinue | Where-Object { $_.Name -ne 'snishaper-windows-amd64.7z' } | Select-Object -First 1
-          $portable = Get-ChildItem -Path $assetsDir -Filter 'snishaper-windows-amd64.7z' -ErrorAction SilentlyContinue | Select-Object -First 1
-          $unsigned = Get-ChildItem -Path $assetsDir -Filter 'unsigned_*' -ErrorAction SilentlyContinue | Select-Object -First 1
-          $setupExe = Get-ChildItem -Path $assetsDir -Filter '*-x64Setup.exe' -ErrorAction SilentlyContinue | Select-Object -First 1
-          $linuxTgz = Get-ChildItem -Path $assetsDir -Filter 'snishaper-linux-amd64.tar.gz' -ErrorAction SilentlyContinue | Select-Object -First 1
-
-          Add-AssetRow $setupExe "Windows installer (Inno Setup): classic guided installation with license and desktop shortcut, for regular users"
-          Add-AssetRow $bundle "Signed bundle: mixed-architecture MSIX package + signing certificate (devcert.pfx) + install.bat + signing password, for one-click sideload"
-          Add-AssetRow $portable "Windows portable build: extract and run snishaper.exe directly, no installation required"
-          Add-AssetRow $unsigned "Unsigned mixed-architecture MSIX package for Microsoft Partner Center submission (re-signed by Microsoft on upload)"
-          Add-AssetRow $linuxTgz "Linux portable build (amd64): extract and run ./SniShaper, requires GTK4/WebKitGTK runtime"
-
-          $cliPurpose = @{
-            'snishaper-cli-windows-amd64.7z'  = 'CLI (headless): Windows x64, extract and run snishaper.exe, includes config/ and rules/ seed files'
-            'snishaper-cli-windows-386.7z'      = 'CLI (headless): Windows x86 (32-bit), extract and run snishaper.exe, includes config/ and rules/ seed files'
-            'snishaper-cli-windows-arm64.7z'  = 'CLI (headless): Windows ARM64, extract and run snishaper.exe, includes config/ and rules/ seed files'
-            'snishaper-cli-linux-amd64.7z'    = 'CLI (headless): Linux x64, extract and run ./snishaper, includes config/ and rules/ seed files'
-            'snishaper-cli-linux-arm64.7z'    = 'CLI (headless): Linux ARM64, extract and run ./snishaper, includes config/ and rules/ seed files'
-            'snishaper-cli-darwin-amd64.7z'   = 'CLI (headless): macOS x64, extract and run ./snishaper, includes config/ and rules/ seed files'
-            'snishaper-cli-darwin-arm64.7z'   = 'CLI (headless): macOS ARM64 (Apple Silicon), extract and run ./snishaper, includes config/ and rules/ seed files'
-          }
+          # Any staged file the ordered pass did not classify (new archive
+          # naming, auxiliary files) still gets a row, so the table can never
+          # silently omit an asset that ships with the release.
           Get-ChildItem -Path $assetsDir -File | Where-Object {
-            $_.Name -match '^snishaper-cli-(windows|linux|darwin)-(amd64|arm64|386)\.7z$'
+            $_.Name -ne 'RELEASE_NOTES.md' -and -not $listed.ContainsKey($_.Name)
           } | Sort-Object Name | ForEach-Object {
-            $p = if ($cliPurpose.ContainsKey($_.Name)) { $cliPurpose[$_.Name] } else { 'CLI portable build (7z)' }
-            Add-AssetRow $_ $p
+            $md5 = (Get-FileHash -LiteralPath $_.FullName -Algorithm MD5).Hash.ToLowerInvariant()
+            $sizeMB = [Math]::Round($_.Length / 1MB, 1)
+            [void]$sb.AppendLine("| $($_.Name) | $(Get-AssetPurpose $_.Name) (Size: $sizeMB MB) | $md5 |")
           }
           # Blank line so the following ## Contributors heading is separated.
           [void]$sb.AppendLine("")
@@ -1010,16 +1112,40 @@ jobs:
           $notesFile = Join-Path $assetsDir 'RELEASE_NOTES.md'
 
           Write-Host "::group::gh release create $tag"
+          # Glob patterns (not literal paths) so every architecture the build
+          # jobs produced is attached: all Setup exes, all Windows portable
+          # 7z, all Linux tar.gz, all CLI 7z, plus the signed MSIX bundle
+          # archive and the unsigned Partner Center package. The signed MSIX
+          # itself ships inside the dongle.*.7z archive together with
+          # devcert.pfx, install.bat and the signing password.
+          $patterns = @(
+            (Join-Path $assetsDir 'unsigned_*.msix*'),
+            (Join-Path $assetsDir '*-Setup.exe'),
+            (Join-Path $assetsDir 'dongle.*.7z'),
+            (Join-Path $assetsDir 'snishaper-windows-*.7z'),
+            (Join-Path $assetsDir 'snishaper-linux-*.tar.gz'),
+            (Join-Path $assetsDir 'snishaper-cli-*.7z')
+          )
+          $matched = @()
+          foreach ($pattern in $patterns) {
+            $hits = Get-ChildItem -Path $pattern -File -ErrorAction SilentlyContinue
+            if (-not $hits) {
+              Write-Host "::warning::no asset matches pattern $pattern"
+              continue
+            }
+            $matched += $hits.Name
+          }
+          $matched = $matched | Sort-Object -Unique
+          if ($matched.Count -eq 0) {
+            Write-Host "::error::no assets staged for upload"
+            exit 1
+          }
+          Write-Host "::notice::uploading $($matched.Count) assets:"
+          $matched | ForEach-Object { Write-Host "  $_" }
+
           $args = @(
-            'release', 'create', $tag,
-            # The signed mixed-architecture package + devcert.pfx +
-            # install.bat + password are bundled into the *_x64*.7z archive,
-            # so only upload the unsigned package (for Partner Center) plus
-            # the Inno Setup exe, the two 7z archives and the Linux tar.gz.
-            (Join-Path $assetsDir 'unsigned_*'),
-            (Join-Path $assetsDir '*.exe'),
-            (Join-Path $assetsDir '*.7z'),
-            (Join-Path $assetsDir 'snishaper-linux-amd64.tar.gz'),
+            'release', 'create', $tag
+          ) + $matched + @(
             '--title', $releaseName,
             '--notes-file', $notesFile
           )
@@ -1031,6 +1157,46 @@ jobs:
           }
           Write-Host "::endgroup::"
           Write-Host "::notice::Release $releaseName ($tag) published, prerelease=$prerelease"
+
+      - name: Verify every staged asset is downloadable
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ steps.bot.outputs.token || github.token }}
+        run: |
+          # `gh release create` silently accepts partial uploads, so confirm
+          # each staged archive is actually attached to the published release
+          # and reachable before the workflow reports success.
+          $ErrorActionPreference = 'Continue'
+          $assetsDir = Join-Path $env:GITHUB_WORKSPACE 'staging'
+          $tag = "${{ needs.check.outputs.tag }}"
+          $expected = Get-ChildItem -Path $assetsDir -File |
+                      Where-Object { $_.Name -ne 'RELEASE_NOTES.md' } |
+                      Sort-Object Name
+          if (-not $expected) {
+            Write-Host "::error::nothing staged to verify"
+            exit 1
+          }
+          $json = gh release view $tag --json assets --jq '.assets[].name' 2>$null
+          if ($LASTEXITCODE -ne 0) {
+            Write-Host "::error::cannot read the published asset list"
+            exit 1
+          }
+          $attached = @($json)
+          $missing = @()
+          foreach ($file in $expected) {
+            if ($attached -notcontains $file.Name) {
+              $missing += $file.Name
+              Write-Host "::error::staged asset missing from the release: $($file.Name)"
+            } else {
+              Write-Host "::notice::attached: $($file.Name)"
+            }
+          }
+          if ($missing.Count -gt 0) {
+            Write-Host "::error::$($missing.Count) asset(s) did not reach the release: $($missing -join ', ')"
+            exit 1
+          }
+          Write-Host "::notice::all $($expected.Count) staged assets are attached to $tag"
+          exit 0
 
       - name: Append GitHub generated contributor list
         shell: pwsh
