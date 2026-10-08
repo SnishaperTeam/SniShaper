@@ -103,40 +103,57 @@ func (p *ProxyServer) handleConnect(w http.ResponseWriter, req *http.Request, ru
 		return
 	}
 
-	if err := p.dialUpstream(cr); err != nil {
+	// mitm 不用 cr.conn：上游 ALPN 要按客户端宣告的协议来定，连接只能在 TLS 握手
+	// 回调里由 establishUpstreamConn 建立，这里仅解析候选地址。
+	if cr.effectiveMode == "mitm" {
+		if err := p.resolveDialCandidates(cr); err != nil {
+			http.Error(w, "Failed to connect to upstream", http.StatusBadGateway)
+			p.tracef("[Connect] Failed to resolve upstream candidates for %s: %v", cr.targetHost, err)
+			return
+		}
+	} else if err := p.dialUpstream(cr); err != nil {
 		http.Error(w, "Failed to connect to upstream", http.StatusBadGateway)
 		p.tracef("[Connect] All upstream connect attempts failed: %v, error: %v", cr.dialCandidates, err)
 		return
 	}
 
+	// cr.conn 仅 tls-rf / transparent 使用，mitm 下为 nil
+	closeUpstream := func() {
+		if cr.conn != nil {
+			cr.conn.Close()
+		}
+	}
+
 	hijacker, ok := w.(http.Hijacker)
 	if !ok {
 		http.Error(w, "Hijack not supported", http.StatusInternalServerError)
-		cr.conn.Close()
+		closeUpstream()
 		return
 	}
 
 	clientConn, rw, err := hijacker.Hijack()
 	if err != nil {
 		log.Printf("[Connect] Hijack failed: %v", err)
-		cr.conn.Close()
+		closeUpstream()
 		return
 	}
 	if _, err := rw.WriteString("HTTP/1.1 200 Connection Established\r\n\r\n"); err != nil {
 		log.Printf("[Connect] Write 200 failed: %v", err)
 		clientConn.Close()
-		cr.conn.Close()
+		closeUpstream()
 		return
 	}
 	if err := rw.Flush(); err != nil {
 		log.Printf("[Connect] Flush 200 failed: %v", err)
 		clientConn.Close()
-		cr.conn.Close()
+		closeUpstream()
 		return
 	}
 	clientConn = wrapHijackedConn(clientConn, rw)
 	_ = clientConn.SetDeadline(time.Time{})
-	_ = cr.conn.SetDeadline(time.Time{})
+	if cr.conn != nil {
+		_ = cr.conn.SetDeadline(time.Time{})
+	}
 
 	switch cr.effectiveMode {
 	case "mitm":
