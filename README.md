@@ -6,7 +6,7 @@
 
 **SniShaper** 是一款为复杂网络环境设计的本地代理软件，通过 **ECH 注入**、**TLS 分片**、**QUIC 转换**、**会话迁移** 等多种解决方案，帮助实现复杂环境下稳定而灵活的网络访问体验。
 
-本项目提供跨平台支持。详见 **[Platform.md](Platform.md)**。
+本项目提供跨平台支持。详见 **[Platform.md](docs/Platform.md)**。
 
 ---
 
@@ -48,7 +48,10 @@
 
 对于一般用户，我们建议直接在 [Releases](https://github.com/SnishaperTeam/SniShaper/releases) 下载最新的 Windows 稳定版本。
 
-对于其它平台的情况和构建方式，详见其它文档。
+对于其它平台的情况和构建方式，详见以下文档：
+
+- **[Platform.md](docs/Platform.md)** — 各平台快速上手、CLI 用法与移动端伴侣。
+- **[build.md](docs/build.md)** — 构建指南与 12 目标产物矩阵。
 
 ---
 
@@ -60,12 +63,13 @@
 - **[规则自定义指南](https://github.com/SnishaperTeam/SniShaper/wiki/Custom-Rules-Guide)**：了解如何开发针对性的规则。
 - **[界面配置实操](https://github.com/SnishaperTeam/SniShaper/wiki/GUI-Configuration)**：了解在 GUI 快速配置规则。
 - **[常见问题排除](https://github.com/SnishaperTeam/SniShaper/wiki/FAQ)**：解决证书警告、规则不生效等常见问题。
+- **[Collaborator 协作条款](docs/COLLABORATOR_AGREEMENT.md)**：成为本仓库 collaborator 的条款、邀请与接受流程。
 
 ---
 
 ## 构建与开发
 
-本项目在目前，前端基于 **Wails v3 + React 19 + MUI** 构建，核心使用 **Go** 开发，支持 Windows / Linux 双平台 GUI 与跨平台 CLI 共 12 个构建目标。完整的构建指南详见 **[build.md](build.md)**。
+本项目在目前，前端基于 **Wails v3 + React 19 + MUI** 构建，核心使用 **Go** 开发，支持 Windows / Linux 双平台 GUI 与跨平台 CLI 共 12 个构建目标。完整的构建指南详见 **[build.md](docs/build.md)**。
 
 我们会在不久后的另一个稳定版本完成原生 GUI 实现，减少前端的内存占用。
 
