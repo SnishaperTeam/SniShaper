@@ -82,9 +82,6 @@ func newCoreRuntime() (*coreRuntime, error) {
 	}
 	// Initialize nativeTUN with DoH resolver
 	r.nativeTUN = singtun.NewManager(r.proxyServer.GetDoHResolver(), r.appendLog)
-	// TUN SNI 重写决策注入（US4）：把 ProxyServer 的规则决策（sni_fake）
-	// 交给 TUN Handler；Manager 持久保存该回调，Start 重建 Handler 时重新注入。
-	r.nativeTUN.SetSNIDecider(r.proxyServer.SNIRewriteDecisionForTUN)
 
 	if err := r.start(); err != nil {
 		return nil, err

@@ -16,8 +16,8 @@ import (
 // ---- T016 集成用例：NewConnectionEx 端到端（fake proxy listener + net.Pipe） ----
 
 // runFlowThroughHandler 把一条客户端流推入 NewConnectionEx，返回代理侧观察到的
-// CONNECT 目标主机与隧道首条 TLS record。setup 在内部 Handler 上配置决策回调，
-// 并返回该流的目标地址（可用 h.fakeIP 注册 fake-ip 域名目标）。
+// CONNECT 目标主机与隧道首条 TLS record。setup 返回该流的目标地址
+// （可用 h.fakeIP 注册 fake-ip 域名目标）。
 func runFlowThroughHandler(t *testing.T, setup func(h *Handler) M.Socksaddr, clientHello []byte) (connectHost string, firstRecord []byte) {
 	t.Helper()
 	l, err := net.Listen("tcp", "127.0.0.1:0")
@@ -110,18 +110,12 @@ func fakeIPDest(h *Handler, domain string, port uint16) M.Socksaddr {
 	return M.SocksaddrFrom(addr, port)
 }
 
-// 用例 1：IP 目标 + 决策命中 → CONNECT 用嗅探域名，隧道内的 ClientHello
-// 已被重写为新 SNI。
-func TestNewConnectionRewritesSNIWhenDeciderMatches(t *testing.T) {
+// 用例 1：IP 目标 → CONNECT 用嗅探域名，ClientHello 原样回放。
+// 数据面绝不重写（TLS 转录哈希约束，见 NewConnectionEx 注释）。
+func TestNewConnectionSniffsAndPassesThrough(t *testing.T) {
 	hello := buildClientHelloRecord("example.com", nil)
 
 	connectHost, rec := runFlowThroughHandler(t, func(h *Handler) M.Socksaddr {
-		h.SetSNIDecider(func(sni string) (string, bool) {
-			if sni == "example.com" {
-				return "cdn.example.org", true
-			}
-			return "", false
-		})
 		return M.SocksaddrFrom(netip.MustParseAddr("93.184.216.34"), 443)
 	}, hello)
 
@@ -132,12 +126,12 @@ func TestNewConnectionRewritesSNIWhenDeciderMatches(t *testing.T) {
 	if err != nil {
 		t.Fatalf("tunneled record must parse: %v", err)
 	}
-	if info.SNI != "cdn.example.org" {
-		t.Fatalf("tunneled ClientHello must carry rewritten SNI, got %q", info.SNI)
+	if info.SNI != "example.com" {
+		t.Fatalf("ClientHello must pass through unrewritten, got %q", info.SNI)
 	}
 }
 
-// 用例 2：决策回调为 nil → 行为等同现状：IP 场景仍嗅探 SNI 用于 CONNECT，
+// 用例 2：fake-ip 反查成功的行为等同现状：IP 场景仍嗅探 SNI 用于 CONNECT，
 // ClientHello 原样回放（不丢字节、不重写）。
 func TestNewConnectionNilDeciderKeepsCurrentBehavior(t *testing.T) {
 	hello := buildClientHelloRecord("example.com", nil)
@@ -158,16 +152,13 @@ func TestNewConnectionNilDeciderKeepsCurrentBehavior(t *testing.T) {
 	}
 }
 
-// 用例 3：ECH 流量即使决策命中也跳过重写（D4）：外层 SNI 用于 CONNECT，
-// ClientHello 原样透传。
+// 用例 3：ECH 流量照常嗅探外层 SNI 用于 CONNECT，ClientHello 原样透传
+// （数据面不重写，ECH 封装完整性天然保持）。
 func TestNewConnectionSkipsRewriteForECH(t *testing.T) {
 	ech := testExt{typ: 0xfe0d, data: []byte{0x01, 0x00, 0x02, 0x03}}
 	hello := buildClientHelloRecord("outer.example.com", []testExt{ech})
 
 	connectHost, rec := runFlowThroughHandler(t, func(h *Handler) M.Socksaddr {
-		h.SetSNIDecider(func(string) (string, bool) { // 无条件命中，验证 ECH 防线
-			return "evil.example.org", true
-		})
 		return M.SocksaddrFrom(netip.MustParseAddr("93.184.216.34"), 443)
 	}, hello)
 
@@ -186,14 +177,13 @@ func TestNewConnectionSkipsRewriteForECH(t *testing.T) {
 	}
 }
 
-// 用例 4：惰性嗅探（D5）——fake-ip 域名目标且决策无重写时，不读首包、
-// 不等待嗅探超时：非 TLS 字节直通，CONNECT 直接用反查域名。
+// 用例 4：惰性嗅探（D5）——fake-ip 域名目标时不读首包、不等待嗅探超时：
+// 非 TLS 字节直通，CONNECT 直接用反查域名。
 func TestNewConnectionLazySniffSkipsNonTLSWhenNoRewrite(t *testing.T) {
 	hello := []byte("GET / HTTP/1.1\r\nHost: plain.example\r\n\r\n")
 
 	start := time.Now()
 	connectHost, rec := runFlowThroughHandler(t, func(h *Handler) M.Socksaddr {
-		h.SetSNIDecider(func(string) (string, bool) { return "", false }) // 不重写
 		return fakeIPDest(h, "plain.example", 80)
 	}, hello)
 	elapsed := time.Since(start)
