@@ -6,7 +6,7 @@
 
 **SniShaper** is a local proxy tool for complex network environments, using **ECH Injection**, **TLS Fragmentation**, **QUIC Conversion**, **Session Migration** and other solutions to deliver a stable and flexible browsing experience.
 
-This project provides cross-platform support. See **[Platform_EN.md](Platform_EN.md)**.
+This project provides cross-platform support. See **[Platform_EN.md](docs/Platform_EN.md)**.
 
 ---
 
@@ -50,8 +50,8 @@ For most users, we recommend downloading the latest stable Windows build straigh
 
 For the other platforms and for build instructions, see the following documents:
 
-- **[Platform_EN.md](Platform_EN.md)** — per-platform quick start, CLI usage and mobile companions.
-- **[build_EN.md](build_EN.md)** — build guide and the 12-target artifact matrix.
+- **[Platform_EN.md](docs/Platform_EN.md)** — per-platform quick start, CLI usage and mobile companions.
+- **[build_EN.md](docs/build_EN.md)** — build guide and the 12-target artifact matrix.
 
 ---
 
@@ -63,12 +63,13 @@ For detailed technical principles and custom rule guides, refer to the [**GitHub
 - **[Rule Customization Guide](https://github.com/SnishaperTeam/SniShaper/wiki/Custom-Rules-Guide)**: Learn how to develop targeted rules.
 - **[GUI Configuration Practice](https://github.com/SnishaperTeam/SniShaper/wiki/GUI-Configuration)**: Quickly configure rules in the GUI.
 - **[FAQ](https://github.com/SnishaperTeam/SniShaper/wiki/FAQ)**: Resolve certificate warnings, rule issues and other common problems.
+- **[Collaborator Agreement](docs/COLLABORATOR_AGREEMENT.md)**: Terms, invitation and acceptance process for becoming a repository collaborator.
 
 ---
 
 ## Build and Development
 
-The frontend is currently built with **Wails v3 + React 19 + MUI**, with the core developed in **Go**, supporting Windows / Linux dual-platform GUI and cross-platform CLI for a total of 12 build targets. The full build guide is in **[build_EN.md](build_EN.md)**.
+The frontend is currently built with **Wails v3 + React 19 + MUI**, with the core developed in **Go**, supporting Windows / Linux dual-platform GUI and cross-platform CLI for a total of 12 build targets. The full build guide is in **[build_EN.md](docs/build_EN.md)**.
 
 We will complete a native GUI implementation in an upcoming stable release, to reduce the frontend's memory footprint.
 
