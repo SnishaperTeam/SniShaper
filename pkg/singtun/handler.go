@@ -38,7 +38,6 @@ type Handler struct {
 	logf        func(string)
 	logger      *slog.Logger
 	ifaceConfig netiface.Config
-	sniDecider  func(sni string) (rewriteTo string, matched bool)
 	mu          sync.Mutex
 	live        map[net.Conn]struct{}
 	livePacket  map[N.PacketConn]struct{}
@@ -209,27 +208,6 @@ func (h *Handler) SetInterfaceConfig(cfg netiface.Config) {
 	h.mu.Unlock()
 }
 
-// SetSNIDecider 设置 SNI 重写决策回调（US4，设计决策 D11）。
-// 回调返回 matched=true 且 rewriteTo 非空时，TUN 路径对命中的 TLS 流执行
-// ClientHello SNI 重写；nil 回调 = 保持现状（仅 IP 场景嗅探，不重写）。
-// 必须在 Start 建立数据面前设置（Manager.Start 在创建 Handler 后注入）。
-func (h *Handler) SetSNIDecider(fn func(sni string) (rewriteTo string, matched bool)) {
-	h.mu.Lock()
-	h.sniDecider = fn
-	h.mu.Unlock()
-}
-
-// sniDecide 线程安全地执行当前决策回调；未设置时视为未命中。
-func (h *Handler) sniDecide(sni string) (rewriteTo string, matched bool) {
-	h.mu.Lock()
-	fn := h.sniDecider
-	h.mu.Unlock()
-	if fn == nil {
-		return "", false
-	}
-	return fn(sni)
-}
-
 func (h *Handler) JudgeFlow(network uint8, source netip.AddrPort, destination netip.AddrPort, firstPacket []byte) tun.FlowVerdict {
 	return tun.FlowVerdict{Action: tun.ActionAccept}
 }
@@ -256,39 +234,18 @@ func (h *Handler) NewConnectionEx(ctx context.Context, conn net.Conn, source M.S
 
 	// 查找真实域名（fake-ip 反查）
 	targetHost := h.resolveHost(destination)
-	rawConn := conn // 嗅探前的原始连接：重写注入需包装 rawConn（原始字节已被嗅探消费）
 
-	// 惰性嗅探（设计决策 D5）：仅在必要时读取首包——
-	//   a) targetHost 是 IP（fake-ip 反查失败/被绕过，需嗅探 SNI 重建域名）；或
-	//   b) 决策器对当前域名给出非空重写目标（重写必须要 ClientHello）。
-	// 其余流量不碰首包，保持零开销直通。
-	needSniff := net.ParseIP(targetHost) != nil
-	if !needSniff {
-		if rewriteTo, matched := h.sniDecide(targetHost); matched && rewriteTo != "" {
-			needSniff = true
-		}
-	}
-	if needSniff {
+	// 惰性嗅探（设计决策 D5）：仅 targetHost 是 IP（fake-ip 反查失败/被绕过）
+	// 时读取首包嗅探 SNI 重建域名，供 CONNECT 选路；其余流量不碰首包，零开销直通。
+	// 注意：只嗅探、绝不改写 ClientHello——TLS 1.2/1.3 的转录哈希覆盖整个
+	// ClientHello，传输途中改任何字节都会导致两端密钥不一致（bad record MAC）。
+	// SNI 伪装只能在 TLS 端点侧做（MITM 出站重放，见 proxy/mitm.go）。
+	if net.ParseIP(targetHost) != nil {
 		info, c := h.sniffTLSSNI(conn)
 		conn = c
 		if info.SNI != "" && info.SNI != targetHost {
 			h.logger.Info("SNI sniffed", "sni", info.SNI, "previous", targetHost)
 			targetHost = info.SNI
-		}
-		// SNI 重写（US4，设计决策 D3/D4）：决策命中且给出非空目标、成功嗅探出
-		// ClientHello、且无 ECH（ECH 下改写外层 SNI 会破坏 HPKE 封装一致性，
-		// 仅用外层 SNI 参与匹配）时，重写记录经 prefixConn 注入——包装
-		// rawConn 而非嗅探返回的包装，避免原始 ClientHello 重复发给上游。
-		rewriteTo, matched := h.sniDecide(targetHost)
-		if matched && rewriteTo != "" && info.SNI != "" {
-			if info.HasECH {
-				h.logger.Info("SNI rewrite skipped: ECH present (D4)", "sni", info.SNI)
-			} else if rewritten, err := RewriteClientHelloSNI(info.Record, rewriteTo); err != nil {
-				h.logger.Warn("SNI rewrite skipped", "sni", info.SNI, "error", err.Error())
-			} else {
-				h.logger.Info("SNI rewritten", "from", info.SNI, "to", rewriteTo)
-				conn = &prefixConn{Conn: rawConn, prefix: rewritten}
-			}
 		}
 	}
 	h.logger.Debug("TCP flow", "source", source.String(), "destination", destination.String(), "resolved", targetHost)
