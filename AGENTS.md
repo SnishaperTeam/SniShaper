@@ -44,6 +44,7 @@ Data flow: Frontend (React HashRouter) → Wails bindings (`EventsOn` + async Go
 - i18n placeholders: param names passed to `t('k', {...})` must match `{param}` placeholders in all three locales (shorthand props like `{ ms }` count as params); keep the key tree structurally identical across zh/en/ru
 - i18n coverage: aria-label / placeholder / title / toast / button text must go through `t()`; add new UI copy to ALL of zh/en/ru JSON in the same commit
 - Git: commit messages MUST be written in English (user requirement), conventional-commit style, e.g. `refactor: remove GFWList dynamic update and complete i18n`
+- Wiki: any change that alters a file's purpose/nature, adds new files, or renames/removes files MUST update the GitHub Wiki in the same change (zh + EN pages; clone `https://github.com/SnishaperTeam/SniShaper.wiki.git`, naming: `Page.md` = zh, `EN-Page.md` = en)
 
 # Security & Environment
 
