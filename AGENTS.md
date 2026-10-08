@@ -1,9 +1,10 @@
 # Build & Test
 
 - Build all: `.\build_windows.ps1 -Build all -Silent`
-- Build backend only: `.\build_windows.ps1 -Build backend -Silent`
-- Build frontend only: `.\build_windows.ps1 -Build frontend -Silent`
-- Build + MSIX: `.\build_windows.ps1 -Build all -Silent -BuildMsix`
+- Build backend only: `.\build_windows.ps1 -Build all,gui,backend -Silent`
+- Build frontend only: `.\build_windows.ps1 -Build all,gui,frontend -Silent`
+- Build + MSIX: `.\build_windows.ps1 -Build all -Silent -BuildMsix` (`-Build` format is `<system>,<mode>,<scope>`, e.g. `windows,gui,backend`; single token without comma is parsed as `<system>` only)
+- Headless CLI (linux/WSL TUN test): `$env:GOOS='linux'; $env:CGO_ENABLED='0'; go build -tags "headless with_gvisor" -o build/bin/snishaper-linux ./cli` (must include `with_gvisor`, otherwise TUN fails with "gVisor is not included in this build") then run in WSL2 as root: `./snishaper start && ./snishaper tun on`, test with `curl -k -m 15 <url>`, cleanup `./snishaper tun off && ./snishaper stop`; note: `stop` is async and the core RPC port is fixed at 127.0.0.1:18933, so wait for processes to fully exit (`pgrep -x snishaper`) before the next `start` — overlapping instances can kill the new core or leave old `--serve` processes stuck
 - Frontend dev: `cd frontend && npm run dev`
 - Frontend install: `cd frontend && npm install`
 - Go mod tidy: `go mod tidy`

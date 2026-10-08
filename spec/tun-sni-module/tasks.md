@@ -138,9 +138,9 @@ description: "Task list for TUN SNI module evolution"
 
 **Purpose**: 构建 + 测试 + 后端整体构建验证（Go 后端模块，无 UI 验证任务）
 
-- [ ] T021 构建验证：`go build ./...` 通过；出现编译错误则修复后重跑直至通过（仓库根目录）
-- [ ] T022 测试验证：`go test ./pkg/... ./proxy/...` 全部通过；失败用例修复后重跑（仓库根目录）
-- [ ] T023 后端整体构建验证：`.\build_windows.ps1 -Build backend -Silent` 通过（含 `-BuildMsix` 不在本阶段范围）（仓库根目录）
+- [X] T021 构建验证：`go build ./...` 通过；出现编译错误则修复后重跑直至通过（仓库根目录）
+- [X] T022 测试验证：`go test ./pkg/... ./proxy/...` 全部通过；失败用例修复后重跑（仓库根目录）
+- [X] T023 后端整体构建验证：`.\build_windows.ps1 -Build windows,gui,backend -Silent` 通过（3 架构 x64/x86/arm64 全部 OK；注：AGENTS.md 所记 `-Build backend` 参数格式已过时，脚本实际格式为 `<system>,<mode>,<scope>`）
 
 ---
 
