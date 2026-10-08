@@ -159,12 +159,21 @@ func (p *ProxyServer) handleSocks5Connect(ctx context.Context, writer io.Writer,
 		return nil
 	}
 
-	if err := p.dialUpstream(cr); err != nil {
-		p.tracef("[SOCKS5] upstream connect failed: %v", err)
-		socks5.SendReply(writer, statute.RepHostUnreachable, req.LocalAddr)
-		return err
+	// 同 HTTP CONNECT 路径：mitm 只解析候选地址，连接由 handleMITM 自建
+	if cr.effectiveMode == "mitm" {
+		if err := p.resolveDialCandidates(cr); err != nil {
+			p.tracef("[SOCKS5] failed to resolve upstream candidates: %v", err)
+			socks5.SendReply(writer, statute.RepHostUnreachable, req.LocalAddr)
+			return err
+		}
+	} else {
+		if err := p.dialUpstream(cr); err != nil {
+			p.tracef("[SOCKS5] upstream connect failed: %v", err)
+			socks5.SendReply(writer, statute.RepHostUnreachable, req.LocalAddr)
+			return err
+		}
+		defer cr.conn.Close()
 	}
-	defer cr.conn.Close()
 
 	p.tracef("[SOCKS5] sending success reply")
 	socks5.SendReply(writer, statute.RepSuccess, req.LocalAddr)

@@ -522,6 +522,60 @@ func (p *CloudflarePool) DialParallel(ctx context.Context, network string, port 
 	return nil, "", errors.New("all Cloudflare pool IPs failed to connect under NAT64 mode")
 }
 
+// CandidateAddrs 返回池中可用 IP 候选（已完成 NAT64 映射），未过期的最快 IP 排首位。
+// 与 DialParallel 的区别：只挑地址不拨号，供自带 Happy Eyeballs 竞速的调用方使用
+// （MITM 在 ClientHello 回调里自己竞速并完成 TLS 握手），否则会「池里选一个再重拨一次」。
+func (p *CloudflarePool) CandidateAddrs(port string, nat64Prefix string) []string {
+	if port == "" {
+		port = "443"
+	}
+	if nat64Prefix == "" {
+		nat64Prefix = p.getNAT64Prefix()
+	}
+
+	p.mu.RLock()
+	best := ""
+	if p.bestIP != "" && time.Now().Before(p.bestIPExpire) {
+		best = p.bestIP
+	}
+	ips := make([]string, 0, len(p.activeIPs))
+	for _, s := range p.activeIPs {
+		ips = append(ips, s.IP)
+	}
+	if len(ips) == 0 {
+		// 无健康 IP 时退回全集（与 DialParallel 一致）；map 序随机，排序保证可复现
+		ips = ips[:0]
+		for ip := range p.allIPs {
+			ips = append(ips, ip)
+		}
+		sort.Strings(ips)
+	}
+	p.mu.RUnlock()
+
+	out := make([]string, 0, len(ips)+1)
+	seen := make(map[string]struct{}, len(ips)+1)
+	appendMapped := func(ip string) {
+		mapped, ok := common.MapNAT64Addr(ip, nat64Prefix)
+		if !ok {
+			return
+		}
+		addr := net.JoinHostPort(mapped, port)
+		if _, dup := seen[addr]; dup {
+			return
+		}
+		seen[addr] = struct{}{}
+		out = append(out, addr)
+	}
+
+	if best != "" {
+		appendMapped(best)
+	}
+	for _, ip := range ips {
+		appendMapped(ip)
+	}
+	return out
+}
+
 type apiIPInfo struct {
 	IP string `json:"ip"`
 }

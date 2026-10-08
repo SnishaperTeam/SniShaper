@@ -265,7 +265,83 @@ func (p *ProxyServer) prepareConnect(targetHost, targetAddr string, rule Rule) *
 	}
 }
 
+// resolveDialCandidates 只解析上游候选地址，不建立到上游的连接。
+// handleMITM 需要候选地址即可：上游 ALPN 必须按客户端宣告的协议来定，连接只能在
+// TLS 握手回调里由 establishUpstreamConn 建立，因此它用不到也不该拿到 cr.conn。
+func (p *ProxyServer) resolveDialCandidates(cr *connectResult) error {
+	_, port, _ := net.SplitHostPort(cr.targetAddr)
+	if port == "" {
+		port = "443"
+	}
+	var prefix string
+	if cr.rule.NAT64Enabled && cr.rule.NAT64ProfileID != "" {
+		prefix = p.rules.GetNAT64PrefixByID(cr.rule.NAT64ProfileID)
+	}
+
+	if cr.rule.UseCFPool {
+		if p.CFPoolUsable() {
+			if addrs := p.cfPool.CandidateAddrs(port, prefix); len(addrs) > 0 {
+				cr.dialCandidates = addrs
+				cr.dialAddr = addrs[0]
+				p.tracef("[Connect] CFPool candidates %v for host %s", addrs, cr.targetHost)
+				return nil
+			}
+			p.tracef("[Connect] CFPool has no usable candidate, falling back to buildDialCandidates")
+		} else {
+			// Pool is nil, empty, or stale — fall back to DNS, trigger async refresh if stale
+			p.maybeRefreshCFPoolAsync()
+		}
+	}
+
+	dialCandidates := p.buildDialCandidates(context.Background(), cr.targetHost, cr.targetAddr, cr.rule, cr.effectiveMode)
+	if len(dialCandidates) == 0 {
+		// 规则带有硬性地址族约束（ipv6_only / NAT64）而本机无 IPv6：以明确错误
+		// 失败，不要用 targetAddr 兜底 —— 那会静默走 IPv4 并掩盖配置不匹配。
+		if ruleRequiresIPv6(cr.rule) && !hasUsableIPv6() {
+			return ErrIPv6Required
+		}
+		dialCandidates = []string{cr.targetAddr}
+	}
+
+	if cr.rule.NAT64Enabled && cr.rule.NAT64ProfileID != "" {
+		natPrefix := p.rules.GetNAT64PrefixByID(cr.rule.NAT64ProfileID)
+		if natPrefix != "" {
+			var mapped []string
+			for _, candidate := range dialCandidates {
+				host, candPort, err := net.SplitHostPort(candidate)
+				if err != nil {
+					host = candidate
+					candPort = "443"
+				}
+				mappedIP, ok := common.MapNAT64Addr(host, natPrefix)
+				if ok {
+					mapped = append(mapped, net.JoinHostPort(mappedIP, candPort))
+				} else {
+					p.tracef("[NAT64] Drop native IPv6 candidate: %s", host)
+				}
+			}
+			dialCandidates = mapped
+		}
+	}
+
+	if len(dialCandidates) == 0 {
+		if ruleRequiresIPv6(cr.rule) && !hasUsableIPv6() {
+			return ErrIPv6Required
+		}
+		return errors.New("no valid NAT64 candidates available for dial")
+	}
+
+	cr.dialCandidates = dialCandidates
+	cr.dialAddr = dialCandidates[0]
+	p.tracef("[Connect] Using candidates %v for host %s", dialCandidates, cr.targetHost)
+	return nil
+}
+
+// dialUpstream 解析候选并拨通一条上游连接存入 cr.conn。
+// tls-rf / transparent 隧道直接复用它，必须在 hijack 之前建好，上游不可达才能回 502。
 func (p *ProxyServer) dialUpstream(cr *connectResult) error {
+	// CF 池路径保留 DialParallel 的整池竞速：这条路径的调用方不做二次竞速，
+	// 换成串行拨号会明显拉长建连时间。
 	if cr.rule.UseCFPool && p.CFPoolUsable() {
 		_, port, _ := net.SplitHostPort(cr.targetAddr)
 		if port == "" {
@@ -284,61 +360,19 @@ func (p *ProxyServer) dialUpstream(cr *connectResult) error {
 			return nil
 		}
 		p.tracef("[Connect] CFPool DialParallel failed: %v, falling back to buildDialCandidates", err)
-	} else if cr.rule.UseCFPool {
-		// Pool is nil, empty, or stale — fall back to DNS, trigger async refresh if stale
-		p.maybeRefreshCFPoolAsync()
 	}
 
-	dialCandidates := p.buildDialCandidates(context.Background(), cr.targetHost, cr.targetAddr, cr.rule, cr.effectiveMode)
-	if len(dialCandidates) == 0 {
-		// 规则带有硬性地址族约束（ipv6_only / NAT64）而本机无 IPv6：以明确错误
-		// 失败，不要用 targetAddr 兜底 —— 那会静默走 IPv4 并掩盖配置不匹配。
-		if ruleRequiresIPv6(cr.rule) && !hasUsableIPv6() {
-			return ErrIPv6Required
-		}
-		dialCandidates = []string{cr.targetAddr}
+	if err := p.resolveDialCandidates(cr); err != nil {
+		return err
 	}
-
-	if cr.rule.NAT64Enabled && cr.rule.NAT64ProfileID != "" {
-		prefix := p.rules.GetNAT64PrefixByID(cr.rule.NAT64ProfileID)
-		if prefix != "" {
-			var mapped []string
-			for _, candidate := range dialCandidates {
-				host, port, err := net.SplitHostPort(candidate)
-				if err != nil {
-					host = candidate
-					port = "443"
-				}
-				mappedIP, ok := common.MapNAT64Addr(host, prefix)
-				if ok {
-					mapped = append(mapped, net.JoinHostPort(mappedIP, port))
-				} else {
-					p.tracef("[NAT64] Drop native IPv6 candidate: %s", host)
-				}
-			}
-			dialCandidates = mapped
-		}
-	}
-
-	if len(dialCandidates) == 0 {
-		if ruleRequiresIPv6(cr.rule) && !hasUsableIPv6() {
-			return ErrIPv6Required
-		}
-		return errors.New("no valid NAT64 candidates available for dial")
-	}
-
-	cr.dialCandidates = dialCandidates
-	cr.dialAddr = dialCandidates[0]
-
-	p.tracef("[Connect] Using candidates %v for host %s", dialCandidates, cr.targetHost)
 
 	dial := func(network, addr string) (net.Conn, error) {
 		return p.dialWithRule(context.Background(), network, addr, cr.rule)
 	}
 
-	if len(dialCandidates) > 1 {
+	if len(cr.dialCandidates) > 1 {
 		var errs []error
-		for _, addr := range dialCandidates {
+		for _, addr := range cr.dialCandidates {
 			conn, err := dial("tcp", addr)
 			if err == nil {
 				cr.dialAddr = addr
