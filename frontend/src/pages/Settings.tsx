@@ -476,6 +476,12 @@ const Settings: React.FC<SettingsProps> = ({ cache, onCacheUpdate, currentThemeI
                 />
               </SettingRowInline>
 
+              <SettingRowInline title={t('settings.tutorial.title')} desc={t('settings.tutorial.desc')} icon={<RefreshCcw size={18} />}>
+                <Button size="small" variant="outlined" color="primary" onClick={() => window.dispatchEvent(new CustomEvent('app:restart-tutorial'))}>
+                  {t('settings.tutorial.replay')}
+                </Button>
+              </SettingRowInline>
+
               <SettingRowInline title={t('settings.language.title')} desc={t('settings.language.desc')} icon={<Globe size={18} />}>
                 <Stack direction="row" spacing={0.5} sx={{ alignItems: 'center', bgcolor: bgColor, border: 1, borderColor: 'divider', borderRadius: 2, p: 0.5 }} role="radiogroup" aria-label={t('settings.select_language')}>
                   {(['zh', 'en', 'ru'] as const).map((lang) => (

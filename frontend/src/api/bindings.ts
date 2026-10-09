@@ -101,6 +101,9 @@ export const UpdateAutoRoutingConfig = (cfg: any) => appCall('UpdateAutoRoutingC
 export const GetAutoRoutingStatus = () => appCall('GetAutoRoutingStatus');
 
 
+export const GetTutorialDone = () => appCall('GetTutorialDone');
+export const SetTutorialDone = () => appCall('SetTutorialDone');
+
 // About API
 export const GetAppVersion = () => appCall('GetAppVersion');
 export const GetReleaseChannel = () => appCall('GetReleaseChannel');
