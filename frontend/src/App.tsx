@@ -197,12 +197,9 @@ const App: React.FC = () => {
           updateSettingsCache={updateSettingsCache}
           themeId={themeId}
           onThemeChange={(id: string) => { setThemeId(id); localStorage.setItem('theme-id', id); }}
+          showTutorial={showTutorial}
+          onTutorialFinish={() => setShowTutorial(false)}
         />
-        {showTutorial && (
-          <Suspense fallback={null}>
-            <Tutorial onFinish={() => setShowTutorial(false)} />
-          </Suspense>
-        )}
       </I18nProvider>
     </ThemeProvider>
   );
@@ -238,7 +235,7 @@ const AppRoutes: React.FC<{ settingsCache: SettingsCache, updateSettingsCache: a
   );
 };
 
-const AppContent: React.FC<{ settingsCache: SettingsCache, updateSettingsCache: any, themeId: string, onThemeChange: (id: string) => void }> = ({ settingsCache, updateSettingsCache, themeId, onThemeChange }) => {
+const AppContent: React.FC<{ settingsCache: SettingsCache, updateSettingsCache: any, themeId: string, onThemeChange: (id: string) => void, showTutorial: boolean, onTutorialFinish: () => void }> = ({ settingsCache, updateSettingsCache, themeId, onThemeChange, showTutorial, onTutorialFinish }) => {
   const { t } = useTranslation();
   const [glowPos, setGlowPos] = useState({ x: 0.5, y: 0.3 });
   const glowRef = useRef<HTMLDivElement>(null);
@@ -341,6 +338,11 @@ const AppContent: React.FC<{ settingsCache: SettingsCache, updateSettingsCache: 
             />
           </Box>
         </Box>
+        {showTutorial && (
+          <Suspense fallback={null}>
+            <Tutorial onFinish={onTutorialFinish} />
+          </Suspense>
+        )}
       </Box>
     </Router>
   );

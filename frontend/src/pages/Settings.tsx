@@ -71,8 +71,8 @@ const SettingRowInline = ({ icon, title, desc, children }: { icon: React.ReactNo
   </Box>
 );
 
-const StackedRow = ({ icon, title, desc, children }: { icon: React.ReactNode; title: string; desc?: string; children: React.ReactNode }) => (
-  <Box sx={{ p: 2.5, bgcolor: 'background.paper', border: 1, borderColor: 'divider', borderRadius: 2 }}>
+const StackedRow = ({ icon, title, desc, children, ...rest }: { icon: React.ReactNode; title: string; desc?: string; children: React.ReactNode } & React.ComponentProps<typeof Box>) => (
+  <Box {...rest} sx={{ p: 2.5, bgcolor: 'background.paper', border: 1, borderColor: 'divider', borderRadius: 2 }}>
     <Stack direction="row" spacing={1.5} sx={{ mb: desc ? 1.5 : 0, alignItems: 'center' }}>
       <Box sx={{ width: 40, height: 40, borderRadius: 1, bgcolor: 'primary.main', color: 'primary.contrastText', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
         {icon}
@@ -706,7 +706,7 @@ const Settings: React.FC<SettingsProps> = ({ cache, onCacheUpdate, currentThemeI
             </Box>
           </Box>
 
-          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5, mt: 1.5 }}>
+          <Box data-tut="tun-section" sx={{ display: 'flex', flexDirection: 'column', gap: 1.5, mt: 1.5 }}>
             <SectionHeader icon={<Wifi size={18} />} label={t('settings.tabs.tun')} />
 
             <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
@@ -899,7 +899,7 @@ const Settings: React.FC<SettingsProps> = ({ cache, onCacheUpdate, currentThemeI
               </SettingRowInline>
             </Box>
 
-            <StackedRow title={t('settings.ca_management.title')} desc={caStatus?.Installed ? t('dashboard.cert_installed') : t('dashboard.cert_not_installed')} icon={<ShieldAlert size={18} />}>
+            <StackedRow data-tut="cert-section" title={t('settings.ca_management.title')} desc={caStatus?.Installed ? t('dashboard.cert_installed') : t('dashboard.cert_not_installed')} icon={<ShieldAlert size={18} />}>
               <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
                 <Typography variant="body2" sx={{ fontWeight: 'bold', color: caStatus?.Installed ? 'success.main' : 'text.secondary' }}>
                   {caStatus?.Installed ? t('settings.certs_count', { count: installedCerts.length }) : t('common.off')}

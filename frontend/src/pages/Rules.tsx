@@ -209,7 +209,7 @@ const Rules: React.FC = () => {
           <Box sx={{ p: 1.25, borderRadius: 1.5, border: 1, color: 'primary.main', bgcolor: (theme) => alpha(theme.palette.primary.main, 0.1), borderColor: (theme) => alpha(theme.palette.primary.main, 0.1), display: 'flex' }}>
             <Filter size={20} />
           </Box>
-          <Typography variant="h5" sx={{ fontWeight: 700, letterSpacing: '-0.02em' }}>{t('rules.title')}</Typography>
+          <Typography variant="h5" data-tut="rules-title" sx={{ fontWeight: 700, letterSpacing: '-0.02em' }}>{t('rules.title')}</Typography>
         </Box>
         <Box sx={{ display: 'flex', gap: 1 }}>
           <Button
