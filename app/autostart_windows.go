@@ -12,7 +12,6 @@ import (
 	"strings"
 	"syscall"
 	"unicode/utf16"
-	"unsafe"
 
 	"golang.org/x/sys/windows"
 	"golang.org/x/sys/windows/registry"
@@ -27,13 +26,6 @@ const (
 
 	// Task name in the Task Scheduler library.
 	autoStartTaskName = "SniShaper"
-)
-
-var (
-	autostartShell32       = syscall.NewLazyDLL("shell32.dll")
-	autostartKernel32      = syscall.NewLazyDLL("kernel32.dll")
-	procCommandLineToArgvW = autostartShell32.NewProc("CommandLineToArgvW")
-	procLocalFree          = autostartKernel32.NewProc("LocalFree")
 )
 
 // buildAutoStartCommand builds the command line stored in the task action.
@@ -175,37 +167,34 @@ func runSchtasks(args ...string) (string, error) {
 }
 
 // splitCommandLine splits a command line into its executable path and an
-// argument string, following the same rules as CreateProcess. Going through
-// CommandLineToArgvW keeps the XML <Command>/<Arguments> fields exact even
-// when the path contains spaces or embedded quotes; schtasks /tr cannot be
-// used for that, its own quoting is ambiguous past the first layer.
+// argument string, following the CreateProcess rules for the leading token:
+// a quoted path ends at the closing quote, an unquoted one at the first
+// whitespace. The remainder is passed through verbatim, so quoting in the
+// argument string is preserved as written.
 func splitCommandLine(command string) (string, string, error) {
-	cmdPtr, err := windows.UTF16PtrFromString(command)
-	if err != nil {
-		return "", "", err
-	}
-
-	var argc int32
-	argv, _, _ := procCommandLineToArgvW.Call(
-		uintptr(unsafe.Pointer(cmdPtr)),
-		uintptr(unsafe.Pointer(&argc)),
-	)
-	if argv == 0 {
-		return "", "", fmt.Errorf("CommandLineToArgvW failed")
-	}
-	defer procLocalFree.Call(argv)
-
-	if argc < 1 {
+	rest := strings.TrimLeft(command, " \t")
+	if rest == "" {
 		return "", "", fmt.Errorf("empty command line")
 	}
-
-	ptrs := unsafe.Slice((**uint16)(unsafe.Pointer(argv)), int(argc))
-	exe := windows.UTF16PtrToString(ptrs[0])
-	parts := make([]string, 0, argc-1)
-	for _, p := range ptrs[1:] {
-		parts = append(parts, syscall.EscapeArg(windows.UTF16PtrToString(p)))
+	var exe string
+	if rest[0] == '"' {
+		end := strings.IndexByte(rest[1:], '"')
+		if end < 0 {
+			return "", "", fmt.Errorf("unbalanced quote in command line")
+		}
+		exe = rest[1 : 1+end]
+		rest = rest[2+end:]
+	} else if cut := strings.IndexAny(rest, " \t"); cut >= 0 {
+		exe = rest[:cut]
+		rest = rest[cut:]
+	} else {
+		exe = rest
+		rest = ""
 	}
-	return exe, strings.Join(parts, " "), nil
+	if strings.TrimSpace(exe) == "" {
+		return "", "", fmt.Errorf("empty executable path")
+	}
+	return exe, strings.TrimSpace(rest), nil
 }
 
 // buildAutoStartTaskXML builds the task definition.
