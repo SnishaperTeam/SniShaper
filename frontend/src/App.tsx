@@ -12,13 +12,14 @@ import {
   GetShowMainWindowOnAutoStart, GetAutoEnableProxyOnAutoStart, GetAutoEnableSysProxyOnAutoStart, GetAutoUpdateRules,
   GetTUNConfig, GetTUNStatus, GetCloudflareConfig,
   GetCAInstallStatus, GetInstalledCerts, GetCloudflareIPStats,
-  GetLanguage, GetTheme, SetTheme, GetIPv6Available, EventsOn
+  GetLanguage, GetTheme, SetTheme, GetIPv6Available, GetTutorialDone, EventsOn
 } from './api/bindings';
 import { I18nProvider, useTranslation } from './i18n/I18nContext';
 import { toast } from './lib/toast';
 import logoUrl from './assets/logo.svg';
 
 const Welcome = lazy(() => import('./pages/Welcome'));
+const Tutorial = lazy(() => import('./components/Tutorial'));
 
 const fadeIn = keyframes`from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); }`;
 
@@ -79,6 +80,7 @@ const App: React.FC = () => {
     themeMode: (localStorage.getItem('mui-mode') as any) || 'dark'
   });
   const [initialized, setInitialized] = useState(false);
+  const [showTutorial, setShowTutorial] = useState(false);
   const [themeId, setThemeId] = useState<string>(() => localStorage.getItem('theme-id') || 'default');
   const activeTheme = availableThemes.find((th) => th.id === themeId)?.theme || defaultTheme;
 
@@ -104,6 +106,10 @@ const App: React.FC = () => {
         ]);
         if (language) {
           localStorage.setItem('language', language as string);
+          try {
+            const tutorialDone = await GetTutorialDone();
+            if (!tutorialDone) setShowTutorial(true);
+          } catch { /* non-fatal */ }
         }
         setSettingsCache(prev => ({
           ...prev,
@@ -164,6 +170,12 @@ const App: React.FC = () => {
   }, []);
 
   useEffect(() => {
+    const onRestartTutorial = () => setShowTutorial(true);
+    window.addEventListener('app:restart-tutorial', onRestartTutorial);
+    return () => window.removeEventListener('app:restart-tutorial', onRestartTutorial);
+  }, []);
+
+  useEffect(() => {
     const shouldAllowNativeMenu = (target: EventTarget | null) => {
       if (!(target instanceof HTMLElement)) return false;
       return Boolean(target.closest('input, textarea, [contenteditable="true"], [data-native-contextmenu="true"]'));
@@ -186,6 +198,11 @@ const App: React.FC = () => {
           themeId={themeId}
           onThemeChange={(id: string) => { setThemeId(id); localStorage.setItem('theme-id', id); }}
         />
+        {showTutorial && (
+          <Suspense fallback={null}>
+            <Tutorial onFinish={() => setShowTutorial(false)} />
+          </Suspense>
+        )}
       </I18nProvider>
     </ThemeProvider>
   );
