@@ -52,12 +52,12 @@
     "next": "Next",
     "done": "Finish",
     "open_wiki": "Open Wiki",
-    "s1": { "title": "Start the Proxy", "text": "On the Dashboard, click \"Start Proxy\", then turn on \"System Proxy\" so browser traffic flows through SniShaper." },
-    "s2": { "title": "Install the Certificate", "text": "MITM, QUIC and other modes need the root certificate. Install it under \"Settings → Security\", then restart your browser." },
-    "s3": { "title": "Use Rules", "text": "The Rules page ships with official rules that apply MITM, TLS fragmentation, QUIC and other modes per site group. You can also create your own groups." },
-    "s4": { "title": "Smart Routing", "text": "Domains not covered by rules are routed automatically via the GFWList: blocked sites get ECH injection or TLS fragmentation, everything else goes direct." },
-    "s5": { "title": "TUN Mode", "text": "To take over all traffic, enable TUN under \"Settings → TUN\" (admin rights required) — every app then uses the proxy without extra configuration." },
-    "s6": { "title": "Learn More", "text": "For advanced features (CLI, DNS, Cloudflare IP selection, Evolution mode, etc.) visit the GitHub Wiki, and check the FAQ first when you run into problems." }
+    "s1": { "title": "Start the Proxy", "text": "Click the highlighted \"Start Proxy\" button to launch the local proxy." },
+    "s2": { "title": "System Proxy", "text": "Now click \"System Proxy\" so browser traffic is automatically routed through the proxy." },
+    "s3": { "title": "Use Rules", "text": "The Rules page ships with official rules applying MITM, TLS fragmentation, QUIC and more per site group. Create your own groups here; domains outside the rules are routed automatically via the GFWList." },
+    "s4": { "title": "Install the Certificate", "text": "MITM, QUIC and other modes need the root certificate. When it is not installed, the Dashboard offers a one-click install prompt; this section shows and manages installed certificates." },
+    "s5": { "title": "TUN Mode", "text": "Enable TUN under \"Settings → TUN\" (admin rights required) when every app should use the proxy without extra configuration." },
+    "s6": { "title": "Learn More", "text": "Congrats on finishing the basics! For advanced features (CLI, DNS, Cloudflare IP selection, Evolution mode, etc.) visit the GitHub Wiki, and check the FAQ first when you run into problems." }
   },
   "dashboard": {
     "title": "Home",
