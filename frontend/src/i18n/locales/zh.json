@@ -623,7 +623,7 @@
     "connection_refused": "连接被拒绝，可能是代理服务器不可用。",
     "dns_error": "DNS 解析失败，请检查您的 DNS 设置。",
     "proxy_error": "代理配置错误，请检查系统代理设置。",
-    "rights_reserved": "保留所有权利。",
+    "rights_reserved": "保留所有权利，AGPLv3 授权除外。",
     "made_with": "由 SniShaper 社区",
     "by_community": "倾心打造",
     "latest_beta": "最新beta版",
