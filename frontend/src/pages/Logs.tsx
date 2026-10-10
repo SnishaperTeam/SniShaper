@@ -1,13 +1,13 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback, useDeferredValue } from 'react';
 import {
-  FileText, Delete, Pause, Play, Search, ChevronsUp, Antenna, ArrowDown, Download
+  FileText, Delete, Pause, Play, Search, ChevronsUp, Antenna, ArrowDown, Download, X
 } from '../lib/icons';
 import {
   ClearLogs, GetRecentLogs, IsLogCaptureEnabled,
   StartLogCapture, StopLogCapture
 } from '../api/bindings';
 import { useTranslation } from '../i18n/I18nContext';
-import { Box, Typography, Button, TextField, InputAdornment } from '@mui/material';
+import { Box, Typography, Button, TextField, InputAdornment, IconButton } from '@mui/material';
 import { alpha } from '@mui/material/styles';
 import { keyframes } from '@emotion/react';
 
@@ -204,25 +204,37 @@ const Logs: React.FC = () => {
       </Box>
 
       <Box sx={{ mb: 2.5, flexShrink: 0 }}>
-        <TextField
-          type="text"
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          placeholder={t('logs.search_placeholder')}
-          aria-label={t('logs.search_placeholder')}
-          fullWidth
-          size="small"
-          slotProps={{
-            input: {
-              startAdornment: (
-                <InputAdornment position="start">
-                  <Search size={16} aria-hidden />
-                </InputAdornment>
-              ),
-            },
-          }}
-          sx={{ '& .MuiOutlinedInput-root': { borderRadius: 2, bgcolor: 'background.paper' } }}
-        />
+		<TextField
+		  type="text"
+		  value={search}
+		  onChange={(e) => setSearch(e.target.value)}
+		  placeholder={t('logs.search_placeholder')}
+		  aria-label={t('logs.search_placeholder')}
+		  fullWidth
+		  size="small"
+		  slotProps={{
+			input: {
+			  startAdornment: (
+				<InputAdornment position="start">
+				  <Search size={16} aria-hidden />
+				</InputAdornment>
+			  ),
+			  endAdornment: search ? (
+				<InputAdornment position="end">
+				  <IconButton
+					size="small"
+					onClick={() => setSearch('')}
+					aria-label={t('common.clear')}
+					edge="end"
+				  >
+					<X size={14} />
+				  </IconButton>
+				</InputAdornment>
+			  ) : null,
+			},
+		  }}
+		  sx={{ '& .MuiOutlinedInput-root': { borderRadius: 2, bgcolor: 'background.paper' } }}
+		/>
       </Box>
 
       <Box ref={scrollRef} onScroll={handleScroll} sx={{
