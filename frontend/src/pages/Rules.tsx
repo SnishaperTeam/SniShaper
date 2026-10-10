@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import {
-  Plus, Search, Filter, Edit, ExternalLink, Delete, Activity, Bolt, RefreshCcw
+  Plus, Search, Filter, Edit, ExternalLink, Delete, Activity, Bolt, RefreshCcw, X
 } from '../lib/icons';
 import {
   GetSiteGroups, DeleteSiteGroup, ExportConfig, EventsOn, UpdateRules
@@ -262,7 +262,23 @@ const Rules: React.FC = () => {
           onChange={(e) => setSearch(e.target.value)}
           placeholder={t('rules.search_placeholder')}
           aria-label={t('rules.search_placeholder')}
-          slotProps={{ input: { startAdornment: <InputAdornment position="start"><Search size={16} /></InputAdornment> } }}
+          slotProps={{
+            input: {
+              startAdornment: <InputAdornment position="start"><Search size={16} /></InputAdornment>,
+              endAdornment: search ? (
+                <InputAdornment position="end">
+                  <IconButton
+                    size="small"
+                    onClick={() => setSearch('')}
+                    aria-label={t('common.clear')}
+                    edge="end"
+                  >
+                    <X size={14} />
+                  </IconButton>
+                </InputAdornment>
+              ) : null,
+            },
+          }}
         />
       </Box>
 
