@@ -623,7 +623,7 @@
     "connection_refused": "Connection refused. The proxy server may be unavailable.",
     "dns_error": "DNS resolution failed. Please check your DNS settings.",
     "proxy_error": "Proxy configuration error. Please check your system proxy settings.",
-    "rights_reserved": "All rights reserved.",
+    "rights_reserved": "All rights reserved, except as granted under the AGPLv3.",
     "made_with": "Made with",
     "by_community": "by the SniShaper community",
     "latest_beta": "Latest Beta",
