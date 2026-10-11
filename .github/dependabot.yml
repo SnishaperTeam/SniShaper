@@ -5,7 +5,7 @@ updates:
   - package-ecosystem: gomod
     directory: /
     schedule:
-      interval: dayly
+      interval: daily
     cooldown:
       default-days: 1
     open-pull-requests-limit: 10
@@ -18,7 +18,7 @@ updates:
   - package-ecosystem: npm
     directory: /frontend
     schedule:
-      interval: dayly
+      interval: daily
     cooldown:
       default-days: 1
     open-pull-requests-limit: 10
@@ -31,7 +31,7 @@ updates:
   - package-ecosystem: github-actions
     directory: /
     schedule:
-      interval: dayly
+      interval: daily
     cooldown:
       default-days: 1
     open-pull-requests-limit: 10
