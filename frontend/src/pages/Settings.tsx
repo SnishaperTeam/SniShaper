@@ -174,6 +174,15 @@ const Settings: React.FC<SettingsProps> = ({ cache, onCacheUpdate, currentThemeI
       toast.error(t('common.failed'), String(err));
     }
   }, [loadIfaces]);
+  
+  // MUI 在 Select 菜单关闭后会把焦点交还给触发按钮，导致 InputLabel 一直保持
+  // shrink（收缩上移）状态，必须再点一下别处才复位。这里在 onClose 时主动失焦。
+  const blurSelectAfterClose = useCallback(() => {
+    window.setTimeout(() => {
+      const el = document.activeElement;
+      if (el instanceof HTMLElement) el.blur();
+    }, 0);
+  }, []);
 
   const measureSources = async () => {
     if (measuring) return;
@@ -723,6 +732,7 @@ const Settings: React.FC<SettingsProps> = ({ cache, onCacheUpdate, currentThemeI
                       id="tun-outbound-iface"
                       value={outboundIface}
                       label={t('settings.tun.outbound_iface.title')}
+                      onClose={blurSelectAfterClose}
                       onChange={(e) => {
                         const value = String(e.target.value);
                         setOutboundIface(value);
@@ -786,6 +796,7 @@ const Settings: React.FC<SettingsProps> = ({ cache, onCacheUpdate, currentThemeI
                       id="tun-stack"
                       value={tunStack}
                       label={t('settings.tun.stack.title')}
+                      onClose={blurSelectAfterClose}
                       onChange={(e) => {
                         const value = String(e.target.value);
                         setTunStack(value);
