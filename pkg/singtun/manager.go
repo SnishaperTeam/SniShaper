@@ -6,7 +6,7 @@ import (
 	"log/slog"
 	"net/netip"
 	"runtime"
-	"strings"  
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -94,11 +94,11 @@ func (m *Manager) Start(cfg proxy.TUNConfig, proxyAddr string) (err error) {
 	if mtu <= 0 {
 		mtu = 9000
 	}
-	
+
 	adapterName := strings.TrimSpace(cfg.AdapterName)
 	if adapterName == "" {
 		adapterName = "SniShaper"
-	} 
+	}
 
 	m.options = tun.Options{
 		Name: adapterName,

@@ -270,7 +270,7 @@ type ProxyServer struct {
 	socks5ChanLn *chanListener
 
 	cfRefreshCallback func()
-	OnStop func(error)
+	OnStop            func(error)
 
 	// migrationCache holds persistent session tickets for migration mode,
 	// keyed by host name. Tickets are reused across requests until they fail.
