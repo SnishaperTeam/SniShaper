@@ -82,6 +82,8 @@ type TUNConfig struct {
 	InterfaceName         string   `json:"interface_name,omitempty"`
 	ExcludeInterfaces     []string `json:"exclude_interface,omitempty"`
 	RouteExcludeAddresses []string `json:"route_exclude_address,omitempty"`
+	Stack                 string   `json:"stack,omitempty"`
+	AdapterName           string   `json:"adapter_name,omitempty"`
 }
 
 // InterfaceConfig 把 TUN 设置转换为出站网卡选择配置。
@@ -1272,6 +1274,17 @@ func normalizeTUNConfig(cfg TUNConfig) TUNConfig {
 	cfg.InterfaceName = strings.TrimSpace(cfg.InterfaceName)
 	cfg.ExcludeInterfaces = normalizeStringList(cfg.ExcludeInterfaces)
 	cfg.RouteExcludeAddresses = normalizeStringList(cfg.RouteExcludeAddresses)
+	cfg.Stack = strings.TrimSpace(cfg.Stack)
+	switch cfg.Stack {
+	case "gvisor", "mixed", "system":
+		// ok
+	default:
+		cfg.Stack = "gvisor"
+	}
+	cfg.AdapterName = strings.TrimSpace(cfg.AdapterName)
+	if cfg.AdapterName == "" {
+		cfg.AdapterName = "SniShaper"
+	}
 	return cfg
 }
 
