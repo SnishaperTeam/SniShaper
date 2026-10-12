@@ -503,7 +503,10 @@
         "in_use": "当前生效"
       },
       "outbound_exclude": {
-        "label": "排除网卡（可选）"
+        "label": "排除网卡（可选）",
+        "placeholder": "VMware*,vEthernet*",
+        "hint": "支持选择或输入网卡名称。多个用逗号（,）分隔，支持 name* 通配符（如 VMware*）",
+        "error": "⚠️ 警告：输入包含系统未识别或不带通配符 (*) 的网卡名称，请检查拼写或添加 * 通配符。"
       },
       "stack": {
         "title": "TUN 网络栈",

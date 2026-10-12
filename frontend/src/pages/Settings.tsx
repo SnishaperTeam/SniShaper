@@ -27,6 +27,7 @@ import {
 import {
   Box, Button, TextField, Select, MenuItem, FormControl, InputLabel, Switch,
   FormControlLabel, Tooltip, Typography, Stack, Grid, Badge, Divider, CircularProgress,
+  Autocomplete, Chip,
 } from '@mui/material';
 import { alpha } from '@mui/material/styles';
 import { toast } from '../lib/toast';
@@ -133,7 +134,8 @@ const Settings: React.FC<SettingsProps> = ({ cache, onCacheUpdate, currentThemeI
   const [measuring, setMeasuring] = useState<boolean>(false);
   const [ifaces, setIfaces] = useState<any[]>([]);
   const [outboundIface, setOutboundIface] = useState<string>('');
-  const [outboundExclude, setOutboundExclude] = useState<string>('');
+  const [outboundExclude, setOutboundExclude] = useState<string[]>([]);
+  const [outboundExcludeInput, setOutboundExcludeInput] = useState<string>('');
   const [tunStack, setTunStack] = useState<string>('gvisor');
   const [adapterName, setAdapterName] = useState<string>('');
   const [routeExclude, setRouteExclude] = useState<string>('');
@@ -144,15 +146,19 @@ const Settings: React.FC<SettingsProps> = ({ cache, onCacheUpdate, currentThemeI
       setIfaces(Array.isArray(list) ? list : []);
       const pick = (obj: any, snake: string, pascal: string) => obj?.[snake] ?? obj?.[pascal] ?? '';
       setOutboundIface(String(pick(cfg, 'interface_name', 'InterfaceName') || ''));
-	  
+
       setTunStack(String(pick(cfg, 'stack', 'Stack') || 'gvisor'));
       setAdapterName(String(pick(cfg, 'adapter_name', 'AdapterName') || ''));
-	  
-      setOutboundExclude(Array.isArray(cfg?.exclude_interface)
-        ? cfg.exclude_interface.join(',')
-        : Array.isArray(cfg?.ExcludeInterfaces)
-          ? cfg.ExcludeInterfaces.join(',')
-          : '');
+
+      setOutboundExclude(
+        Array.isArray(cfg?.exclude_interface)
+          ? cfg.exclude_interface
+          : Array.isArray(cfg?.ExcludeInterfaces)
+            ? cfg.ExcludeInterfaces
+            : []
+      );
+      setOutboundExcludeInput('');
+
       setRouteExclude(Array.isArray(cfg?.route_exclude_address)
         ? cfg.route_exclude_address.join(',')
         : Array.isArray(cfg?.RouteExcludeAddresses)
@@ -178,6 +184,26 @@ const Settings: React.FC<SettingsProps> = ({ cache, onCacheUpdate, currentThemeI
       toast.error(t('common.failed'), String(err));
     }
   }, [loadIfaces]);
+  
+  // MUI 在 Select 菜单关闭后会把焦点交还给触发按钮，导致 InputLabel 一直保持
+  // shrink（收缩上移）状态，必须再点一下别处才复位。这里在 onClose 时主动失焦。
+  const blurSelectAfterClose = useCallback(() => {
+    window.setTimeout(() => {
+      const el = document.activeElement;
+      if (el instanceof HTMLElement) el.blur();
+    }, 0);
+  }, []);
+
+  const saveExclude = useCallback(async (values: string[]) => {
+    try {
+      // The backend expects a comma-separated string, so join the array before sending.
+      const excludeStr = values.join(',');
+      await SetTUNInterfaceExclude(excludeStr);
+      toast.success(t('settings.notifications.updated'));
+    } catch (err: any) {
+      toast.error(t('common.failed'), String(err));
+    }
+  }, []);
 
   const measureSources = async () => {
     if (measuring) return;
@@ -433,6 +459,26 @@ const Settings: React.FC<SettingsProps> = ({ cache, onCacheUpdate, currentThemeI
 
   const channelKey = 'settings.update_channel.' + updateChannel;
   const channelDesc = t(channelKey) === channelKey ? t('settings.update_channel.stable') : t(channelKey);
+
+  // Render a single network interface option; shared by the outbound iface and exclude iface lists.
+  const renderInterfaceOption = (nic: any) => (
+    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, width: '100%' }}>
+      <span>{nic.name}</span>
+      <Typography variant="caption" color={nic.physical ? 'success.main' : 'text.secondary'}>
+        {nic.physical ? t('settings.tun.outbound_iface.physical') : t('settings.tun.outbound_iface.virtual')}
+      </Typography>
+      {nic.default_route && (
+        <Typography variant="caption" color="primary.main">
+          {t('settings.tun.outbound_iface.default_route')}
+        </Typography>
+      )}
+      {nic.current_outbound && (
+        <Typography variant="caption" color="warning.main">
+          {t('settings.tun.outbound_iface.in_use')}
+        </Typography>
+      )}
+    </Box>
+  );
 
   return (
     <Box sx={{ flexGrow: 1, minHeight: 0, width: '100%', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
@@ -727,6 +773,7 @@ const Settings: React.FC<SettingsProps> = ({ cache, onCacheUpdate, currentThemeI
                       id="tun-outbound-iface"
                       value={outboundIface}
                       label={t('settings.tun.outbound_iface.title')}
+                      onClose={blurSelectAfterClose}
                       onChange={(e) => {
                         const value = String(e.target.value);
                         setOutboundIface(value);
@@ -738,40 +785,101 @@ const Settings: React.FC<SettingsProps> = ({ cache, onCacheUpdate, currentThemeI
                       <MenuItem value="">{t('settings.tun.outbound_iface.auto')}</MenuItem>
                       {ifaces.map((nic) => (
                         <MenuItem key={`${nic.name}-${nic.index}`} value={nic.name}>
-                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, width: '100%' }}>
-                            <span>{nic.name}</span>
-                            <Typography variant="caption" color={nic.physical ? 'success.main' : 'text.secondary'}>
-                              {nic.physical ? t('settings.tun.outbound_iface.physical') : t('settings.tun.outbound_iface.virtual')}
-                            </Typography>
-                            {nic.default_route && (
-                              <Typography variant="caption" color="primary.main">
-                                {t('settings.tun.outbound_iface.default_route')}
-                              </Typography>
-                            )}
-                            {nic.current_outbound && (
-                              <Typography variant="caption" color="warning.main">
-                                {t('settings.tun.outbound_iface.in_use')}
-                              </Typography>
-                            )}
-                          </Box>
+                          {renderInterfaceOption(nic)}
                         </MenuItem>
                       ))}
                     </Select>
                   </FormControl>
-                  <TextField
+                  <Autocomplete
+                    multiple
+                    freeSolo
                     size="small"
                     fullWidth
                     sx={{ mt: 1 }}
-                    label={t('settings.tun.outbound_exclude.label')}
-                    placeholder="VMware*,vEthernet*"
+                    options={ifaces.map((nic) => nic.name)}
                     value={outboundExclude}
-                    onChange={(e) => setOutboundExclude(e.target.value)}
+                    inputValue={outboundExcludeInput}
+                    onInputChange={(_, newInputValue) => {
+                      // Controlled input: keep the text field content in sync so we can handle unsubmitted text on blur.
+                      setOutboundExcludeInput(newInputValue);
+                    }}
+                    onChange={(_, newValue) => {
+                      setOutboundExclude(newValue as string[]);
+                      // Clear the input after a tag is selected/created.
+                      setOutboundExcludeInput('');
+                    }}
                     onBlur={() => {
-                      {
-                        SetTUNInterfaceExclude(outboundExclude.trim()).catch((err: any) => {
-                          toast.error(t('common.failed'), String(err));
-                        });
+                      const raw = outboundExcludeInput.trim();
+                      if (raw) {
+                        // Support comma and full-width comma as separators; split into multiple tags at once.
+                        const parts = raw.split(/[,，]+/).map((s) => s.trim()).filter(Boolean);
+                        const merged = [...outboundExclude];
+                        for (const p of parts) {
+                          if (!merged.includes(p)) merged.push(p);
+                        }
+                        if (merged.length !== outboundExclude.length) {
+                          setOutboundExclude(merged);
+                          setOutboundExcludeInput('');
+                          saveExclude(merged);
+                          return;
+                        }
                       }
+                      // No new content; just persist the current tags.
+                      saveExclude(outboundExclude);
+                    }}
+                    // To make Autocomplete match the Select styling: slotProps.popper is the only
+                    // channel that can reach the Portal-rendered dropdown whose inline width is
+                    // hard-coded by JS. width:max-content overrides that inline width so the menu
+                    // grows with its content; the Paper layer must also be overridden or the
+                    // white panel will still be narrow.
+                    slotProps={{
+                      popper: {
+                        sx: {
+                          width: 'max-content !important',
+                          '& .MuiAutocomplete-paper': {
+                            width: 'max-content',
+                            minWidth: 320,
+                          },
+                        },
+                      },
+                    }}
+                    renderTags={(value: string[], getTagProps) =>
+                      value.map((option: string, index: number) => (
+                        <Chip
+                          variant="outlined"
+                          label={option}
+                          size="small"
+                          {...getTagProps({ index })}
+                        />
+                      ))
+                    }
+                    renderOption={(props, option) => {
+                      const nic = ifaces.find((n) => n.name === option);
+                      return (
+                        <Box component="li" {...props}>
+                          {nic ? renderInterfaceOption(nic) : option}
+                        </Box>
+                      );
+                    }}
+                    renderInput={(params) => {
+                      // Validation for committed tags: must contain no "*" and must exist in the system NIC list.
+                      const tagsInvalid = outboundExclude.some(
+                        (val) => !val.includes('*') && !ifaces.some((nic) => nic.name === val)
+                      );
+                      const hasInvalidInput = tagsInvalid;
+                      return (
+                        <TextField
+                          {...params}
+                          label={t('settings.tun.outbound_exclude.label')}
+                          placeholder={t('settings.tun.outbound_exclude.placeholder')}
+                          error={hasInvalidInput}
+                          helperText={
+                            hasInvalidInput
+                              ? t('settings.tun.outbound_exclude.error')
+                              : t('settings.tun.outbound_exclude.hint')
+                          }
+                        />
+                      );
                     }}
                   />
                 </Box>
@@ -790,6 +898,7 @@ const Settings: React.FC<SettingsProps> = ({ cache, onCacheUpdate, currentThemeI
                       id="tun-stack"
                       value={tunStack}
                       label={t('settings.tun.stack.title')}
+                      onClose={blurSelectAfterClose}
                       onChange={(e) => {
                         const value = String(e.target.value);
                         setTunStack(value);

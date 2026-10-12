@@ -503,7 +503,10 @@
         "in_use": "in use"
       },
       "outbound_exclude": {
-        "label": "Excluded interfaces (optional)"
+        "label": "Excluded interfaces (optional)",
+        "placeholder": "VMware*,vEthernet*",
+        "hint": "Select or type interface names. Separate multiple names with commas. Wildcards like VMware* are supported.",
+        "error": "⚠️ Warning: Input contains unknown interface names or names without a wildcard (*). Please check spelling or add *."
       },
       "stack": {
         "title": "TUN network stack",
