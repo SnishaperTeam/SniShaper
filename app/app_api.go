@@ -270,7 +270,6 @@ func (a *App) RevealMainWindow() {
 	a.showMainWindow()
 }
 
-
 func (a *App) GetProxyMode() string {
 	if a.core != nil {
 		return a.core.GetProxyMode()
@@ -344,29 +343,29 @@ func splitCommaList(raw string) []string {
 }
 
 func (a *App) UpdateTUNConfig(cfg proxy.TUNConfig) error {
-    a.appendLog("[action] UpdateTUNConfig called")
+	a.appendLog("[action] UpdateTUNConfig called")
 
-    old := a.ruleManager.GetTUNConfig()
-    if err := a.ruleManager.UpdateTUNConfig(cfg); err != nil {
-        return err
-    }
-    netiface.InvalidateCache()
+	old := a.ruleManager.GetTUNConfig()
+	if err := a.ruleManager.UpdateTUNConfig(cfg); err != nil {
+		return err
+	}
+	netiface.InvalidateCache()
 
-    if a.core == nil {
-        return nil
-    }
-    if !a.core.GetTUNStatus().Running {
-        return nil
-    }
-    if old.Stack == cfg.Stack && old.AdapterName == cfg.AdapterName {
-        a.core.ReloadIfRunning()
-        return nil
-    }
-    a.appendLog("[action] UpdateTUNConfig: restarting TUN to apply stack / adapter changes")
-    if err := a.StopTUN(); err != nil {
-        a.appendLog("[warn] UpdateTUNConfig: StopTUN failed: " + err.Error())
-    }
-    return a.StartTUN()
+	if a.core == nil {
+		return nil
+	}
+	if !a.core.GetTUNStatus().Running {
+		return nil
+	}
+	if old.Stack == cfg.Stack && old.AdapterName == cfg.AdapterName {
+		a.core.ReloadIfRunning()
+		return nil
+	}
+	a.appendLog("[action] UpdateTUNConfig: restarting TUN to apply stack / adapter changes")
+	if err := a.StopTUN(); err != nil {
+		a.appendLog("[warn] UpdateTUNConfig: StopTUN failed: " + err.Error())
+	}
+	return a.StartTUN()
 }
 
 func (a *App) GetTUNStatus() proxy.TUNStatus {
