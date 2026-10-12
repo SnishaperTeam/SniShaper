@@ -144,6 +144,10 @@ const Settings: React.FC<SettingsProps> = ({ cache, onCacheUpdate, currentThemeI
       setIfaces(Array.isArray(list) ? list : []);
       const pick = (obj: any, snake: string, pascal: string) => obj?.[snake] ?? obj?.[pascal] ?? '';
       setOutboundIface(String(pick(cfg, 'interface_name', 'InterfaceName') || ''));
+	  
+      setTunStack(String(pick(cfg, 'stack', 'Stack') || 'gvisor'));
+      setAdapterName(String(pick(cfg, 'adapter_name', 'AdapterName') || ''));
+	  
       setOutboundExclude(Array.isArray(cfg?.exclude_interface)
         ? cfg.exclude_interface.join(',')
         : Array.isArray(cfg?.ExcludeInterfaces)
