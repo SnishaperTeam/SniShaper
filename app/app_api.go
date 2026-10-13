@@ -309,6 +309,15 @@ func (a *App) SetTheme(theme string) error {
 	return a.ruleManager.SetTheme(theme)
 }
 
+func (a *App) GetAppearanceMode() string {
+	return a.ruleManager.GetAppearanceMode()
+}
+
+func (a *App) SetAppearanceMode(mode string) error {
+	a.appendLog(fmt.Sprintf("[action] SetAppearanceMode called: %s", mode))
+	return a.ruleManager.SetAppearanceMode(mode)
+}
+
 func (a *App) GetTUNConfig() proxy.TUNConfig {
 	return a.ruleManager.GetTUNConfig()
 }

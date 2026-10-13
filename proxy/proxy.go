@@ -166,6 +166,7 @@ type SettingsConfig struct {
 	TUN                           TUNConfig         `json:"tun,omitempty"`
 	Language                      string            `json:"language,omitempty"`
 	Theme                         string            `json:"theme,omitempty"`
+	AppearanceMode                string            `json:"appearance_mode,omitempty"`
 	CloudflareConfig              CloudflareConfig  `json:"cloudflare_config,omitempty"`
 	MigrationEnabled              *bool             `json:"migration_enabled,omitempty"`
 	MigrationServer               string            `json:"migration_server,omitempty"`

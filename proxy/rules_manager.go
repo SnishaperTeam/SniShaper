@@ -40,6 +40,7 @@ type RuleManager struct {
 	onConfigSaved                 func()
 	language                      string
 	theme                         string
+	appearanceMode                string
 	migrationEnabled              bool
 	migrationServer               string
 	updateChannel                 string
@@ -327,6 +328,7 @@ func (rm *RuleManager) loadSettingsConfig() error {
 	if config.Theme != "" {
 		rm.theme = config.Theme
 	}
+	rm.appearanceMode = config.AppearanceMode
 
 	if config.CloseToTray != nil {
 		rm.closeToTray = *config.CloseToTray
@@ -663,6 +665,26 @@ func (r *RuleManager) SetTheme(theme string) error {
 	return r.saveSettingsConfig()
 }
 
+// GetAppearanceMode 返回浅色/深色模式（"light"/"dark"/"system"），
+// 从未设置过时返回空串，让前端保留本地缓存的上一选择。
+func (r *RuleManager) GetAppearanceMode() string {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return r.appearanceMode
+}
+
+func (r *RuleManager) SetAppearanceMode(mode string) error {
+	switch mode {
+	case "light", "dark", "system":
+	default:
+		return fmt.Errorf("invalid appearance mode: %s", mode)
+	}
+	r.mu.Lock()
+	r.appearanceMode = mode
+	r.mu.Unlock()
+	return r.saveSettingsConfig()
+}
+
 func (rm *RuleManager) UpdateCloudflareConfig(cfg CloudflareConfig) error {
 	rm.mu.Lock()
 	rm.cloudflareConfig = cfg
@@ -871,6 +893,7 @@ func (rm *RuleManager) saveSettingsConfig() error {
 		TUN:                        tunConfig,
 		Language:                   rm.language,
 		Theme:                      rm.theme,
+		AppearanceMode:             rm.appearanceMode,
 
 		MigrationEnabled:           &migrationEnabled,
 		MigrationServer:            rm.migrationServer,
