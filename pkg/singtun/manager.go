@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"net/netip"
 	"runtime"
+	"strings"  
 	"sync"
 	"sync/atomic"
 	"time"
@@ -93,9 +94,14 @@ func (m *Manager) Start(cfg proxy.TUNConfig, proxyAddr string) (err error) {
 	if mtu <= 0 {
 		mtu = 9000
 	}
+	
+	adapterName := strings.TrimSpace(cfg.AdapterName)
+	if adapterName == "" {
+		adapterName = "SniShaper"
+	} 
 
 	m.options = tun.Options{
-		Name: "SniShaper",
+		Name: adapterName,
 		MTU:  uint32(mtu),
 		Inet4Address: []netip.Prefix{
 			netip.MustParsePrefix(fakeIPv4Prefix),
@@ -196,7 +202,11 @@ func (m *Manager) Start(cfg proxy.TUNConfig, proxyAddr string) (err error) {
 	m.handler.SetInterfaceConfig(cfg.InterfaceConfig())
 
 	stackStart := time.Now()
-	m.stack, err = tun.NewStack("gvisor", tun.StackOptions{
+	stackName := strings.TrimSpace(cfg.Stack)
+	if stackName == "" {
+		stackName = "gvisor"
+	}
+	m.stack, err = tun.NewStack(stackName, tun.StackOptions{
 		Context:    context.Background(),
 		Tun:        m.tun,
 		TunOptions: m.options,
@@ -205,7 +215,9 @@ func (m *Manager) Start(cfg proxy.TUNConfig, proxyAddr string) (err error) {
 		Logger:     &singTunLogger{m.logger},
 	})
 	if err != nil {
-		return fmt.Errorf("create stack failed: %w", err)
+		// Include the requested stack name so a failed start can be traced back
+		// to the specific stack (e.g. "system" requires admin rights on Windows).
+		return fmt.Errorf("create stack failed (%s): %w", stackName, err)
 	}
 	m.logger.Info("start: NewStack completed", "elapsed", time.Since(stackStart).String())
 
