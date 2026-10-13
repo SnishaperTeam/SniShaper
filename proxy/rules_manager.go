@@ -22,6 +22,7 @@ type RuleManager struct {
 	rulesPath                     string
 	cloudflareConfig              CloudflareConfig
 	tunConfig                     TUNConfig
+	fragConfig                    FragmentConfig
 	closeToTray                   bool
 	hibernateOnClose              bool
 	autoStart                     bool
@@ -30,23 +31,23 @@ type RuleManager struct {
 	autoEnableSysProxyOnAutoStart bool
 	autoUpdateRules               bool
 
-	listenPort                    string
-	echProfiles                   []ECHProfile
-	nat64Profiles                 []NAT64Profile
-	autoRouter                    *AutoRouter
-	autoRoutingConfig             AutoRoutingConfig
-	mu                            sync.RWMutex
-	routeEventCallback            func(domain, mode string)
-	onConfigSaved                 func()
-	language                      string
-	theme                         string
-	migrationEnabled              bool
-	migrationServer               string
-	updateChannel                 string
-	downloadSource                string
-	customDownloadSource          string
-	rulesHashMu                   sync.Mutex
-	rulesHash                     string
+	listenPort           string
+	echProfiles          []ECHProfile
+	nat64Profiles        []NAT64Profile
+	autoRouter           *AutoRouter
+	autoRoutingConfig    AutoRoutingConfig
+	mu                   sync.RWMutex
+	routeEventCallback   func(domain, mode string)
+	onConfigSaved        func()
+	language             string
+	theme                string
+	migrationEnabled     bool
+	migrationServer      string
+	updateChannel        string
+	downloadSource       string
+	customDownloadSource string
+	rulesHashMu          sync.Mutex
+	rulesHash            string
 }
 
 func (r *RuleManager) SetRouteEventCallback(cb func(domain, mode string)) {
@@ -315,6 +316,7 @@ func (rm *RuleManager) loadSettingsConfig() error {
 	// 2. Override with JSON values if they exist
 	rm.cloudflareConfig = config.CloudflareConfig
 	rm.tunConfig = config.TUN
+	rm.fragConfig = config.Fragment
 
 	if config.ListenPort != "" {
 		rm.listenPort = config.ListenPort
@@ -487,6 +489,7 @@ func (rm *RuleManager) buildRules() {
 				CertVerify:         sg.CertVerify,
 				NAT64Enabled:       sg.NAT64Enabled,
 				NAT64ProfileID:     sg.NAT64ProfileID,
+				Frag:               sg.Frag,
 			}
 			rm.rules = append(rm.rules, rule)
 		}
@@ -498,8 +501,6 @@ func (rm *RuleManager) GetSiteGroups() []SiteGroup {
 	defer rm.mu.RUnlock()
 	return rm.siteGroups
 }
-
-
 
 func (rm *RuleManager) GetListenPort() string {
 	rm.mu.RLock()
@@ -513,7 +514,6 @@ func (rm *RuleManager) SetListenPort(port string) {
 	rm.mu.Unlock()
 }
 
-
 func (rm *RuleManager) SaveConfig() error {
 	rm.mu.RLock()
 	defer rm.mu.RUnlock()
@@ -522,8 +522,6 @@ func (rm *RuleManager) SaveConfig() error {
 	}
 	return rm.saveRulesConfig()
 }
-
-
 
 func (rm *RuleManager) GetCloudflareConfig() CloudflareConfig {
 	rm.mu.RLock()
@@ -541,6 +539,19 @@ func (rm *RuleManager) GetCloseToTray() bool {
 	rm.mu.RLock()
 	defer rm.mu.RUnlock()
 	return rm.closeToTray
+}
+
+func (rm *RuleManager) GetFragmentConfig() FragmentConfig {
+	rm.mu.RLock()
+	defer rm.mu.RUnlock()
+	return normalizeFragmentConfig(rm.fragConfig)
+}
+
+func (rm *RuleManager) SetFragmentConfig(cfg FragmentConfig) error {
+	rm.mu.Lock()
+	rm.fragConfig = normalizeFragmentConfig(cfg)
+	rm.mu.Unlock()
+	return rm.saveSettingsConfig()
 }
 
 func (rm *RuleManager) SetCloseToTray(enabled bool) error {
@@ -855,28 +866,30 @@ func (rm *RuleManager) saveSettingsConfig() error {
 	migrationEnabled := rm.migrationEnabled
 	cloudflareConfig := rm.cloudflareConfig
 	tunConfig := normalizeTUNConfig(rm.tunConfig)
+	fragConfig := normalizeFragmentConfig(rm.fragConfig)
 
 	settings := SettingsConfig{
 		ListenPort: listenPort,
 
-		CloseToTray:                &closeToTray,
-		HibernateOnClose:           &hibernateOnClose,
-		AutoStart:                  &autoStart,
-		ShowMainWindowOnAutoStart:  &showMainOnAutoStart,
-		AutoEnableProxyOnAutoStart: &autoEnableProxyOnAutoStart,
+		CloseToTray:                   &closeToTray,
+		HibernateOnClose:              &hibernateOnClose,
+		AutoStart:                     &autoStart,
+		ShowMainWindowOnAutoStart:     &showMainOnAutoStart,
+		AutoEnableProxyOnAutoStart:    &autoEnableProxyOnAutoStart,
 		AutoEnableSysProxyOnAutoStart: &autoEnableSysProxyOnAutoStart,
 		AutoUpdateRules:               &autoUpdateRules,
-		CloudflareConfig:           cloudflareConfig,
-		AutoRouting:                rm.autoRoutingConfig,
-		TUN:                        tunConfig,
-		Language:                   rm.language,
-		Theme:                      rm.theme,
+		CloudflareConfig:              cloudflareConfig,
+		AutoRouting:                   rm.autoRoutingConfig,
+		TUN:                           tunConfig,
+		Fragment:                      fragConfig,
+		Language:                      rm.language,
+		Theme:                         rm.theme,
 
-		MigrationEnabled:           &migrationEnabled,
-		MigrationServer:            rm.migrationServer,
-		UpdateChannel:              rm.updateChannel,
-		DownloadSource:             rm.downloadSource,
-		CustomDownloadSource:       rm.customDownloadSource,
+		MigrationEnabled:     &migrationEnabled,
+		MigrationServer:      rm.migrationServer,
+		UpdateChannel:        rm.updateChannel,
+		DownloadSource:       rm.downloadSource,
+		CustomDownloadSource: rm.customDownloadSource,
 	}
 
 	data, err := json.MarshalIndent(settings, "", "  ")
@@ -1185,5 +1198,3 @@ func (rm *RuleManager) SetCustomDownloadSource(prefix string) error {
 	rm.mu.Unlock()
 	return rm.saveSettingsConfig()
 }
-
-

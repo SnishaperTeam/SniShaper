@@ -24,6 +24,23 @@ interface RuleFormProps {
   onCancel: () => void;
 }
 
+const FRAG_DEFAULTS = { num_records: 4, num_segments: 1, interval_ms: 50, mod_minor_ver: true, oob: false };
+
+const fragFromBackend = (raw: any) => {
+  const r = raw || {};
+  const records = Number(r.num_records ?? FRAG_DEFAULTS.num_records) || FRAG_DEFAULTS.num_records;
+  return {
+    num_records: records,
+    num_segments: Number(r.num_segments ?? FRAG_DEFAULTS.num_segments) || FRAG_DEFAULTS.num_segments,
+    interval_ms: Math.max(0, Number(r.interval_ms ?? FRAG_DEFAULTS.interval_ms) || 0),
+    mod_minor_ver: r.mod_minor_ver === undefined || r.mod_minor_ver === null
+      ? FRAG_DEFAULTS.mod_minor_ver
+      : Boolean(r.mod_minor_ver),
+    oob: Boolean(r.oob),
+    tcp_only: records === 1
+  };
+};
+
 const normalizeCertVerify = (value: any) => {
   const next = {
     mode: '',
@@ -133,6 +150,7 @@ const RuleForm: React.FC<RuleFormProps> = ({ initialData, onSuccess, onCancel })
       data.nat64_enabled = Boolean(data.nat64_enabled);
       data.nat64_profile_id = String(data.nat64_profile_id || '');
       setFormData(data);
+      setFrag(fragFromBackend(data.frag));
     }
   }, [initialData]);
 
@@ -160,7 +178,8 @@ const RuleForm: React.FC<RuleFormProps> = ({ initialData, onSuccess, onCancel })
       cert_verify: normalizeCertVerify(formData.cert_verify),
       upstream: String(formData.upstream || '').trim().toUpperCase() === 'DIRECT'
         ? ''
-        : String(formData.upstream || '').trim()
+        : String(formData.upstream || '').trim(),
+      frag: currentMode === 'tls-rf' ? buildFragPayload() : null
     };
     try {
       if (formData.id) {
@@ -193,6 +212,36 @@ const RuleForm: React.FC<RuleFormProps> = ({ initialData, onSuccess, onCancel })
   const showCertVerify = ['mitm', 'quic', 'migration'].includes(currentMode);
   const showNat64Config = ['mitm', 'quic', 'tls-rf', 'transparent', 'migration'].includes(currentMode);
   const showCfPool = ['mitm', 'transparent', 'tls-rf', 'quic'].includes(currentMode);
+  const showFragment = currentMode === 'tls-rf';
+
+  const [frag, setFrag] = useState<any>(fragFromBackend(null));
+
+  const setFragField = (field: string, value: any) => {
+    setFrag((prev: any) => ({ ...prev, [field]: value }));
+  };
+  const toggleFragmentField = (field: 'tcp_only' | 'mod_minor_ver' | 'oob') => {
+    setFrag((prev: any) => {
+      const next = { ...prev };
+      if (field === 'tcp_only') {
+        next.tcp_only = !next.tcp_only;
+        next.num_records = next.tcp_only ? 1 : FRAG_DEFAULTS.num_records;
+        next.num_segments = next.tcp_only ? 4 : FRAG_DEFAULTS.num_segments;
+      } else {
+        next[field] = !next[field];
+      }
+      return next;
+    });
+  };
+  const resetFragment = () => setFrag(fragFromBackend(null));
+
+  const buildFragPayload = () => ({
+    num_records: Number(frag.num_records) || 4,
+    num_segments: Number(frag.num_segments) || 1,
+    interval_ms: Math.max(0, Number(frag.interval_ms) || 0),
+    mod_minor_ver: Boolean(frag.mod_minor_ver),
+    oob: Boolean(frag.oob),
+    oob_ex: false
+  });
 
   const splitListInput = (value: string) =>
     value
@@ -491,6 +540,73 @@ const RuleForm: React.FC<RuleFormProps> = ({ initialData, onSuccess, onCancel })
               </Box>
             )}
           </Box>
+
+          {showFragment && (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5, p: 2, border: 1, borderColor: 'divider', bgcolor: 'background.paper', borderRadius: 2 }}>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, color: 'primary.main' }}>
+                <Monitor size={16} />
+                <Typography variant="caption" sx={{ fontWeight: 'bold', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                  {t('rules.fragment.title')}
+                </Typography>
+                <Box sx={{ flex: 1 }} />
+                <Button size="small" onClick={resetFragment} sx={{ fontSize: 10 }}>
+                  {t('rules.fragment.reset')}
+                </Button>
+              </Box>
+
+              <Box onClick={() => toggleFragmentField('tcp_only')} sx={cardSx(frag.tcp_only, { row: true, inactiveBg: 'action.hover' })}>
+                <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5, minWidth: 0 }}>
+                  <Typography variant="caption" sx={{ fontWeight: 'bold', color: 'text.primary', display: 'flex', alignItems: 'center', gap: 0.5, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '100%', py: 0.25 }}>
+                    <Box component="span" sx={{ display: 'inline-flex', color: 'primary.main' }}><Bolt size={12} /></Box>
+                    {t('rules.fragment.tcp_only')}
+                  </Typography>
+                </Box>
+                <Switch size="small" checked={frag.tcp_only} />
+              </Box>
+
+              <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: '1fr 1fr' }, gap: 1.5 }}>
+                <TextField
+                  size="small" fullWidth type="number"
+                  slotProps={{ htmlInput: { min: 1, max: 8 } }}
+                  label={t('rules.fragment.records')}
+                  value={frag.num_records}
+                  onChange={(e) => setFragField('num_records', Number(e.target.value))}
+                />
+                <TextField
+                  size="small" fullWidth type="number"
+                  slotProps={{ htmlInput: { min: 1, max: 16 } }}
+                  label={t('rules.fragment.segments')}
+                  value={frag.num_segments}
+                  onChange={(e) => setFragField('num_segments', Number(e.target.value))}
+                />
+                <TextField
+                  size="small" fullWidth type="number"
+                  slotProps={{ htmlInput: { min: 0, max: 500 } }}
+                  label={t('rules.fragment.interval')}
+                  value={frag.interval_ms}
+                  onChange={(e) => setFragField('interval_ms', Number(e.target.value))}
+                />
+              </Box>
+
+              <Box onClick={() => toggleFragmentField('mod_minor_ver')} sx={cardSx(frag.mod_minor_ver, { row: true, inactiveBg: 'action.hover' })}>
+                <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5, minWidth: 0 }}>
+                  <Typography variant="caption" sx={{ fontWeight: 'bold', color: 'text.primary', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '100%', py: 0.25 }}>
+                    {t('rules.fragment.minorver')}
+                  </Typography>
+                </Box>
+                <Switch size="small" checked={frag.mod_minor_ver} />
+              </Box>
+
+              <Box onClick={() => toggleFragmentField('oob')} sx={cardSx(frag.oob, { row: true, inactiveBg: 'action.hover' })}>
+                <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5, minWidth: 0 }}>
+                  <Typography variant="caption" sx={{ fontWeight: 'bold', color: 'text.primary', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '100%', py: 0.25 }}>
+                    {t('rules.fragment.oob')}
+                  </Typography>
+                </Box>
+                <Switch size="small" checked={frag.oob} />
+              </Box>
+            </Box>
+          )}
 
           {showCertVerify && (
             <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5, p: 2, border: 1, borderColor: 'warning.main', bgcolor: 'background.paper', borderRadius: 2, position: 'relative' }}>
