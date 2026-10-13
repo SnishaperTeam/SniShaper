@@ -20,6 +20,8 @@ export const GetLanguage = () => appCall('GetLanguage');
 export const SetLanguage = (lang: string) => appCall('SetLanguage', lang);
 export const GetTheme = () => appCall('GetTheme');
 export const SetTheme = (theme: string) => appCall('SetTheme', theme);
+export const GetAppearanceMode = () => appCall('GetAppearanceMode');
+export const SetAppearanceMode = (mode: string) => appCall('SetAppearanceMode', mode);
 export const GetTUNConfig = () => appCall('GetTUNConfig');
 export const UpdateTUNConfig = (cfg: any) => appCall('UpdateTUNConfig', cfg);
 export const GetTUNStatus = () => appCall('GetTUNStatus');

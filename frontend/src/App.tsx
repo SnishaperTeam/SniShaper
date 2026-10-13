@@ -1,6 +1,6 @@
 import React, { Suspense, lazy, useState, useEffect, useCallback, useRef, createContext, useContext } from 'react';
 import { HashRouter as Router, Routes, Route, Navigate, useLocation } from 'react-router-dom';
-import { Box, CssBaseline, ThemeProvider, AppBar, Toolbar, Typography, CircularProgress } from '@mui/material';
+import { Box, CssBaseline, ThemeProvider, AppBar, Toolbar, Typography, CircularProgress, useColorScheme } from '@mui/material';
 import { alpha } from '@mui/material/styles';
 import { keyframes } from '@emotion/react';
 import Sidebar from './components/Sidebar';
@@ -12,7 +12,7 @@ import {
   GetShowMainWindowOnAutoStart, GetAutoEnableProxyOnAutoStart, GetAutoEnableSysProxyOnAutoStart, GetAutoUpdateRules,
   GetTUNConfig, GetTUNStatus, GetCloudflareConfig,
   GetCAInstallStatus, GetInstalledCerts, GetCloudflareIPStats,
-  GetLanguage, GetTheme, SetTheme, GetIPv6Available, GetTutorialDone, EventsOn
+  GetLanguage, GetTheme, SetTheme, GetIPv6Available, GetTutorialDone, GetAppearanceMode, EventsOn
 } from './api/bindings';
 import { I18nProvider, useTranslation } from './i18n/I18nContext';
 import { toast } from './lib/toast';
@@ -100,9 +100,9 @@ const App: React.FC = () => {
     const fastLoad = async () => {
       try {
         const [language, port, closeToTray, autoStart,
-          showMainOnAutoStart, autoEnableProxyOnAutoStart, autoEnableSysProxyOnAutoStart, autoUpdateRules, cfConfig, ipv6Available] = await Promise.all([
+          showMainOnAutoStart, autoEnableProxyOnAutoStart, autoEnableSysProxyOnAutoStart, autoUpdateRules, cfConfig, ipv6Available, savedThemeId] = await Promise.all([
           GetLanguage(), GetListenPort(), GetCloseToTray(), GetAutoStart(),
-          GetShowMainWindowOnAutoStart(), GetAutoEnableProxyOnAutoStart(), GetAutoEnableSysProxyOnAutoStart(), GetAutoUpdateRules(), GetCloudflareConfig(), GetIPv6Available()
+          GetShowMainWindowOnAutoStart(), GetAutoEnableProxyOnAutoStart(), GetAutoEnableSysProxyOnAutoStart(), GetAutoUpdateRules(), GetCloudflareConfig(), GetIPv6Available(), GetTheme()
         ]);
         if (language) {
           localStorage.setItem('language', language as string);
@@ -110,6 +110,12 @@ const App: React.FC = () => {
             const tutorialDone = await GetTutorialDone();
             if (!tutorialDone) setShowTutorial(true);
           } catch { /* non-fatal */ }
+        }
+        // settings.json 里的主题 ID 优先于 localStorage 缓存；后端存的是
+        // 主题 ID 本身，"dark" 这类历史默认值不在 availableThemes 里会被忽略。
+        if (typeof savedThemeId === 'string' && availableThemes.some((th) => th.id === savedThemeId)) {
+          setThemeId(savedThemeId);
+          localStorage.setItem('theme-id', savedThemeId);
         }
         setSettingsCache(prev => ({
           ...prev,
@@ -196,7 +202,11 @@ const App: React.FC = () => {
           settingsCache={settingsCache}
           updateSettingsCache={updateSettingsCache}
           themeId={themeId}
-          onThemeChange={(id: string) => { setThemeId(id); localStorage.setItem('theme-id', id); }}
+          onThemeChange={(id: string) => {
+            setThemeId(id);
+            localStorage.setItem('theme-id', id);
+            SetTheme(id).catch(() => {});
+          }}
           showTutorial={showTutorial}
           onTutorialFinish={() => setShowTutorial(false)}
         />
@@ -261,6 +271,15 @@ const AppContent: React.FC<{ settingsCache: SettingsCache, updateSettingsCache: 
       toast.error(t('network.ipv6_disabled'));
     }
   }, [settingsCache.ipv6Available, t]);
+
+  // 外观模式（浅色/深色/跟随系统）以 settings.json 为准；MUI 会先从 localStorage
+  // 恢复避免闪烁，后端有已保存值时再覆盖。旧版本未写过该字段时保持本地选择。
+  const { setMode } = useColorScheme();
+  useEffect(() => {
+    GetAppearanceMode().then((m) => {
+      if (m === 'light' || m === 'dark' || m === 'system') setMode(m);
+    }).catch(() => {});
+  }, [setMode]);
 
   if (!settingsCache.language) {
     return (

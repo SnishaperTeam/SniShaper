@@ -23,6 +23,7 @@ import {
   GetCustomDownloadSource, SetCustomDownloadSource,
   MeasureDownloadSources,
   GetNetworkInterfaces, SetTUNInterface, SetTUNInterfaceExclude,
+  SetAppearanceMode,
 } from '../api/bindings';
 import {
   Box, Button, TextField, Select, MenuItem, FormControl, InputLabel, Switch,
@@ -581,7 +582,7 @@ const Settings: React.FC<SettingsProps> = ({ cache, onCacheUpdate, currentThemeI
                       bgcolor: mode === 'light' ? 'primary.main' : 'transparent',
                       '&:hover': { color: 'text.primary' },
                     }}
-                    onClick={() => setMode('light')}
+                    onClick={() => { setMode('light'); SetAppearanceMode('light').catch(() => {}); }}
                     role="radio"
                     aria-checked={mode === 'light'}
                   >
@@ -606,7 +607,7 @@ const Settings: React.FC<SettingsProps> = ({ cache, onCacheUpdate, currentThemeI
                       bgcolor: mode === 'dark' ? 'primary.main' : 'transparent',
                       '&:hover': { color: 'text.primary' },
                     }}
-                    onClick={() => setMode('dark')}
+                    onClick={() => { setMode('dark'); SetAppearanceMode('dark').catch(() => {}); }}
                     role="radio"
                     aria-checked={mode === 'dark'}
                   >
@@ -631,7 +632,7 @@ const Settings: React.FC<SettingsProps> = ({ cache, onCacheUpdate, currentThemeI
                       bgcolor: mode === 'system' ? 'primary.main' : 'transparent',
                       '&:hover': { color: 'text.primary' },
                     }}
-                    onClick={() => setMode('system')}
+                    onClick={() => { setMode('system'); SetAppearanceMode('system').catch(() => {}); }}
                     role="radio"
                     aria-checked={mode === 'system'}
                   >
@@ -843,13 +844,13 @@ const Settings: React.FC<SettingsProps> = ({ cache, onCacheUpdate, currentThemeI
                         },
                       },
                     }}
-                    renderTags={(value: string[], getTagProps) =>
+                    renderValue={(value: string[], getItemProps) =>
                       value.map((option: string, index: number) => (
                         <Chip
                           variant="outlined"
                           label={option}
                           size="small"
-                          {...getTagProps({ index })}
+                          {...getItemProps({ index })}
                         />
                       ))
                     }
