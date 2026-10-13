@@ -7,7 +7,13 @@ import (
 )
 
 func (p *ProxyServer) handleTLSFragment(clientConn, upstreamConn net.Conn, host string, rule Rule) {
-	p.tracef("[TLS-RF] Handling %s via upstream %s", host, rule.Upstream)
+	cfg := p.effectiveFragmentConfig(rule)
+	scope := "global"
+	if rule.Frag != nil {
+		scope = "rule"
+	}
+	p.tracef("[TLS-RF] Handling %s via upstream %s (%s scope, records=%d segments=%d interval=%dms modMinorVer=%t)",
+		host, rule.Upstream, scope, cfg.NumRecords, cfg.NumSegments, cfg.IntervalMillis(), cfg.ModMinorVerEnabled())
 
 	record, err := tlsfrag.ReadInitialTLSRecord(clientConn)
 	if err != nil {
@@ -37,17 +43,19 @@ func (p *ProxyServer) handleTLSFragment(clientConn, upstreamConn net.Conn, host 
 		return
 	}
 
+	interval := cfg.Interval()
+
 	err = tlsfrag.SendRecords(
 		upstreamConn,
 		record,
 		sniPos,
 		sniLen,
-		tlsfrag.DefaultTLSRFNumRecords,
-		tlsfrag.DefaultTLSRFNumSegments,
-		tlsfrag.DefaultTLSRFOOB,
-		tlsfrag.DefaultTLSRFOOBEx,
-		tlsfrag.DefaultTLSRFModMinorVer,
-		tlsfrag.DefaultTLSRFSendInterval,
+		cfg.NumRecords,
+		cfg.NumSegments,
+		cfg.OOBEnabled(),
+		cfg.OOBExEnabled(),
+		cfg.ModMinorVerEnabled(),
+		interval,
 	)
 	if err != nil {
 		p.tracef("[TLS-RF] Fragmented send failed for %s: %v", host, err)
@@ -56,6 +64,19 @@ func (p *ProxyServer) handleTLSFragment(clientConn, upstreamConn net.Conn, host 
 		return
 	}
 
-	p.tracef("[TLS-RF] ClientHello sent in original-style fragments for %s", host)
+	if cfg.NumRecords <= 1 {
+		p.tracef("[TLS-RF] TCP-only fragmentation: %d segment(s), SNI moved to packet 2 for %s",
+			cfg.NumSegments, host)
+	} else {
+		p.tracef("[TLS-RF] ClientHello split into %d TLS records / %d TCP segments for %s",
+			cfg.NumRecords, cfg.NumSegments, host)
+	}
 	p.directTunnel(clientConn, upstreamConn)
+}
+
+func (p *ProxyServer) effectiveFragmentConfig(rule Rule) FragmentConfig {
+	if rule.Frag != nil {
+		return normalizeFragmentConfig(*rule.Frag)
+	}
+	return p.rules.GetFragmentConfig()
 }

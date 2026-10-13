@@ -21,6 +21,7 @@ import (
 	"snishaper/pkg/cfpool"
 	"snishaper/pkg/dohresolver"
 	"snishaper/pkg/netiface"
+	"snishaper/pkg/tlsfrag"
 
 	"github.com/miekg/dns"
 	utls "github.com/refraction-networking/utls"
@@ -82,6 +83,41 @@ type TUNConfig struct {
 	InterfaceName         string   `json:"interface_name,omitempty"`
 	ExcludeInterfaces     []string `json:"exclude_interface,omitempty"`
 	RouteExcludeAddresses []string `json:"route_exclude_address,omitempty"`
+}
+
+type FragmentConfig struct {
+	NumRecords  int   `json:"num_records"`
+	NumSegments int   `json:"num_segments"`
+	IntervalMs  *int  `json:"interval_ms,omitempty"`
+	ModMinorVer *bool `json:"mod_minor_ver,omitempty"`
+	OOB         *bool `json:"oob,omitempty"`
+	OOBEx       *bool `json:"oob_ex,omitempty"`
+}
+
+func (c FragmentConfig) ModMinorVerEnabled() bool {
+	return c.ModMinorVer == nil || *c.ModMinorVer
+}
+
+func (c FragmentConfig) OOBEnabled() bool {
+	return c.OOB != nil && *c.OOB
+}
+
+func (c FragmentConfig) OOBExEnabled() bool {
+	return c.OOBEx != nil && *c.OOBEx
+}
+
+func (c FragmentConfig) Interval() time.Duration {
+	if c.IntervalMs == nil {
+		return tlsfrag.DefaultTLSRFSendInterval
+	}
+	return time.Duration(*c.IntervalMs) * time.Millisecond
+}
+
+func (c FragmentConfig) IntervalMillis() int {
+	if c.IntervalMs == nil {
+		return int(tlsfrag.DefaultTLSRFSendInterval / time.Millisecond)
+	}
+	return *c.IntervalMs
 }
 
 // InterfaceConfig 把 TUN 设置转换为出站网卡选择配置。
@@ -162,6 +198,7 @@ type SettingsConfig struct {
 	AutoUpdateRules               *bool             `json:"auto_update_rules,omitempty"`
 	AutoRouting                   AutoRoutingConfig `json:"auto_routing,omitempty"`
 	TUN                           TUNConfig         `json:"tun,omitempty"`
+	Fragment                      FragmentConfig    `json:"fragment,omitempty"`
 	Language                      string            `json:"language,omitempty"`
 	Theme                         string            `json:"theme,omitempty"`
 	CloudflareConfig              CloudflareConfig  `json:"cloudflare_config,omitempty"`
@@ -199,6 +236,8 @@ type Rule struct {
 	AutoRouted         bool             `json:"auto_routed,omitempty"`
 	NAT64Enabled       bool             `json:"nat64_enabled"`
 	NAT64ProfileID     string           `json:"nat64_profile_id,omitempty"`
+	// Frag 是这条规则自己的分片参数（仅 tls-rf 模式使用），nil 表示跟随全局。
+	Frag *FragmentConfig `json:"frag,omitempty"`
 }
 
 type SiteGroup struct {
@@ -223,6 +262,8 @@ type SiteGroup struct {
 	ECHDomain          string           `json:"ech_domain,omitempty"`
 	NAT64Enabled       bool             `json:"nat64_enabled"`
 	NAT64ProfileID     string           `json:"nat64_profile_id,omitempty"`
+	// Frag 是这个站点组自己的分片参数（仅 tls-rf 模式使用），nil 表示跟随全局。
+	Frag *FragmentConfig `json:"frag,omitempty"`
 }
 
 type Upstream struct {
@@ -268,7 +309,7 @@ type ProxyServer struct {
 	socks5ChanLn *chanListener
 
 	cfRefreshCallback func()
-	OnStop func(error)
+	OnStop            func(error)
 
 	// migrationCache holds persistent session tickets for migration mode,
 	// keyed by host name. Tickets are reused across requests until they fail.
@@ -1273,6 +1314,60 @@ func normalizeTUNConfig(cfg TUNConfig) TUNConfig {
 	cfg.ExcludeInterfaces = normalizeStringList(cfg.ExcludeInterfaces)
 	cfg.RouteExcludeAddresses = normalizeStringList(cfg.RouteExcludeAddresses)
 	return cfg
+}
+
+const (
+	fragmentRecordsMin  = 1
+	fragmentRecordsMax  = 8
+	fragmentSegmentsMin = 1
+	fragmentSegmentsMax = 16
+	fragmentIntervalMin = 0
+	fragmentIntervalMax = 500
+)
+
+func normalizeFragmentConfig(cfg FragmentConfig) FragmentConfig {
+	if cfg.NumRecords < fragmentRecordsMin {
+		cfg.NumRecords = tlsfrag.DefaultTLSRFNumRecords
+	}
+	if cfg.NumRecords > fragmentRecordsMax {
+		cfg.NumRecords = fragmentRecordsMax
+	}
+	if cfg.NumSegments < fragmentSegmentsMin {
+		cfg.NumSegments = tlsfrag.DefaultTLSRFNumSegments
+	}
+	if cfg.NumSegments > fragmentSegmentsMax {
+		cfg.NumSegments = fragmentSegmentsMax
+	}
+	if cfg.IntervalMs == nil {
+		def := int(tlsfrag.DefaultTLSRFSendInterval / time.Millisecond)
+		cfg.IntervalMs = &def
+	} else {
+		v := *cfg.IntervalMs
+		if v < fragmentIntervalMin {
+			v = fragmentIntervalMin
+		}
+		if v > fragmentIntervalMax {
+			v = fragmentIntervalMax
+		}
+		cfg.IntervalMs = &v
+	}
+	if cfg.ModMinorVer == nil {
+		def := tlsfrag.DefaultTLSRFModMinorVer
+		cfg.ModMinorVer = &def
+	}
+	if cfg.OOB == nil {
+		def := tlsfrag.DefaultTLSRFOOB
+		cfg.OOB = &def
+	}
+	if cfg.OOBEx == nil {
+		def := tlsfrag.DefaultTLSRFOOBEx
+		cfg.OOBEx = &def
+	}
+	return cfg
+}
+
+func DefaultFragmentConfig() FragmentConfig {
+	return normalizeFragmentConfig(FragmentConfig{})
 }
 
 func normalizeStringList(values []string) []string {

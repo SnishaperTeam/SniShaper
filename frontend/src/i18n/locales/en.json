@@ -268,6 +268,16 @@
       "ipv4_only": "IPv4 Only",
       "ipv6_only": "IPv6 Only"
     },
+    "fragment": {
+      "title": "Fragmentation",
+      "reset": "Reset",
+      "tcp_only": "TCP-only fragmentation",
+      "records": "TLS record count (1-8)",
+      "segments": "TCP segment count (1-16)",
+      "interval": "Send interval (ms)",
+      "minorver": "Modify minor version",
+      "oob": "Out-of-band sending (OOB)"
+    },
     "display": {
       "transparent": "Pass-through",
       "direct": "Direct",

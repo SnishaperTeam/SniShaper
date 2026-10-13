@@ -268,6 +268,16 @@
       "ipv4_only": "仅 IPv4",
       "ipv6_only": "仅 IPv6"
     },
+    "fragment": {
+      "title": "分片参数",
+      "reset": "恢复默认",
+      "tcp_only": "仅 TCP 分片",
+      "records": "TLS 记录段数（1-8）",
+      "segments": "TCP 分段数（1-16）",
+      "interval": "发送间隔（毫秒）",
+      "minorver": "修改 minor version",
+      "oob": "带外发送（OOB）"
+    },
     "display": {
       "transparent": "透传",
       "direct": "直连",
