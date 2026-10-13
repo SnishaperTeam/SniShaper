@@ -46,6 +46,19 @@
     "select_language": "Select Language",
     "start": "Get Started"
   },
+  "tutorial": {
+    "skip": "Skip",
+    "back": "Back",
+    "next": "Next",
+    "done": "Finish",
+    "open_wiki": "Open Wiki",
+    "s1": { "title": "Start the Proxy", "text": "Click the highlighted \"Start Proxy\" button to launch the local proxy." },
+    "s2": { "title": "System Proxy", "text": "Now click \"System Proxy\" so browser traffic is automatically routed through the proxy." },
+    "s3": { "title": "Use Rules", "text": "The Rules page ships with official rules applying MITM, TLS fragmentation, QUIC and more per site group. Create your own groups here; domains outside the rules are routed automatically via the GFWList." },
+    "s4": { "title": "Install the Certificate", "text": "MITM, QUIC and other modes need the root certificate. When it is not installed, the Dashboard offers a one-click install prompt; this section shows and manages installed certificates." },
+    "s5": { "title": "TUN Mode", "text": "Enable TUN under \"Settings → TUN\" (admin rights required) when every app should use the proxy without extra configuration." },
+    "s6": { "title": "Learn More", "text": "Congrats on finishing the basics! For advanced features (CLI, DNS, Cloudflare IP selection, Evolution mode, etc.) visit the GitHub Wiki, and check the FAQ first when you run into problems." }
+  },
   "dashboard": {
     "title": "Home",
     "proxy_start": "Start Proxy",
@@ -369,6 +382,11 @@
   },
   "settings": {
     "title": "Settings",
+    "tutorial": {
+      "title": "Getting Started",
+      "desc": "Replay the beginner tutorial",
+      "replay": "Replay Tutorial"
+    },
     "tabs": {
       "general": "General",
       "port": "Port",
@@ -495,7 +513,10 @@
         "in_use": "in use"
       },
       "outbound_exclude": {
-        "label": "Excluded interfaces (optional)"
+        "label": "Excluded interfaces (optional)",
+        "placeholder": "VMware*,vEthernet*",
+        "hint": "Select or type interface names. Separate multiple names with commas. Wildcards like VMware* are supported.",
+        "error": "⚠️ Warning: Input contains unknown interface names or names without a wildcard (*). Please check spelling or add *."
       },
       "stack": {
         "title": "TUN network stack",
@@ -615,7 +636,7 @@
     "connection_refused": "Connection refused. The proxy server may be unavailable.",
     "dns_error": "DNS resolution failed. Please check your DNS settings.",
     "proxy_error": "Proxy configuration error. Please check your system proxy settings.",
-    "rights_reserved": "All rights reserved.",
+    "rights_reserved": "All rights reserved, except as granted under the AGPLv3.",
     "made_with": "Made with",
     "by_community": "by the SniShaper community",
     "latest_beta": "Latest Beta",

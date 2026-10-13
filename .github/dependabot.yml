@@ -1,39 +1,39 @@
 version: 2
 
 updates:
-  # Go modules: check once every 7 days, grouped into one PR.
+  # Go modules: check once every 1 day, grouped into one PR.
   - package-ecosystem: gomod
     directory: /
     schedule:
-      interval: weekly
+      interval: daily
     cooldown:
-      default-days: 3
+      default-days: 1
     open-pull-requests-limit: 10
     groups:
       go-modules:
         patterns:
           - "*"
 
-  # Frontend npm: check once every 7 days, grouped into one PR.
+  # Frontend npm: check once every 1 day, grouped into one PR.
   - package-ecosystem: npm
     directory: /frontend
     schedule:
-      interval: weekly
+      interval: daily
     cooldown:
-      default-days: 3
+      default-days: 1
     open-pull-requests-limit: 10
     groups:
       frontend-deps:
         patterns:
           - "*"
 
-  # GitHub Actions: check once every 7 days, grouped into one PR.
+  # GitHub Actions: check once every 1 day, grouped into one PR.
   - package-ecosystem: github-actions
     directory: /
     schedule:
-      interval: weekly
+      interval: daily
     cooldown:
-      default-days: 3
+      default-days: 1
     open-pull-requests-limit: 10
     groups:
       actions:

@@ -78,7 +78,12 @@ var (
 //   - WM_WTSSESSION_CHANGE / WTS_SESSION_UNLOCK — the icon registered while
 //     the session was locked is discarded when the user logs in.
 //   - TaskbarCreated — explorer.exe crash or restart rebuilds the shell and
-//     drops every tray icon along with it.
+//     drops every tray icon along with it. Wails' own wndProc also handles
+//     this broadcast, but only when the app runs at medium integrity:
+//     explorer broadcasts at medium IL, and UIPI blocks cross-integrity
+//     window messages into an elevated process. Wails never calls
+//     ChangeWindowMessageFilterEx, so in an elevated build its handler is
+//     dead code and this watcher is the only path that sees the broadcast.
 //
 // The window is a normal top-level window created without WS_VISIBLE, so it
 // never shows on screen but does receive HWND_BROADCAST messages. A
@@ -178,7 +183,7 @@ func sessionWatcherProc(hwnd, msg, wParam, lParam uintptr) uintptr {
 			log.Printf("[tray-session] session locked")
 		case wtsSessionUnlock:
 			sessionLocked.Store(false)
-			log.Printf("[tray-session] session unlocked, rebuilding tray")
+			log.Printf("[tray-session] session unlocked, requesting tray reshow")
 			if app := sessionWatcherApp; app != nil {
 				app.RebuildSystemTray()
 			}
@@ -188,17 +193,21 @@ func sessionWatcherProc(hwnd, msg, wParam, lParam uintptr) uintptr {
 	// explorer.exe broadcasts TaskbarCreated every time the shell starts or
 	// restarts, but the notification area is not ready to accept new
 	// registrations the instant the broadcast fires. There is no "ready"
-	// signal to wait for, so retry a few times. The intervals are wider
-	// than RebuildSystemTray's own debounce window so each retry actually
-	// runs; otherwise the debounce would silently drop the middle attempts.
+	// signal to wait for, so retry a few times. The intervals are wider than
+	// both debounce windows (RebuildSystemTray's own 3 s window and Wails'
+	// internal 1 s TaskbarCreated debounce), so every retry actually runs.
+	//
+	// RebuildSystemTray no longer creates a new tray — it requests Wails to
+	// re-add the existing one via NIM_ADD on the same HWND/UID, so the retries
+	// are idempotent and never produce a duplicate icon.
 	if taskbarCreatedMsg != 0 && msg == uintptr(taskbarCreatedMsg) {
-		log.Printf("[tray-session] taskbar created (explorer restart), scheduling rebuilds")
+		log.Printf("[tray-session] taskbar created (explorer restart), scheduling reshow retries")
 		if app := sessionWatcherApp; app != nil {
 			go func() {
 				for _, d := range []time.Duration{
 					1 * time.Second,
 					4 * time.Second,
-					12 * time.Second,
+					16 * time.Second,
 				} {
 					time.Sleep(d)
 					app.RebuildSystemTray()

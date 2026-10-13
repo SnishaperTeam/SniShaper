@@ -73,10 +73,11 @@ func (c *CoreClient) Call(method string, args any, reply any) error {
 	return client.Call(method, args, reply)
 }
 
-// Ping reports whether the core process is reachable.
+// Ping reports whether the core process is reachable and accepts our token
+// (instance-scoped: a stale token from a previous core instance yields false).
 func (c *CoreClient) Ping() bool {
 	var pong BoolReply
-	return c.Call("Core.Ping", EmptyArgs{}, &pong) == nil && pong.Value
+	return c.Call("Core.Ping", AuthArgs{Token: c.readToken()}, &pong) == nil && pong.Value
 }
 
 // EnsureRunning makes sure the core process is alive and responding.
@@ -91,7 +92,7 @@ func (c *CoreClient) ensureRunningWithElevation(requireElevated bool) error {
 	wasLogCaptureEnabled := false
 	wasProxyRunning := false
 	var pong BoolReply
-	if err := c.Call("Core.Ping", EmptyArgs{}, &pong); err == nil && pong.Value {
+	if err := c.Call("Core.Ping", AuthArgs{Token: c.readToken()}, &pong); err == nil && pong.Value {
 		wasLogCaptureEnabled = c.IsLogCaptureEnabled()
 		wasProxyRunning = c.IsProxyRunning()
 		execPath, pathErr := os.Executable()
@@ -108,10 +109,10 @@ func (c *CoreClient) ensureRunningWithElevation(requireElevated bool) error {
 			return nil
 		}
 		var empty EmptyArgs
-		_ = c.Call("Core.Shutdown", EmptyArgs{}, &empty)
+		_ = c.Call("Core.Shutdown", AuthArgs{Token: c.readToken()}, &empty)
 		for i := 0; i < 10; i++ {
 			time.Sleep(100 * time.Millisecond)
-			if err := c.Call("Core.Ping", EmptyArgs{}, &pong); err != nil || !pong.Value {
+			if err := c.Call("Core.Ping", AuthArgs{Token: c.readToken()}, &pong); err != nil || !pong.Value {
 				break
 			}
 		}
@@ -124,20 +125,9 @@ func (c *CoreClient) ensureRunningWithElevation(requireElevated bool) error {
 	if err := startCoreProcess(execPath, requireElevated); err != nil {
 		return err
 	}
-	authRejected := false
 	for i := 0; i < 75; i++ {
 		time.Sleep(200 * time.Millisecond)
-		if err := c.Call("Core.Ping", EmptyArgs{}, &pong); err == nil && pong.Value {
-			// Authenticate with the core process
-			token := c.readToken()
-			if token != "" {
-				var authReply BoolReply
-				if err := c.Call("Core.Authenticate", AuthArgs{Token: token}, &authReply); err != nil || !authReply.Value {
-					c.invalidateToken()
-					authRejected = true
-					continue // Authentication failed, retry
-				}
-			}
+		if err := c.Call("Core.Ping", AuthArgs{Token: c.readToken()}, &pong); err == nil && pong.Value {
 			if wasLogCaptureEnabled {
 				var empty EmptyArgs
 				_ = c.Call("Core.StartLogCapture", EmptyArgs{}, &empty)
@@ -159,9 +149,8 @@ func (c *CoreClient) ensureRunningWithElevation(requireElevated bool) error {
 			}
 			return nil
 		}
-	}
-	if authRejected {
-		return fmt.Errorf("core process is reachable on %s but rejected the RPC token after 75 retries (15s): a stale core instance is still running", coreRPCAddr)
+		// ping 失败：token 文件可能尚未写入或已被新 core 覆盖，下次重读磁盘
+		c.invalidateToken()
 	}
 	return fmt.Errorf("core process did not become ready after 75 retries (15s): check admin rights, antivirus, and core process logs")
 }
@@ -175,7 +164,7 @@ func (c *CoreClient) getInfo() (CoreInfoReply, error) {
 // ReloadIfRunning tells the core to reload its configuration.
 func (c *CoreClient) ReloadIfRunning() {
 	var pong BoolReply
-	if err := c.Call("Core.Ping", EmptyArgs{}, &pong); err != nil || !pong.Value {
+	if err := c.Call("Core.Ping", AuthArgs{Token: c.readToken()}, &pong); err != nil || !pong.Value {
 		return
 	}
 	var empty EmptyArgs
@@ -185,21 +174,22 @@ func (c *CoreClient) ReloadIfRunning() {
 // ReloadCertificateIfRunning tells the core to reload its certificate.
 func (c *CoreClient) ReloadCertificateIfRunning() {
 	var pong BoolReply
-	if err := c.Call("Core.Ping", EmptyArgs{}, &pong); err != nil || !pong.Value {
+	if err := c.Call("Core.Ping", AuthArgs{Token: c.readToken()}, &pong); err != nil || !pong.Value {
 		return
 	}
 	var empty EmptyArgs
 	_ = c.Call("Core.ReloadCertificate", EmptyArgs{}, &empty)
 }
 
-// ShutdownIfRunning shuts down the core process if it's alive.
+// ShutdownIfRunning shuts down the core process if it's ours (token-scoped:
+// a stale token cannot shut down a newly started core instance).
 func (c *CoreClient) ShutdownIfRunning() {
 	var pong BoolReply
-	if err := c.Call("Core.Ping", EmptyArgs{}, &pong); err != nil || !pong.Value {
+	if err := c.Call("Core.Ping", AuthArgs{Token: c.readToken()}, &pong); err != nil || !pong.Value {
 		return
 	}
 	var empty EmptyArgs
-	_ = c.Call("Core.Shutdown", EmptyArgs{}, &empty)
+	_ = c.Call("Core.Shutdown", AuthArgs{Token: c.readToken()}, &empty)
 }
 
 func (c *CoreClient) StartProxy() error {

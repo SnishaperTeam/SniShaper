@@ -11,13 +11,24 @@ import (
 	"github.com/wailsapp/wails/v3/pkg/events"
 )
 
-// The runtime adds the tray icon once and never re-adds it: its own icon update
-// reports a failed Shell_NotifyIcon and rolls back instead of registering the
-// icon again. The shell drops icons for reasons the app cannot observe (a
-// display or session change, a shell glitch, a sleep/resume cycle, or a
-// notification area that simply forgets the icon), so the app owns the tray
-// lifecycle: it builds the tray at startup and rebuilds it on system resume,
-// on session unlock, when the window goes away, and after a long interval.
+// Background: Wails v3 beta.26 only re-adds the tray icon when the shell
+// broadcasts TaskbarCreated (Explorer restart). Sleep/resume, session
+// lock/unlock, and silent shell drops never trigger it, so the app requests a
+// reshow at those moments.
+//
+// Recovery must go through Wails' internal reshowSystrays()
+// (v3/pkg/application/application_windows.go), which calls systray.show() on
+// every registered tray. show() issues NIM_ADD + NIM_SETVERSION against the
+// existing HWND/UID, so it is idempotent: if the shell still holds the icon it
+// is a no-op refresh; if the shell dropped it, the original slot is restored.
+//
+// Never rebuild via SystemTray.New(): Wails' systrayMap is keyed by HWND, and
+// each New() allocates a fresh HWND plus a fresh UID, which the Shell treats as
+// a second, independent icon. That is exactly the "double icon after wake,
+// one disappears when the mouse passes over it" symptom.
+//
+// requestTrayReshow is implemented in app_tray_reshow_windows.go; on other
+// builds it is a no-op in app_tray_reshow_other.go.
 
 const (
 	trayRebuildMinInterval = 3 * time.Second
@@ -29,14 +40,13 @@ type trayHolder struct {
 	app        *application.App
 	icon       []byte
 	current    *application.SystemTray
-	builtAt    time.Time
-	rebuilding bool
+	lastReshow time.Time
 }
 
 var tray trayHolder
 
 // BuildSystemTray creates the tray icon, starts the periodic refresh loop,
-// and wires up the two recovery hooks that rebuild the icon after the shell
+// and wires up the two recovery hooks that request a reshow after the shell
 // drops it: system resume (SystemDidWake) and user session unlock
 // (WTS_SESSION_UNLOCK, Windows only). It must be called before the runtime
 // starts, so the tray is registered while the app is still starting up.
@@ -55,7 +65,7 @@ func (a *App) BuildSystemTray(wailsApp *application.App, icon []byte) {
 			log.Printf("[tray] system resumed while locked, deferring rebuild to session unlock")
 			return
 		}
-		log.Printf("[tray] system resumed (not locked), rebuilding tray")
+		log.Printf("[tray] system resumed (not locked), requesting tray reshow")
 		a.RebuildSystemTray()
 	})
 }
@@ -130,67 +140,29 @@ func (a *App) buildSystemTray() {
 
 	tray.mu.Lock()
 	tray.current = trayItem
-	tray.builtAt = time.Now()
+	tray.lastReshow = time.Now()
 	tray.mu.Unlock()
 }
 
-// RebuildSystemTray replaces the tray icon with a fresh one, which is the only
-// way to recover an icon the shell dropped. It returns immediately and does the
-// work on the runtime's main thread.
+// RebuildSystemTray requests Wails to re-add the tray icon on the existing
+// HWND/UID. Despite the name, it no longer creates a new tray: it triggers
+// Wails' internal reshowSystrays() via a wmTaskbarCreated post, which is
+// idempotent and never produces a duplicate icon. The name is kept so the
+// existing call sites (wake, unlock, periodic refresh) stay unchanged.
 func (a *App) RebuildSystemTray() {
 	tray.mu.Lock()
-	if tray.rebuilding || tray.app == nil || time.Since(tray.builtAt) < trayRebuildMinInterval {
+	if tray.app == nil || time.Since(tray.lastReshow) < trayRebuildMinInterval {
 		tray.mu.Unlock()
 		return
 	}
-	tray.rebuilding = true
-	old := tray.current
-	tray.current = nil
+	tray.lastReshow = time.Now()
 	tray.mu.Unlock()
 
-	go func() {
-		defer func() {
-			tray.mu.Lock()
-			tray.rebuilding = false
-			tray.mu.Unlock()
-		}()
-
-		// Build the replacement before dropping the old one: the tray must never be
-		// left with no icon, because a window without one cannot be recovered by the
-		// user. The Destroy is delayed by a short sleep rather than issued in the
-		// same frame, because the Windows notification area does not repaint on its
-		// own when NIM_ADD and NIM_DELETE land together, leaving the stale icon
-		// visible next to the new one until the user hovers over it.
-		application.InvokeSync(func() {
-			a.buildSystemTray()
-		})
-
-		if old != nil {
-			time.Sleep(300 * time.Millisecond)
-			application.InvokeSync(func() {
-				old.Destroy()
-			})
-		}
-
-		tray.mu.Lock()
-		rebuilt := tray.current != nil && tray.current != old
-		tray.mu.Unlock()
-		if rebuilt {
-			log.Printf("[tray] system tray rebuilt")
-			return
-		}
-
-		// Registration failed: retry shortly instead of waiting a full period.
-		log.Printf("[tray] system tray rebuild did not take effect, retrying")
-		tray.mu.Lock()
-		tray.builtAt = time.Time{}
-		tray.mu.Unlock()
-		time.Sleep(30 * time.Second)
-		a.RebuildSystemTray()
-	}()
+	requestTrayReshow()
 }
 
-// trayRefreshLoop heals an icon that vanished while the window stayed open.
+// trayRefreshLoop requests a reshow periodically to heal an icon that vanished
+// while the window stayed open.
 func (a *App) trayRefreshLoop() {
 	for {
 		time.Sleep(trayRebuildPeriod)

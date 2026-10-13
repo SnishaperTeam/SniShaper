@@ -41,11 +41,13 @@ func matchesSniShaperAdapter(desc string, friendly string) bool {
 	return strings.Contains(d, "wintun") && f == "snishaper"
 }
 
-func cleanupStaleAdapters(logf func(string)) {
+// cleanupStaleAdapters 移除本项目遗留的虚拟网卡，返回移除数量。
+// 返回值供启动清理阶段记入日志（US1：用户需在启动日志中看到"清了几个"）。
+func cleanupStaleAdapters(logf func(string)) int {
 	devInfo, err := windows.SetupDiGetClassDevsEx(&netClassGUID, "", 0, windows.DIGCF_PRESENT, 0, "")
 	if err != nil {
 		logf("[sing-tun] stale adapter scan unavailable: " + err.Error())
-		return
+		return 0
 	}
 	defer devInfo.Close()
 	removed := 0
@@ -73,6 +75,7 @@ func cleanupStaleAdapters(logf func(string)) {
 	if removed > 0 {
 		logf("[sing-tun] stale adapter cleanup removed " + fmt.Sprint(removed) + " device(s)")
 	}
+	return removed
 }
 
 func deviceStringProperty(devInfo windows.DevInfo, data *windows.DevInfoData, property windows.SPDRP) string {

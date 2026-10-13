@@ -31,23 +31,24 @@ type RuleManager struct {
 	autoEnableSysProxyOnAutoStart bool
 	autoUpdateRules               bool
 
-	listenPort           string
-	echProfiles          []ECHProfile
-	nat64Profiles        []NAT64Profile
-	autoRouter           *AutoRouter
-	autoRoutingConfig    AutoRoutingConfig
-	mu                   sync.RWMutex
-	routeEventCallback   func(domain, mode string)
-	onConfigSaved        func()
-	language             string
-	theme                string
-	migrationEnabled     bool
-	migrationServer      string
-	updateChannel        string
-	downloadSource       string
-	customDownloadSource string
-	rulesHashMu          sync.Mutex
-	rulesHash            string
+	listenPort                    string
+	echProfiles                   []ECHProfile
+	nat64Profiles                 []NAT64Profile
+	autoRouter                    *AutoRouter
+	autoRoutingConfig             AutoRoutingConfig
+	mu                            sync.RWMutex
+	routeEventCallback            func(domain, mode string)
+	onConfigSaved                 func()
+	language                      string
+	theme                         string
+	appearanceMode                string
+	migrationEnabled              bool
+	migrationServer               string
+	updateChannel                 string
+	downloadSource                string
+	customDownloadSource          string
+	rulesHashMu                   sync.Mutex
+	rulesHash                     string
 }
 
 func (r *RuleManager) SetRouteEventCallback(cb func(domain, mode string)) {
@@ -329,6 +330,7 @@ func (rm *RuleManager) loadSettingsConfig() error {
 	if config.Theme != "" {
 		rm.theme = config.Theme
 	}
+	rm.appearanceMode = config.AppearanceMode
 
 	if config.CloseToTray != nil {
 		rm.closeToTray = *config.CloseToTray
@@ -674,6 +676,26 @@ func (r *RuleManager) SetTheme(theme string) error {
 	return r.saveSettingsConfig()
 }
 
+// GetAppearanceMode 返回浅色/深色模式（"light"/"dark"/"system"），
+// 从未设置过时返回空串，让前端保留本地缓存的上一选择。
+func (r *RuleManager) GetAppearanceMode() string {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return r.appearanceMode
+}
+
+func (r *RuleManager) SetAppearanceMode(mode string) error {
+	switch mode {
+	case "light", "dark", "system":
+	default:
+		return fmt.Errorf("invalid appearance mode: %s", mode)
+	}
+	r.mu.Lock()
+	r.appearanceMode = mode
+	r.mu.Unlock()
+	return r.saveSettingsConfig()
+}
+
 func (rm *RuleManager) UpdateCloudflareConfig(cfg CloudflareConfig) error {
 	rm.mu.Lock()
 	rm.cloudflareConfig = cfg
@@ -878,12 +900,13 @@ func (rm *RuleManager) saveSettingsConfig() error {
 		AutoEnableProxyOnAutoStart:    &autoEnableProxyOnAutoStart,
 		AutoEnableSysProxyOnAutoStart: &autoEnableSysProxyOnAutoStart,
 		AutoUpdateRules:               &autoUpdateRules,
-		CloudflareConfig:              cloudflareConfig,
-		AutoRouting:                   rm.autoRoutingConfig,
-		TUN:                           tunConfig,
-		Fragment:                      fragConfig,
-		Language:                      rm.language,
-		Theme:                         rm.theme,
+		CloudflareConfig:           cloudflareConfig,
+		AutoRouting:                rm.autoRoutingConfig,
+		TUN:                        tunConfig,
+		Fragment:                   fragConfig,
+		Language:                   rm.language,
+		Theme:                      rm.theme,
+		AppearanceMode:             rm.appearanceMode,
 
 		MigrationEnabled:     &migrationEnabled,
 		MigrationServer:      rm.migrationServer,
