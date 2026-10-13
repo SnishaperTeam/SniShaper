@@ -354,6 +354,7 @@ const Dashboard: React.FC = () => {
         </Box>
         <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
           <Button
+            data-tut="proxy-toggle"
             onClick={handleToggleProxy}
             loading={isOperating}
             color={proxyRunning ? 'error' : 'primary'}
@@ -363,6 +364,7 @@ const Dashboard: React.FC = () => {
             {!isOperating && (proxyRunning ? t('dashboard.proxy_stop') : t('dashboard.proxy_start'))}
           </Button>
           <Button
+            data-tut="sys-proxy"
             onClick={handleToggleSysProxy}
             loading={isOperating}
             variant={sysProxyEnabled ? 'contained' : 'outlined'}

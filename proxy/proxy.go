@@ -83,6 +83,8 @@ type TUNConfig struct {
 	InterfaceName         string   `json:"interface_name,omitempty"`
 	ExcludeInterfaces     []string `json:"exclude_interface,omitempty"`
 	RouteExcludeAddresses []string `json:"route_exclude_address,omitempty"`
+	Stack                 string   `json:"stack,omitempty"`
+	AdapterName           string   `json:"adapter_name,omitempty"`
 }
 
 type FragmentConfig struct {
@@ -201,6 +203,7 @@ type SettingsConfig struct {
 	Fragment                      FragmentConfig    `json:"fragment,omitempty"`
 	Language                      string            `json:"language,omitempty"`
 	Theme                         string            `json:"theme,omitempty"`
+	AppearanceMode                string            `json:"appearance_mode,omitempty"`
 	CloudflareConfig              CloudflareConfig  `json:"cloudflare_config,omitempty"`
 	MigrationEnabled              *bool             `json:"migration_enabled,omitempty"`
 	MigrationServer               string            `json:"migration_server,omitempty"`
@@ -1313,6 +1316,17 @@ func normalizeTUNConfig(cfg TUNConfig) TUNConfig {
 	cfg.InterfaceName = strings.TrimSpace(cfg.InterfaceName)
 	cfg.ExcludeInterfaces = normalizeStringList(cfg.ExcludeInterfaces)
 	cfg.RouteExcludeAddresses = normalizeStringList(cfg.RouteExcludeAddresses)
+	cfg.Stack = strings.TrimSpace(cfg.Stack)
+	switch cfg.Stack {
+	case "gvisor", "mixed", "system":
+		// ok
+	default:
+		cfg.Stack = "gvisor"
+	}
+	cfg.AdapterName = strings.TrimSpace(cfg.AdapterName)
+	if cfg.AdapterName == "" {
+		cfg.AdapterName = "SniShaper"
+	}
 	return cfg
 }
 

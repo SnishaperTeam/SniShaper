@@ -1,9 +1,10 @@
 # Build & Test
 
 - Build all: `.\build_windows.ps1 -Build all -Silent`
-- Build backend only: `.\build_windows.ps1 -Build backend -Silent`
-- Build frontend only: `.\build_windows.ps1 -Build frontend -Silent`
-- Build + MSIX: `.\build_windows.ps1 -Build all -Silent -BuildMsix`
+- Build backend only: `.\build_windows.ps1 -Build all,gui,backend -Silent`
+- Build frontend only: `.\build_windows.ps1 -Build all,gui,frontend -Silent`
+- Build + MSIX: `.\build_windows.ps1 -Build all -Silent -BuildMsix` (`-Build` format is `<system>,<mode>,<scope>`, e.g. `windows,gui,backend`; single token without comma is parsed as `<system>` only)
+- Headless CLI (linux/WSL TUN test): `$env:GOOS='linux'; $env:CGO_ENABLED='0'; go build -tags "headless with_gvisor" -o build/bin/snishaper-linux ./cli` (must include `with_gvisor`, otherwise TUN fails with "gVisor is not included in this build") then run in WSL2 as root: `./snishaper start && ./snishaper tun on`, test with `curl -k -m 15 <url>`, cleanup `./snishaper tun off && ./snishaper stop`; note: `stop` is async, so wait for processes to fully exit (`pgrep -x snishaper`) before the next `start` — core RPC is token-isolated (a stale instance can no longer kill a newly started core), but a zero-gap restart can still race the TUN device teardown and leave the data plane degraded
 - Frontend dev: `cd frontend && npm run dev`
 - Frontend install: `cd frontend && npm install`
 - Go mod tidy: `go mod tidy`
@@ -43,6 +44,7 @@ Data flow: Frontend (React HashRouter) → Wails bindings (`EventsOn` + async Go
 - i18n placeholders: param names passed to `t('k', {...})` must match `{param}` placeholders in all three locales (shorthand props like `{ ms }` count as params); keep the key tree structurally identical across zh/en/ru
 - i18n coverage: aria-label / placeholder / title / toast / button text must go through `t()`; add new UI copy to ALL of zh/en/ru JSON in the same commit
 - Git: commit messages MUST be written in English (user requirement), conventional-commit style, e.g. `refactor: remove GFWList dynamic update and complete i18n`
+- Wiki: any change that alters a file's purpose/nature, adds new files, or renames/removes files MUST update the GitHub Wiki in the same change (zh + EN pages; clone `https://github.com/SnishaperTeam/SniShaper.wiki.git`, naming: `Page.md` = zh, `EN-Page.md` = en)
 
 # Security & Environment
 

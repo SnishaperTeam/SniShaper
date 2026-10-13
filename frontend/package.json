@@ -10,19 +10,21 @@
   "devDependencies": {
     "@emnapi/core": "^1.11.3",
     "@emnapi/runtime": "^1.11.3",
-    "@types/node": "^26.6.4",
+    "@types/node": "^26.6.5",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
     "@vitejs/plugin-react-swc": "^4.3.3",
     "typescript": "^7.0.2",
-    "vite": "^8.3.2"
+    "vite": "^8.3.4"
   },
   "dependencies": {
     "@emotion/react": "^11.14.0",
     "@emotion/styled": "^11.14.1",
-    "@heroicons/react": "^2.2.0",
-    "@mui/material": "^9.4.0",
-    "@wailsio/runtime": "^3.0.0-beta.27",
+    "@iconify-icons/material-symbols": "^2.0.6",
+    "@iconify-icons/mdi": "^2.0.0",
+    "@iconify/react": "^6.0.2",
+    "@mui/material": "^9.5.0",
+    "@wailsio/runtime": "^3.0.0-beta.28",
     "react": "^19.3.0",
     "react-dom": "^19.3.0",
     "react-router-dom": "^7.18.4"

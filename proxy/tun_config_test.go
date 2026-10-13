@@ -73,6 +73,24 @@ func TestNormalizeTUNConfigDisablesStrictRoute(t *testing.T) {
 	}
 }
 
+func TestNormalizeTUNConfigRejectsUnknownStack(t *testing.T) {
+	if got := normalizeTUNConfig(TUNConfig{Stack: "bogus"}).Stack; got != "gvisor" {
+		t.Fatalf("want gvisor, got %q", got)
+	}
+	if got := normalizeTUNConfig(TUNConfig{Stack: "mixed"}).Stack; got != "mixed" {
+		t.Fatalf("want mixed, got %q", got)
+	}
+}
+
+func TestNormalizeTUNConfigDefaultsAdapterName(t *testing.T) {
+	if got := normalizeTUNConfig(TUNConfig{AdapterName: "  "}).AdapterName; got != "SniShaper" {
+		t.Fatalf("want SniShaper, got %q", got)
+	}
+	if got := normalizeTUNConfig(TUNConfig{AdapterName: "  MyTun "}).AdapterName; got != "MyTun" {
+		t.Fatalf("want MyTun, got %q", got)
+	}
+}
+
 func TestRouteExcludePrefixesClassifiesFamilies(t *testing.T) {
 	cfg := TUNConfig{
 		RouteExcludeAddresses: []string{

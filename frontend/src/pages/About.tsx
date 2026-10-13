@@ -352,7 +352,7 @@ const About: React.FC = () => {
         </Box>
 
         <Box component="footer" sx={{ textAlign: 'center', pb: 2 }}>
-          <Typography variant="caption" sx={{ display: 'block', fontSize: '0.75rem', color: 'text.secondary' }}>© 2025-2026 SniShaper. {t('about.rights_reserved')}</Typography>
+          <Typography variant="caption" sx={{ display: 'block', fontSize: '0.75rem', color: 'text.secondary' }}>Copyleft 🄯 © 2025-2026 SniShaper Team and JetCPP Team. {t('about.rights_reserved')}</Typography>
           <Typography variant="caption" sx={{ display: 'block', fontSize: '0.6875rem', color: 'text.secondary', opacity: 0.6, mt: 1 }}>{t('about.made_with')} ❤️ {t('about.by_community')}</Typography>
         </Box>
       </Box>

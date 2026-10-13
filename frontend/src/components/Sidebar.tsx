@@ -15,6 +15,7 @@ import {
   Bolt,
 } from '../lib/icons';
 import { useTranslation } from '../i18n/I18nContext';
+import { SetAppearanceMode } from '../api/bindings';
 
 const DRAWER_WIDTH = 240;
 
@@ -111,7 +112,11 @@ const SidebarContent: React.FC = () => {
           <IconButton
             size="small"
             aria-label={mode === 'light' ? t('sidebar.dark_mode_aria') : t('sidebar.light_mode_aria')}
-            onClick={() => setMode(mode === 'light' ? 'dark' : 'light')}
+            onClick={() => {
+              const next = mode === 'light' ? 'dark' : 'light';
+              setMode(next);
+              SetAppearanceMode(next).catch(() => {});
+            }}
             color={mode === 'dark' ? 'primary' : 'default'}
           >
             {mode === 'light' ? <Sun size={18} /> : <Moon size={18} />}

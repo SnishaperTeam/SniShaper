@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import {
-  Plus, Search, Filter, Edit, ExternalLink, Delete, Activity, Bolt, RefreshCcw
+  Plus, Search, Filter, Edit, ExternalLink, Delete, Activity, Bolt, RefreshCcw, X
 } from '../lib/icons';
 import {
   GetSiteGroups, DeleteSiteGroup, ExportConfig, EventsOn, UpdateRules
@@ -209,7 +209,7 @@ const Rules: React.FC = () => {
           <Box sx={{ p: 1.25, borderRadius: 1.5, border: 1, color: 'primary.main', bgcolor: (theme) => alpha(theme.palette.primary.main, 0.1), borderColor: (theme) => alpha(theme.palette.primary.main, 0.1), display: 'flex' }}>
             <Filter size={20} />
           </Box>
-          <Typography variant="h5" sx={{ fontWeight: 700, letterSpacing: '-0.02em' }}>{t('rules.title')}</Typography>
+          <Typography variant="h5" data-tut="rules-title" sx={{ fontWeight: 700, letterSpacing: '-0.02em' }}>{t('rules.title')}</Typography>
         </Box>
         <Box sx={{ display: 'flex', gap: 1 }}>
           <Button
@@ -262,7 +262,23 @@ const Rules: React.FC = () => {
           onChange={(e) => setSearch(e.target.value)}
           placeholder={t('rules.search_placeholder')}
           aria-label={t('rules.search_placeholder')}
-          slotProps={{ input: { startAdornment: <InputAdornment position="start"><Search size={16} /></InputAdornment> } }}
+          slotProps={{
+            input: {
+              startAdornment: <InputAdornment position="start"><Search size={16} /></InputAdornment>,
+              endAdornment: search ? (
+                <InputAdornment position="end">
+                  <IconButton
+                    size="small"
+                    onClick={() => setSearch('')}
+                    aria-label={t('common.clear')}
+                    edge="end"
+                  >
+                    <X size={14} />
+                  </IconButton>
+                </InputAdornment>
+              ) : null,
+            },
+          }}
         />
       </Box>
 

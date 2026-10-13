@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"log/slog"
 	"net"
 	"net/netip"
 	"strconv"
@@ -35,6 +36,7 @@ type Handler struct {
 	resolver    *dohresolver.FailoverResolver
 	fakeIP      *FakeIPStore
 	logf        func(string)
+	logger      *slog.Logger
 	ifaceConfig netiface.Config
 	mu          sync.Mutex
 	live        map[net.Conn]struct{}
@@ -108,14 +110,19 @@ func (h *Handler) Close() {
 	h.mu.Unlock()
 }
 
+// releaseMaxRounds 是 Release 快照收敛循环的最大轮次（设计决策 D6）。
+// Release 不置 closed，理论上新连接可能在快照间隙持续进入；无上限的
+// 收敛循环在极端场景下会让 Stop 永不返回。到顶后记录剩余连接数并返回。
+const releaseMaxRounds = 5
+
 // Release 回收全部存量连接并等待转发 goroutine 退出，但不复用 closed 标记。
 // Manager 的 releaseLocked 走这条路径：设备已关闭但 Handler 语义上仍可继续
 // 接收派发，Start 失败回滚时也无需重建 Handler。
 //
 // 因为不置 closed，snapshot 之后仍可能有新连接被 track，所以按轮次收敛：
-// 每轮重新快照并关闭，直到某一轮快照为空。
+// 每轮重新快照并关闭，直到某一轮快照为空；最多 releaseMaxRounds 轮（D6）。
 func (h *Handler) Release() {
-	for {
+	for round := 1; round <= releaseMaxRounds; round++ {
 		h.mu.Lock()
 		conns := make([]net.Conn, 0, len(h.live))
 		for c := range h.live {
@@ -144,15 +151,34 @@ func (h *Handler) Release() {
 		remaining := len(h.live) + len(h.livePacket)
 		closed := h.closed
 		h.mu.Unlock()
-		if remaining == 0 || closed {
-			// closed 时不会再有新的 track 进来，remaining 必将在下一轮归零。
-			if remaining == 0 {
-				return
-			}
-			h.wg.Wait()
+		if remaining == 0 {
 			return
 		}
+		if closed {
+			// closed 后不会再有新 track，剩余条目必将在下一轮归零；
+			// 继续循环收敛而不是原地无限 Wait（D6：关闭路径全部有界）。
+			h.logger.Debug("handler release: closed with remaining entries, draining",
+				"round", round, "remaining", remaining)
+			continue
+		}
+		// 未 closed 仍有剩余：快照间隙有新连接进入，进入下一轮前记录剩余数。
+		h.logger.Warn("handler release round finished with remaining entries",
+			"round", round, "remaining", remaining)
 	}
+	// 轮次上限到顶仍未收敛（D6）：记告警后返回。剩余连接由其自身转发
+	// goroutine 结束时释放，随 Handler 生命周期终结回收。
+	h.mu.Lock()
+	remaining := len(h.live) + len(h.livePacket)
+	h.mu.Unlock()
+	h.logger.Warn("handler release exceeded max rounds, giving up",
+		"rounds", releaseMaxRounds, "remaining", remaining)
+}
+
+// liveCounts 返回当前存活的 TCP 连接数与 UDP 会话数（启停 instrumentation 用）。
+func (h *Handler) liveCounts() (tcp, udp int) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	return len(h.live), len(h.livePacket)
 }
 
 // NewHandler 创建新的 Handler
@@ -162,8 +188,9 @@ func NewHandler(proxyAddr string, resolver *dohresolver.FailoverResolver, logf f
 		resolver:  resolver,
 		fakeIP:    NewFakeIPStore(),
 		logf:      logf,
+		logger:    newBridgedLogger(logf),
 	}
-	h.logf("[sing-tun] Handler created, proxy: " + proxyAddr)
+	h.logger.Info("Handler created", "proxy", proxyAddr)
 	return h
 }
 
@@ -208,23 +235,27 @@ func (h *Handler) NewConnectionEx(ctx context.Context, conn net.Conn, source M.S
 	// 查找真实域名（fake-ip 反查）
 	targetHost := h.resolveHost(destination)
 
-	// 浏览器可能用 DoH/系统缓存解析出真实 IP（绕过 TUN 的 fake-ip 劫持），
-	// 导致规则按域名匹配失效。此时从 TLS ClientHello 嗅探 SNI 重建域名。
+	// 惰性嗅探（设计决策 D5）：仅 targetHost 是 IP（fake-ip 反查失败/被绕过）
+	// 时读取首包嗅探 SNI 重建域名，供 CONNECT 选路；其余流量不碰首包，零开销直通。
+	// 注意：只嗅探、绝不改写 ClientHello——TLS 1.2/1.3 的转录哈希覆盖整个
+	// ClientHello，传输途中改任何字节都会导致两端密钥不一致（bad record MAC）。
+	// SNI 伪装只能在 TLS 端点侧做（MITM 出站重放，见 proxy/mitm.go）。
 	if net.ParseIP(targetHost) != nil {
-		if sni, c := h.sniffTLSSNI(conn); sni != "" {
-			h.logf("[sing-tun] SNI sniffed: " + sni + " (was IP " + targetHost + ")")
-			targetHost = sni
-			conn = c
+		info, c := h.sniffTLSSNI(conn)
+		conn = c
+		if info.SNI != "" && info.SNI != targetHost {
+			h.logger.Info("SNI sniffed", "sni", info.SNI, "previous", targetHost)
+			targetHost = info.SNI
 		}
 	}
-	h.logf(fmt.Sprintf("[sing-tun] TCP %s -> %s (resolved: %s)", source.String(), destination.String(), targetHost))
+	h.logger.Debug("TCP flow", "source", source.String(), "destination", destination.String(), "resolved", targetHost)
 
 	// 连接到 ProxyServer
 	// loopback (127.0.0.0/8) 已被 Inet4RouteExcludeAddress 排除出 TUN，
 	// 连接 127.0.0.1 不会进 TUN，无需绑定物理网卡。
 	upstream, err := h.dialProxy()
 	if err != nil {
-		h.logf("[sing-tun] failed to connect to proxy: " + err.Error())
+		h.logger.Warn("failed to connect to proxy", "error", err)
 		_ = conn.Close()
 		h.untrack(trackedConn)
 		if onClose != nil {
@@ -239,9 +270,9 @@ func (h *Handler) NewConnectionEx(ctx context.Context, conn net.Conn, source M.S
 	// 用 net.JoinHostPort 正确处理 IPv6 地址（自动加方括号）
 	target := net.JoinHostPort(targetHost, strconv.Itoa(int(destination.Port)))
 	connectReq := "CONNECT " + target + " HTTP/1.1\r\nHost: " + target + "\r\n\r\n"
-	h.logf(fmt.Sprintf("[sing-tun] CONNECT request: %q", connectReq))
+	h.logger.Debug("CONNECT request", "request", connectReq)
 	if _, err := upstream.Write([]byte(connectReq)); err != nil {
-		h.logf("[sing-tun] failed to send CONNECT: " + err.Error())
+		h.logger.Warn("failed to send CONNECT", "error", err)
 		_ = conn.Close()
 		_ = upstream.Close()
 		h.untrack(trackedConn)
@@ -255,7 +286,7 @@ func (h *Handler) NewConnectionEx(ctx context.Context, conn net.Conn, source M.S
 	br := bufio.NewReader(upstream)
 	statusLine, err := br.ReadString('\n')
 	if err != nil {
-		h.logf("[sing-tun] failed to read CONNECT response: " + err.Error())
+		h.logger.Warn("failed to read CONNECT response", "error", err)
 		_ = conn.Close()
 		_ = upstream.Close()
 		h.untrack(trackedConn)
@@ -265,7 +296,7 @@ func (h *Handler) NewConnectionEx(ctx context.Context, conn net.Conn, source M.S
 		return
 	}
 	statusLine = strings.TrimRight(statusLine, "\r\n")
-	h.logf(fmt.Sprintf("[sing-tun] CONNECT response: %q", statusLine))
+	h.logger.Debug("CONNECT response", "status", statusLine)
 
 	// 解析状态码（不能用子串匹配 "200"，状态行其他字段也可能包含 "200"）
 	if !isHTTPSuccess(statusLine) {
@@ -275,7 +306,7 @@ func (h *Handler) NewConnectionEx(ctx context.Context, conn net.Conn, source M.S
 		if len(rest) > 0 {
 			errMsg += "\r\n" + string(rest)
 		}
-		h.logf("[sing-tun] CONNECT failed: " + errMsg)
+		h.logger.Warn("CONNECT failed", "detail", errMsg)
 		err := fmt.Errorf("proxy connect failed: %s", statusLine)
 		_ = conn.Close()
 		_ = upstream.Close()
@@ -290,7 +321,7 @@ func (h *Handler) NewConnectionEx(ctx context.Context, conn net.Conn, source M.S
 	for {
 		line, err := br.ReadString('\n')
 		if err != nil {
-			h.logf("[sing-tun] failed to read CONNECT headers: " + err.Error())
+			h.logger.Warn("failed to read CONNECT headers", "error", err)
 			_ = conn.Close()
 			_ = upstream.Close()
 			h.untrack(trackedConn)
@@ -361,98 +392,21 @@ func (c *bufferedConn) CloseWrite() error {
 }
 
 // sniffTLSSNI 从 TLS ClientHello 中嗅探 SNI 域名。
-// 返回的 net.Conn 总是包装后的 bufferedConn，保证已读字节不丢失。
-// 非 TLS 或超时（客户端迟迟不发包）返回空 SNI。
-func (h *Handler) sniffTLSSNI(conn net.Conn) (string, net.Conn) {
-	br := bufio.NewReader(conn)
-	_ = conn.SetReadDeadline(time.Now().Add(3 * time.Second))
-	defer conn.SetReadDeadline(time.Time{})
-
-	sni := sniffSNIFromReader(br)
-	return sni, &bufferedConn{Conn: conn, br: br}
-}
-
-// sniffSNIFromReader 读取并解析 TLS ClientHello 的 SNI 扩展
-func sniffSNIFromReader(br *bufio.Reader) string {
-	// record header: type(1) + version(2) + length(2)
-	hdr := make([]byte, 5)
-	if _, err := io.ReadFull(br, hdr); err != nil {
-		return ""
+// T012：切换到独立解析模块 sni_parser（ECH 检测/分片到达/畸形安全）。
+// 非 TLS / 超时：info.SNI 为空、Err 记录原因，返回的连接总是包装后的，
+// 已读字节经 prefixConn 完整回放——旧实现经 bufio 消费后不回放，会把整个
+// ClientHello 丢掉不发给上游，这是 US3 明确要求修复的丢字节缺陷。
+func (h *Handler) sniffTLSSNI(conn net.Conn) (SNIInfo, net.Conn) {
+	info, wrapped := SniffClientHello(conn, 3*time.Second)
+	if info.Err != nil {
+		h.logger.Debug("SNI sniff failed", "error", info.Err.Error())
 	}
-	if hdr[0] != 0x16 { // not TLS handshake
-		return ""
+	if info.HasECH {
+		// D4：ECH 存在时 inner SNI 加密不可见，外层 SNI 用于规则匹配；
+		// Debug 级避免每个 ECH 流刷屏，重写跳过路径另有 Info 日志。
+		h.logger.Debug("SNI sniffed with ECH present, outer SNI used for matching", "sni", info.SNI)
 	}
-	bodyLen := int(hdr[3])<<8 | int(hdr[4])
-	if bodyLen < 4 || bodyLen > 1<<14 {
-		return ""
-	}
-	body := make([]byte, bodyLen)
-	if _, err := io.ReadFull(br, body); err != nil {
-		return ""
-	}
-	// handshake header: msgType(1) + length(3)
-	if len(body) < 4 || body[0] != 0x01 { // not ClientHello
-		return ""
-	}
-	// ClientHello: version(2) + random(32) + sessionID...
-	p := 4 + 2 + 32
-	if p >= len(body) {
-		return ""
-	}
-	sidLen := int(body[p])
-	p++
-	if p+sidLen > len(body) {
-		return ""
-	}
-	p += sidLen
-	if p+2 > len(body) {
-		return ""
-	}
-	cipherLen := int(body[p])<<8 | int(body[p+1])
-	p += 2
-	if p+cipherLen > len(body) {
-		return ""
-	}
-	p += cipherLen
-	if p >= len(body) {
-		return ""
-	}
-	compLen := int(body[p])
-	p++
-	if p+compLen > len(body) {
-		return ""
-	}
-	p += compLen
-	if p+2 > len(body) {
-		return ""
-	}
-	extLen := int(body[p])<<8 | int(body[p+1])
-	p += 2
-	if p+extLen > len(body) {
-		return ""
-	}
-	end := p + extLen
-	for p+4 <= end {
-		extType := int(body[p])<<8 | int(body[p+1])
-		extDataLen := int(body[p+2])<<8 | int(body[p+3])
-		p += 4
-		if p+extDataLen > end {
-			return ""
-		}
-		if extType == 0 { // server_name
-			data := body[p : p+extDataLen]
-			// listLength(2) + nameType(1) + nameLen(2) + name
-			if len(data) >= 5 && data[2] == 0 {
-				nameLen := int(data[3])<<8 | int(data[4])
-				if 5+nameLen <= len(data) {
-					return string(data[5 : 5+nameLen])
-				}
-			}
-			return ""
-		}
-		p += extDataLen
-	}
-	return ""
+	return info, wrapped
 }
 
 // resolveHost 解析目标地址的真实域名
@@ -466,7 +420,7 @@ func (h *Handler) resolveHost(destination M.Socksaddr) string {
 			return domain
 		}
 		// fake-ip 在范围内但反查失败（映射丢失），记录警告
-		h.logf(fmt.Sprintf("[sing-tun] WARNING: fake-ip %s has no domain mapping", addr))
+		h.logger.Warn("fake-ip has no domain mapping", "addr", addr.String())
 	}
 
 	// 不是 fake-ip，返回原始地址
@@ -673,7 +627,7 @@ func packEmptyReply(msg *dns.Msg) ([]byte, error) {
 func (h *Handler) handleRawDNSPacket(payload []byte, source M.Socksaddr, destination M.Socksaddr, writer N.PacketWriter) {
 	msg := new(dns.Msg)
 	if err := msg.Unpack(payload); err != nil {
-		h.logf("[sing-tun] failed to parse DNS packet: " + err.Error())
+		h.logger.Warn("failed to parse DNS packet", "error", err)
 		return
 	}
 
@@ -702,7 +656,7 @@ func (h *Handler) handleRawDNSPacket(payload []byte, source M.Socksaddr, destina
 		fakeIP, isNew = h.fakeIP.CreateIPv6(domain)
 	}
 	if isNew {
-		h.logf(fmt.Sprintf("[sing-tun] fake-ip: %s -> %s (type: %d)", domain, fakeIP, question.Qtype))
+		h.logger.Debug("fake-ip allocated", "domain", domain, "fake_ip", fakeIP.String(), "qtype", question.Qtype)
 	}
 
 	resp := new(dns.Msg)
@@ -733,13 +687,13 @@ func (h *Handler) handleRawDNSPacket(payload []byte, source M.Socksaddr, destina
 
 	respBytes, err := resp.Pack()
 	if err != nil {
-		h.logf("[sing-tun] failed to pack DNS response: " + err.Error())
+		h.logger.Warn("failed to pack DNS response", "error", err)
 		return
 	}
 	respBuf := buf.NewPacket()
 	respBuf.Write(respBytes)
 	if err := writer.WritePacket(respBuf, destination); err != nil {
-		h.logf("[sing-tun] failed to write DNS response: " + err.Error())
+		h.logger.Warn("failed to write DNS response", "error", err)
 	}
 }
 
@@ -747,13 +701,13 @@ func (h *Handler) handleRawDNSPacket(payload []byte, source M.Socksaddr, destina
 func (h *Handler) serveEmptyReply(msg *dns.Msg, destination M.Socksaddr, writer N.PacketWriter) bool {
 	respBytes, err := packEmptyReply(msg)
 	if err != nil {
-		h.logf("[sing-tun] failed to pack empty DNS reply: " + err.Error())
+		h.logger.Warn("failed to pack empty DNS reply", "error", err)
 		return false
 	}
 	respBuf := buf.NewPacket()
 	respBuf.Write(respBytes)
 	if err := writer.WritePacket(respBuf, destination); err != nil {
-		h.logf("[sing-tun] failed to write empty DNS reply: " + err.Error())
+		h.logger.Warn("failed to write empty DNS reply", "error", err)
 		return false
 	}
 	return true
@@ -773,14 +727,14 @@ func (h *Handler) serveDNSFailure(msg *dns.Msg, destination M.Socksaddr, writer 
 	respBuf := buf.NewPacket()
 	respBuf.Write(respBytes)
 	if writeErr := writer.WritePacket(respBuf, destination); writeErr != nil {
-		h.logf("[sing-tun] failed to write DNS error response: " + writeErr.Error())
+		h.logger.Warn("failed to write DNS error response", "error", writeErr)
 	}
 }
 
 // handleDNSRealPacket resolves non-A/AAAA queries via DoH
 func (h *Handler) handleDNSRealPacket(msg *dns.Msg, domain string, destination M.Socksaddr, writer N.PacketWriter) {
 	if h.resolver == nil {
-		h.logf("[sing-tun] DNS resolve unavailable for " + domain + ": no resolver configured")
+		h.logger.Warn("DNS resolve unavailable: no resolver configured", "domain", domain)
 		h.serveDNSFailure(msg, destination, writer)
 		return
 	}
@@ -791,7 +745,7 @@ func (h *Handler) handleDNSRealPacket(msg *dns.Msg, domain string, destination M
 	defer cancel()
 	ips, err := h.resolver.ResolveIPs(ctx, domain)
 	if err != nil {
-		h.logf("[sing-tun] DNS resolve failed for " + domain + ": " + err.Error())
+		h.logger.Warn("DNS resolve failed", "domain", domain, "error", err)
 		h.serveDNSFailure(msg, destination, writer)
 		return
 	}
@@ -830,13 +784,13 @@ func (h *Handler) handleDNSRealPacket(msg *dns.Msg, domain string, destination M
 
 	respBytes, err := resp.Pack()
 	if err != nil {
-		h.logf("[sing-tun] failed to pack DNS response: " + err.Error())
+		h.logger.Warn("failed to pack DNS response", "error", err)
 		return
 	}
 	respBuf := buf.NewPacket()
 	respBuf.Write(respBytes)
 	if err := writer.WritePacket(respBuf, destination); err != nil {
-		h.logf("[sing-tun] failed to write DNS response: " + err.Error())
+		h.logger.Warn("failed to write DNS response", "error", err)
 	}
 }
 
@@ -870,7 +824,7 @@ func (h *Handler) forwardUDPDirect(ctx context.Context, conn N.PacketConn, sourc
 	// 地址必须绑本地通配（0.0.0.0 / ::），绑具体地址会收不到回包。
 	binding, err := netiface.Select(netifaceFamily(wantIPv6), h.interfaceConfig(), h.logf)
 	if err != nil {
-		h.logf("[sing-tun] no physical UDP binding: " + err.Error())
+		h.logger.Warn("no physical UDP binding", "error", err)
 		if onClose != nil {
 			onClose(err)
 		}
@@ -886,7 +840,7 @@ func (h *Handler) forwardUDPDirect(ctx context.Context, conn N.PacketConn, sourc
 	}
 	packetConn, err := listenConfig.ListenPacket(context.Background(), network, ":0")
 	if err != nil {
-		h.logf("[sing-tun] failed to create UDP conn: " + err.Error())
+		h.logger.Warn("failed to create UDP conn", "error", err)
 		if onClose != nil {
 			onClose(err)
 		}
@@ -895,7 +849,7 @@ func (h *Handler) forwardUDPDirect(ctx context.Context, conn N.PacketConn, sourc
 	remoteConn, ok := packetConn.(*net.UDPConn)
 	if !ok {
 		_ = packetConn.Close()
-		h.logf("[sing-tun] unexpected UDP socket type")
+		h.logger.Warn("unexpected UDP socket type")
 		if onClose != nil {
 			onClose(err)
 		}
@@ -906,7 +860,7 @@ func (h *Handler) forwardUDPDirect(ctx context.Context, conn N.PacketConn, sourc
 	destAddr := destination.String()
 	destUDPAddr, err := net.ResolveUDPAddr(network, destAddr)
 	if err != nil {
-		h.logf("[sing-tun] failed to resolve dest: " + err.Error())
+		h.logger.Warn("failed to resolve dest", "error", err)
 		remoteConn.Close()
 		if onClose != nil {
 			onClose(err)
@@ -946,81 +900,81 @@ func (h *Handler) forwardUDPDirect(ctx context.Context, conn N.PacketConn, sourc
 		var wg sync.WaitGroup
 		wg.Add(2)
 
-stopped := make(chan struct{})
-	var stopOnce sync.Once
-	stop := func() {
-		stopOnce.Do(func() { close(stopped) })
-	}
+		stopped := make(chan struct{})
+		var stopOnce sync.Once
+		stop := func() {
+			stopOnce.Do(func() { close(stopped) })
+		}
 
-	// 方向一：客户端 → 上游
-	go func() {
-		defer wg.Done()
-		defer stop()
-		for {
-			select {
-			case <-stopped:
-				return
-			case <-ctx.Done():
-				return
-			default:
-			}
+		// 方向一：客户端 → 上游
+		go func() {
+			defer wg.Done()
+			defer stop()
+			for {
+				select {
+				case <-stopped:
+					return
+				case <-ctx.Done():
+					return
+				default:
+				}
 
-			conn.SetReadDeadline(time.Now().Add(udpIdleTimeout))
-			packetBuf := buf.NewPacket()
-			_, err := conn.ReadPacket(packetBuf)
-			if err != nil {
+				conn.SetReadDeadline(time.Now().Add(udpIdleTimeout))
+				packetBuf := buf.NewPacket()
+				_, err := conn.ReadPacket(packetBuf)
+				if err != nil {
+					packetBuf.Release()
+					if netErr, ok := err.(net.Error); ok && netErr.Timeout() {
+						continue // 客户端暂时空闲，等待会话由 sing-tun NAT 回收
+					}
+					return
+				}
+
+				_, err = remoteConn.WriteTo(packetBuf.Bytes(), destUDPAddr)
 				packetBuf.Release()
-				if netErr, ok := err.(net.Error); ok && netErr.Timeout() {
-					continue // 客户端暂时空闲，等待会话由 sing-tun NAT 回收
+				if err != nil {
+					h.logger.Warn("failed to forward UDP", "error", err)
+					return
 				}
-				return
 			}
+		}()
 
-			_, err = remoteConn.WriteTo(packetBuf.Bytes(), destUDPAddr)
-			packetBuf.Release()
-			if err != nil {
-				h.logf("[sing-tun] failed to forward UDP: " + err.Error())
-				return
-			}
-		}
-	}()
-
-	// 方向二：上游 → 客户端（独立持续读取，QUIC 多包响应不会丢失）
-	go func() {
-		defer wg.Done()
-		defer stop()
-		responseBuf := make([]byte, 65535)
-		for {
-			select {
-			case <-stopped:
-				return
-			case <-ctx.Done():
-				return
-			default:
-			}
-
-			remoteConn.SetReadDeadline(time.Now().Add(udpIdleTimeout))
-			n, _, err := remoteConn.ReadFrom(responseBuf)
-			if err != nil {
-				if netErr, ok := err.(net.Error); ok && netErr.Timeout() {
-					continue // 上游暂时无数据（QUIC 静默期），等待另一方向结束
+		// 方向二：上游 → 客户端（独立持续读取，QUIC 多包响应不会丢失）
+		go func() {
+			defer wg.Done()
+			defer stop()
+			responseBuf := make([]byte, 65535)
+			for {
+				select {
+				case <-stopped:
+					return
+				case <-ctx.Done():
+					return
+				default:
 				}
-				return
-			}
 
-			responsePacket := buf.NewPacket()
-			responsePacket.Write(responseBuf[:n])
-			// WritePacket 的 dest 是响应包的源地址（远端服务器），不是目标（应用）
-			// 所有权随 WritePacket 转移，由 gvisor 背压写端负责 Release
-			if err := conn.WritePacket(responsePacket, destination); err != nil {
-				h.logf("[sing-tun] failed to write UDP response: " + err.Error())
-				return
+				remoteConn.SetReadDeadline(time.Now().Add(udpIdleTimeout))
+				n, _, err := remoteConn.ReadFrom(responseBuf)
+				if err != nil {
+					if netErr, ok := err.(net.Error); ok && netErr.Timeout() {
+						continue // 上游暂时无数据（QUIC 静默期），等待另一方向结束
+					}
+					return
+				}
+
+				responsePacket := buf.NewPacket()
+				responsePacket.Write(responseBuf[:n])
+				// WritePacket 的 dest 是响应包的源地址（远端服务器），不是目标（应用）
+				// 所有权随 WritePacket 转移，由 gvisor 背压写端负责 Release
+				if err := conn.WritePacket(responsePacket, destination); err != nil {
+					h.logger.Warn("failed to write UDP response", "error", err)
+					return
+				}
 			}
-		}
+		}()
+
+		wg.Wait()
 	}()
-
-	wg.Wait()
-}()
 }
 
 // proxyConn 双向复制数据，正确处理 TCP 半关闭

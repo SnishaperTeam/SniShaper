@@ -104,7 +104,6 @@ build/bin/markers/
 /.workbuddy/
 
 .history/
-docs/
 .opencode/
 
 AGENTS.md

@@ -539,7 +539,11 @@ jobs:
             Write-Host "::error::no signed package found under $pkgDir"
             exit 1
           }
-          Copy-Item $msix.FullName $assetsDir\ -ErrorAction Stop
+          # The signed MSIX ships only inside the dongle.*.7z bundle (with
+          # devcert.pfx, install.bat and the signing password); staging it as
+          # a loose file would make the verify step demand an upload that no
+          # pattern provides. Only the unsigned Partner Center package is a
+          # standalone asset.
           $unsigned = Get-ChildItem -Path $pkgDir -File -Filter 'unsigned_*' | Select-Object -First 1
           if ($unsigned) { Copy-Item $unsigned.FullName $assetsDir\ -ErrorAction Stop }
 
@@ -571,8 +575,8 @@ jobs:
             Write-Host "::notice::staged installer $($s.Name)"
           }
 
-          if (Test-Path (Join-Path $root 'devcert.pfx')) { Copy-Item (Join-Path $root 'devcert.pfx') $assetsDir\ }
-          if (Test-Path (Join-Path $root 'install.bat')) { Copy-Item (Join-Path $root 'install.bat') $assetsDir\ }
+          if (Test-Path (Join-Path $root 'devcert.pfx')) { Write-Host "::notice::devcert.pfx ships inside the dongle bundle only" }
+          if (Test-Path (Join-Path $root 'install.bat')) { Write-Host "::notice::install.bat ships inside the dongle bundle only" }
 
           Write-Host "Staged files:" -ForegroundColor Green
           Get-ChildItem $assetsDir | ForEach-Object { Write-Host "  $($_.Name) ($($_.Length) bytes)" }
@@ -1063,7 +1067,7 @@ jobs:
           # Fixed order: installers, signed bundle, unsigned MSIX, Windows
           # portables, Linux portables, then every CLI target by name.
           $ordered = @()
-          $ordered += Get-ChildItem -Path $assetsDir -File -Filter '*-Setup.exe' -ErrorAction SilentlyContinue
+          $ordered += Get-ChildItem -Path $assetsDir -File -Filter '*Setup.exe' -ErrorAction SilentlyContinue
           $ordered += Get-ChildItem -Path $assetsDir -File -Filter 'dongle.*.7z' -ErrorAction SilentlyContinue
           $ordered += Get-ChildItem -Path $assetsDir -File -Filter 'unsigned_*.msix*' -ErrorAction SilentlyContinue
           $ordered += Get-ChildItem -Path $assetsDir -File -Filter 'snishaper-windows-*.7z' -ErrorAction SilentlyContinue | Sort-Object Name
@@ -1127,7 +1131,7 @@ jobs:
           # devcert.pfx, install.bat and the signing password.
           $patterns = @(
             (Join-Path $assetsDir 'unsigned_*.msix*'),
-            (Join-Path $assetsDir '*-Setup.exe'),
+            (Join-Path $assetsDir '*Setup.exe'),
             (Join-Path $assetsDir 'dongle.*.7z'),
             (Join-Path $assetsDir 'snishaper-windows-*.7z'),
             (Join-Path $assetsDir 'snishaper-linux-*.tar.gz'),
@@ -1140,7 +1144,11 @@ jobs:
               Write-Host "::warning::no asset matches pattern $pattern"
               continue
             }
-            $matched += $hits.Name
+            # Full paths: gh resolves bare file names (and glob patterns)
+            # against the current working directory, which is the workspace
+            # root, not staging/ - bare names make gh exit with
+            # "no matches found" and abort the whole release.
+            $matched += $hits.FullName
           }
           $matched = $matched | Sort-Object -Unique
           if ($matched.Count -eq 0) {

@@ -270,7 +270,6 @@ func (a *App) RevealMainWindow() {
 	a.showMainWindow()
 }
 
-
 func (a *App) GetProxyMode() string {
 	if a.core != nil {
 		return a.core.GetProxyMode()
@@ -310,6 +309,15 @@ func (a *App) SetTheme(theme string) error {
 	return a.ruleManager.SetTheme(theme)
 }
 
+func (a *App) GetAppearanceMode() string {
+	return a.ruleManager.GetAppearanceMode()
+}
+
+func (a *App) SetAppearanceMode(mode string) error {
+	a.appendLog(fmt.Sprintf("[action] SetAppearanceMode called: %s", mode))
+	return a.ruleManager.SetAppearanceMode(mode)
+}
+
 func (a *App) GetTUNConfig() proxy.TUNConfig {
 	return a.ruleManager.GetTUNConfig()
 }
@@ -345,14 +353,28 @@ func splitCommaList(raw string) []string {
 
 func (a *App) UpdateTUNConfig(cfg proxy.TUNConfig) error {
 	a.appendLog("[action] UpdateTUNConfig called")
+
+	old := a.ruleManager.GetTUNConfig()
 	if err := a.ruleManager.UpdateTUNConfig(cfg); err != nil {
 		return err
 	}
 	netiface.InvalidateCache()
-	if a.core != nil {
-		a.core.ReloadIfRunning()
+
+	if a.core == nil {
+		return nil
 	}
-	return nil
+	if !a.core.GetTUNStatus().Running {
+		return nil
+	}
+	if old.Stack == cfg.Stack && old.AdapterName == cfg.AdapterName {
+		a.core.ReloadIfRunning()
+		return nil
+	}
+	a.appendLog("[action] UpdateTUNConfig: restarting TUN to apply stack / adapter changes")
+	if err := a.StopTUN(); err != nil {
+		a.appendLog("[warn] UpdateTUNConfig: StopTUN failed: " + err.Error())
+	}
+	return a.StartTUN()
 }
 
 func (a *App) GetTUNStatus() proxy.TUNStatus {

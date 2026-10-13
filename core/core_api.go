@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime/debug"
+	"strings"
 	"sync"
 	"time"
 
@@ -83,8 +84,11 @@ func (s *coreService) Authenticate(args AuthArgs, reply *BoolReply) error {
 	return nil
 }
 
-func (s *coreService) Ping(_ EmptyArgs, reply *BoolReply) error {
-	reply.Value = true
+// Ping 要求 token 匹配：使"core 存活"判定按实例隔离——持有旧实例
+// token 的客户端（如正在退出的 --serve）不会把复用固定端口的新 core
+// 当成自己的 core，从而既不会误杀它，也不会因 ping 成功而永不退出。
+func (s *coreService) Ping(args AuthArgs, reply *BoolReply) error {
+	reply.Value = args.Token == coreRPCToken
 	return nil
 }
 
@@ -108,7 +112,12 @@ func (s *coreService) ReloadCertificate(_ EmptyArgs, _ *EmptyArgs) error {
 	return s.runtime.reloadCertificate()
 }
 
-func (s *coreService) Shutdown(_ EmptyArgs, _ *EmptyArgs) error {
+// Shutdown 要求 token：否则任何本地进程都能经固定 RPC 端口杀掉 core，
+// 且旧 --serve 退出流程会误杀刚接任固定端口的新 core。
+func (s *coreService) Shutdown(args AuthArgs, _ *EmptyArgs) error {
+	if args.Token != coreRPCToken {
+		return errors.New("shutdown rejected: invalid token")
+	}
 	if s.stop != nil {
 		s.stop()
 	}
@@ -230,7 +239,13 @@ func RunCoreMain() error {
 	if err := os.WriteFile(tokenPath, []byte(coreRPCToken), 0600); err != nil {
 		return fmt.Errorf("failed to write RPC token: %w", err)
 	}
-	defer os.Remove(tokenPath)
+	defer func() {
+		// 仅当文件仍属于本实例时才删除：新实例可能已覆盖写入自己的
+		// token，退出时不得删掉别人的。
+		if data, err := os.ReadFile(tokenPath); err == nil && strings.TrimSpace(string(data)) == coreRPCToken {
+			_ = os.Remove(tokenPath)
+		}
+	}()
 
 	server := rpc.NewServer()
 	var (
