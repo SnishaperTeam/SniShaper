@@ -147,12 +147,16 @@ const Settings: React.FC<SettingsProps> = ({ cache, onCacheUpdate, currentThemeI
       const pick = (obj: any, snake: string, pascal: string) => obj?.[snake] ?? obj?.[pascal] ?? '';
       setOutboundIface(String(pick(cfg, 'interface_name', 'InterfaceName') || ''));
 
-      const rawExclude = Array.isArray(cfg?.exclude_interface)
-        ? cfg.exclude_interface
-        : Array.isArray(cfg?.ExcludeInterfaces)
-          ? cfg.ExcludeInterfaces
-          : [];
-      setOutboundExclude(rawExclude);
+      setTunStack(String(pick(cfg, 'stack', 'Stack') || 'gvisor'));
+      setAdapterName(String(pick(cfg, 'adapter_name', 'AdapterName') || ''));
+
+      setOutboundExclude(
+        Array.isArray(cfg?.exclude_interface)
+          ? cfg.exclude_interface
+          : Array.isArray(cfg?.ExcludeInterfaces)
+            ? cfg.ExcludeInterfaces
+            : []
+      );
       setOutboundExcludeInput('');
 
       setRouteExclude(Array.isArray(cfg?.route_exclude_address)
