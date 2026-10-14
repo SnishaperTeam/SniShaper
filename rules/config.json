@@ -3070,6 +3070,8 @@
         "camo.githubusercontent.com",
         "release-assets.githubusercontent.com",
         "objects.githubusercontent.com",
+        "github-releases.githubusercontent.com",
+        "pkg-containers.githubusercontent.com",
         "marketplace-screenshots.githubusercontent.com"
       ],
       "ech_enabled": false,
@@ -3077,7 +3079,7 @@
       "cert_verify": {},
       "website": "github",
       "enabled": true,
-      "upstream": "13.143.65.4",
+      "upstream": "185.199.110.133,185.199.111.133,185.199.108.133,185.199.109.133,185.199.110.154,185.199.111.154,185.199.108.154,185.199.109.154",
       "nat64_enabled": false
     },
     {
@@ -3127,7 +3129,39 @@
       },
       "website": "github",
       "enabled": true,
-      "upstream": "151.101.192.133",
+      "upstream": "185.199.110.133,185.199.111.133,185.199.108.133,185.199.109.133",
+      "nat64_enabled": false
+    },
+    {
+      "id": "sg-windows-update-direct",
+      "name": "windows-update",
+      "mode": "transparent",
+      "domains": [
+        "*.blob.core.windows.net",
+        "*.windowsupdate.com",
+        "*.update.microsoft.com",
+        "*.delivery.mp.microsoft.com",
+        "*.azureedge.net"
+      ],
+      "ech_enabled": false,
+      "use_cf_pool": false,
+      "cert_verify": {},
+      "website": "microsoft",
+      "enabled": true,
+      "nat64_enabled": false
+    },
+    {
+      "id": "sg-ghcr-registry",
+      "name": "ghcr.io",
+      "mode": "tls-rf",
+      "domains": [
+        "ghcr.io"
+      ],
+      "ech_enabled": false,
+      "use_cf_pool": false,
+      "cert_verify": {},
+      "website": "github",
+      "enabled": true,
       "nat64_enabled": false
     },
     {
