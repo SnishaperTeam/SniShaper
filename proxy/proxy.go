@@ -655,10 +655,13 @@ func (p *ProxyServer) Start() error {
 	socks5ChanLn := newChanListener(ln.Addr())
 
 	httpSrv := &http.Server{
-		Addr:         listenAddr,
-		Handler:      http.HandlerFunc(p.handleRequest),
-		ReadTimeout:  30 * time.Second,
-		WriteTimeout: 30 * time.Second,
+		Addr:    listenAddr,
+		Handler: http.HandlerFunc(p.handleRequest),
+		// 只保留读头超时（慢连接保护）。ReadTimeout/WriteTimeout 会给整个请求
+		// 生命周期上 30s 死线：大文件经 handleHTTP 流式转发时（IDM 下载 http
+		// 直链）必然在 30s 处被截断。CONNECT 请求 hijack 后会自行清空 deadline，
+		// 不受影响。
+		ReadHeaderTimeout: 30 * time.Second,
 	}
 	socks5Srv := p.newSocks5Server()
 	socks5Tracker := &socks5ConnTracker{Listener: socks5ChanLn}

@@ -337,8 +337,78 @@ func (p *ProxyServer) resolveDialCandidates(cr *connectResult) error {
 	return nil
 }
 
+// dialSerial 按顺序串行拨号候选列表，返回第一个成功的连接及其地址。
+// 全部失败时汇总每个候选的错误返回（超时候选即 i/o timeout），调用方
+// 拿到的错误要能看出每个候选分别是怎么失败的。
+func (p *ProxyServer) dialSerial(rule Rule, candidates []string) (net.Conn, string, error) {
+	var errs []error
+	for _, addr := range candidates {
+		conn, err := p.dialWithRule(context.Background(), "tcp", addr, rule)
+		if err == nil {
+			return conn, addr, nil
+		}
+		if rule.UseCFPool && p.cfPool != nil {
+			if h, _, splitErr := net.SplitHostPort(addr); splitErr == nil && h != "" {
+				p.cfPool.ReportFailure(h)
+			}
+		}
+		errs = append(errs, fmt.Errorf("%s: %w", addr, err))
+	}
+	if len(errs) == 0 {
+		return nil, "", errors.New("no dial candidates")
+	}
+	// 汇总所有候选的失败原因：只返回最后一个会让不可达地址族的报错
+	// 覆盖掉真正的失败点，排障时看到的是误导性的错误。
+	return nil, "", fmt.Errorf("all %d dial candidates failed: %w", len(errs), errors.Join(errs...))
+}
+
+// buildDoHFallbackCandidates 在主拨号候选全部失败后，用 DoH 重新解析客户端
+// 要访问的目标域名本身，生成一列未被尝试过的备用候选。
+//
+// 典型场景：规则 upstream 是硬编码 IP（例如 GitHub 资产域名写死了某个 Azure
+// IP），该 IP 换 CDN / 被墙后整条规则不可达；而域名本身经 DoH 解析出的真实
+// 地址（Fastly anycast 等）仍然可用。目标本身就是字面 IP 时没有可回退的解析，
+// DoH 也没有给出可用 IP 时同样返回 nil —— 此时绝不能退回系统解析：TUN 模式下
+// 系统 DNS 会被劫持成 fake-ip，拿它拨号必然失败，只会把错误拖成超时。
+func (p *ProxyServer) buildDoHFallbackCandidates(cr *connectResult, tried []string) []string {
+	host := normalizeHost(cr.targetHost)
+	if host == "" || isLiteralIP(host) {
+		return nil
+	}
+	port := portFromTargetAddr(cr.targetAddr)
+	if port == "" {
+		port = "443"
+	}
+
+	resolved := p.resolveDomainCandidates(context.Background(), host, port, cr.rule.DNSMode)
+	triedSet := make(map[string]struct{}, len(tried))
+	for _, addr := range tried {
+		triedSet[strings.TrimSpace(addr)] = struct{}{}
+	}
+
+	out := make([]string, 0, len(resolved))
+	for _, addr := range resolved {
+		host, _, err := net.SplitHostPort(addr)
+		if err != nil || !isLiteralIP(host) {
+			continue
+		}
+		if _, ok := triedSet[addr]; ok {
+			continue
+		}
+		if p.isSelfTarget(addr) {
+			continue
+		}
+		out = append(out, addr)
+	}
+	return dedupeDialCandidates(filterUnreachableFamily(out))
+}
+
 // dialUpstream 解析候选并拨通一条上游连接存入 cr.conn。
 // tls-rf / transparent 隧道直接复用它，必须在 hijack 之前建好，上游不可达才能回 502。
+//
+// 主候选失败后有一次 DoH 回退：规则 upstream 常是硬编码 IP，可能整体失效
+// （换 CDN、IP 被封），而目标域名本身仍可经 DoH 解析出可达地址。回退仍失败
+// 时把最终（通常是拨号超时）错误原样返回，由调用方决定对客户端的响应。
 func (p *ProxyServer) dialUpstream(cr *connectResult) error {
 	// CF 池路径保留 DialParallel 的整池竞速：这条路径的调用方不做二次竞速，
 	// 换成串行拨号会明显拉长建连时间。
@@ -366,43 +436,28 @@ func (p *ProxyServer) dialUpstream(cr *connectResult) error {
 		return err
 	}
 
-	dial := func(network, addr string) (net.Conn, error) {
-		return p.dialWithRule(context.Background(), network, addr, cr.rule)
-	}
-
-	if len(cr.dialCandidates) > 1 {
-		var errs []error
-		for _, addr := range cr.dialCandidates {
-			conn, err := dial("tcp", addr)
-			if err == nil {
-				cr.dialAddr = addr
-				cr.conn = conn
-				if cr.rule.UseCFPool && p.cfPool != nil {
-					h, _, _ := net.SplitHostPort(addr)
-					if h != "" {
-						p.cfPool.ReportSuccess(h)
-					}
-				}
-				return nil
-			}
-			if cr.rule.UseCFPool && p.cfPool != nil {
-				h, _, _ := net.SplitHostPort(addr)
-				if h != "" {
-					p.cfPool.ReportFailure(h)
-				}
-			}
-			errs = append(errs, fmt.Errorf("%s: %w", addr, err))
-		}
-		// 汇总所有候选的失败原因：只返回最后一个会让不可达地址族的报错
-		// 覆盖掉真正的失败点，排障时看到的是误导性的错误。
-		return fmt.Errorf("all %d dial candidates failed: %w", len(errs), errors.Join(errs...))
-	}
-
-	conn, err := dial("tcp", cr.dialAddr)
+	conn, dialedAddr, err := p.dialSerial(cr.rule, cr.dialCandidates)
 	if err != nil {
-		return err
+		fallback := p.buildDoHFallbackCandidates(cr, cr.dialCandidates)
+		if len(fallback) == 0 {
+			return err
+		}
+		p.tracef("[Connect] All %d primary candidates failed for %s (%v), retrying via DoH fallback %v",
+			len(cr.dialCandidates), cr.targetHost, err, fallback)
+		conn, dialedAddr, err = p.dialSerial(cr.rule, fallback)
+		if err != nil {
+			return fmt.Errorf("primary candidates failed; DoH fallback also failed: %w", err)
+		}
+		p.tracef("[Connect] DoH fallback dial success for %s via %s", cr.targetHost, dialedAddr)
 	}
+
+	cr.dialAddr = dialedAddr
 	cr.conn = conn
+	if cr.rule.UseCFPool && p.cfPool != nil {
+		if h, _, splitErr := net.SplitHostPort(dialedAddr); splitErr == nil && h != "" {
+			p.cfPool.ReportSuccess(h)
+		}
+	}
 	return nil
 }
 

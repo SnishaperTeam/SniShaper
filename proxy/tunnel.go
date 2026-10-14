@@ -107,11 +107,15 @@ func (p *ProxyServer) handleConnect(w http.ResponseWriter, req *http.Request, ru
 	// 回调里由 establishUpstreamConn 建立，这里仅解析候选地址。
 	if cr.effectiveMode == "mitm" {
 		if err := p.resolveDialCandidates(cr); err != nil {
+			log.Printf("[Connect] 502 (local): CONNECT %s mode=mitm rule-mode=%s upstream=%s error=%v",
+				targetAuthority, rule.Mode, rule.Upstream, err)
 			http.Error(w, "Failed to connect to upstream", http.StatusBadGateway)
 			p.tracef("[Connect] Failed to resolve upstream candidates for %s: %v", cr.targetHost, err)
 			return
 		}
 	} else if err := p.dialUpstream(cr); err != nil {
+		log.Printf("[Connect] 502 (local): CONNECT %s mode=%s rule-mode=%s upstream=%s candidates=%v error=%v",
+			targetAuthority, cr.effectiveMode, rule.Mode, rule.Upstream, cr.dialCandidates, err)
 		http.Error(w, "Failed to connect to upstream", http.StatusBadGateway)
 		p.tracef("[Connect] All upstream connect attempts failed: %v, error: %v", cr.dialCandidates, err)
 		return
