@@ -118,3 +118,4 @@ reference/
 tools/logs/*
 !tools/logs/.gitkeep
 /.vs
+/.v2c/
