@@ -3112,6 +3112,29 @@
       }
     },
     {
+      "id": "1792243200000000000",
+      "name": "pythonhosted",
+      "mode": "tls-rf",
+      "domains": [
+        "files.pythonhosted.org"
+      ],
+      "ech_enabled": false,
+      "use_cf_pool": false,
+      "cert_verify": {},
+      "website": "pypi",
+      "enabled": true,
+      "upstream": "106.55.101.131",
+      "nat64_enabled": false,
+      "frag": {
+        "num_records": 1,
+        "num_segments": 4,
+        "interval_ms": 50,
+        "mod_minor_ver": false,
+        "oob": false,
+        "oob_ex": false
+      }
+    },
+    {
       "id": "1778740245266254000",
       "name": "anydomain",
       "mode": "tls-rf",
