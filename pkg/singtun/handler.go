@@ -11,6 +11,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"syscall"
 	"time"
 
@@ -795,9 +796,153 @@ func (h *Handler) handleDNSRealPacket(msg *dns.Msg, domain string, destination M
 }
 
 // udpIdleTimeout UDP 中继的读写轮询间隔。
-// 仅用于让 ReadPacket/ReadFrom 定期唤醒以检查 ctx 取消，
-// 不代表会话超时——空闲会话由 sing-tun 的 NAT 表自行回收。
+// 仅用于让 ReadPacket/ReadFrom 定期唤醒以检查 ctx 取消与空闲超时，
+// 本身不代表会话超时。
 const udpIdleTimeout = 5 * time.Second
+
+// defaultUDPIdleSessionTTL 是 UDP 中继的空闲自毁上限。
+//
+// 为什么必须有它：中继的两个方向都只在「真实 socket 错误」或 ctx 取消时
+// 退出。设计上 sing-tun 的 NAT 表负责回收空闲会话（关闭 udpNatConn 使
+// ReadPacket 返回 io.ErrClosedPipe，从而唤醒循环）。但实测该回收未生效：
+// core 进程持有 908 个 UDP socket，916s 内 0 个被释放，而 60s 就该回收。
+// 同时 manager.go 传入的是 context.Background()，永不 cancel，
+// 所以「等 ctx 取消」这条出口也不存在 —— 两个出口都没了，goroutine 与
+// 它的本地 socket 就永久滞留。
+//
+// 这里加一个与 NAT 实现无关的空闲看门狗作为兜底：只要两个方向都静默
+// 超过 TTL，就主动退出并让 defer 关闭两个 socket。
+//
+// 取值必须 > sing-tun 的 UDPTimeout（manager.go 设为 60s），否则会在 NAT
+// 仍认为会话存活时抢先拆除。用 atomic 存放是为了让测试可以调小它。
+var udpIdleSessionTTL atomic.Int64
+
+func init() {
+	udpIdleSessionTTL.Store(int64(120 * time.Second))
+}
+
+// udpRelayPeer 是上游 UDP socket 在中继里用到的最小接口。
+// 抽成接口是为了让中继逻辑可被单元测试注入假实现（真实类型是 *net.UDPConn）。
+type udpRelayPeer interface {
+	ReadFrom(b []byte) (int, net.Addr, error)
+	WriteTo(b []byte, addr net.Addr) (int, error)
+	SetReadDeadline(t time.Time) error
+}
+
+// isTimeout 判断错误是否为 deadline 到期（而非真实 socket 故障）。
+func isTimeout(err error) bool {
+	netErr, ok := err.(net.Error)
+	return ok && netErr.Timeout()
+}
+
+// relayUDP 在 conn（客户端侧）与 peer（上游侧）之间双向转发，
+// 并在会话彻底静默超过 udpIdleSessionTTL 后自行退出。
+//
+// 之所以要两个独立方向的 goroutine：QUIC 握手期服务端会连续回多个
+// datagram，串行「一问一答」模型会双向僵死（详见 forwardUDPDirect 的注释）。
+//
+// 退出条件有三个，任一满足即结束：
+//  1. 任一方向出现真实 socket 错误（含 NAT 关闭会话导致的 io.ErrClosedPipe）
+//  2. ctx 被取消
+//  3. 两个方向都静默超过 TTL —— 这是本函数新增的兜底，修复 socket 泄漏
+func (h *Handler) relayUDP(ctx context.Context, conn N.PacketConn, peer udpRelayPeer, destination M.Socksaddr, destUDPAddr net.Addr) {
+	// lastActive 由两个方向共享：任一方向成功收发即刷新，表示会话仍活跃。
+	var lastActive atomic.Int64
+	lastActive.Store(time.Now().UnixNano())
+	touch := func() { lastActive.Store(time.Now().UnixNano()) }
+
+	// expired 在超时分支被调用：判断会话是否已静默超过 TTL。
+	expired := func() bool {
+		ttl := time.Duration(udpIdleSessionTTL.Load())
+		return time.Since(time.Unix(0, lastActive.Load())) >= ttl
+	}
+
+	stopped := make(chan struct{})
+	var stopOnce sync.Once
+	stop := func() { stopOnce.Do(func() { close(stopped) }) }
+
+	var wg sync.WaitGroup
+	wg.Add(2)
+
+	// 方向一：客户端 → 上游
+	go func() {
+		defer wg.Done()
+		defer stop()
+		for {
+			select {
+			case <-stopped:
+				return
+			case <-ctx.Done():
+				return
+			default:
+			}
+
+			_ = conn.SetReadDeadline(time.Now().Add(udpIdleTimeout))
+			packetBuf := buf.NewPacket()
+			_, err := conn.ReadPacket(packetBuf)
+			if err != nil {
+				packetBuf.Release()
+				if isTimeout(err) {
+					if expired() {
+						h.logger.Debug("udp relay: idle beyond ttl, releasing session",
+							"target", destUDPAddr.String())
+						return
+					}
+					continue // 客户端暂时空闲，继续等待
+				}
+				return
+			}
+			touch()
+
+			_, err = peer.WriteTo(packetBuf.Bytes(), destUDPAddr)
+			packetBuf.Release()
+			if err != nil {
+				h.logger.Warn("failed to forward UDP", "error", err)
+				return
+			}
+		}
+	}()
+
+	// 方向二：上游 → 客户端（独立持续读取，QUIC 多包响应不会丢失）
+	go func() {
+		defer wg.Done()
+		defer stop()
+		responseBuf := make([]byte, 65535)
+		for {
+			select {
+			case <-stopped:
+				return
+			case <-ctx.Done():
+				return
+			default:
+			}
+
+			_ = peer.SetReadDeadline(time.Now().Add(udpIdleTimeout))
+			n, _, err := peer.ReadFrom(responseBuf)
+			if err != nil {
+				if isTimeout(err) {
+					if expired() {
+						return
+					}
+					continue // 上游暂时无数据（QUIC 静默期）
+				}
+				return
+			}
+			touch()
+
+			responsePacket := buf.NewPacket()
+			responsePacket.Write(responseBuf[:n])
+			// WritePacket 的 dest 是响应包的源地址（远端服务器），不是目标（应用）
+			// 所有权随 WritePacket 转移，由 gvisor 背压写端负责 Release
+			if err := conn.WritePacket(responsePacket, destination); err != nil {
+				h.logger.Warn("failed to write UDP response", "error", err)
+				return
+			}
+		}
+	}()
+
+	wg.Wait()
+}
 
 // forwardUDPDirect 直接转发 UDP 流量到上游
 // 仅处理非 fake-ip 的真实 IP 目标（如 DoH 自行解析的应用 QUIC 流量）
@@ -805,6 +950,9 @@ const udpIdleTimeout = 5 * time.Second
 func (h *Handler) forwardUDPDirect(ctx context.Context, conn N.PacketConn, source M.Socksaddr, destination M.Socksaddr, onClose N.CloseHandlerFunc) {
 	// fake-ip 目标无法直接转发（是假地址），丢弃让浏览器回退 TCP
 	if h.fakeIP.Contains(destination.Addr) {
+		// 必须关闭 conn：它在 gVisor 侧代表一个已建立的会话，
+		// 不关会让 session 与其缓冲一并滞留（早退路径的 socket 泄漏）。
+		_ = conn.Close()
 		if onClose != nil {
 			onClose(nil)
 		}
@@ -825,6 +973,7 @@ func (h *Handler) forwardUDPDirect(ctx context.Context, conn N.PacketConn, sourc
 	binding, err := netiface.Select(netifaceFamily(wantIPv6), h.interfaceConfig(), h.logf)
 	if err != nil {
 		h.logger.Warn("no physical UDP binding", "error", err)
+		_ = conn.Close() // 同上：早退也要释放会话
 		if onClose != nil {
 			onClose(err)
 		}
@@ -897,83 +1046,8 @@ func (h *Handler) forwardUDPDirect(ctx context.Context, conn N.PacketConn, sourc
 			}
 		}()
 
-		var wg sync.WaitGroup
-		wg.Add(2)
-
-		stopped := make(chan struct{})
-		var stopOnce sync.Once
-		stop := func() {
-			stopOnce.Do(func() { close(stopped) })
-		}
-
-		// 方向一：客户端 → 上游
-		go func() {
-			defer wg.Done()
-			defer stop()
-			for {
-				select {
-				case <-stopped:
-					return
-				case <-ctx.Done():
-					return
-				default:
-				}
-
-				conn.SetReadDeadline(time.Now().Add(udpIdleTimeout))
-				packetBuf := buf.NewPacket()
-				_, err := conn.ReadPacket(packetBuf)
-				if err != nil {
-					packetBuf.Release()
-					if netErr, ok := err.(net.Error); ok && netErr.Timeout() {
-						continue // 客户端暂时空闲，等待会话由 sing-tun NAT 回收
-					}
-					return
-				}
-
-				_, err = remoteConn.WriteTo(packetBuf.Bytes(), destUDPAddr)
-				packetBuf.Release()
-				if err != nil {
-					h.logger.Warn("failed to forward UDP", "error", err)
-					return
-				}
-			}
-		}()
-
-		// 方向二：上游 → 客户端（独立持续读取，QUIC 多包响应不会丢失）
-		go func() {
-			defer wg.Done()
-			defer stop()
-			responseBuf := make([]byte, 65535)
-			for {
-				select {
-				case <-stopped:
-					return
-				case <-ctx.Done():
-					return
-				default:
-				}
-
-				remoteConn.SetReadDeadline(time.Now().Add(udpIdleTimeout))
-				n, _, err := remoteConn.ReadFrom(responseBuf)
-				if err != nil {
-					if netErr, ok := err.(net.Error); ok && netErr.Timeout() {
-						continue // 上游暂时无数据（QUIC 静默期），等待另一方向结束
-					}
-					return
-				}
-
-				responsePacket := buf.NewPacket()
-				responsePacket.Write(responseBuf[:n])
-				// WritePacket 的 dest 是响应包的源地址（远端服务器），不是目标（应用）
-				// 所有权随 WritePacket 转移，由 gvisor 背压写端负责 Release
-				if err := conn.WritePacket(responsePacket, destination); err != nil {
-					h.logger.Warn("failed to write UDP response", "error", err)
-					return
-				}
-			}
-		}()
-
-		wg.Wait()
+		// 双向转发 + 空闲自毁看门狗。实现细节见 relayUDP 的文档注释。
+		h.relayUDP(ctx, conn, remoteConn, destination, destUDPAddr)
 	}()
 }
 
