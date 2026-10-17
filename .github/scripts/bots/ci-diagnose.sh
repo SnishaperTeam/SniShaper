@@ -121,7 +121,12 @@ main() {
     n=$((n + 1))
     _parse_job_name "$job_name"
     log_file="$(mktemp)"
-    if gh_retry gh api "repos/${GH_REPO}/actions/jobs/${job_id}/logs" >"$log_file" 2>/dev/null; then
+    # Job logs are downloaded with the workflow's GITHUB_TOKEN (actions:
+    # read) instead of the bot App token - the App does not carry the
+    # Actions read permission, which made every diagnosis fall back to
+    # "(job log unavailable)".
+    if gh_retry env "GH_TOKEN=${LOG_GH_TOKEN:-${GH_TOKEN}}" \
+      gh api "repos/${GH_REPO}/actions/jobs/${job_id}/logs" >"$log_file" 2>/dev/null; then
       _classify_log "$log_file"
     else
       DIAG_TYPE="Other failure"
