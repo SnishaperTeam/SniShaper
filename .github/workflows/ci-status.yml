@@ -36,12 +36,30 @@ jobs:
           source .github/scripts/bots/common.sh
           pr="$(jq -r '.pull_requests[0].number // empty' <<<"$WORKFLOW_RUN")"
           if [ -z "$pr" ]; then
+            branch="$(jq -r '.head_branch // empty' <<<"$WORKFLOW_RUN")"
+            if [ -n "$branch" ]; then
+              pr="$(gh_retry gh pr list --repo "$GH_REPO" --head "$branch" --state open \
+                --json number --jq '.[0].number // empty' || true)"
+            fi
+          fi
+          if [ -z "$pr" ]; then
             sha="$(jq -r '.head_sha' <<<"$WORKFLOW_RUN")"
             pr="$(gh_retry gh api "repos/${GH_REPO}/commits/${sha}/pulls" --jq '.[0].number // empty' || true)"
           fi
           echo "pr=${pr:-}" >> "$GITHUB_OUTPUT"
           if [ -z "$pr" ]; then
             echo "no pull request associated with this run - nothing to do"
+            exit 0
+          fi
+          # Ignore gate-skipped noise runs: bot label writes re-trigger
+          # pr-ci (labeled events) and such runs finish "success" because
+          # every job is skipped - treating them as CI success corrupts the
+          # state machine. A run only counts when its gate job actually ran.
+          run_id="$(jq -r '.id' <<<"$WORKFLOW_RUN")"
+          gate="$(gh_retry gh api "repos/${GH_REPO}/actions/runs/${run_id}/jobs" \
+            --jq '.jobs[] | select(.name == "gate") | .conclusion')"
+          if [ "$gate" = "skipped" ]; then
+            echo "source run is a gate-skipped noise run - ignoring"
             exit 0
           fi
           # Mirror the pr-ci gate: only proceed when the author is exempt or
