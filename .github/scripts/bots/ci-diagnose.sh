@@ -113,7 +113,7 @@ main() {
   echo "PR: #${PR_NUMBER} • Run: [#${RUN_ID}](${RUN_URL})"
   echo
 
-  local n=0 job_id job_name job_url log_file loc
+  local n=0 job_id job_name job_url log_file err_file loc
   while IFS=$'\t' read -r job_id job_name job_url; do
     if [ -z "$job_id" ]; then
       continue
@@ -121,18 +121,23 @@ main() {
     n=$((n + 1))
     _parse_job_name "$job_name"
     log_file="$(mktemp)"
+    err_file="$(mktemp)"
     # Job logs are downloaded with the workflow's GITHUB_TOKEN (actions:
-    # read) instead of the bot App token - the App does not carry the
-    # Actions read permission, which made every diagnosis fall back to
-    # "(job log unavailable)".
-    if gh_retry env "GH_TOKEN=${LOG_GH_TOKEN:-${GH_TOKEN}}" \
-      gh api "repos/${GH_REPO}/actions/jobs/${job_id}/logs" >"$log_file" 2>/dev/null; then
+    # read) over curl -L: the endpoint 302-redirects to a pre-signed blob
+    # URL, and curl follows it transparently while surfacing HTTP errors.
+    # No custom Accept header: the logs endpoint rejects anything other
+    # than the GitHub default with 415 Unsupported Media Type.
+    api="${GITHUB_API_URL:-https://api.github.com}"
+    if curl -fsSL --retry 3 --retry-delay 2 \
+        -H "Authorization: Bearer ${LOG_GH_TOKEN:-${GH_TOKEN}}" \
+        "$api/repos/${GH_REPO}/actions/jobs/${job_id}/logs" \
+        -o "$log_file" 2>"$err_file"; then
       _classify_log "$log_file"
     else
       DIAG_TYPE="Other failure"
-      DIAG_LINE="(job log unavailable)"
+      DIAG_LINE="(job log download failed: $(head -c 300 "$err_file"))"
     fi
-    rm -f "$log_file"
+    rm -f "$log_file" "$err_file"
     loc="$(_extract_loc "$DIAG_LINE")"
 
     echo "### ${n}. ${job_name}"
