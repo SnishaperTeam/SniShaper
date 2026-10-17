@@ -11,6 +11,8 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -64,17 +66,155 @@ type dnsCacheEntry struct {
 	staleAt   time.Time
 }
 
+// nodeClientIdleTimeout 是复用的 DoH 传输层保留空闲连接的时间。
+const nodeClientIdleTimeout = 90 * time.Second
+
+// maxCachedNodeClients 限制缓存的 DoH 客户端数量：节点配置变化（URL/SNI/IP/证书校验策略）
+// 或 QUIC 节点 ECH 配置热更新时会产生新条目，超限时按最久未使用淘汰并关闭。
+const maxCachedNodeClients = 16
+
+// nodeClient 是一个按节点配置复用的 DoH 客户端及其释放逻辑。
+type nodeClient struct {
+	client   *http.Client
+	closeFn  func()
+	echSig   string // QUIC 客户端构建时固化的 ECH config 指纹
+	lastUsed time.Time
+}
+
 type FailoverResolver struct {
 	proxy    ProxyServer
 	getNodes func() []DNSNode
 	dnsCache sync.Map // domain -> *dnsCacheEntry
 	echCache sync.Map // domain -> []byte (ECH config hot-patched by server retry)
+
+	clientMu    sync.Mutex             // 保护 clients
+	clients     map[string]*nodeClient // node 配置指纹 -> 复用中的 DoH 客户端
+	clientLocks [keyLockShards]sync.Mutex
+}
+
+// keyLockShards 是节点客户端键的分片锁数量。ResolveIPAddrs 会并发发起 A/AAAA 两个查询，
+// 同一节点的两个 goroutine 必须串行完成"查缓存 → 建连 → 入缓存"，否则会各自建一个客户端，
+// 后写入的那个会把前一个正在使用的客户端关闭，导致请求失败。
+const keyLockShards = 32
+
+// nodeClientLock 返回缓存键对应的分片锁（FNV-1a 散列）。
+func (r *FailoverResolver) nodeClientLock(key string) *sync.Mutex {
+	var h uint32 = 2166136261
+	for i := 0; i < len(key); i++ {
+		h ^= uint32(key[i])
+		h *= 16777619
+	}
+	return &r.clientLocks[h%keyLockShards]
 }
 
 func NewFailoverResolver(proxy ProxyServer, getNodes func() []DNSNode) *FailoverResolver {
 	return &FailoverResolver{
 		proxy:    proxy,
 		getNodes: getNodes,
+		clients:  make(map[string]*nodeClient),
+	}
+}
+
+// nodeClientKey 生成客户端缓存键。任何影响底层 transport 行为（拨号地址、SNI、
+// 证书校验策略、传输协议）的字段变化都必须映射到不同的键，否则会复用错误的连接。
+func nodeClientKey(node DNSNode) string {
+	var b strings.Builder
+	b.WriteString(node.URL)
+	b.WriteByte(0)
+	b.WriteString(node.SNI)
+	b.WriteByte(0)
+	b.WriteString(strconv.FormatBool(node.QUIC))
+	b.WriteByte(0)
+	b.WriteString(strconv.FormatBool(node.ECHEnabled))
+	b.WriteByte(0)
+	b.WriteString(node.ECHProfileID)
+	b.WriteByte(0)
+	b.WriteString(node.CertVerify.Mode)
+	b.WriteByte(0)
+	b.WriteString(strconv.FormatBool(node.CertVerify.AllowUnknownAuthority))
+	b.WriteByte(0)
+	b.WriteString(strings.Join(node.CertVerify.Names, ","))
+	b.WriteByte(0)
+	b.WriteString(strings.Join(node.CertVerify.Suffixes, ","))
+	b.WriteByte(0)
+	b.WriteString(strings.Join(node.CertVerify.SPKISHA256, ","))
+	b.WriteByte(0)
+	b.WriteString(strings.Join(node.IPs, ","))
+	return b.String()
+}
+
+// reuseNodeClient 返回可复用的客户端。ECH 指纹不匹配（配置被热补丁更新）时返回 nil，
+// 由调用方重建，避免继续使用固化在 TLS 配置里的旧 ECH。
+func (r *FailoverResolver) reuseNodeClient(key, echSig string) *http.Client {
+	r.clientMu.Lock()
+	defer r.clientMu.Unlock()
+
+	cl, ok := r.clients[key]
+	if !ok || cl.echSig != echSig {
+		return nil
+	}
+	cl.lastUsed = time.Now()
+	return cl.client
+}
+
+// storeNodeClient 记录新建的客户端，并关闭被替换或淘汰的旧客户端。
+// 关闭动作放在锁外执行，QUIC transport 的 Close 会等待连接收尾，不应阻塞其他查询。
+func (r *FailoverResolver) storeNodeClient(key, echSig string, client *http.Client, closeFn func()) {
+	var stale []*nodeClient
+
+	r.clientMu.Lock()
+	if old, ok := r.clients[key]; ok {
+		stale = append(stale, old)
+	}
+	r.clients[key] = &nodeClient{
+		client:   client,
+		closeFn:  closeFn,
+		echSig:   echSig,
+		lastUsed: time.Now(),
+	}
+
+	for len(r.clients) > maxCachedNodeClients {
+		oldestKey := ""
+		var oldest time.Time
+		for k, v := range r.clients {
+			if oldestKey == "" || v.lastUsed.Before(oldest) {
+				oldestKey, oldest = k, v.lastUsed
+			}
+		}
+		if oldestKey == "" {
+			break
+		}
+		stale = append(stale, r.clients[oldestKey])
+		delete(r.clients, oldestKey)
+	}
+	r.clientMu.Unlock()
+
+	for _, s := range stale {
+		s.closeFn()
+	}
+}
+
+// Close 释放所有缓存的 DoH 客户端：关闭 QUIC 连接、其底层 UDP socket 以及 TCP 空闲连接。
+// 停止代理或切换 TUN 模式（出站绑定网卡变化）后必须调用，否则连接与 goroutine 会泄漏。
+func (r *FailoverResolver) Close() {
+	var stale []*nodeClient
+
+	// 逐分片加锁，避免与正在建连接的 getNodeClient 交错（否则 Close 之后又塞入新客户端）。
+	for i := range r.clientLocks {
+		r.clientLocks[i].Lock()
+	}
+	r.clientMu.Lock()
+	for k, v := range r.clients {
+		stale = append(stale, v)
+		delete(r.clients, k)
+	}
+	r.clientMu.Unlock()
+	for i := len(r.clientLocks) - 1; i >= 0; i-- {
+		r.clientLocks[i].Unlock()
+	}
+
+	for _, s := range stale {
+		s.closeFn()
 	}
 }
 
@@ -93,9 +233,30 @@ func (r *FailoverResolver) getNodeClient(ctx context.Context, node DNSNode) (*ht
 		ECHAutoUpdate: node.ECHAutoUpdate,
 	}
 
+	// QUIC 客户端的 TLS 配置在构建时固化 ECH config，配置被热补丁更新后必须重建客户端，
+	// 因此把 ECH 指纹并入缓存判定。TCP 路径每次握手都会重新解析 ECH，无需参与判定。
+	var quicECH []byte
+	if node.QUIC && node.ECHEnabled {
+		quicECH = r.proxy.ResolveRuleECHConfig(host, rule)
+	}
+	echSig := string(quicECH)
+
+	clientKey := nodeClientKey(node)
+
+	// 同一节点的并发查询（A/AAAA 双查询、故障转移并发）串行化：
+	// 先查缓存，未命中才建连并入缓存，避免重复建连与互相关闭。
+	keyLock := r.nodeClientLock(clientKey)
+	keyLock.Lock()
+	defer keyLock.Unlock()
+
+	if c := r.reuseNodeClient(clientKey, echSig); c != nil {
+		return c, nil
+	}
+
 	// QUIC/HTTP3 path
 	if node.QUIC {
-		echBytes := r.proxy.ResolveRuleECHConfig(host, rule)
+		// 与 echSig 同一次解析结果，避免重复查询 ECH 配置。
+		echBytes := quicECH
 		tlsConfig := &tls.Config{
 			ServerName:         host,
 			NextProtos:         []string{"h3", "h3-29", "h3-32"},
@@ -159,18 +320,29 @@ func (r *FailoverResolver) getNodeClient(ctx context.Context, node DNSNode) (*ht
 					}
 					conn, err := quic.Dial(ctx, udpConn, remote, tlsCfg, cfg)
 					if err == nil {
+						// quic.Dial 不会关闭调用方传入的 PacketConn（createdPacketConn=false），
+						// 该 socket 只服务于这一个 QUIC 连接，因此连接结束时必须显式关闭，
+						// 否则每个成功的 QUIC 拨号都会泄漏一个 UDP socket。
+						go func(c *net.UDPConn, qc *quic.Conn) {
+							<-qc.Context().Done()
+							_ = c.Close()
+						}(udpConn, conn)
 						return conn, nil
 					}
-					pc.Close()
+					_ = udpConn.Close()
 				}
 				return nil, fmt.Errorf("all QUIC dial failed for %s", host)
 			},
 		}
 
-		return &http.Client{
+		client := &http.Client{
 			Transport: tr,
 			Timeout:   10 * time.Second,
-		}, nil
+		}
+		// tr.Close 关闭池中所有 QUIC 连接，连接关闭后上面的协程会一并关掉各自的 UDP socket。
+		// 客户端被替换或淘汰时由 storeNodeClient 调用，避免 transport 与 socket 泄漏。
+		r.storeNodeClient(clientKey, echSig, client, func() { _ = tr.Close() })
+		return client, nil
 	}
 
 	// TCP/TLS path (default)
@@ -226,9 +398,13 @@ func (r *FailoverResolver) getNodeClient(ctx context.Context, node DNSNode) (*ht
 			return uconn, nil
 		},
 		ResponseHeaderTimeout: 5 * time.Second,
+		// 复用同一节点时保留空闲连接，避免每次查询都重建 TCP+TLS（含 uTLS 握手）。
+		IdleConnTimeout: nodeClientIdleTimeout,
 	}
 
-	return &http.Client{Transport: tr, Timeout: 10 * time.Second}, nil
+	client := &http.Client{Transport: tr, Timeout: 10 * time.Second}
+	r.storeNodeClient(clientKey, echSig, client, func() { tr.CloseIdleConnections() })
+	return client, nil
 }
 
 func (r *FailoverResolver) exchangeNode(ctx context.Context, node *DNSNode, msg *dns.Msg) (*dns.Msg, error) {

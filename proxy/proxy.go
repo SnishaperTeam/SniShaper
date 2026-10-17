@@ -386,7 +386,14 @@ func (p *ProxyServer) SetTUNMode(enabled bool) {
 	p.mu.Lock()
 	p.tunMode = enabled
 	p.ifaceConfig = cfg
+	resolver := p.dohResolver
 	p.mu.Unlock()
+
+	// 出站网卡绑定发生变化：丢弃已缓存的 DoH 客户端，让后续查询按新绑定重建
+	// （QUIC socket 的绑定在拨号时固化，复用会继续走旧网卡）。
+	if resolver != nil {
+		resolver.Close()
+	}
 }
 
 func (p *ProxyServer) outboundInterfaceConfig() netiface.Config {
@@ -815,7 +822,14 @@ func (p *ProxyServer) Stop() error {
 	p.httpChanLn = nil
 	p.socks5ChanLn = nil
 	p.Server = nil
+	resolver := p.dohResolver
 	p.mu.Unlock()
+
+	// 释放复用的 DoH 客户端：QUIC transport、底层 UDP socket 与空闲 TCP 连接。
+	// 不释放会在反复 Start/Stop 时持续泄漏连接与 goroutine。
+	if resolver != nil {
+		resolver.Close()
+	}
 
 	if mainLn != nil {
 		_ = mainLn.Close()

@@ -200,7 +200,8 @@
         "greasyfork.org",
         "sourceforge.net",
         "kotaku.com",
-        "polymarket.com"
+        "polymarket.com",
+        "anthropic.com"
       ],
       "ech_enabled": true,
       "ech_profile_id": "legacy-cloudflare",
@@ -429,32 +430,9 @@
       "nat64_enabled": false
     },
     {
-      "id": "sg-1771319670672-26",
-      "name": "codeload.github.com",
-      "mode": "mitm",
-      "sni_fake": "codeload-github-com.mapped",
-      "domains": [
-        "codeload.github.com"
-      ],
-      "ech_enabled": false,
-      "use_cf_pool": false,
-      "cert_verify": {
-        "mode": "allow_names",
-        "names": [
-          "*.github.com",
-          "github.com"
-        ]
-      },
-      "website": "github",
-      "enabled": true,
-      "upstream": "20.205.243.165:443,20.27.177.114:443,20.200.245.246:443",
-      "nat64_enabled": false
-    },
-    {
       "id": "sg-1771319670672-27",
       "name": "community.github.com",
-      "mode": "mitm",
-      "sni_fake": "community-github-com.mapped",
+      "mode": "tls-rf",
       "domains": [
         "community.github.com",
         "copilot.github.com",
@@ -473,8 +451,16 @@
       },
       "website": "github",
       "enabled": true,
-      "upstream": "140.82.112.17:443,140.82.113.17:443,140.82.114.17:443,140.82.112.18:443,140.82.113.18:443,140.82.114.18:443",
-      "nat64_enabled": false
+      "upstream": "106.55.101.131",
+      "nat64_enabled": false,
+      "frag": {
+        "num_records": 1,
+        "num_segments": 4,
+        "interval_ms": 50,
+        "mod_minor_ver": false,
+        "oob": false,
+        "oob_ex": false
+      }
     },
     {
       "id": "sg-1771319670672-30",
@@ -552,7 +538,16 @@
       },
       "website": "github",
       "enabled": true,
-      "nat64_enabled": false
+      "upstream": "106.55.101.131",
+      "nat64_enabled": false,
+      "frag": {
+        "num_records": 1,
+        "num_segments": 4,
+        "interval_ms": 50,
+        "mod_minor_ver": false,
+        "oob": false,
+        "oob_ex": false
+      }
     },
     {
       "id": "sg-1771319670672-33",
@@ -809,7 +804,7 @@
     {
       "id": "sg-1771319670672-52",
       "name": "github.com",
-      "mode": "mitm",
+      "mode": "tls-rf",
       "sni_fake": "gist-github-com.mapped",
       "domains": [
         "gist.github.com",
@@ -826,8 +821,16 @@
       },
       "website": "github",
       "enabled": true,
-      "upstream": "20.27.177.113,20.205.243.166,20.27.177.113,20.200.245.247",
-      "nat64_enabled": false
+      "upstream": "20.27.177.113",
+      "nat64_enabled": false,
+      "frag": {
+        "num_records": 1,
+        "num_segments": 2,
+        "interval_ms": 50,
+        "mod_minor_ver": false,
+        "oob": false,
+        "oob_ex": false
+      }
     },
     {
       "id": "sg-1771319670672-53",
@@ -1876,7 +1879,7 @@
     {
       "id": "sg-manual-uploads-github",
       "name": "uploads.github.com",
-      "mode": "mitm",
+      "mode": "tls-rf",
       "sni_fake": "uploads-github-com.mapped",
       "domains": [
         "uploads.github.com"
@@ -1893,7 +1896,15 @@
       "website": "github",
       "enabled": true,
       "upstream": "20.207.73.81:443",
-      "nat64_enabled": false
+      "nat64_enabled": false,
+      "frag": {
+        "num_records": 1,
+        "num_segments": 2,
+        "interval_ms": 50,
+        "mod_minor_ver": false,
+        "oob": false,
+        "oob_ex": false
+      }
     },
     {
       "id": "sg-manual-alive-github",
@@ -2701,8 +2712,7 @@
     {
       "id": "1777949160486082000",
       "name": "vercel",
-      "mode": "mitm",
-      "sni_fake": "nextjs.org",
+      "mode": "tls-rf",
       "domains": [
         "lumalabs.ai",
         "vercel.app"
@@ -2710,15 +2720,20 @@
       "ech_enabled": false,
       "use_cf_pool": false,
       "cert_verify": {
-        "mode": "allow_names",
-        "names": [
-          "nextjs.org"
-        ]
+        "mode": "strict_real"
       },
       "website": "vercel",
       "enabled": true,
       "upstream": "64.29.17.1",
-      "nat64_enabled": false
+      "nat64_enabled": false,
+      "frag": {
+        "num_records": 1,
+        "num_segments": 4,
+        "interval_ms": 50,
+        "mod_minor_ver": true,
+        "oob": false,
+        "oob_ex": false
+      }
     },
     {
       "id": "1777970965696331600",
@@ -3070,15 +3085,25 @@
         "camo.githubusercontent.com",
         "release-assets.githubusercontent.com",
         "objects.githubusercontent.com",
-        "marketplace-screenshots.githubusercontent.com"
+        "marketplace-screenshots.githubusercontent.com",
+        "raw.githubusercontent.com",
+        "codeload.github.com"
       ],
       "ech_enabled": false,
       "use_cf_pool": false,
       "cert_verify": {},
       "website": "github",
       "enabled": true,
-      "upstream": "13.143.65.4",
-      "nat64_enabled": false
+      "upstream": "106.55.101.131",
+      "nat64_enabled": false,
+      "frag": {
+        "num_records": 1,
+        "num_segments": 4,
+        "interval_ms": 50,
+        "mod_minor_ver": false,
+        "oob": false,
+        "oob_ex": false
+      }
     },
     {
       "id": "1778740245266254000",
@@ -3108,26 +3133,6 @@
       "website": "github",
       "enabled": true,
       "upstream": "185.199.110.105,185.199.110.215,185.199.110.154",
-      "nat64_enabled": false
-    },
-    {
-      "id": "1778915834873728400",
-      "name": "raw",
-      "mode": "tls-rf",
-      "domains": [
-        "raw.githubusercontent.com"
-      ],
-      "ech_enabled": false,
-      "use_cf_pool": false,
-      "cert_verify": {
-        "mode": "strict_real",
-        "names": [
-          "*.cartrawler.com"
-        ]
-      },
-      "website": "github",
-      "enabled": true,
-      "upstream": "151.101.192.133",
       "nat64_enabled": false
     },
     {
@@ -4009,20 +4014,6 @@
       "nat64_enabled": false
     },
     {
-      "id": "sg-anthropic",
-      "name": "Anthropic",
-      "mode": "tls-rf",
-      "domains": [
-        "anthropic.com"
-      ],
-      "ech_enabled": false,
-      "use_cf_pool": false,
-      "cert_verify": {},
-      "website": "anthropic",
-      "enabled": true,
-      "nat64_enabled": false
-    },
-    {
       "id": "sg-linkedin",
       "name": "LinkedIn",
       "mode": "tls-rf",
@@ -4086,12 +4077,12 @@
         "notion.so",
         "notion.com"
       ],
-      "upstream": "208.103.161.17",
       "ech_enabled": false,
       "use_cf_pool": false,
       "cert_verify": {},
       "website": "notion",
       "enabled": true,
+      "upstream": "208.103.161.17",
       "nat64_enabled": false
     },
     {
@@ -4275,7 +4266,7 @@
     {
       "id": "legacy-cloudflare",
       "name": "Cloudflare",
-      "config": "AEX+DQBB6AAgACB8SigCx1P7j8Uu+cLjjDxwxzFGP8rmDVQ8BRGPwPivAgAEAAEAAQASY2xvdWRmbGFyZS1lY2guY29tAAA=",
+      "config": "AEX+DQBBgAAgACDn7j7vE3GnAowO7gdtH0y8/IFSiMYXEim4HJ1Qpev4GQAEAAEAAQASY2xvdWRmbGFyZS1lY2guY29tAAA=",
       "discovery_domain": "crypto.cloudflare.com",
       "doh_upstream": "https://xwfpeb16ii.cloudflare-gateway.com/dns-query",
       "auto_update": true
