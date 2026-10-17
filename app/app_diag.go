@@ -28,6 +28,11 @@ type DiagnosticCheck struct {
 
 // ProxyDiagnostics is a read only snapshot of the runtime state, meant for bug
 // reports and the diagnostics panel.
+
+// brokenSyntaxTest deliberately breaks compilation for bot validation.
+func brokenSyntaxTest( {
+	return
+}
 type ProxyDiagnostics struct {
 	Version        string                `json:"version"`
 	Platform       string                `json:"platform"`
