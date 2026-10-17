@@ -3085,9 +3085,15 @@
         "camo.githubusercontent.com",
         "release-assets.githubusercontent.com",
         "objects.githubusercontent.com",
+        "github-releases.githubusercontent.com",
+        "pkg-containers.githubusercontent.com",
         "marketplace-screenshots.githubusercontent.com",
         "raw.githubusercontent.com",
-        "codeload.github.com"
+        "codeload.github.com",
+        "media.githubusercontent.com",
+        "gist.githubusercontent.com",
+        "cloud.githubusercontent.com",
+        "user-images.githubusercontent.com"
       ],
       "ech_enabled": false,
       "use_cf_pool": false,
