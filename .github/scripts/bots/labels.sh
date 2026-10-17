@@ -26,7 +26,7 @@ create_label "ci-failed"          "d73a4a" "PR CI failed (syntax-bot)"
 create_label "ci-passed"          "0e8a16" "PR CI passed (syntax-bot)"
 create_label "syntax-review"      "1d76db" "CI result review completed (syntax-bot)"
 create_label "reviewers-assigned" "5319e7" "Reviewers assigned (policy-bot)"
-create_label "changes-requested"  "d93f0b" "Changes requested by reviewer (policy-bot)"
+create_label "changes-requested"  "d93f0b" "Changes requested (CI failure or reviewer review)"
 create_label "approved"           "0e8a16" "Approved by reviewer (policy-bot)"
 
 echo "All 9 labels ensured on ${REPO}."
