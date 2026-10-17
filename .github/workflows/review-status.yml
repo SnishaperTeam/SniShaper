@@ -1,0 +1,47 @@
+name: review-status
+
+# Human review-state labels driven by the SniShaper Policy Bot App identity.
+#   pull_request_review[submitted]:
+#     CHANGES_REQUESTED -> changes-requested label
+#     APPROVED          -> approved label
+# pull_request_review always runs against the default branch, so the App
+# secrets never reach fork PR code.
+on:
+  pull_request_review:
+    types: [submitted]
+
+permissions:
+  contents: read
+
+jobs:
+  label:
+    name: Apply review-state label (policy-bot)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/create-github-app-token@v3
+        id: policy_token
+        with:
+          app-id: ${{ secrets.POLICY_BOT_APP_ID }}
+          private-key: ${{ secrets.POLICY_BOT_PRIVATE_KEY }}
+
+      - name: Map review state to label
+        env:
+          GH_TOKEN: ${{ steps.policy_token.outputs.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          STATE: ${{ github.event.review.state }}
+        run: |
+          set -euo pipefail
+          source .github/scripts/bots/common.sh
+          case "$STATE" in
+            CHANGES_REQUESTED)
+              sync_labels "$PR_NUMBER" "changes-requested" ""
+              ;;
+            APPROVED)
+              sync_labels "$PR_NUMBER" "approved" ""
+              ;;
+            *)
+              echo "review state '$STATE' does not change labels"
+              ;;
+          esac

@@ -1,0 +1,127 @@
+name: cla
+
+# Contributor-agreement gate driven by the SniShaper Policy Bot App identity.
+#   pull_request[opened]   -> exemption check -> sign-guidance comment
+#                             (anchor upsert) + cla-pending label
+#   issue_comment[created] -> PR comments only, non-exempt commenter,
+#                             /agree/i detection (idempotent) ->
+#                             cla-signed label + anchored confirmation reply
+on:
+  pull_request:
+    types: [opened]
+  issue_comment:
+    types: [created]
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  guidance:
+    name: Sign-guidance comment (policy-bot)
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Check exemption and already-signed state
+        id: check
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          AUTHOR: ${{ github.event.pull_request.user.login }}
+        run: |
+          set -euo pipefail
+          source .github/scripts/bots/common.sh
+          skip=false
+          if is_exempt "$AUTHOR"; then
+            echo "author is exempt from the CLA gate"
+            skip=true
+          fi
+          labels="$(gh_retry gh api "repos/${GH_REPO}/issues/${PR_NUMBER}/labels" --jq '.[].name')"
+          if grep -qx 'cla-signed' <<<"$labels"; then
+            echo "PR already carries cla-signed - nothing to do"
+            skip=true
+          fi
+          echo "skip=$skip" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/create-github-app-token@v3
+        if: steps.check.outputs.skip != 'true'
+        id: policy_token
+        with:
+          app-id: ${{ secrets.POLICY_BOT_APP_ID }}
+          private-key: ${{ secrets.POLICY_BOT_PRIVATE_KEY }}
+
+      - name: Publish sign-guidance comment and add cla-pending
+        if: steps.check.outputs.skip != 'true'
+        env:
+          GH_TOKEN: ${{ steps.policy_token.outputs.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          set -euo pipefail
+          source .github/scripts/bots/common.sh
+          body="<!-- snishaper-bot:cla-guidance -->
+          ## 📝 Contributor agreement required
+
+          Thank you for opening this pull request! Before CI can run, please sign the SniShaper contributor agreement.
+
+          Reply to this pull request with a comment containing the word **agree** (e.g. \"I agree\") to confirm that you have read and accept:
+
+          - [\`docs/CODE_OF_CONDUCT.md\`](https://github.com/${GH_REPO}/blob/main/docs/CODE_OF_CONDUCT.md) — code of conduct
+          - [\`docs/COLLABORATOR_AGREEMENT.md\`](https://github.com/${GH_REPO}/blob/main/docs/COLLABORATOR_AGREEMENT.md) — contributor agreement
+
+          Once you reply, the \`cla-signed\` label is applied and CI starts automatically."
+          bot_comment "$PR_NUMBER" "snishaper-bot:cla-guidance" "$body"
+          sync_labels "$PR_NUMBER" "cla-pending" ""
+
+  agreement:
+    name: Agreement detection (policy-bot)
+    if: github.event_name == 'issue_comment' && github.event.issue.pull_request
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Filter comment and short-circuit already-signed PRs
+        id: check
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.issue.number }}
+          COMMENTER: ${{ github.event.comment.user.login }}
+          AUTHOR: ${{ github.event.issue.user.login }}
+          BODY: ${{ github.event.comment.body }}
+        run: |
+          set -euo pipefail
+          source .github/scripts/bots/common.sh
+          ok=false
+          if is_exempt "$COMMENTER"; then
+            echo "commenter is exempt - ignoring"
+          elif [ "$COMMENTER" != "$AUTHOR" ]; then
+            echo "commenter is not the PR author - ignoring"
+          elif ! grep -qi 'agree' <<<"$BODY"; then
+            echo "comment does not contain 'agree' - ignoring"
+          elif grep -qx 'cla-signed' <<<"$(gh_retry gh api "repos/${GH_REPO}/issues/${PR_NUMBER}/labels" --jq '.[].name')"; then
+            echo "PR already signed - short-circuit"
+          else
+            ok=true
+          fi
+          echo "ok=$ok" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/create-github-app-token@v3
+        if: steps.check.outputs.ok == 'true'
+        id: policy_token
+        with:
+          app-id: ${{ secrets.POLICY_BOT_APP_ID }}
+          private-key: ${{ secrets.POLICY_BOT_PRIVATE_KEY }}
+
+      - name: Record signature and reply confirmation
+        if: steps.check.outputs.ok == 'true'
+        env:
+          GH_TOKEN: ${{ steps.policy_token.outputs.token }}
+          PR_NUMBER: ${{ github.event.issue.number }}
+        run: |
+          set -euo pipefail
+          source .github/scripts/bots/common.sh
+          sync_labels "$PR_NUMBER" "cla-signed" "cla-pending"
+          body="<!-- snishaper-bot:cla-confirmation -->
+          ✅ Contributor agreement signed — thank you! The \`cla-signed\` label has been applied and CI will start automatically."
+          bot_comment "$PR_NUMBER" "snishaper-bot:cla-confirmation" "$body"
