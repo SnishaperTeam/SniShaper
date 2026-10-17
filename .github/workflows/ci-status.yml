@@ -1,13 +1,11 @@
 name: ci-status
 
-# CI state machine driven by the SniShaper Syntax Review Bot App identity,
-# with the final reviewer-assignment step performed as Policy Bot.
+# CI state machine driven by the SniShaper Syntax Review Bot App identity.
 #   workflow_run[pr-ci](completed):
-#     failure   -> five-element diagnosis comment (anchor upsert) + ci-failed
-#     success   -> ci-passed + syntax-review, then (policy-bot token)
-#                  idempotent reviewer requests (Snishaper, dongle-china,
-#                  skipping the PR author - GitHub forbids author reviews)
-#                  + reviewers-assigned
+#     failure -> five-element diagnosis comment (anchor upsert)
+#                + ci-failed + changes-requested
+#     success -> ci-passed + syntax-review, then STOP
+# Reviewer assignment happens at agreement-signing time in cla.yml, not here.
 # The ci-running label is added by pr-ci's mark-running job when the gate
 # passes, and cleared automatically by the ci-failed/ci-passed
 # mutual-exclusion group on completion.
@@ -84,7 +82,10 @@ jobs:
           body="<!-- snishaper-bot:ci-diagnostic -->
           $(.github/scripts/bots/ci-diagnose.sh "$PR_NUMBER" "$RUN_ID")"
           bot_comment "$PR_NUMBER" "snishaper-bot:ci-diagnostic" "$body"
-          sync_labels "$PR_NUMBER" "ci-failed" ""
+          # CI failure is itself a bot review verdict: mark the PR as
+          # changes-requested so the state machine reaches its terminal
+          # state without waiting for a human review.
+          sync_labels "$PR_NUMBER" "ci-failed,changes-requested" ""
 
       - name: Mark CI as passed and complete syntax review
         if: >-
@@ -99,58 +100,3 @@ jobs:
           set -euo pipefail
           source .github/scripts/bots/common.sh
           sync_labels "$PR_NUMBER" "ci-passed,syntax-review" ""
-
-      - uses: actions/create-github-app-token@v3
-        if: >-
-          github.event.action == 'completed' &&
-          github.event.workflow_run.conclusion == 'success' &&
-          steps.ctx.outputs.pr != '' &&
-          steps.ctx.outputs.proceed == 'true'
-        id: policy_token
-        with:
-          app-id: ${{ secrets.POLICY_BOT_APP_ID }}
-          private-key: ${{ secrets.POLICY_BOT_PRIVATE_KEY }}
-
-      - name: Assign reviewers (policy-bot, idempotent)
-        if: >-
-          github.event.action == 'completed' &&
-          github.event.workflow_run.conclusion == 'success' &&
-          steps.ctx.outputs.pr != '' &&
-          steps.ctx.outputs.proceed == 'true'
-        env:
-          GH_TOKEN: ${{ steps.policy_token.outputs.token }}
-          PR_NUMBER: ${{ steps.ctx.outputs.pr }}
-        run: |
-          set -euo pipefail
-          source .github/scripts/bots/common.sh
-          # Read existing requested reviewers and the PR author first;
-          # only request the missing, non-author reviewers so repeated
-          # triggers never duplicate requests. GitHub rejects author
-          # review requests with 422, so the author is skipped explicitly.
-          author="$(gh_retry gh api "repos/${GH_REPO}/pulls/${PR_NUMBER}" \
-            --jq '.user.login')"
-          current="$(gh_retry gh api "repos/${GH_REPO}/pulls/${PR_NUMBER}" \
-            --jq '[.requested_reviewers[].login] | join(",")')"
-          to_request=""
-          for reviewer in Snishaper dongle-china; do
-            if [ "$reviewer" = "$author" ]; then
-              echo "::notice::skipping reviewer ${reviewer}: the PR author cannot review their own PR"
-              continue
-            fi
-            case ",${current}," in
-              *",${reviewer},"*) ;;
-              *) to_request="${to_request:+${to_request},}${reviewer}" ;;
-            esac
-          done
-          if [ -n "$to_request" ]; then
-            # Direct API call: gh pr edit silently swallows invalid
-            # reviewer errors (exit 0), the API surfaces them.
-            args=()
-            for r in ${to_request//,/ }; do
-              args+=(-f "reviewers[]=${r}")
-            done
-            gh_retry gh api -X POST \
-              "repos/${GH_REPO}/pulls/${PR_NUMBER}/requested_reviewers" \
-              "${args[@]}" >/dev/null
-          fi
-          sync_labels "$PR_NUMBER" "reviewers-assigned" ""

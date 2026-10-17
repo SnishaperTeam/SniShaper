@@ -58,9 +58,11 @@ gh_retry() {
 # Delta sync of the PR state labels: adds only labels missing on the issue,
 # removes only labels that are present. Adding a label from a
 # mutual-exclusion group also removes the group's stale siblings
-# ({cla-pending, cla-signed} and {ci-running, ci-failed, ci-passed}); a new
-# CI round (adding ci-running) also clears syntax-review. Callers still pass
-# explicit removals, so repeated events converge without label flicker.
+# ({cla-pending, cla-signed}, {ci-running, ci-failed, ci-passed} and
+# {changes-requested, approved}); a new CI round (adding ci-running) also
+# clears syntax-review, changes-requested and approved (new commits
+# invalidate the previous review state). Callers still pass explicit
+# removals, so repeated events converge without label flicker.
 # ---------------------------------------------------------------------------
 _label_group_peers() {
   case "$1" in
@@ -69,6 +71,9 @@ _label_group_peers() {
       ;;
     ci-running | ci-failed | ci-passed)
       echo "ci-running ci-failed ci-passed"
+      ;;
+    changes-requested | approved)
+      echo "changes-requested approved"
       ;;
     *)
       echo ""
@@ -101,7 +106,7 @@ sync_labels() {
         fi
       done
       if [ "$label" = "ci-running" ]; then
-        rems+=("syntax-review")
+        rems+=("syntax-review" "changes-requested" "approved")
       fi
     fi
   done

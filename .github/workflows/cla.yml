@@ -125,3 +125,45 @@ jobs:
           body="<!-- snishaper-bot:cla-confirmation -->
           ✅ Contributor agreement signed — thank you! The \`cla-signed\` label has been applied and CI will start automatically."
           bot_comment "$PR_NUMBER" "snishaper-bot:cla-confirmation" "$body"
+
+      - name: Assign reviewers (policy-bot, idempotent)
+        if: steps.check.outputs.ok == 'true'
+        env:
+          GH_TOKEN: ${{ steps.policy_token.outputs.token }}
+          PR_NUMBER: ${{ github.event.issue.number }}
+        run: |
+          set -euo pipefail
+          source .github/scripts/bots/common.sh
+          # Reviewers are assigned as soon as the agreement is signed, so
+          # they can follow the PR from the start. Read the existing
+          # requested reviewers and the PR author first; only request the
+          # missing, non-author reviewers so repeated triggers never
+          # duplicate requests. GitHub rejects author review requests
+          # with 422, so the author is skipped explicitly.
+          author="$(gh_retry gh api "repos/${GH_REPO}/pulls/${PR_NUMBER}" \
+            --jq '.user.login')"
+          current="$(gh_retry gh api "repos/${GH_REPO}/pulls/${PR_NUMBER}" \
+            --jq '[.requested_reviewers[].login] | join(",")')"
+          to_request=""
+          for reviewer in Snishaper dongle-china; do
+            if [ "$reviewer" = "$author" ]; then
+              echo "::notice::skipping reviewer ${reviewer}: the PR author cannot review their own PR"
+              continue
+            fi
+            case ",${current}," in
+              *",${reviewer},"*) ;;
+              *) to_request="${to_request:+${to_request},}${reviewer}" ;;
+            esac
+          done
+          if [ -n "$to_request" ]; then
+            # Direct API call: gh pr edit silently swallows invalid
+            # reviewer errors (exit 0), the API surfaces them.
+            args=()
+            for r in ${to_request//,/ }; do
+              args+=(-f "reviewers[]=${r}")
+            done
+            gh_retry gh api -X POST \
+              "repos/${GH_REPO}/pulls/${PR_NUMBER}/requested_reviewers" \
+              "${args[@]}" >/dev/null
+          fi
+          sync_labels "$PR_NUMBER" "reviewers-assigned" ""
