@@ -2,20 +2,21 @@ name: ci-status
 
 # CI state machine driven by the SniShaper Syntax Review Bot App identity,
 # with the final reviewer-assignment step performed as Policy Bot.
-#   workflow_run[pr-ci](requested) -> ci-running label
 #   workflow_run[pr-ci](completed):
-#     failure             -> five-element diagnosis comment (anchor upsert)
-#                            + ci-failed
-#     success             -> ci-passed + syntax-review, then (policy-bot
-#                            token) idempotent reviewer requests
-#                            (Snishaper, dongle-china) + reviewers-assigned
-#     cancelled/skipped   -> clear ci-running
+#     failure   -> five-element diagnosis comment (anchor upsert) + ci-failed
+#     success   -> ci-passed + syntax-review, then (policy-bot token)
+#                  idempotent reviewer requests (Snishaper, dongle-china,
+#                  skipping the PR author - GitHub forbids author reviews)
+#                  + reviewers-assigned
+# The ci-running label is added by pr-ci's mark-running job when the gate
+# passes, and cleared automatically by the ci-failed/ci-passed
+# mutual-exclusion group on completion.
 # workflow_run always runs against the default branch, so the App secrets
 # never reach fork PR code.
 on:
   workflow_run:
     workflows: [pr-ci]
-    types: [requested, completed]
+    types: [completed]
 
 permissions:
   contents: read
@@ -66,21 +67,6 @@ jobs:
         with:
           app-id: ${{ secrets.SYNTAX_BOT_APP_ID }}
           private-key: ${{ secrets.SYNTAX_BOT_PRIVATE_KEY }}
-
-      - name: Mark CI as running
-        if: >-
-          github.event.action == 'requested' &&
-          steps.ctx.outputs.pr != '' &&
-          steps.ctx.outputs.proceed == 'true'
-        env:
-          GH_TOKEN: ${{ steps.syntax_token.outputs.token }}
-          PR_NUMBER: ${{ steps.ctx.outputs.pr }}
-        run: |
-          set -euo pipefail
-          source .github/scripts/bots/common.sh
-          # sync_labels clears ci-failed/ci-passed (mutual-exclusion group)
-          # and syntax-review (reset on new CI round) automatically.
-          sync_labels "$PR_NUMBER" "ci-running" ""
 
       - name: Diagnose CI failure
         if: >-
@@ -137,32 +123,34 @@ jobs:
         run: |
           set -euo pipefail
           source .github/scripts/bots/common.sh
-          # Read existing requested reviewers first; only request the
-          # missing ones so repeated triggers never duplicate requests.
+          # Read existing requested reviewers and the PR author first;
+          # only request the missing, non-author reviewers so repeated
+          # triggers never duplicate requests. GitHub rejects author
+          # review requests with 422, so the author is skipped explicitly.
+          author="$(gh_retry gh api "repos/${GH_REPO}/pulls/${PR_NUMBER}" \
+            --jq '.user.login')"
           current="$(gh_retry gh api "repos/${GH_REPO}/pulls/${PR_NUMBER}" \
             --jq '[.requested_reviewers[].login] | join(",")')"
           to_request=""
           for reviewer in Snishaper dongle-china; do
+            if [ "$reviewer" = "$author" ]; then
+              echo "::notice::skipping reviewer ${reviewer}: the PR author cannot review their own PR"
+              continue
+            fi
             case ",${current}," in
               *",${reviewer},"*) ;;
               *) to_request="${to_request:+${to_request},}${reviewer}" ;;
             esac
           done
           if [ -n "$to_request" ]; then
-            gh_retry gh pr edit "$PR_NUMBER" --repo "$GH_REPO" --add-reviewer "$to_request"
+            # Direct API call: gh pr edit silently swallows invalid
+            # reviewer errors (exit 0), the API surfaces them.
+            args=()
+            for r in ${to_request//,/ }; do
+              args+=(-f "reviewers[]=${r}")
+            done
+            gh_retry gh api -X POST \
+              "repos/${GH_REPO}/pulls/${PR_NUMBER}/requested_reviewers" \
+              "${args[@]}" >/dev/null
           fi
           sync_labels "$PR_NUMBER" "reviewers-assigned" ""
-
-      - name: Clear ci-running on cancelled or skipped runs
-        if: >-
-          github.event.action == 'completed' &&
-          (github.event.workflow_run.conclusion == 'cancelled' ||
-           github.event.workflow_run.conclusion == 'skipped') &&
-          steps.ctx.outputs.pr != ''
-        env:
-          GH_TOKEN: ${{ steps.syntax_token.outputs.token }}
-          PR_NUMBER: ${{ steps.ctx.outputs.pr }}
-        run: |
-          set -euo pipefail
-          source .github/scripts/bots/common.sh
-          sync_labels "$PR_NUMBER" "" "ci-running"

@@ -29,6 +29,13 @@ env:
 jobs:
   gate:
     name: gate
+    # Re-run the matrix only when the labeled event can change the gate
+    # outcome (cla-signed). Label writes performed by the bots themselves
+    # (ci-running, ci-passed, ...) must not re-trigger the matrix, or the
+    # labeled -> pr-ci -> label-write feedback loop never converges.
+    if: >-
+      github.event.action != 'labeled' ||
+      github.event.label.name == 'cla-signed'
     runs-on: ubuntu-latest
     outputs:
       proceed: ${{ steps.decide.outputs.proceed }}
@@ -53,6 +60,35 @@ jobs:
             proceed=true
           fi
           echo "proceed=$proceed" >> "$GITHUB_OUTPUT"
+
+  # Mark the CI round as running as soon as the gate passes, so the label
+  # reflects a matrix that is actually about to run (a gate-skipped run
+  # never touches labels). Done here instead of ci-status[requested] so a
+  # gate-skipped run cannot flip labels and re-trigger this workflow.
+  mark-running:
+    name: mark CI running
+    needs: gate
+    if: needs.gate.outputs.proceed == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/create-github-app-token@v3
+        id: syntax_token
+        with:
+          app-id: ${{ secrets.SYNTAX_BOT_APP_ID }}
+          private-key: ${{ secrets.SYNTAX_BOT_PRIVATE_KEY }}
+
+      - name: Add ci-running label
+        env:
+          GH_TOKEN: ${{ steps.syntax_token.outputs.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          set -euo pipefail
+          source .github/scripts/bots/common.sh
+          # sync_labels clears ci-failed/ci-passed (mutual-exclusion group)
+          # and syntax-review (reset on new CI round) automatically.
+          sync_labels "$PR_NUMBER" "ci-running" ""
 
   # ------------------------------------------------------------------
   # GUI matrix — one (platform, arch) pair per job, GUI builds only.
