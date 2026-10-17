@@ -383,6 +383,11 @@ jobs:
       always() && !cancelled() &&
       needs.gate.outputs.proceed == 'true'
     runs-on: ubuntu-latest
+    permissions:
+      # GITHUB_TOKEN grants for the diagnostic log download; comment and
+      # label writes go through the syntax-bot App token instead.
+      actions: read
+      contents: read
     steps:
       - uses: actions/checkout@v7
 
@@ -396,6 +401,7 @@ jobs:
         if: needs.ci.result == 'failure'
         env:
           GH_TOKEN: ${{ steps.syntax_token.outputs.token }}
+          LOG_GH_TOKEN: ${{ github.token }}
           PR_NUMBER: ${{ github.event.pull_request.number || github.event.inputs.pr_number }}
           RUN_ID: ${{ github.run_id }}
         run: |
