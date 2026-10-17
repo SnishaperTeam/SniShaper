@@ -1,4 +1,39 @@
+# Line-ending policy
+# ---------------------------------------------------------------------------
+# Line endings used to be inconsistent: most text files were stored with LF,
+# but a handful (Makefile, rules/config.json, several frontend sources) were
+# stored with CRLF. Since core.autocrlf normalizes CRLF to LF on `git add`,
+# merely touching one of those files rewrote every line and buried the real
+# change under thousands of phantom diff lines.
+#
+# Store every text file as LF in the repository, and check it out as LF too.
+# Git still accepts CRLF in the working tree and normalizes it back to LF, so
+# an editor that writes CRLF can no longer produce EOL-only diffs.
+* text=auto eol=lf
+
+# Windows scripts keep CRLF in the working tree (Windows tooling and legacy
+# PowerShell hosts are unreliable with LF-only script files).
+*.ps1 text eol=crlf
+*.bat text eol=crlf
+*.cmd text eol=crlf
+
 # Shell scripts must keep LF line endings: they are executed in WSL, in
 # containers and on CI runners, where a CRLF shebang fails with
 # "env: 'bash\r': No such file or directory".
 *.sh text eol=lf
+
+# Binary assets must never be line-ending converted.
+*.png   binary
+*.jpg   binary
+*.jpeg  binary
+*.gif   binary
+*.ico   binary
+*.woff  binary
+*.woff2 binary
+*.ttf   binary
+*.otf   binary
+*.dll   binary
+*.exe   binary
+*.syso  binary
+*.pfx   binary
+*.msix  binary
