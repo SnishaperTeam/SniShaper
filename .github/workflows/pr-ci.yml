@@ -329,8 +329,37 @@ jobs:
     needs: [gate, matrix-build, cli-build, darwin-cli]
     if: always()
     runs-on: ubuntu-latest
+    permissions:
+      checks: read
+      contents: read
     steps:
+      # Bot label writes re-trigger this workflow (labeled events). In such
+      # a noise run the gate is skipped and every real job is skipped too;
+      # a plain "all skipped -> success" assert would report a bogus green
+      # "ci" check that overwrites the real matrix verdict in the merge box
+      # and misleads ci-status. Instead, mirror the latest concluded "ci"
+      # check run for the same commit SHA (this run's own check is still
+      # pending and therefore filtered out).
+      - name: Mirror real matrix result (noise runs)
+        if: needs.gate.result == 'skipped'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          latest="$(gh api "repos/${GITHUB_REPOSITORY}/commits/${GITHUB_SHA}/check-runs?check_name=ci" \
+            --jq '[.check_runs[] | select(.conclusion != "" and .conclusion != null)] | sort_by(.started_at) | last | .conclusion // "none"')"
+          echo "mirroring ci check conclusion: ${latest}"
+          case "$latest" in
+            failure|timed_out|action_required|cancelled|startup_failure)
+              exit 1
+              ;;
+            *)
+              exit 0
+              ;;
+          esac
+
       - name: Assert matrix outcome
+        if: needs.gate.result != 'skipped'
         env:
           RESULTS: ${{ toJSON(needs) }}
         run: |
