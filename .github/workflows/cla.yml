@@ -21,6 +21,9 @@ jobs:
     name: Sign-guidance comment (policy-bot)
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
     steps:
       - uses: actions/checkout@v7
 
@@ -78,6 +81,12 @@ jobs:
     name: Agreement detection (policy-bot)
     if: github.event_name == 'issue_comment' && github.event.issue.pull_request
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+      # GITHUB_TOKEN may trigger workflow_dispatch (exempt from the
+      # no-retrigger rule) and needs this to dispatch build.yml.
+      actions: write
     steps:
       - uses: actions/checkout@v7
 
@@ -167,3 +176,29 @@ jobs:
               "${args[@]}" >/dev/null
           fi
           sync_labels "$PR_NUMBER" "reviewers-assigned" ""
+
+      - name: Start CI for the signed PR
+        if: steps.check.outputs.ok == 'true'
+        env:
+          # GITHUB_TOKEN may trigger workflow_dispatch (the only event type
+          # exempt from the GITHUB_TOKEN no-retrigger rule) and needs
+          # actions: write, granted on the agreement job below. The App
+          # token's permission set is not guaranteed to include it.
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.issue.number }}
+        run: |
+          set -euo pipefail
+          source .github/scripts/bots/common.sh
+          # The agreement is signed - kick off the build matrix for this
+          # PR via workflow_dispatch (build.yml's pull_request trigger only
+          # fires on opened/synchronize/reopened, so the signing itself
+          # cannot start it).
+          branch="$(gh_retry gh api "repos/${GH_REPO}/pulls/${PR_NUMBER}" --jq '.head.ref')"
+          if gh_retry gh workflow run build.yml --repo "$GH_REPO" --ref "$branch" \
+            -f pr_number="$PR_NUMBER"; then
+            echo "CI dispatched for PR #${PR_NUMBER} on branch ${branch}"
+          else
+            # Fork PRs cannot be dispatched from the base repository; the
+            # next push (or a manual dispatch by a maintainer) starts CI.
+            echo "::warning::could not dispatch build.yml on ${branch} - CI starts on the next push"
+          fi

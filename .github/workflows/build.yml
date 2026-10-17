@@ -1,14 +1,39 @@
 name: build
 
+# Single build workflow for both direct pushes and pull requests
+# (winget-pkgs style: one workflow, no workflow_run chain, bots invoked
+# from inside the build itself).
+#
+#   push(main)                                   -> build only
+#   pull_request(opened/synchronize/reopened)    -> CLA gate + build + bots
+#   workflow_dispatch(pr_number set, called by
+#     cla.yml after the agreement is signed)     -> CLA gate + build + bots
+#   workflow_dispatch(no pr_number, manual)      -> build only
+#
+# Bot label writes never re-trigger this workflow (labeled is not a trigger
+# type), so the labeled -> workflow -> label feedback loop of the previous
+# two-workflow design cannot exist.
 on:
   push:
     branches:
       - main
+  pull_request:
+    types: [opened, synchronize, reopened]
   workflow_dispatch:
+    inputs:
+      pr_number:
+        description: Pull request number (set by cla.yml after signing)
+        required: false
+        type: string
+
+# One build per PR (or per branch); a newer push cancels the stale matrix.
+concurrency:
+  group: build-${{ github.event.pull_request.number || github.event.inputs.pr_number || github.ref }}
+  cancel-in-progress: true
 
 permissions:
   contents: read
-  pull-requests: write
+  pull-requests: read
 
 # GitHub-hosted runners reach the canonical module proxy directly, so CI uses
 # the official source only. The build scripts default to a mirror-first
@@ -18,6 +43,69 @@ env:
   GOPROXY: https://proxy.golang.org,direct
 
 jobs:
+  # ------------------------------------------------------------------
+  # CLA gate — only for pull requests (and post-signing dispatches).
+  # Direct pushes to main and plain manual dispatches skip it entirely.
+  # ------------------------------------------------------------------
+  gate:
+    name: gate
+    if: >-
+      github.event_name == 'pull_request' ||
+      (github.event_name == 'workflow_dispatch' && github.event.inputs.pr_number != '')
+    runs-on: ubuntu-latest
+    outputs:
+      proceed: ${{ steps.decide.outputs.proceed }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Decide CLA gate
+        id: decide
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number || github.event.inputs.pr_number }}
+          AUTHOR: ${{ github.event.pull_request.user.login }}
+        run: |
+          set -euo pipefail
+          source .github/scripts/bots/common.sh
+          proceed=false
+          if [ -n "${AUTHOR:-}" ] && is_exempt "$AUTHOR"; then
+            proceed=true
+          fi
+          labels="$(gh_retry gh api "repos/${GH_REPO}/issues/${PR_NUMBER}/labels" --jq '.[].name')"
+          if grep -qx 'cla-signed' <<<"$labels"; then
+            proceed=true
+          fi
+          echo "proceed=$proceed" >> "$GITHUB_OUTPUT"
+
+  # ------------------------------------------------------------------
+  # Mark the CI round as running as soon as the gate passes.
+  # ------------------------------------------------------------------
+  mark-running:
+    name: mark CI running
+    needs: gate
+    if: needs.gate.outputs.proceed == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/create-github-app-token@v3
+        id: syntax_token
+        with:
+          app-id: ${{ secrets.SYNTAX_BOT_APP_ID }}
+          private-key: ${{ secrets.SYNTAX_BOT_PRIVATE_KEY }}
+
+      - name: Add ci-running label
+        env:
+          GH_TOKEN: ${{ steps.syntax_token.outputs.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number || github.event.inputs.pr_number }}
+        run: |
+          set -euo pipefail
+          source .github/scripts/bots/common.sh
+          # sync_labels clears ci-failed/ci-passed (mutual-exclusion group)
+          # plus syntax-review, changes-requested and approved (new round)
+          # automatically.
+          sync_labels "$PR_NUMBER" "ci-running" ""
+
   # ------------------------------------------------------------------
   # GUI matrix — one (platform, arch) pair per job, GUI builds only.
   # The CLI is pure Go with CGO_ENABLED=0 and is produced by the dedicated
@@ -33,9 +121,18 @@ jobs:
   # Every job also greps its build log for aarch64-linux-gnu / osxcross and
   # fails if a cross toolchain shows up. This workflow is build + smoke only:
   # packaging (MSIX / 7z / tar.gz) happens in the release pipeline.
+  #
+  # Runs unconditionally for direct pushes / manual dispatches; for pull
+  # requests only when the gate passed.
   # ------------------------------------------------------------------
   matrix-build:
     name: GUI ${{ matrix.platform }}/${{ matrix.arch }} on ${{ matrix.runner }}
+    needs: gate
+    if: >-
+      always() && !cancelled() &&
+      (github.event_name == 'push' ||
+       (github.event_name == 'workflow_dispatch' && github.event.inputs.pr_number == '') ||
+       needs.gate.outputs.proceed == 'true')
     runs-on: ${{ matrix.runner }}
 
     strategy:
@@ -147,6 +244,12 @@ jobs:
   # ------------------------------------------------------------------
   cli-build:
     name: CLI (windows + linux, 5 targets)
+    needs: gate
+    if: >-
+      always() && !cancelled() &&
+      (github.event_name == 'push' ||
+       (github.event_name == 'workflow_dispatch' && github.event.inputs.pr_number == '') ||
+       needs.gate.outputs.proceed == 'true')
     runs-on: windows-latest
 
     steps:
@@ -196,6 +299,12 @@ jobs:
   # ------------------------------------------------------------------
   darwin-cli:
     name: CLI ${{ matrix.platform }}/${{ matrix.arch }} on ${{ matrix.runner }}
+    needs: gate
+    if: >-
+      always() && !cancelled() &&
+      (github.event_name == 'push' ||
+       (github.event_name == 'workflow_dispatch' && github.event.inputs.pr_number == '') ||
+       needs.gate.outputs.proceed == 'true')
     runs-on: ${{ matrix.runner }}
 
     strategy:
@@ -239,3 +348,73 @@ jobs:
           if [ -z "$V" ]; then echo "::error::empty CLI version"; exit 1; fi
           "$BIN" help >/dev/null
 
+  # ------------------------------------------------------------------
+  # Stable single-point summary used as the required status check in
+  # branch protection ("ci"). Succeeds when every build job succeeded
+  # or was skipped (gate-skipped PR runs skip the whole matrix); fails on
+  # any real failure so a red build blocks the merge.
+  # ------------------------------------------------------------------
+  ci:
+    name: ci
+    needs: [gate, matrix-build, cli-build, darwin-cli]
+    if: always() && !cancelled()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Assert build outcome
+        env:
+          RESULTS: ${{ toJSON(needs) }}
+        run: |
+          failed="$(jq '[.[] | select(.result != "success" and .result != "skipped")] | length' <<<"$RESULTS")"
+          if [ "$failed" -ne 0 ]; then
+            echo "::error::one or more required CI jobs did not succeed"
+            exit 1
+          fi
+          echo "all required CI jobs succeeded (or were skipped)"
+
+  # ------------------------------------------------------------------
+  # Bots — invoked directly from the build (no separate listener
+  # workflow). Only for pull-request rounds that passed the gate; label
+  # writes never re-trigger this workflow, so there is no feedback loop.
+  # ------------------------------------------------------------------
+  bot-report:
+    name: Report CI result (syntax-bot)
+    needs: [gate, ci]
+    if: >-
+      always() && !cancelled() &&
+      needs.gate.outputs.proceed == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/create-github-app-token@v3
+        id: syntax_token
+        with:
+          app-id: ${{ secrets.SYNTAX_BOT_APP_ID }}
+          private-key: ${{ secrets.SYNTAX_BOT_PRIVATE_KEY }}
+
+      - name: Diagnose failure and mark changes requested
+        if: needs.ci.result == 'failure'
+        env:
+          GH_TOKEN: ${{ steps.syntax_token.outputs.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number || github.event.inputs.pr_number }}
+          RUN_ID: ${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          source .github/scripts/bots/common.sh
+          body="<!-- snishaper-bot:ci-diagnostic -->
+          $(.github/scripts/bots/ci-diagnose.sh "$PR_NUMBER" "$RUN_ID")"
+          bot_comment "$PR_NUMBER" "snishaper-bot:ci-diagnostic" "$body"
+          # CI failure is itself a bot review verdict: mark the PR as
+          # changes-requested so the state machine reaches its terminal
+          # state without waiting for a human review.
+          sync_labels "$PR_NUMBER" "ci-failed,changes-requested" ""
+
+      - name: Mark CI passed and complete syntax review
+        if: needs.ci.result == 'success'
+        env:
+          GH_TOKEN: ${{ steps.syntax_token.outputs.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number || github.event.inputs.pr_number }}
+        run: |
+          set -euo pipefail
+          source .github/scripts/bots/common.sh
+          sync_labels "$PR_NUMBER" "ci-passed,syntax-review" ""
