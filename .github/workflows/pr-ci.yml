@@ -10,9 +10,12 @@ on:
   pull_request:
     types: [opened, synchronize, reopened, labeled]
 
-# One run per PR; a newer push cancels the stale matrix.
+# One run per PR; a newer push cancels the stale matrix. Runs triggered
+# by bot label writes (labeled events other than cla-signed) get a side
+# group: they are gate-skipped no-ops and must never cancel a real,
+# in-progress matrix run sharing the PR number.
 concurrency:
-  group: pr-ci-${{ github.event.pull_request.number }}
+  group: pr-ci-${{ github.event.pull_request.number }}${{ (github.event.action == 'labeled' && github.event.label.name != 'cla-signed') && '-noise' || '' }}
   cancel-in-progress: true
 
 permissions:
@@ -316,3 +319,24 @@ jobs:
           echo "::notice::CLI (${{ matrix.platform }}/${{ matrix.arch }}) version: $V"
           if [ -z "$V" ]; then echo "::error::empty CLI version"; exit 1; fi
           "$BIN" help >/dev/null
+
+  # Stable single-point summary used as the required status check in
+  # branch protection ("ci"). Succeeds when every matrix job succeeded
+  # or was skipped (unsigned PRs skip the whole matrix); fails on any
+  # real failure so a red build blocks the merge.
+  ci:
+    name: ci
+    needs: [gate, matrix-build, cli-build, darwin-cli]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Assert matrix outcome
+        env:
+          RESULTS: ${{ toJSON(needs) }}
+        run: |
+          failed="$(jq '[.[] | select(.result != "success" and .result != "skipped")] | length' <<<"$RESULTS")"
+          if [ "$failed" -ne 0 ]; then
+            echo "::error::one or more required CI jobs did not succeed"
+            exit 1
+          fi
+          echo "all required CI jobs succeeded (or were skipped)"
