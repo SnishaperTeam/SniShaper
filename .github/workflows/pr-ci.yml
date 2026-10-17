@@ -73,7 +73,7 @@ jobs:
   matrix-build:
     name: GUI ${{ matrix.platform }}/${{ matrix.arch }} on ${{ matrix.runner }}
     needs: gate
-    if: gate.outputs.proceed == 'true'
+    if: needs.gate.outputs.proceed == 'true'
     runs-on: ${{ matrix.runner }}
 
     strategy:
@@ -186,7 +186,7 @@ jobs:
   cli-build:
     name: CLI (windows + linux, 5 targets)
     needs: gate
-    if: gate.outputs.proceed == 'true'
+    if: needs.gate.outputs.proceed == 'true'
     runs-on: windows-latest
 
     steps:
@@ -237,7 +237,7 @@ jobs:
   darwin-cli:
     name: CLI ${{ matrix.platform }}/${{ matrix.arch }} on ${{ matrix.runner }}
     needs: gate
-    if: gate.outputs.proceed == 'true'
+    if: needs.gate.outputs.proceed == 'true'
     runs-on: ${{ matrix.runner }}
 
     strategy:
