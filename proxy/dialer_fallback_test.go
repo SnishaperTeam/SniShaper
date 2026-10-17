@@ -154,9 +154,10 @@ func TestBuiltinRulesCoverDownloadDomains(t *testing.T) {
 	}
 }
 
-// TestBuiltinGitHubAssetUpstreamsNotSingleIP GitHub 资产域名规则此前只配了单个
-// 硬编码 IP，该 IP 一旦失效整条规则直接 502。要求这类规则的上游是多 IP 列表。
-func TestBuiltinGitHubAssetUpstreamsNotSingleIP(t *testing.T) {
+// TestBuiltinGitHubAssetsUseTencentReverseProxy GitHub 资产域名规则经腾讯
+// EdgeOne 反代（106.55.101.131）兜底，实测该反代比直连 Fastly anycast 更稳。
+// 要求这类规则的上游首位必须是腾讯反代。
+func TestBuiltinGitHubAssetsUseTencentReverseProxy(t *testing.T) {
 	data, err := os.ReadFile(filepath.Join("..", "rules", "config.json"))
 	if err != nil {
 		t.Skipf("rules/config.json not available: %v", err)
@@ -181,9 +182,10 @@ func TestBuiltinGitHubAssetUpstreamsNotSingleIP(t *testing.T) {
 		if !coversAsset {
 			continue
 		}
-		if got := len(splitUpstreamCandidates("objects.githubusercontent.com", sg.Upstream, "443")); got < 2 {
-			t.Errorf("site group %q covers GitHub asset domains but upstream has only %d candidate(s): %s",
-				sg.Name, got, sg.Upstream)
+		first := splitUpstreamCandidates("objects.githubusercontent.com", sg.Upstream, "443")[0]
+		if host, _, err := net.SplitHostPort(first); err != nil || host != "106.55.101.131" {
+			t.Errorf("site group %q covers GitHub asset domains but upstream primary is %q, want Tencent reverse proxy 106.55.101.131",
+				sg.Name, first)
 		}
 	}
 }
