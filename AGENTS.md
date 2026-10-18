@@ -21,15 +21,22 @@ SniShaper is a Windows local proxy tool using ECH Injection, TLS-RF Fragmentatio
 - `/main.go` — entry point, Wails app + tray setup
 - `/app/` — Go backend: App struct, API bindings (`app_api.go`), system proxy (`app_system.go`), autostart
 - `/core/` — Mihomo core process management (`core_client.go`), TUN, admin elevation
-- `/proxy/` — Proxy server: MITM, SOCKS5, TLS fragmentation, TUN flow, auto-routing, rules
-- `/pkg/rules/gfwlist.go` — GFWList domain list: local file/reader loading + `IsBlocked` suffix match. NOTE: online update (fetch from URL, cache write) was removed; only local `gfwlist_cache.txt` (next to rules file) is loaded at startup, no network calls
-- `/pkg/` — Packages: cert manager, CF IP pool, DoH resolver, sysproxy, TLS fragmentation
-- `/evolution/` — Rule evolution testing: tester, rule generator, result analysis
+- `/proxy` — Proxy server (MITM, SOCKS5, TLS fragmentation, TUN flow, auto-routing, rules): no longer a local directory, imported from snishaper-core as `proxy`
+- `/pkg/` — Local packages only: `platform`, `tun`, and a thin `sysproxy` facade; cert manager, CF IP pool, DoH resolver, netiface, singtun, subscription, TLS fragmentation and GFWList all live in snishaper-core
+- `evolution` — Rule evolution testing (tester, rule generator, result analysis) is `github.com/SnishaperTeam/snishaper-core/evolution`; there is no local `/evolution/` directory
 - `/frontend/src/` — React SPA: 10 pages (Dashboard, Proxies, Rules, Routing, DNS, Evolution, Logs, Settings, About, Welcome)
 - `/rules/config.json` — Site group rules (~3800 lines), MITM/ECH/SNI-fake configs
 - `/config/settings.json` — App settings (port, TUN, theme, Cloudflare IPs)
 
 Data flow: Frontend (React HashRouter) → Wails bindings (`EventsOn` + async Go calls) → App API → proxy/core subsystems. Frontend state sync via `app:state_changed` events from `emitFrontendState()`.
+
+# snishaper-core Dependency
+
+Engine and shared feature packages come from `github.com/SnishaperTeam/snishaper-core` (pinned in `go.mod`, **no `replace` directive**). This repo imports: `proxy`, `certmanager`, `cfpool`, `dohresolver`, `netiface`, `singtun`, `subscription`, `sysproxy`, `evolution`, `config` and `log`.
+
+- `pkg/sysproxy` is only a thin facade over core's `sysproxy.Manager`: one process-wide instance plus the original package-level helpers, so call sites are unchanged. Core's `Manager` is per-instance (no process-global proxy snapshot); the facade injects `SUDO_USER` via `sysproxy.WithRunAsUser`
+- `evolution` (rule evolution testing) has no local directory — it is `snishaper-core/evolution`
+- Core requires `^v0.4.0`: v0.4.0 moved `sysproxy` and `evolution` into the library, each app previously carrying a byte-identical copy
 
 # Conventions
 
@@ -49,7 +56,7 @@ Data flow: Frontend (React HashRouter) → Wails bindings (`EventsOn` + async Go
 # Security & Environment
 
 - Dev certificate: `devcert.pfx` (password: `password`)
-- Cert manager generates CA at `pkg/certmanager/` (runtime, gitignored)
+- Cert manager lives in snishaper-core (`certmanager`); it writes the CA under the per-user config dir (runtime, gitignored)
 - Admin rights required for system proxy registry writes and TUN
 - Registry access via `golang.org/x/sys/windows/registry` (not `reg.exe`)
 - MSIX packaging requires PFX signing cert; CI uses self-signed
