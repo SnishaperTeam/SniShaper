@@ -3,7 +3,7 @@ module snishaper
 go 1.27.0
 
 require (
-	github.com/SnishaperTeam/snishaper-core v0.0.0
+	github.com/SnishaperTeam/snishaper-core v0.1.0
 	github.com/admpub/go-download/v2 v2.2.0
 	github.com/gdamore/tcell/v2 v2.13.10
 	github.com/miekg/dns v1.1.73
@@ -12,9 +12,6 @@ require (
 	github.com/wailsapp/wails/v3 v3.0.0-beta.30
 	golang.org/x/sys v0.49.0
 )
-
-// 核心功能来自本地抽取的独立库；发布前可推送远端并去掉 replace。
-replace github.com/SnishaperTeam/snishaper-core => ../Snishaper-core
 
 require (
 	github.com/admpub/fsnotify v1.7.0 // indirect

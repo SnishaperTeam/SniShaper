@@ -8,6 +8,8 @@ dmitri.shuralyov.com/service/change v0.0.0-20181023043359-a85b471d5412/go.mod h1
 dmitri.shuralyov.com/state v0.0.0-20180228185332-28bcc343414c/go.mod h1:0PRwlb0D6DFvNNtx+9ybjezNCa8XF0xaYcETyp6rHWU=
 git.apache.org/thrift.git v0.0.0-20180902110319-2566ecd5d999/go.mod h1:fPE2ZNJGynbRyZ4dJvy6G277gSllfV2HJqblrnkyeyg=
 github.com/BurntSushi/toml v0.3.1/go.mod h1:xHWCNGjB5oqiDr8zfno3MHue2Ht5sIBksp03qcyfWMU=
+github.com/SnishaperTeam/snishaper-core v0.1.0 h1:BLw4YdX4uVTJ33mvwBHZNvlMFWUXR15jrH/EAizjobc=
+github.com/SnishaperTeam/snishaper-core v0.1.0/go.mod h1:egCr1A9VhnauoNRM+l3wU6MR1MhHo7z8iYKCaVOVzFE=
 github.com/admpub/fsnotify v1.7.0 h1:pI04ANljHE5cS3fr+uXMgDG4/Cv3iye40nH/oZE8pB0=
 github.com/admpub/fsnotify v1.7.0/go.mod h1:D9ecq8Ksz5grAhvRRrbN7AdVXnwYx3OxM1+xfjru4+4=
 github.com/admpub/go-download/v2 v2.2.0 h1:kbRBK9nnynSXs5m92dHOjhoDuyEkyM8G7YCfg6EzawY=
