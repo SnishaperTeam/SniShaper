@@ -13,8 +13,8 @@ import (
 	"time"
 
 	"snishaper/common"
-	"snishaper/pkg/dohresolver"
-	"snishaper/proxy"
+	"github.com/SnishaperTeam/snishaper-core/dohresolver"
+	"github.com/SnishaperTeam/snishaper-core/proxy"
 )
 
 type Tester struct {

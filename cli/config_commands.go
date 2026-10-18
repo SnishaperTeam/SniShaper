@@ -12,7 +12,7 @@ import (
 
 	"snishaper/app"
 	"snishaper/core"
-	"snishaper/proxy"
+	"github.com/SnishaperTeam/snishaper-core/proxy"
 )
 
 // configApp builds an App that only loads settings and rules. Commands that

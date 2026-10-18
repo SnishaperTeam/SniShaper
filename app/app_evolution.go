@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"snishaper/evolution"
-	"snishaper/proxy"
+	"github.com/SnishaperTeam/snishaper-core/proxy"
 
 )
 

@@ -16,10 +16,11 @@ import (
 	"github.com/miekg/dns"
 
 	"snishaper/common"
-	"snishaper/pkg/certmanager"
-	"snishaper/pkg/netiface"
-	"snishaper/pkg/singtun"
-	"snishaper/proxy"
+	"github.com/SnishaperTeam/snishaper-core/certmanager"
+	"github.com/SnishaperTeam/snishaper-core/netiface"
+	"github.com/SnishaperTeam/snishaper-core/singtun"
+	corelog "github.com/SnishaperTeam/snishaper-core/log"
+	"github.com/SnishaperTeam/snishaper-core/proxy"
 )
 
 // logBufPool provides reusable byte buffers for log formatting
@@ -51,6 +52,8 @@ type coreRuntime struct {
 	routeEventsMu     sync.Mutex
 	routeEvents       []RouteEvent
 	rulesWatchStop    func()
+	// ifaces 网卡选择器实例；原包级缓存已随库化改为实例持有。
+	ifaces *netiface.Selector
 }
 
 func newCoreRuntime() (*coreRuntime, error) {
@@ -62,7 +65,8 @@ func newCoreRuntime() (*coreRuntime, error) {
 	settingsPath := common.ConfigSettingsPath(execDir)
 	rulesPath := common.ConfigRulesPath(execDir)
 
-	ruleManager := proxy.NewRuleManager(settingsPath, rulesPath)
+	ruleManager := proxy.NewRuleManager(settingsPath, rulesPath,
+		proxy.WithLogger(corelog.Std), proxy.WithRouterDebug(os.Getenv("SNISHAPER_ROUTER_DEBUG") == "1"))
 	if err := ruleManager.LoadConfig(); err != nil {
 		return nil, err
 	}
@@ -77,7 +81,8 @@ func newCoreRuntime() (*coreRuntime, error) {
 		execDir:     execDir,
 		certPath:    common.ConfigCertDir(execDir),
 		ruleManager: ruleManager,
-		proxyServer: proxy.NewProxyServer("127.0.0.1:" + port),
+		proxyServer: proxy.NewProxyServer("127.0.0.1:"+port, proxy.WithLogger(corelog.Std)),
+		ifaces:      netiface.NewSelector(),
 		logBuffer:   common.NewRingLogWriter(5000),
 	}
 	// Initialize nativeTUN with DoH resolver
@@ -340,8 +345,8 @@ func (r *coreRuntime) startTUN() (err error) {
 	// 注意 SetTUNMode 必须在 Start 成功之后：Start 失败时 TUN 并不存在，
 	// 此时打开 TUN 模式会让所有出站连接去找一张并不存在的网卡。
 	r.proxyServer.SetTUNMode(true)
-	netiface.InvalidateCache()
-	if binding, selErr := netiface.Select(netiface.FamilyIPv4, tunCfg.InterfaceConfig(), r.appendLog); selErr == nil {
+	r.ifaces.Invalidate()
+	if binding, selErr := r.ifaces.Select(netiface.FamilyIPv4, tunCfg.InterfaceConfig(), r.appendLog); selErr == nil {
 		r.appendLog("[core] TUN outbound interface: " + binding.Describe())
 	}
 	// TUN 数据面自检：通过 TUN 发送 DNS 查询，验证 gvisor 栈正常工作。
@@ -419,7 +424,7 @@ func (r *coreRuntime) stopTUN() error {
 	// 通知 ProxyServer 退出 TUN 模式
 	r.proxyServer.SetTUNMode(false)
 	// TUN 网卡已消失，重新扫描网卡列表，避免下次出站仍引用已释放的接口索引。
-	netiface.InvalidateCache()
+	r.ifaces.Invalidate()
 	r.appendLog("[core] native sing-tun stopped")
 	return nil
 }

@@ -22,11 +22,12 @@ import (
 
 	"snishaper/common"
 	"snishaper/core"
-	"snishaper/pkg/certmanager"
-	"snishaper/pkg/cfpool"
-	"snishaper/pkg/dohresolver"
-	"snishaper/pkg/netiface"
-	"snishaper/proxy"
+	"github.com/SnishaperTeam/snishaper-core/certmanager"
+	"github.com/SnishaperTeam/snishaper-core/cfpool"
+	"github.com/SnishaperTeam/snishaper-core/dohresolver"
+	"github.com/SnishaperTeam/snishaper-core/netiface"
+	corelog "github.com/SnishaperTeam/snishaper-core/log"
+	"github.com/SnishaperTeam/snishaper-core/proxy"
 )
 
 func NewApp() *App {
@@ -35,7 +36,8 @@ func NewApp() *App {
 	settingsPath := common.ConfigSettingsPath(execDir)
 	rulesPath := common.ConfigRulesPath(execDir)
 
-	ruleManager := proxy.NewRuleManager(settingsPath, rulesPath)
+	ruleManager := proxy.NewRuleManager(settingsPath, rulesPath,
+		proxy.WithLogger(corelog.Std), proxy.WithRouterDebug(os.Getenv("SNISHAPER_ROUTER_DEBUG") == "1"))
 	if err := ruleManager.LoadConfig(); err != nil {
 		log.Printf("[warn] Failed to load config at init: %v", err)
 	}
@@ -46,7 +48,7 @@ func NewApp() *App {
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
-	proxyServer := proxy.NewProxyServer("127.0.0.1:" + port)
+	proxyServer := proxy.NewProxyServer("127.0.0.1:"+port, proxy.WithLogger(corelog.Std))
 	proxyServer.SetRuleManager(ruleManager)
 	a := &App{
 		ctx:                ctx,
@@ -55,6 +57,7 @@ func NewApp() *App {
 		ruleManager:        ruleManager,
 		certPath:           common.ConfigCertDir(execDir),
 		proxyMarkerPath:    common.ConfigProxyMarker(execDir),
+		ifaces:             netiface.NewSelector(),
 		launchedAtStartup:  HasLaunchArg("--startup"),
 		autoProxyAtStartup: HasLaunchArg("--autoproxy"),
 		core:               core.NewCoreClient(),
@@ -330,7 +333,7 @@ func (a *App) SetTUNInterfaceExclude(exclude string) error {
 	if err := a.ruleManager.UpdateTUNConfig(cfg); err != nil {
 		return err
 	}
-	netiface.InvalidateCache()
+	a.ifaces.Invalidate()
 	if a.core != nil {
 		a.core.ReloadIfRunning()
 	}
@@ -358,7 +361,7 @@ func (a *App) UpdateTUNConfig(cfg proxy.TUNConfig) error {
 	if err := a.ruleManager.UpdateTUNConfig(cfg); err != nil {
 		return err
 	}
-	netiface.InvalidateCache()
+	a.ifaces.Invalidate()
 
 	if a.core == nil {
 		return nil
@@ -389,7 +392,7 @@ func (a *App) GetTUNStatus() proxy.TUNStatus {
 
 func (a *App) GetNetworkInterfaces() []netiface.Descriptor {
 	cfg := a.ruleManager.GetTUNConfig()
-	descriptors := netiface.List(cfg.InterfaceConfig())
+	descriptors := a.ifaces.List(cfg.InterfaceConfig())
 	a.appendLog(fmt.Sprintf("[action] GetNetworkInterfaces: %d interface(s) listed", len(descriptors)))
 	return descriptors
 }
@@ -401,7 +404,7 @@ func (a *App) SetTUNInterface(name string) error {
 
 	if selected != "" {
 		known := false
-		for _, descriptor := range netiface.List(cfg.InterfaceConfig()) {
+		for _, descriptor := range a.ifaces.List(cfg.InterfaceConfig()) {
 			if strings.EqualFold(descriptor.Name, selected) || strconv.Itoa(descriptor.Index) == selected {
 				known = true
 				selected = descriptor.Name
@@ -420,7 +423,7 @@ func (a *App) SetTUNInterface(name string) error {
 	if err := a.ruleManager.UpdateTUNConfig(cfg); err != nil {
 		return err
 	}
-	netiface.InvalidateCache()
+	a.ifaces.Invalidate()
 
 	if a.core == nil {
 		return nil

@@ -3,7 +3,7 @@ package app
 import (
 	"fmt"
 
-	"snishaper/proxy"
+	"github.com/SnishaperTeam/snishaper-core/proxy"
 )
 
 // PortOccupant 描述占用指定端口的进程信息。

@@ -1,11 +1,12 @@
 package common
 
 import (
-	"net"
 	"os"
 	"path/filepath"
 	"strings"
 	"sync"
+
+	"github.com/SnishaperTeam/snishaper-core/config"
 )
 
 type RingLogWriter struct {
@@ -113,69 +114,14 @@ func UserConfigDir() string {
 	return filepath.Join(dir, "snishaper")
 }
 
-func MapNAT64Addr(ipStr string, prefix string) (string, bool) {
-	prefix = strings.TrimSpace(prefix)
-	if prefix == "" {
-		return ipStr, true
-	}
-	parsedIP := net.ParseIP(ipStr)
-	if parsedIP == nil {
-		return ipStr, true
-	}
-	ipv4 := parsedIP.To4()
-	if ipv4 == nil {
-		return ipStr, false
-	}
+// 共享类型与辅助函数已迁入 snishaper-core 的 config 包；
+// 这里保留别名，让应用侧既有引用（含 JSON 结构）无需改动。
+type CertVerifyConfig = config.CertVerifyConfig
 
-	var prefixIP net.IP
-	if strings.Contains(prefix, "/") {
-		_, ipnet, err := net.ParseCIDR(prefix)
-		if err == nil && ipnet != nil {
-			prefixIP = ipnet.IP
-		}
-	} else {
-		prefixIP = net.ParseIP(prefix)
-	}
-
-	if prefixIP == nil || len(prefixIP) != 16 {
-		return ipStr, true
-	}
-	mappedIP := make(net.IP, 16)
-	copy(mappedIP, prefixIP[:12])
-	copy(mappedIP[12:], ipv4)
-	return mappedIP.String(), true
-}
-
-type CertVerifyConfig struct {
-	Mode                  string   `json:"mode,omitempty"`
-	Names                 []string `json:"names,omitempty"`
-	Suffixes              []string `json:"suffixes,omitempty"`
-	SPKISHA256            []string `json:"spki_sha256,omitempty"`
-	AllowUnknownAuthority bool     `json:"allow_unknown_authority,omitempty"`
-}
-
-func (c CertVerifyConfig) IsZero() bool {
-	return strings.TrimSpace(c.Mode) == "" &&
-		len(c.Names) == 0 &&
-		len(c.Suffixes) == 0 &&
-		len(c.SPKISHA256) == 0 &&
-		!c.AllowUnknownAuthority
-}
-
-func HalfClose(conn net.Conn) {
-	if tc, ok := conn.(*net.TCPConn); ok {
-		_ = tc.CloseWrite()
-		return
-	}
-	type closeWriter interface {
-		CloseWrite() error
-	}
-	if cw, ok := conn.(closeWriter); ok {
-		_ = cw.CloseWrite()
-		return
-	}
-	conn.Close()
-}
+var (
+	MapNAT64Addr = config.MapNAT64Addr
+	HalfClose    = config.HalfClose
+)
 
 // UserConfigPath maps a runtime-relative path (e.g. config/settings.json)
 // into the per-user config directory.
