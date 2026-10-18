@@ -15,8 +15,8 @@ import (
 
 	"snishaper/common"
 	"snishaper/core"
-	"snishaper/evolution"
 	"github.com/SnishaperTeam/snishaper-core/certmanager"
+	"github.com/SnishaperTeam/snishaper-core/evolution"
 	"github.com/SnishaperTeam/snishaper-core/netiface"
 	"github.com/SnishaperTeam/snishaper-core/proxy"
 )
