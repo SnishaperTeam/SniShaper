@@ -2,7 +2,7 @@
 
 [中文](README.md) | [English](README_EN.md) | [Русский](README_RU.md)
 
-[![Go Version](https://img.shields.io/badge/Go-1.27%2B-00ADD8?style=flat&logo=go)](https://golang.org) [![License](https://img.shields.io/badge/License-AGPL--3.0-blue?style=flat&logo=open-source-initiative)](LICENSE) [![Wiki](https://img.shields.io/badge/Docs-Wiki-orange?style=flat&logo=readthedocs)](https://github.com/SnishaperTeam/SniShaper/wiki) [![GitHub Release](https://img.shields.io/github/v/release/SnishaperTeam/SniShaper?style=flat&logo=github&label=Release)](https://github.com/SnishaperTeam/SniShaper/releases) [![GitHub Downloads](https://img.shields.io/github/downloads/SnishaperTeam/SniShaper/total?style=flat&logo=github&label=Downloads)](https://github.com/SnishaperTeam/SniShaper/releases) [![GitHub last commit](https://img.shields.io/github/last-commit/SnishaperTeam/SniShaper?style=flat&logo=git&label=Last%20Commit)](https://github.com/SnishaperTeam/SniShaper/commits/main) [![GitHub Actions Workflow Status](https://img.shields.io/github/actions/workflow/status/SnishaperTeam/SniShaper/build.yml?style=flat&logo=githubactions&label=CI)](https://github.com/SnishaperTeam/SniShaper/actions)
+[![Go Version](https://img.shields.io/badge/Go-1.27%2B-00ADD8?style=flat&logo=go)](https://golang.org) [![Core](https://img.shields.io/badge/Core-snishaper--core-00ADD8?style=flat&logo=go)](https://github.com/SnishaperTeam/snishaper-core) [![License](https://img.shields.io/badge/License-AGPL--3.0-blue?style=flat&logo=open-source-initiative)](LICENSE) [![Wiki](https://img.shields.io/badge/Docs-Wiki-orange?style=flat&logo=readthedocs)](https://github.com/SnishaperTeam/SniShaper/wiki) [![GitHub Release](https://img.shields.io/github/v/release/SnishaperTeam/SniShaper?style=flat&logo=github&label=Release)](https://github.com/SnishaperTeam/SniShaper/releases) [![GitHub Downloads](https://img.shields.io/github/downloads/SnishaperTeam/SniShaper/total?style=flat&logo=github&label=Downloads)](https://github.com/SnishaperTeam/SniShaper/releases) [![GitHub last commit](https://img.shields.io/github/last-commit/SnishaperTeam/SniShaper?style=flat&logo=git&label=Last%20Commit)](https://github.com/SnishaperTeam/SniShaper/commits/main) [![GitHub Actions Workflow Status](https://img.shields.io/github/actions/workflow/status/SnishaperTeam/SniShaper/build.yml?style=flat&logo=githubactions&label=CI)](https://github.com/SnishaperTeam/SniShaper/actions)
 
 **SniShaper** is a local proxy tool for complex network environments, using **ECH Injection**, **TLS Fragmentation**, **QUIC Conversion**, **Session Migration** and other solutions to deliver a stable and flexible browsing experience.
 
@@ -20,6 +20,8 @@ This project provides cross-platform support. See **[Platform_EN.md](docs/Platfo
 | Core strengths | ECH injection, TLS fragmentation, session migration | Clash subscriptions, multi-protocol nodes, WireGuard, TUN gateway |
 
 They keep separate codebases and evolve independently. Subscription and rule files are format-compatible. If you need **subscription import, multi-protocol node selection or WireGuard tunnels**, use FlowWeaver.
+
+Both projects take their proxy engine from the standalone **[snishaper-core](https://github.com/SnishaperTeam/snishaper-core)** library: the proxy server, rule engine, DoH resolver, certificate manager and TUN data plane live there, while this repository keeps only the application layer (GUI, CLI, system integration and rule data).
 
 ---
 
