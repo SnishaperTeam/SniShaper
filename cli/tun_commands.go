@@ -10,7 +10,7 @@ import (
 
 	"snishaper/core"
 	"snishaper/pkg/sysproxy"
-	"snishaper/proxy"
+	"github.com/SnishaperTeam/snishaper-core/proxy"
 )
 
 // TUN commands mirror the current app level TUN flow one to one:

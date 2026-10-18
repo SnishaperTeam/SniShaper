@@ -3,20 +3,18 @@ module snishaper
 go 1.27.0
 
 require (
+	github.com/SnishaperTeam/snishaper-core v0.0.0
 	github.com/admpub/go-download/v2 v2.2.0
-	github.com/fsnotify/fsnotify v1.10.1
 	github.com/gdamore/tcell/v2 v2.13.10
 	github.com/miekg/dns v1.1.73
-	github.com/quic-go/quic-go v0.63.0
-	github.com/refraction-networking/utls v1.8.2
 	github.com/rivo/tview v0.42.0
-	github.com/sagernet/sing v0.9.6
-	github.com/sagernet/sing-tun v0.9.6
-	github.com/things-go/go-socks5 v0.1.3
 	github.com/vishvananda/netlink v1.3.1
 	github.com/wailsapp/wails/v3 v3.0.0-beta.30
 	golang.org/x/sys v0.49.0
 )
+
+// 核心功能来自本地抽取的独立库；发布前可推送远端并去掉 replace。
+replace github.com/SnishaperTeam/snishaper-core => ../Snishaper-core
 
 require (
 	github.com/admpub/fsnotify v1.7.0 // indirect
@@ -25,6 +23,7 @@ require (
 	github.com/coder/websocket v1.8.14 // indirect
 	github.com/florianl/go-nfqueue/v2 v2.1.0 // indirect
 	github.com/francoispqt/gojay v1.2.13 // indirect
+	github.com/fsnotify/fsnotify v1.10.1 // indirect
 	github.com/gdamore/encoding v1.0.1 // indirect
 	github.com/go-ole/go-ole v1.3.0 // indirect
 	github.com/goccy/go-json v0.10.5 // indirect
@@ -42,11 +41,16 @@ require (
 	github.com/modern-go/concurrent v0.0.0-20180306012644-bacd9c7ef1dd // indirect
 	github.com/modern-go/reflect2 v1.0.2 // indirect
 	github.com/quic-go/qpack v0.6.0 // indirect
+	github.com/quic-go/quic-go v0.63.0 // indirect
+	github.com/refraction-networking/utls v1.8.2 // indirect
 	github.com/rivo/uniseg v0.4.7 // indirect
 	github.com/sagernet/fswatch v0.1.2 // indirect
 	github.com/sagernet/gvisor v0.0.0-20260727.0-sing-box-mod.1 // indirect
 	github.com/sagernet/netlink v0.0.0-20240612041022-b9a21c07ac6a // indirect
 	github.com/sagernet/nftables v0.3.0-mod.4 // indirect
+	github.com/sagernet/sing v0.9.6 // indirect
+	github.com/sagernet/sing-tun v0.9.6 // indirect
+	github.com/things-go/go-socks5 v0.1.3 // indirect
 	github.com/vishvananda/netns v0.0.5 // indirect
 	github.com/webx-top/com v1.3.30 // indirect
 	go4.org/netipx v0.0.0-20231129151722-fdeea329fbba // indirect

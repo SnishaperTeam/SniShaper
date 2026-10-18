@@ -16,7 +16,7 @@ import (
 	"sync"
 	"time"
 
-	"snishaper/proxy"
+	"github.com/SnishaperTeam/snishaper-core/proxy"
 )
 
 const rulesRemoteURL = "https://raw.githubusercontent.com/" + githubRepo + "/main/rules/config.json"

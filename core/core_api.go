@@ -15,7 +15,7 @@ import (
 	"time"
 
 	"snishaper/common"
-	"snishaper/proxy"
+	"github.com/SnishaperTeam/snishaper-core/proxy"
 )
 
 const coreRPCAddr = "127.0.0.1:18933"

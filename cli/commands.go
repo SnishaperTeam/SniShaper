@@ -13,9 +13,10 @@ import (
 	"snishaper/app"
 	"snishaper/common"
 	"snishaper/core"
-	"snishaper/pkg/certmanager"
+	"github.com/SnishaperTeam/snishaper-core/certmanager"
 	"snishaper/pkg/sysproxy"
-	"snishaper/proxy"
+	corelog "github.com/SnishaperTeam/snishaper-core/log"
+	"github.com/SnishaperTeam/snishaper-core/proxy"
 )
 
 type cmdOut func(string)
@@ -31,7 +32,8 @@ func opRequireService(out cmdOut) *core.CoreClient {
 
 func listenPort() string {
 	settingsPath, _ := settingsPaths()
-	rm := proxy.NewRuleManager(settingsPath, "")
+	rm := proxy.NewRuleManager(settingsPath, "",
+		proxy.WithLogger(corelog.Std), proxy.WithRouterDebug(os.Getenv("SNISHAPER_ROUTER_DEBUG") == "1"))
 	_ = rm.LoadConfig()
 	port := rm.GetListenPort()
 	if port == "" {

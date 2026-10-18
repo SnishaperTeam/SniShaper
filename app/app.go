@@ -16,8 +16,9 @@ import (
 	"snishaper/common"
 	"snishaper/core"
 	"snishaper/evolution"
-	"snishaper/pkg/certmanager"
-	"snishaper/proxy"
+	"github.com/SnishaperTeam/snishaper-core/certmanager"
+	"github.com/SnishaperTeam/snishaper-core/netiface"
+	"github.com/SnishaperTeam/snishaper-core/proxy"
 )
 
 // UIAdapter is an optional event sink used by headless builds (the CLI /
@@ -66,6 +67,8 @@ type App struct {
 	launchedAtStartup   bool
 	autoProxyAtStartup  bool
 	core                *core.CoreClient
+	// ifaces 用于 UI 侧网卡列举与配置变更后的缓存失效。
+	ifaces *netiface.Selector
 	tunSysProxyMu       sync.Mutex // 保护 tunRestoreSysProxy：调用方与 StartTUN 异步 goroutine 并发访问
 	tunRestoreSysProxy  bool
 	pendingShow         bool

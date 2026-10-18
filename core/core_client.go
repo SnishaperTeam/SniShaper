@@ -12,7 +12,7 @@ import (
 	"sync"
 	"time"
 
-	"snishaper/proxy"
+	"github.com/SnishaperTeam/snishaper-core/proxy"
 )
 
 // CoreClient is an RPC client that communicates with the core process.

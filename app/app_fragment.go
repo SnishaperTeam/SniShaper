@@ -1,7 +1,7 @@
 package app
 
 import (
-	"snishaper/proxy"
+	"github.com/SnishaperTeam/snishaper-core/proxy"
 )
 
 func (a *App) GetFragmentConfig() proxy.FragmentConfig {
