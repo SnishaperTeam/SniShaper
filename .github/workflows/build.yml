@@ -397,9 +397,13 @@ jobs:
         run: |
           set -euo pipefail
           source .github/scripts/bots/common.sh
-          body="<!-- snishaper-bot:ci-diagnostic -->
+          # Fresh comment per CI round (per-run anchor, no upsert): each
+          # round shows up in the PR timeline with a notification instead
+          # of silently editing an old comment.
+          body="<!-- snishaper-bot:ci-diagnostic:${RUN_ID} -->
           $(.github/scripts/bots/ci-diagnose.sh "$PR_NUMBER" "$RUN_ID")"
-          bot_comment "$PR_NUMBER" "snishaper-bot:ci-diagnostic" "$body"
+          gh_retry gh api -X POST "repos/${GH_REPO}/issues/${PR_NUMBER}/comments" \
+            -f body="$body" >/dev/null
           # CI failure is itself a bot review verdict: mark the PR as
           # changes-requested so the state machine reaches its terminal
           # state without waiting for a human review.
