@@ -4,15 +4,6 @@ package common
 
 import "testing"
 
-func TestGenerated_ConfigCertDir(t *testing.T) {
-	defer func() {
-		if r := recover(); r != nil {
-			t.Skipf("zero-value call panicked (not smoke-testable): ConfigCertDir")
-		}
-	}()
-	_ = ConfigCertDir("")
-}
-
 func TestGenerated_ConfigProxyMarker(t *testing.T) {
 	defer func() {
 		if r := recover(); r != nil {
@@ -20,4 +11,13 @@ func TestGenerated_ConfigProxyMarker(t *testing.T) {
 		}
 	}()
 	_ = ConfigProxyMarker("")
+}
+
+func TestGenerated_CrashLogPath(t *testing.T) {
+	defer func() {
+		if r := recover(); r != nil {
+			t.Skipf("zero-value call panicked (not smoke-testable): CrashLogPath")
+		}
+	}()
+	_ = CrashLogPath()
 }
