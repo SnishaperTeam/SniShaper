@@ -4,11 +4,14 @@ name: build
 # (winget-pkgs style: one workflow, no workflow_run chain, bots invoked
 # from inside the build itself).
 #
-#   push(main)                                   -> build only
-#   pull_request(opened/synchronize/reopened)    -> CLA gate + build + bots
-#   workflow_dispatch(pr_number set, called by
-#     cla.yml after the agreement is signed)     -> CLA gate + build + bots
-#   workflow_dispatch(no pr_number, manual)      -> build only
+#   push(main)                                -> build only
+#   pull_request(opened/synchronize/reopened) -> CLA gate + build + bots
+#   workflow_dispatch (manual)                -> build only
+#
+# After the contributor agreement is signed, cla.yml reruns the PR's
+# original pull_request run (a rerun keeps the pull_request event, so
+# the checks stay in the PR merge box); the gate then sees cla-signed
+# and lets the full matrix through.
 #
 # Bot label writes never re-trigger this workflow (labeled is not a trigger
 # type), so the labeled -> workflow -> label feedback loop of the previous
@@ -20,15 +23,10 @@ on:
   pull_request:
     types: [opened, synchronize, reopened]
   workflow_dispatch:
-    inputs:
-      pr_number:
-        description: Pull request number (set by cla.yml after signing)
-        required: false
-        type: string
 
 # One build per PR (or per branch); a newer push cancels the stale matrix.
 concurrency:
-  group: build-${{ github.event.pull_request.number || github.event.inputs.pr_number || github.ref }}
+  group: build-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 permissions:
@@ -44,14 +42,12 @@ env:
 
 jobs:
   # ------------------------------------------------------------------
-  # CLA gate — only for pull requests (and post-signing dispatches).
-  # Direct pushes to main and plain manual dispatches skip it entirely.
+  # CLA gate — only for pull requests. Direct pushes to main and
+  # manual dispatches skip it entirely.
   # ------------------------------------------------------------------
   gate:
     name: gate
-    if: >-
-      github.event_name == 'pull_request' ||
-      (github.event_name == 'workflow_dispatch' && github.event.inputs.pr_number != '')
+    if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     outputs:
       proceed: ${{ steps.decide.outputs.proceed }}
@@ -62,7 +58,7 @@ jobs:
         id: decide
         env:
           GH_TOKEN: ${{ github.token }}
-          PR_NUMBER: ${{ github.event.pull_request.number || github.event.inputs.pr_number }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
           AUTHOR: ${{ github.event.pull_request.user.login }}
         run: |
           set -euo pipefail
@@ -97,7 +93,7 @@ jobs:
       - name: Add ci-running label
         env:
           GH_TOKEN: ${{ steps.syntax_token.outputs.token }}
-          PR_NUMBER: ${{ github.event.pull_request.number || github.event.inputs.pr_number }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
         run: |
           set -euo pipefail
           source .github/scripts/bots/common.sh
@@ -130,9 +126,7 @@ jobs:
     needs: gate
     if: >-
       always() && !cancelled() &&
-      (github.event_name == 'push' ||
-       (github.event_name == 'workflow_dispatch' && github.event.inputs.pr_number == '') ||
-       needs.gate.outputs.proceed == 'true')
+      (github.event_name != 'pull_request' || needs.gate.outputs.proceed == 'true')
     runs-on: ${{ matrix.runner }}
 
     strategy:
@@ -247,9 +241,7 @@ jobs:
     needs: gate
     if: >-
       always() && !cancelled() &&
-      (github.event_name == 'push' ||
-       (github.event_name == 'workflow_dispatch' && github.event.inputs.pr_number == '') ||
-       needs.gate.outputs.proceed == 'true')
+      (github.event_name != 'pull_request' || needs.gate.outputs.proceed == 'true')
     runs-on: windows-latest
 
     steps:
@@ -302,9 +294,7 @@ jobs:
     needs: gate
     if: >-
       always() && !cancelled() &&
-      (github.event_name == 'push' ||
-       (github.event_name == 'workflow_dispatch' && github.event.inputs.pr_number == '') ||
-       needs.gate.outputs.proceed == 'true')
+      (github.event_name != 'pull_request' || needs.gate.outputs.proceed == 'true')
     runs-on: ${{ matrix.runner }}
 
     strategy:
@@ -402,7 +392,7 @@ jobs:
         env:
           GH_TOKEN: ${{ steps.syntax_token.outputs.token }}
           LOG_GH_TOKEN: ${{ github.token }}
-          PR_NUMBER: ${{ github.event.pull_request.number || github.event.inputs.pr_number }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
           RUN_ID: ${{ github.run_id }}
         run: |
           set -euo pipefail
@@ -419,7 +409,7 @@ jobs:
         if: needs.ci.result == 'success'
         env:
           GH_TOKEN: ${{ steps.syntax_token.outputs.token }}
-          PR_NUMBER: ${{ github.event.pull_request.number || github.event.inputs.pr_number }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
         run: |
           set -euo pipefail
           source .github/scripts/bots/common.sh
