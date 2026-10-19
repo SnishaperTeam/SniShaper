@@ -24,7 +24,7 @@
     "@iconify-icons/mdi": "^2.0.0",
     "@iconify/react": "^6.0.2",
     "@mui/material": "^9.5.0",
-    "@wailsio/runtime": "^3.0.0-beta.30",
+    "@wailsio/runtime": "^3.0.0-beta.32",
     "react": "^19.3.1",
     "react-dom": "^19.3.1",
     "react-router-dom": "^7.18.4"
