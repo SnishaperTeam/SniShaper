@@ -15,7 +15,7 @@ import {
   UninstallCert, ExportConfig, ImportConfigWithSummary,
   GetCloudflareConfig, UpdateCloudflareConfig, GetCloudflareIPStats,
   ForceFetchCloudflareIPs, TriggerCFHealthCheck, RemoveInvalidCFIPs,
-  GetIPPools, UpdateIPPools, ForceFetchIPPoolIPs,
+  GetIPPools, UpdateIPPools,
   GetLanguage, SetLanguage,
   GetIPv6Available, RefreshIPv6Check,
   GetLogFiles, OpenLogFile, CleanOldLogs,
@@ -130,7 +130,6 @@ const Settings: React.FC<SettingsProps> = ({ cache, onCacheUpdate, currentThemeI
   const [ipPools, setIpPools] = useState<any[]>(cache.ipPools || []);
   const [newPoolName, setNewPoolName] = useState('');
   const [newPoolIPs, setNewPoolIPs] = useState('');
-  const [poolBusy, setPoolBusy] = useState<string>('');
   const [isIpv6Checking, setIsIpv6Checking] = useState(false);
   const ipv6Available = cache.ipv6Available !== false;
   const [updateChannel, setUpdateChannel] = useState<string>(cache.updateChannel || 'stable');
@@ -268,20 +267,6 @@ const Settings: React.FC<SettingsProps> = ({ cache, onCacheUpdate, currentThemeI
       await reloadIPPools();
     } catch (err: any) {
       toast.error(t('common.failed'), String(err));
-    }
-  };
-
-  const handleFetchPool = async (name: string) => {
-    if (poolBusy) return;
-    setPoolBusy(name);
-    try {
-      await ForceFetchIPPoolIPs(name);
-      toast.success(t('settings.ip_pools.fetched', { name }));
-      await reloadIPPools();
-    } catch (err: any) {
-      toast.error(t('common.failed'), String(err));
-    } finally {
-      setPoolBusy('');
     }
   };
 
@@ -1251,12 +1236,6 @@ const Settings: React.FC<SettingsProps> = ({ cache, onCacheUpdate, currentThemeI
                       {t('settings.ip_pools.ip_count', { count: (pool.preferred_ips || []).length })}
                     </Typography>
                   </Box>
-                  {pool.name === 'cloudfront' && (
-                    <Button size="small" variant="text" disabled={Boolean(poolBusy)} onClick={() => handleFetchPool(pool.name)}
-                      startIcon={poolBusy === pool.name ? <CircularProgress size={14} /> : <Download size={14} />}>
-                      {t('settings.cf_pool.fetch_now')}
-                    </Button>
-                  )}
                   <Button size="small" variant="text" color="error" onClick={() => handleRemovePool(pool.name)}>
                     {t('common.delete')}
                   </Button>
