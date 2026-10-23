@@ -52,6 +52,8 @@ const RuleItem: React.FC<{ group: any; onEdit: (group: any) => void; onDelete: (
   const getEffectiveUpstream = (group: any) => {
     const upstream = String(group.upstream || '').trim();
     if (upstream && upstream.toUpperCase() !== 'DIRECT') return upstream;
+    const pool = String(group.ip_pool || '').trim();
+    if (pool) return t('rules.display.ip_pool_name', { name: pool });
     if (group.use_cf_pool) return t('rules.display.cf_ip_pool');
     return t('rules.display.doh_dynamic');
   };

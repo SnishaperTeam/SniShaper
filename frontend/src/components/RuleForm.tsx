@@ -13,7 +13,7 @@ import {
 } from '../lib/icons';
 import { Box, Typography, TextField, Switch, IconButton, Button } from '@mui/material';
 import { alpha } from '@mui/material/styles';
-import { AddSiteGroup, UpdateSiteGroup, GetECHProfiles, GetNAT64Profiles } from '../api/bindings';
+import { AddSiteGroup, UpdateSiteGroup, GetECHProfiles, GetNAT64Profiles, GetIPPools } from '../api/bindings';
 import { useTranslation } from '../i18n/I18nContext';
 import { SettingsCtx } from '../App';
 import { toast } from '../lib/toast';
@@ -118,6 +118,7 @@ const RuleForm: React.FC<RuleFormProps> = ({ initialData, onSuccess, onCancel })
     ech_profile_id: '',
     ech_domain: '',
     use_cf_pool: false,
+    ip_pool: '',
     nat64_enabled: false,
     nat64_profile_id: '',
     cert_verify: {
@@ -132,12 +133,14 @@ const RuleForm: React.FC<RuleFormProps> = ({ initialData, onSuccess, onCancel })
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [echProfiles, setEchProfiles] = useState<any[]>([]);
   const [nat64Profiles, setNat64Profiles] = useState<any[]>([]);
+  const [ipPools, setIPPools] = useState<any[]>([]);
 
   useEffect(() => {
     const loadProfiles = async () => {
-      const [ps, ns] = await Promise.all([GetECHProfiles(), GetNAT64Profiles()]);
+      const [ps, ns, pools] = await Promise.all([GetECHProfiles(), GetNAT64Profiles(), GetIPPools()]);
       setEchProfiles(ps || []);
       setNat64Profiles(ns || []);
+      setIPPools(Array.isArray(pools) ? pools : []);
     };
     loadProfiles();
 
@@ -149,6 +152,7 @@ const RuleForm: React.FC<RuleFormProps> = ({ initialData, onSuccess, onCancel })
       data.cert_verify = normalizeCertVerify(data.cert_verify);
       data.nat64_enabled = Boolean(data.nat64_enabled);
       data.nat64_profile_id = String(data.nat64_profile_id || '');
+      data.ip_pool = String(data.ip_pool || '');
       setFormData(data);
       setFrag(fragFromBackend(data.frag));
     }
@@ -540,6 +544,37 @@ const RuleForm: React.FC<RuleFormProps> = ({ initialData, onSuccess, onCancel })
               </Box>
             )}
           </Box>
+
+          {showCfPool && ipPools.length > 0 && (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1, p: 2, bgcolor: 'background.paper', border: 1, borderColor: 'divider', borderRadius: 2 }}>
+              <Typography variant="caption" sx={{ fontWeight: 'bold', textTransform: 'uppercase', letterSpacing: '0.05em', color: 'text.secondary', px: 1 }}>
+                {t('rules.form.ip_pool_select')}
+              </Typography>
+              <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: '1fr 1fr' }, gap: 1 }}>
+                {ipPools.map((pool: any) => {
+                  const active = formData.ip_pool === pool.name;
+                  return (
+                    <Box
+                      key={pool.name}
+                      onClick={() => setFormData({ ...formData, ip_pool: active ? '' : pool.name })}
+                      sx={cardSx(active, { row: true, inactiveBg: 'action.hover' })}
+                    >
+                      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5, minWidth: 0 }}>
+                        <Typography variant="caption" sx={{ fontWeight: 'bold', color: 'text.primary', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '100%', py: 0.25 }}>
+                          <Box component="span" sx={{ display: 'inline-flex', mr: 0.5, color: 'primary.main' }}><Globe size={12} /></Box>
+                          {pool.name}
+                        </Typography>
+                        <Typography variant="caption" sx={{ fontSize: 10, color: 'text.secondary' }}>
+                          {t('rules.form.ip_pool_count', { count: (pool.preferred_ips || []).length })}
+                        </Typography>
+                      </Box>
+                      <Switch size="small" checked={active} />
+                    </Box>
+                  );
+                })}
+              </Box>
+            </Box>
+          )}
 
           {showFragment && (
             <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5, p: 2, border: 1, borderColor: 'divider', bgcolor: 'background.paper', borderRadius: 2 }}>
