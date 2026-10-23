@@ -91,6 +91,15 @@ export const StartProxy = () => appCall('StartProxy');
 export const StopLogCapture = () => appCall('StopLogCapture');
 export const StopProxy = () => appCall('StopProxy');
 export const TriggerCFHealthCheck = () => appCall('TriggerCFHealthCheck');
+
+// Named IP pools (cloudfront, user-defined CDNs)
+export const GetIPPools = () => appCall('GetIPPools');
+export const UpdateIPPools = (pools: any[]) => appCall('UpdateIPPools', pools);
+export const GetIPPoolStats = (name: string) => appCall('GetIPPoolStats', name);
+export const ForceFetchIPPoolIPs = (name: string) => appCall('ForceFetchIPPoolIPs', name);
+export const RefreshIPPool = (name: string) => appCall('RefreshIPPool', name);
+export const RemoveInvalidIPPoolIPs = (name: string) => appCall('RemoveInvalidIPPoolIPs', name);
+export const TriggerIPPoolHealthCheck = (name: string) => appCall('TriggerIPPoolHealthCheck', name);
 export const UninstallCert = (thumbprint: string) => appCall('UninstallCert', thumbprint);
 export const UpdateCloudflareConfig = (cfg: any) => appCall('UpdateCloudflareConfig', cfg);
 

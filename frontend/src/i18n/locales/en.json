@@ -248,6 +248,8 @@
       "ech_hint": "Try ECH connection if enabled",
       "cf_pool": "Preferred IP Pool",
       "cf_pool_hint": "Prioritize using Cloudflare Preferred IPs",
+      "ip_pool_select": "Select Named IP Pool",
+      "ip_pool_count": "{count} IPs",
       "nat64_enable": "Enable NAT64 Mapping",
       "nat64_hint": "Enable NAT64 mapping transformation for this rule",
       "nat64_profile": "NAT64 Configuration",
@@ -299,6 +301,7 @@
       "others": "Others",
       "default_group": "Default",
       "cf_ip_pool": "CF IP POOL",
+      "ip_pool_name": "IP POOL: {name}",
       "doh_dynamic": "DOH DYNAMIC"
     },
     "notifications": {
@@ -454,6 +457,21 @@
     },
     "cf_pool": {
       "fetch_now": "Refresh IP Pool"
+    },
+    "ip_pools": {
+      "title": "Multi-CDN IP Pools",
+      "subtitle": "Maintain named preferred-IP pools per CDN; rules can select them by name",
+      "empty": "No custom IP pools yet — add one with the form below",
+      "name_label": "Pool name",
+      "ips_label": "IP list (comma/space/newline separated)",
+      "add": "Add",
+      "added": "IP pool {name} added",
+      "removed": "IP pool {name} removed",
+      "fetched": "IP pool {name} refreshed",
+      "ip_count": "{count} IPs",
+      "invalid_name": "Invalid or reserved name (cloudflare)",
+      "no_ips": "Enter at least one IP address",
+      "duplicate_name": "An IP pool with this name already exists"
     },
     "logs": {
       "title": "Log Files",

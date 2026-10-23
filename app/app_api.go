@@ -71,6 +71,14 @@ func NewApp() *App {
 	// health check, so no extra trigger is needed here.
 	a.proxyServer.UpdateCloudflareIPPool(ruleManager.GetCloudflareConfig().PreferredIPs)
 
+	// Initialize named IP pools (cloudfront, user-defined CDNs).
+	for _, pc := range ruleManager.GetIPPoolsConfig() {
+		a.proxyServer.UpdateIPPool(pc.Name, pc.PreferredIPs)
+		if pc.AutoUpdate {
+			go a.RefreshIPPool(pc.Name)
+		}
+	}
+
 	ruleManager.InitAutoRouter(a.proxyServer.GetDoHResolver())
 
 	return a
@@ -1001,6 +1009,131 @@ func (a *App) TriggerCFHealthCheck() error {
 	a.appendLog("[Cloudflare] Manual health check triggered...")
 	a.proxyServer.TriggerCFHealthCheck()
 	return nil
+}
+
+// GetIPPools returns the named IP pool configs (cloudfront, user-defined CDNs).
+func (a *App) GetIPPools() []proxy.IPPoolConfig {
+	return a.ruleManager.GetIPPoolsConfig()
+}
+
+// UpdateIPPools saves the full named-pool list and applies the diff to the
+// running proxy: added or changed pools get their IPs applied, removed pools
+// are dropped so their rules fall back to DNS dialing.
+func (a *App) UpdateIPPools(pools []proxy.IPPoolConfig) error {
+	old := a.ruleManager.GetIPPoolsConfig()
+	oldAutoUpdate := make(map[string]bool, len(old))
+	for _, pc := range old {
+		oldAutoUpdate[pc.Name] = pc.AutoUpdate
+	}
+
+	if err := a.ruleManager.UpdateIPPoolsConfig(pools); err != nil {
+		return err
+	}
+
+	current := make(map[string]bool, len(pools))
+	for _, pc := range pools {
+		current[pc.Name] = true
+	}
+	for _, pc := range old {
+		if !current[pc.Name] {
+			a.proxyServer.RemoveIPPool(pc.Name)
+		}
+	}
+	for _, pc := range a.ruleManager.GetIPPoolsConfig() {
+		a.proxyServer.UpdateIPPool(pc.Name, pc.PreferredIPs)
+		if pc.AutoUpdate && !oldAutoUpdate[pc.Name] {
+			go a.RefreshIPPool(pc.Name)
+		}
+	}
+	return nil
+}
+
+// GetIPPoolStats returns every IP of the named pool with its health stats.
+func (a *App) GetIPPoolStats(name string) []*cfpool.IPStats {
+	return a.proxyServer.GetIPPoolStats(name)
+}
+
+// ForceFetchIPPoolIPs pulls fresh preferred IPs for the named pool from its
+// CDN source (manual action, ignores AutoUpdate).
+func (a *App) ForceFetchIPPoolIPs(name string) error {
+	return a.fetchIPPool(name, true)
+}
+
+// RefreshIPPool fetches fresh IPs when the pool is stale or empty and its
+// AutoUpdate flag is on.
+func (a *App) RefreshIPPool(name string) {
+	pools := a.ruleManager.GetIPPoolsConfig()
+	for _, pc := range pools {
+		if pc.Name == name {
+			if pc.AutoUpdate {
+				_ = a.fetchIPPool(name, false)
+			}
+			return
+		}
+	}
+}
+
+func (a *App) fetchIPPool(name string, force bool) error {
+	pool := a.proxyServer.GetIPPool(name)
+	if !force {
+		if pool != nil && pool.HasIPs() && !pool.IsStale(24*time.Hour) {
+			return nil
+		}
+	}
+
+	var cfg *proxy.IPPoolConfig
+	for _, pc := range a.ruleManager.GetIPPoolsConfig() {
+		if pc.Name == name {
+			c := pc
+			cfg = &c
+			break
+		}
+	}
+	if cfg == nil {
+		return fmt.Errorf("IP pool %q not found", name)
+	}
+
+	ips, err := cfpool.FetchCDNIPs(name, cfg.APIKey)
+	if err != nil {
+		a.appendLog(fmt.Sprintf("[error] IP pool %s fetch failed: %s", name, err.Error()))
+		return err
+	}
+	if len(ips) == 0 {
+		return fmt.Errorf("IP pool %s: source returned no IPs", name)
+	}
+
+	a.appendLog(fmt.Sprintf("[success] IP pool %s: fetched %d preferred IPs", name, len(ips)))
+	a.proxyServer.UpdateIPPool(name, ips)
+	a.proxyServer.SetIPPoolFetchTime(name, time.Now())
+	cfg.PreferredIPs = ips
+	return a.saveIPPoolConfig(*cfg)
+}
+
+// saveIPPoolConfig upserts a single named pool into the persisted list.
+func (a *App) saveIPPoolConfig(cfg proxy.IPPoolConfig) error {
+	pools := a.ruleManager.GetIPPoolsConfig()
+	found := false
+	for i, pc := range pools {
+		if pc.Name == cfg.Name {
+			pools[i] = cfg
+			found = true
+			break
+		}
+	}
+	if !found {
+		pools = append(pools, cfg)
+	}
+	return a.ruleManager.UpdateIPPoolsConfig(pools)
+}
+
+// RemoveInvalidIPPoolIPs drops failed IPs from the named pool.
+func (a *App) RemoveInvalidIPPoolIPs(name string) int {
+	return a.proxyServer.RemoveInvalidIPPoolIPs(name)
+}
+
+// TriggerIPPoolHealthCheck starts an immediate health-check pass on the named pool.
+func (a *App) TriggerIPPoolHealthCheck(name string) {
+	a.proxyServer.TriggerIPPoolHealthCheck(name)
 }
 
 func (a *App) GetECHProfiles() []proxy.ECHProfile {

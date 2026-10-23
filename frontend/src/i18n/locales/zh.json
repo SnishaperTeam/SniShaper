@@ -248,6 +248,8 @@
       "ech_hint": "启用后尝试使用 ECH 连接",
       "cf_pool": "优选 IP 池",
       "cf_pool_hint": "优先使用 Cloudflare 优选 IP",
+      "ip_pool_select": "选择命名优选池",
+      "ip_pool_count": "{count} 个 IP",
       "nat64_enable": "启用 NAT64 映射",
       "nat64_hint": "开启此功能以执行 NAT64 映射转换",
       "nat64_profile": "NAT64 配置",
@@ -299,6 +301,7 @@
       "others": "其他",
       "default_group": "默认",
       "cf_ip_pool": "CF IP POOL",
+      "ip_pool_name": "IP POOL: {name}",
       "doh_dynamic": "DOH DYNAMIC"
     },
     "notifications": {
@@ -454,6 +457,21 @@
     },
     "cf_pool": {
       "fetch_now": "更新 IP 池"
+    },
+    "ip_pools": {
+      "title": "多 CDN 优选池",
+      "subtitle": "为不同 CDN 维护命名的优选 IP 池，规则编辑页可按名称选用",
+      "empty": "暂无自定义优选池，使用下方表单添加",
+      "name_label": "池名称",
+      "ips_label": "IP 列表（逗号/空格/换行分隔）",
+      "add": "添加",
+      "added": "优选池 {name} 已添加",
+      "removed": "优选池 {name} 已移除",
+      "fetched": "优选池 {name} 已更新",
+      "ip_count": "{count} 个 IP",
+      "invalid_name": "名称无效或为保留名 cloudflare",
+      "no_ips": "请至少填写一个 IP 地址",
+      "duplicate_name": "已存在同名优选池"
     },
     "logs": {
       "title": "日志文件",

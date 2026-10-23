@@ -15,6 +15,7 @@ import {
   UninstallCert, ExportConfig, ImportConfigWithSummary,
   GetCloudflareConfig, UpdateCloudflareConfig, GetCloudflareIPStats,
   ForceFetchCloudflareIPs, TriggerCFHealthCheck, RemoveInvalidCFIPs,
+  GetIPPools, UpdateIPPools, ForceFetchIPPoolIPs,
   GetLanguage, SetLanguage,
   GetIPv6Available, RefreshIPv6Check,
   GetLogFiles, OpenLogFile, CleanOldLogs,
@@ -126,6 +127,10 @@ const Settings: React.FC<SettingsProps> = ({ cache, onCacheUpdate, currentThemeI
   const caStatus = cache.caStatus;
   const installedCerts = cache.installedCerts || [];
   const [ipStats, setIpStats] = useState<any[]>(cache.ipStats || []);
+  const [ipPools, setIpPools] = useState<any[]>(cache.ipPools || []);
+  const [newPoolName, setNewPoolName] = useState('');
+  const [newPoolIPs, setNewPoolIPs] = useState('');
+  const [poolBusy, setPoolBusy] = useState<string>('');
   const [isIpv6Checking, setIsIpv6Checking] = useState(false);
   const ipv6Available = cache.ipv6Available !== false;
   const [updateChannel, setUpdateChannel] = useState<string>(cache.updateChannel || 'stable');
@@ -219,6 +224,67 @@ const Settings: React.FC<SettingsProps> = ({ cache, onCacheUpdate, currentThemeI
     }
   };
 
+  const reloadIPPools = useCallback(async () => {
+    try {
+      const pools = await GetIPPools();
+      const list = Array.isArray(pools) ? pools : [];
+      setIpPools(list);
+      onCacheUpdate({ ipPools: list });
+    } catch {
+      /* ignore */
+    }
+  }, [onCacheUpdate]);
+
+  const handleAddPool = async () => {
+    const name = newPoolName.trim().toLowerCase();
+    const ips = newPoolIPs.split(/[\s,;]+/).map((s: string) => s.trim()).filter(Boolean);
+    if (!name || name === 'cloudflare') {
+      toast.error(t('common.failed'), t('settings.ip_pools.invalid_name'));
+      return;
+    }
+    if (ips.length === 0) {
+      toast.error(t('common.failed'), t('settings.ip_pools.no_ips'));
+      return;
+    }
+    if (ipPools.some((p: any) => p.name === name)) {
+      toast.error(t('common.failed'), t('settings.ip_pools.duplicate_name'));
+      return;
+    }
+    try {
+      await UpdateIPPools([...ipPools, { name, preferred_ips: ips, auto_update: false, api_key: '' }]);
+      setNewPoolName('');
+      setNewPoolIPs('');
+      toast.success(t('settings.ip_pools.added', { name }));
+      await reloadIPPools();
+    } catch (err: any) {
+      toast.error(t('common.failed'), String(err));
+    }
+  };
+
+  const handleRemovePool = async (name: string) => {
+    try {
+      await UpdateIPPools(ipPools.filter((p: any) => p.name !== name));
+      toast.success(t('settings.ip_pools.removed', { name }));
+      await reloadIPPools();
+    } catch (err: any) {
+      toast.error(t('common.failed'), String(err));
+    }
+  };
+
+  const handleFetchPool = async (name: string) => {
+    if (poolBusy) return;
+    setPoolBusy(name);
+    try {
+      await ForceFetchIPPoolIPs(name);
+      toast.success(t('settings.ip_pools.fetched', { name }));
+      await reloadIPPools();
+    } catch (err: any) {
+      toast.error(t('common.failed'), String(err));
+    } finally {
+      setPoolBusy('');
+    }
+  };
+
   const reloadCriticalData = useCallback(async () => {
     try {
       const [tunCfg, tunState, cf, ca, certs, stats] = await Promise.all([
@@ -239,6 +305,7 @@ const Settings: React.FC<SettingsProps> = ({ cache, onCacheUpdate, currentThemeI
 
   useEffect(() => {
     reloadCriticalData();
+    reloadIPPools();
     TriggerCFHealthCheck().catch(console.error);
     GetUpdateChannel().then((c) => {
       if (c) {
@@ -1155,6 +1222,62 @@ const Settings: React.FC<SettingsProps> = ({ cache, onCacheUpdate, currentThemeI
                       )}
                     </Grid>
                   </Box>
+                </Grid>
+              </Grid>
+            </Box>
+          </Box>
+        </Grid>
+
+        <Grid size={12}>
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+            <SectionHeader icon={<Globe size={18} />} label={t('settings.ip_pools.title')}
+              action={<Typography variant="caption" sx={{ color: 'text.secondary', px: 1 }}>{t('settings.ip_pools.subtitle')}</Typography>}
+            />
+
+            <Box sx={{ p: 2, bgcolor: 'background.paper', border: 1, borderColor: 'divider', borderRadius: 2, display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+              {ipPools.length === 0 && (
+                <Typography variant="caption" sx={{ color: 'text.secondary', px: 1, py: 0.5 }}>
+                  {t('settings.ip_pools.empty')}
+                </Typography>
+              )}
+              {ipPools.map((pool: any) => (
+                <Box key={pool.name} sx={{ p: 1.5, border: 1, borderColor: 'divider', borderRadius: 1, bgcolor: 'background.default', display: 'flex', alignItems: 'center', gap: 1.5 }}>
+                  <Globe size={14} />
+                  <Box sx={{ minWidth: 0, flexGrow: 1 }}>
+                    <Typography variant="caption" sx={{ fontWeight: 'bold', display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {pool.name}
+                    </Typography>
+                    <Typography variant="caption" sx={{ fontSize: 10, color: 'text.secondary' }}>
+                      {t('settings.ip_pools.ip_count', { count: (pool.preferred_ips || []).length })}
+                    </Typography>
+                  </Box>
+                  {pool.name === 'cloudfront' && (
+                    <Button size="small" variant="text" disabled={Boolean(poolBusy)} onClick={() => handleFetchPool(pool.name)}
+                      startIcon={poolBusy === pool.name ? <CircularProgress size={14} /> : <Download size={14} />}>
+                      {t('settings.cf_pool.fetch_now')}
+                    </Button>
+                  )}
+                  <Button size="small" variant="text" color="error" onClick={() => handleRemovePool(pool.name)}>
+                    {t('common.delete')}
+                  </Button>
+                </Box>
+              ))}
+
+              <Divider />
+              <Grid container columns={12} spacing={1}>
+                <Grid size={{ xs: 12, sm: 4 }}>
+                  <TextField size="small" fullWidth label={t('settings.ip_pools.name_label')} placeholder="cloudfront"
+                    value={newPoolName} onChange={(e) => setNewPoolName(e.target.value)} />
+                </Grid>
+                <Grid size={{ xs: 12, sm: 6 }}>
+                  <TextField size="small" fullWidth multiline minRows={1} maxRows={3}
+                    label={t('settings.ip_pools.ips_label')} placeholder="13.226.69.219, 13.226.69.220"
+                    value={newPoolIPs} onChange={(e) => setNewPoolIPs(e.target.value)} />
+                </Grid>
+                <Grid size={{ xs: 12, sm: 2 }} sx={{ display: 'flex', alignItems: 'center' }}>
+                  <Button size="small" variant="outlined" fullWidth disabled={!newPoolName.trim() || !newPoolIPs.trim()} onClick={handleAddPool}>
+                    {t('settings.ip_pools.add')}
+                  </Button>
                 </Grid>
               </Grid>
             </Box>
