@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import {
-  Plus, Search, Filter, Edit, ExternalLink, Delete, Activity, Bolt, RefreshCcw, X
+  Plus, Search, Filter, Edit, ExternalLink, Delete, Activity, Bolt, RefreshCcw, X, History
 } from '../lib/icons';
 import {
-  GetSiteGroups, DeleteSiteGroup, ExportConfig, EventsOn, UpdateRules
+  GetSiteGroups, DeleteSiteGroup, ExportConfig, EventsOn, UpdateRules,
+  GetRulesLayerInfo, RevertSiteGroupToUpstream
 } from '../api/bindings';
 import {
   Box, Typography, Button, IconButton, TextField, InputAdornment,
@@ -28,8 +29,23 @@ const getEffectiveMode = (group: any) => {
   return mode ? mode.toUpperCase() : 'DIRECT';
 };
 
-const RuleItem: React.FC<{ group: any; onEdit: (group: any) => void; onDelete: (id: string) => void }> = ({ group, onEdit, onDelete }) => {
+const RuleItem: React.FC<{ group: any; layer?: string; onEdit: (group: any) => void; onDelete: (id: string) => void; onRevert: (group: any) => void }> = ({ group, layer, onEdit, onDelete, onRevert }) => {
   const { t } = useTranslation();
+
+  const layerBadge = (label: string, color: string) => (
+    <Box
+      component="span"
+      title={label}
+      sx={{
+        fontSize: 9, fontWeight: 800, letterSpacing: '0.05em', textTransform: 'uppercase',
+        px: 0.75, py: 0.15, borderRadius: 1, flexShrink: 0,
+        color: (theme: any) => theme.palette[color].main,
+        bgcolor: (theme: any) => alpha(theme.palette[color].main, 0.12),
+      }}
+    >
+      {label}
+    </Box>
+  );
 
   const getModeDisplay = (mode: string) => {
     switch (mode) {
@@ -65,7 +81,11 @@ const RuleItem: React.FC<{ group: any; onEdit: (group: any) => void; onDelete: (
     <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, py: 1.5, px: 3, bgcolor: 'background.paper', borderBottom: 1, borderColor: 'divider', transition: 'background-color 0.2s', '&:hover': { bgcolor: 'action.hover' }, minWidth: 0 }}>
       <Box sx={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', gap: 3, flexWrap: 'wrap' }}>
         <Box sx={{ width: { xs: '100%', md: '33%' }, minWidth: 0, flexShrink: 0 }}>
-          <Typography variant="body2" sx={{ fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '100%', py: 0.25, outline: '1px solid transparent' }}>{group.name || t('common.unknown')}</Typography>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, maxWidth: '100%' }}>
+            <Typography variant="body2" sx={{ fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', py: 0.25, outline: '1px solid transparent' }}>{group.name || t('common.unknown')}</Typography>
+            {layer === 'override' && layerBadge(t('rules.override_badge'), 'warning')}
+            {layer === 'user' && layerBadge(t('rules.custom_badge'), 'secondary')}
+          </Box>
           <Typography variant="caption" sx={{ fontSize: 10, color: 'text.secondary', fontWeight: 500, textTransform: 'uppercase', letterSpacing: '0.05em', display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '100%', py: 0.25, outline: '1px solid transparent' }}>{group.website || t('rules.display.default_group')}</Typography>
         </Box>
         <Box sx={{ flex: 1, minWidth: 0, display: { xs: 'none', md: 'flex' }, alignItems: 'center', gap: 1, overflow: 'hidden' }}>
@@ -89,6 +109,11 @@ const RuleItem: React.FC<{ group: any; onEdit: (group: any) => void; onDelete: (
         </Box>
       </Box>
       <Box sx={{ display: 'flex', gap: 0.75, flexShrink: 0 }}>
+        {layer === 'override' && (
+          <IconButton size="small" aria-label={t('rules.revert_aria')} onClick={() => onRevert(group)} sx={{ color: 'text.secondary', '&:hover': { bgcolor: 'action.hover', color: 'warning.main' } }}>
+            <History size={15} />
+          </IconButton>
+        )}
         <IconButton size="small" aria-label={t('rules.edit_rule_aria')} onClick={() => onEdit(group)} sx={{ color: 'text.secondary', '&:hover': { bgcolor: 'action.hover', color: 'primary.main' } }}>
           <Edit size={15} />
         </IconButton>
@@ -103,16 +128,21 @@ const RuleItem: React.FC<{ group: any; onEdit: (group: any) => void; onDelete: (
 const Rules: React.FC = () => {
   const { t } = useTranslation();
   const [groups, setGroups] = useState<any[]>([]);
+  const [layerInfo, setLayerInfo] = useState<any>({});
   const [search, setSearch] = useState('');
   const [filterMode, setFilterMode] = useState('ALL');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingGroup, setEditingGroup] = useState<any>(null);
   const [pendingDeleteGroup, setPendingDeleteGroup] = useState<any>(null);
+  const [pendingRevertGroup, setPendingRevertGroup] = useState<any>(null);
   const [updatingRules, setUpdatingRules] = useState(false);
 
   const loadData = async () => {
-    try { setGroups((await GetSiteGroups()) || []); }
-    catch (e) { console.error("Failed to load site groups:", e); }
+    try {
+      const [groups, info] = await Promise.all([GetSiteGroups(), GetRulesLayerInfo()]);
+      setGroups(groups || []);
+      setLayerInfo(info || {});
+    } catch (e) { console.error("Failed to load site groups:", e); }
   };
 
   useEffect(() => { loadData(); }, []);
@@ -128,6 +158,7 @@ const Rules: React.FC = () => {
     const target = groups.find((group) => group.id === id);
     setPendingDeleteGroup(target || { id });
   };
+  const handleRevert = (group: any) => setPendingRevertGroup(group);
   const handleExport = async () => {
     const cfg = await ExportConfig();
     if (cfg) {
@@ -147,7 +178,7 @@ const Rules: React.FC = () => {
         toast.error(t('rules.update_failed'), String(res.error));
       } else if (res?.updated) {
         toast.success(
-          t('rules.update_applied', { added: res.added ?? 0, changed: res.changed ?? 0 }),
+          t('rules.update_applied', { added: res.added ?? 0, changed: res.changed ?? 0, removed: res.removed ?? 0 }),
           t('rules.update_applied_detail', {
             local: shortHash(res.local_hash),
             remote: shortHash(res.remote_hash),
@@ -180,6 +211,19 @@ const Rules: React.FC = () => {
     } catch (err: any) {
       const detail = err && typeof err.message === 'string' && err.message ? err.message : err ? String(err) : '';
       toast.error(t('rules.notifications.delete_error'), detail || t('rules.notifications.save_error_hint'));
+    }
+  };
+
+  const handleRevertConfirm = async () => {
+    if (!pendingRevertGroup?.id) return;
+    try {
+      await RevertSiteGroupToUpstream(pendingRevertGroup.id);
+      setPendingRevertGroup(null);
+      await loadData();
+      toast.success(t('rules.notifications.reverted'));
+    } catch (err: any) {
+      const detail = err && typeof err.message === 'string' && err.message ? err.message : err ? String(err) : '';
+      toast.error(t('rules.notifications.revert_error'), detail || t('rules.notifications.save_error_hint'));
     }
   };
 
@@ -315,7 +359,7 @@ const Rules: React.FC = () => {
               </Box>
               <Box sx={{ border: 1, borderColor: 'divider', borderRadius: 2, overflow: 'hidden', bgcolor: 'background.paper', boxShadow: 1 }}>
                 {group.items.map((item: any) => (
-                  <RuleItem key={item.id} group={item} onEdit={handleEdit} onDelete={handleDelete} />
+                  <RuleItem key={item.id} group={item} layer={layerInfo?.site_group_layers?.[item.id]} onEdit={handleEdit} onDelete={handleDelete} onRevert={handleRevert} />
                 ))}
               </Box>
             </Box>
@@ -338,6 +382,16 @@ const Rules: React.FC = () => {
         </>}>
         <Typography variant="body2" color="text.secondary">
           {t('common.delete')}<Box component="span" sx={{ mx: 0.5, fontWeight: 'bold', color: 'text.primary' }}>{pendingDeleteGroup?.name || t('common.unknown')}</Box>{t('rules.delete_warning')}
+        </Typography>
+      </Modal>
+
+      <Modal isOpen={Boolean(pendingRevertGroup)} onClose={() => setPendingRevertGroup(null)} title={t('rules.revert_rule')} subtitle={t('rules.revert_hint')} maxWidth="28rem"
+        footer={<>
+          <Button type="button" onClick={() => setPendingRevertGroup(null)} variant="outlined" size="small">{t('common.cancel')}</Button>
+          <Button type="button" onClick={handleRevertConfirm} variant="contained" color="warning" size="small" startIcon={<History size={16} />}>{t('common.confirm')}</Button>
+        </>}>
+        <Typography variant="body2" color="text.secondary">
+          {t('rules.revert_prefix')}<Box component="span" sx={{ mx: 0.5, fontWeight: 'bold', color: 'text.primary' }}>{pendingRevertGroup?.name || t('common.unknown')}</Box>{t('rules.revert_warning')}
         </Typography>
       </Modal>
     </Box>

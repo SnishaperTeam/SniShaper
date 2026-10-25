@@ -309,10 +309,19 @@
       "save_success": "规则已保存",
       "save_error": "保存规则失败",
       "save_error_hint": "请检查输入内容后重试",
-      "delete_error": "删除规则失败"
+      "delete_error": "删除规则失败",
+      "reverted": "已恢复上游默认",
+      "revert_error": "恢复默认失败"
     },
     "edit_rule_aria": "编辑规则",
     "delete_rule_aria": "删除规则",
+    "override_badge": "已修改",
+    "custom_badge": "自定义",
+    "revert_rule": "恢复默认",
+    "revert_hint": "这将丢弃对该规则的本地修改，恢复为上游默认配置。",
+    "revert_prefix": "恢复 ",
+    "revert_warning": " 的上游默认配置？",
+    "revert_aria": "恢复该规则为上游默认",
     "filter_mode_aria": "筛选模式",
     "export_aria": "导出配置",
     "update_rules": "更新规则",
@@ -320,7 +329,7 @@
     "update_latest": "规则已是最新",
     "update_latest_detail": "远端更新于 {date} · {hash}",
     "update_applied_detail": "本地 {local} → 远程 {remote} · 远端更新于 {date}",
-    "update_applied": "规则已更新：新增 {added} 条，修改 {changed} 条",
+    "update_applied": "规则已更新：新增 {added} 条，修改 {changed} 条，移除 {removed} 条",
     "update_failed": "规则更新失败"
   },
   "logs": {

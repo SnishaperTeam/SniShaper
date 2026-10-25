@@ -29,6 +29,7 @@ type RulesUpdateResult struct {
 	Added           int      `json:"added"`
 	Changed         int      `json:"changed"`
 	Kept            int      `json:"kept"`
+	Removed         int      `json:"removed"`
 	Source          string   `json:"source,omitempty"`
 	LocalHash       string   `json:"local_hash,omitempty"`
 	RemoteHash      string   `json:"remote_hash,omitempty"`
@@ -129,6 +130,7 @@ func (a *App) syncRemoteRules() RulesUpdateResult {
 		Added:           summary.AddedGroups + summary.AddedUpstreams + summary.AddedDNSNodes + summary.AddedECHProfiles + summary.AddedNAT64,
 		Changed:         summary.UpdatedGroups + summary.UpdatedUpstreams,
 		Kept:            summary.KeptGroups + summary.KeptUpstreams,
+		Removed:         summary.RemovedGroups + summary.RemovedUpstreams,
 		Source:          source,
 		LocalHash:       localHash,
 		RemoteHash:      hash,

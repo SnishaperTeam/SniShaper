@@ -309,10 +309,19 @@
       "save_success": "Rule saved",
       "save_error": "Failed to save rule",
       "save_error_hint": "Please check your input and try again",
-      "delete_error": "Failed to delete rule"
+      "delete_error": "Failed to delete rule",
+      "reverted": "Reverted to upstream default",
+      "revert_error": "Revert failed"
     },
     "edit_rule_aria": "Edit rule",
     "delete_rule_aria": "Delete rule",
+    "override_badge": "Modified",
+    "custom_badge": "Custom",
+    "revert_rule": "Revert to default",
+    "revert_hint": "This discards your local changes and restores the upstream default.",
+    "revert_prefix": "Revert ",
+    "revert_warning": " to its upstream default?",
+    "revert_aria": "Revert this rule to upstream default",
     "filter_mode_aria": "Filter mode",
     "export_aria": "Export config",
     "update_rules": "Update rules",
@@ -320,7 +329,7 @@
     "update_latest": "Rules are already up to date",
     "update_latest_detail": "Remote updated {date} · {hash}",
     "update_applied_detail": "Local {local} → remote {remote} · remote updated {date}",
-    "update_applied": "Rules updated: {added} added, {changed} changed",
+    "update_applied": "Rules updated: {added} added, {changed} changed, {removed} removed",
     "update_failed": "Rules update failed"
   },
   "logs": {
