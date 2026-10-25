@@ -926,6 +926,34 @@ func (a *App) DeleteUpstream(id string) error {
 	return err
 }
 
+// 分层规则（issue #172）：前端根据层级信息标注规则的来源，并只对
+// override/删除态提供"恢复为上游默认"操作。
+func (a *App) GetRulesLayerInfo() proxy.RulesLayerInfo {
+	return a.ruleManager.GetRulesLayerInfo()
+}
+
+func (a *App) RevertSiteGroupToUpstream(id string) error {
+	err := a.ruleManager.RevertSiteGroupToUpstream(id)
+	if err == nil {
+		a.appendLog(fmt.Sprintf("[action] site group %s reverted to upstream", id))
+		if a.core != nil {
+			a.core.ReloadIfRunning()
+		}
+	}
+	return err
+}
+
+func (a *App) RevertUpstreamConfigToUpstream(id string) error {
+	err := a.ruleManager.RevertUpstreamConfigToUpstream(id)
+	if err == nil {
+		a.appendLog(fmt.Sprintf("[action] upstream %s reverted to upstream default", id))
+		if a.core != nil {
+			a.core.ReloadIfRunning()
+		}
+	}
+	return err
+}
+
 func (a *App) GetCloudflareConfig() proxy.CloudflareConfig {
 	return a.ruleManager.GetCloudflareConfig()
 }
