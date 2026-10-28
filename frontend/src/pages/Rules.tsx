@@ -16,6 +16,10 @@ import { toast } from '../lib/toast';
 import { useTranslation } from '../i18n/I18nContext';
 
 const FILTER_MODES = ['ALL', 'MITM', 'TLS-RF', 'QUIC', 'TRANSPARENT', 'MIGRATION'] as const;
+type FilterMode = typeof FILTER_MODES[number];
+
+const SOURCE_FILTERS = ['all', 'official', 'override', 'user'] as const;
+type SourceFilter = typeof SOURCE_FILTERS[number];
 
 const normalizeMode = (value: unknown) => String(value || '').trim().toLowerCase();
 
@@ -27,6 +31,66 @@ const getEffectiveMode = (group: any) => {
   if (mode === 'transparent') return 'TRANSPARENT';
   if (mode === 'migration') return 'MIGRATION';
   return mode ? mode.toUpperCase() : 'DIRECT';
+};
+
+// Generic Tabs component
+interface FilterTabsProps<T extends string> {
+  options: readonly T[];
+  value: T;
+  onChange: (value: T) => void;
+  getLabel: (option: T) => string;
+  color?: 'primary' | 'secondary';
+  ariaLabel: string;
+  isTab?: boolean;
+}
+
+const FilterTabs = <T extends string>({
+  options,
+  value,
+  onChange,
+  getLabel,
+  color = 'primary',
+  ariaLabel,
+  isTab = false,
+}: FilterTabsProps<T>) => {
+  const activeColor = `${color}.main`;
+
+  return (
+    <Box
+      sx={{
+        display: 'inline-flex', alignItems: 'center', gap: 0.75, p: 0.5,
+        border: 1, borderColor: 'divider', borderRadius: 2,
+        width: 'fit-content', flexWrap: 'wrap', minWidth: 0,
+      }}
+      role={isTab ? 'tablist' : 'group'}
+      aria-label={ariaLabel}
+    >
+      {options.map((opt) => {
+        const active = value === opt;
+        return (
+          <Button
+            key={opt}
+            onClick={() => onChange(opt)}
+            role={isTab ? 'tab' : undefined}
+            aria-selected={isTab ? active : undefined}
+            aria-pressed={!isTab ? active : undefined}
+            size="small"
+            sx={{
+              px: 2, py: 0.5, borderRadius: 1.5, fontSize: 10, fontWeight: 900, letterSpacing: '0.05em',
+              textTransform: 'uppercase', minWidth: 0, color: active ? activeColor : 'text.secondary',
+              bgcolor: active ? (theme: any) => alpha(theme.palette[color].main, 0.12) : 'transparent',
+              boxShadow: active ? (theme: any) => `0 4px 12px ${alpha(theme.palette[color].main, 0.15)}` : 'none',
+              '&:hover': {
+                bgcolor: active ? (theme: any) => alpha(theme.palette[color].main, 0.12) : 'action.hover',
+              },
+            }}
+          >
+            {getLabel(opt)}
+          </Button>
+        );
+      })}
+    </Box>
+  );
 };
 
 const RuleItem: React.FC<{ group: any; layer?: string; onEdit: (group: any) => void; onDelete: (id: string) => void; onRevert: (group: any) => void }> = ({ group, layer, onEdit, onDelete, onRevert }) => {
@@ -130,7 +194,8 @@ const Rules: React.FC = () => {
   const [groups, setGroups] = useState<any[]>([]);
   const [layerInfo, setLayerInfo] = useState<any>({});
   const [search, setSearch] = useState('');
-  const [filterMode, setFilterMode] = useState('ALL');
+  const [filterMode, setFilterMode] = useState<FilterMode>('ALL'); // Explicit generic type
+  const [sourceFilter, setSourceFilter] = useState<SourceFilter>('all');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingGroup, setEditingGroup] = useState<any>(null);
   const [pendingDeleteGroup, setPendingDeleteGroup] = useState<any>(null);
@@ -230,10 +295,17 @@ const Rules: React.FC = () => {
   const OTHERS_KEY = 'Others';
   const groupedResults = React.useMemo(() => {
     const filtered = groups.filter(g => {
-      const matchesSearch = ((g.name || '') + (g.website || '') + (g.domains || []).join(''))
-        .toLowerCase().includes(search.toLowerCase());
+      const haystack = ((g.name || '') + (g.website || '') + (g.domains || []).join('')).toLowerCase();
+      const matchesSearch = haystack.includes(search.toLowerCase());
       const matchesMode = filterMode === 'ALL' || getEffectiveMode(g) === filterMode;
-      return matchesSearch && matchesMode;
+      const layer = layerInfo?.site_group_layers?.[g.id];
+      const matchesSource =
+        sourceFilter === 'all'
+          ? true
+          : sourceFilter === 'official'
+            ? layer !== 'override' && layer !== 'user'
+            : layer === sourceFilter;
+      return matchesSearch && matchesMode && matchesSource;
     });
     const groups_map: Record<string, any[]> = {};
     filtered.forEach(item => {
@@ -246,7 +318,7 @@ const Rules: React.FC = () => {
       if (b === OTHERS_KEY) return -1;
       return a.localeCompare(b);
     }).map(key => ({ title: key === OTHERS_KEY ? t('rules.display.others') : key, items: groups_map[key] }));
-  }, [groups, search, filterMode]);
+  }, [groups, search, filterMode, sourceFilter, layerInfo, t]);
 
   return (
     <Box sx={{ pt: 2, width: '100%', flexGrow: 1, minHeight: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
@@ -278,29 +350,37 @@ const Rules: React.FC = () => {
       </Box>
 
       <Box sx={{ flexShrink: 0, display: 'flex', flexDirection: 'column', gap: 1.5, pb: 2 }}>
-        <Box sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.75, p: 0.5, border: 1, borderColor: 'divider', borderRadius: 2, width: 'fit-content', flexWrap: 'wrap', minWidth: 0 }} role="tablist" aria-label={t('rules.filter_mode_aria')}>
-          {FILTER_MODES.map((m) => {
-            const active = filterMode === m;
-            return (
-              <Button
-                key={m}
-                onClick={() => setFilterMode(m)}
-                role="tab"
-                aria-selected={active}
-                size="small"
-                sx={{
-                  px: 2, py: 0.5, borderRadius: 1.5, fontSize: 10, fontWeight: 900, letterSpacing: '0.05em',
-                  textTransform: 'uppercase', minWidth: 0, color: active ? 'primary.main' : 'text.secondary',
-                  bgcolor: active ? (theme) => alpha(theme.palette.primary.main, 0.12) : 'transparent',
-                  boxShadow: active ? (theme) => `0 4px 12px ${alpha(theme.palette.primary.main, 0.15)}` : 'none',
-                  '&:hover': { bgcolor: active ? (theme) => alpha(theme.palette.primary.main, 0.12) : 'action.hover' },
-                }}
-              >
-                {m === 'TLS-RF' ? t('rules.display.fragment') : m === 'TRANSPARENT' ? t('rules.display.transparent') : m === 'MIGRATION' ? t('rules.display.migration') : m}
-              </Button>
-            );
-          })}
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, flexWrap: 'wrap', minWidth: 0 }}>
+          
+          {/* Usage of the extracted component */}
+          <FilterTabs
+            options={FILTER_MODES}
+            value={filterMode}
+            onChange={setFilterMode}
+            getLabel={(m) =>
+              m === 'TLS-RF'
+                ? t('rules.display.fragment')
+                : m === 'TRANSPARENT'
+                ? t('rules.display.transparent')
+                : m === 'MIGRATION'
+                ? t('rules.display.migration')
+                : m
+            }
+            color="primary"
+            ariaLabel={t('rules.filter_mode_aria')}
+            isTab={true}
+          />
+
+          <FilterTabs
+            options={SOURCE_FILTERS}
+            value={sourceFilter}
+            onChange={setSourceFilter}
+            getLabel={(s) => t(`rules.source_${s}`)}
+            color="secondary"
+            ariaLabel={t('rules.filter_source_aria')}
+          />
         </Box>
+
         <TextField
           fullWidth
           size="small"
