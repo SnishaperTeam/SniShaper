@@ -101,9 +101,51 @@ func opDisableSysProxy(out cmdOut) int {
 	return 0
 }
 
-func opStatus(out cmdOut) int {
+// statusJSON 是 `snishaper status --json` 的输出结构，也是 macOS 菜单栏
+// 应用等外部工具的状态契约：服务未运行时仅 service 字段有值。
+type statusJSON struct {
+	Service  bool   `json:"service"`
+	Proxy    *bool  `json:"proxy,omitempty"`
+	Port     string `json:"port,omitempty"`
+	Mode     string `json:"mode,omitempty"`
+	TUN      *bool  `json:"tun,omitempty"`
+	TUNMsg   string `json:"tun_message,omitempty"`
+	SysProxy *bool  `json:"sysproxy,omitempty"`
+	SysSrv   string `json:"sysproxy_server,omitempty"`
+}
+
+func opStatus(args []string, out cmdOut) int {
 	c := core.NewCoreClient()
 	running := c.Ping()
+
+	jsonOut := false
+	for _, a := range args {
+		if a == "--json" {
+			jsonOut = true
+		}
+	}
+	if jsonOut {
+		st := statusJSON{Service: running, Port: listenPort()}
+		if running {
+			proxyOn := c.IsProxyRunning()
+			st.Proxy = &proxyOn
+			st.Mode = c.GetProxyMode()
+			ts := c.GetTUNStatus()
+			st.TUN = &ts.Running
+			st.TUNMsg = ts.Message
+			sp := sysproxy.GetSystemProxyStatus()
+			st.SysProxy = &sp.Enabled
+			st.SysSrv = sp.Server
+		}
+		data, err := json.Marshal(st)
+		if err != nil {
+			out("序列化状态失败: " + err.Error())
+			return 1
+		}
+		out(string(data))
+		return 0
+	}
+
 	out(fmt.Sprintf("服务: %s", map[bool]string{true: "运行中", false: "未运行"}[running]))
 	if !running {
 		return 0
