@@ -12,19 +12,19 @@ This file tracks planned work only. Existing features are intentionally omitted 
 
 ## macOS GUI
 
-- [ ] Evaluate and implement a native macOS GUI.
-- [ ] Reuse the shared core and existing configuration formats wherever practical.
-- [ ] Integrate with macOS system proxy settings and clearly explain permissions or platform limitations.
-- [ ] Build and test on Apple Silicon and, where feasible, Intel Macs.
-- [ ] Document installation, upgrades, removal, and known limitations.
+- [x] Evaluate and implement a native macOS GUI.
+- [x] Reuse the shared core and existing configuration formats wherever practical.
+- [x] Integrate with macOS system proxy settings and clearly explain permissions or platform limitations.
+- [x] Build and test on Apple Silicon and, where feasible, Intel Macs.
+- [x] Document installation, upgrades, removal, and known limitations.
 
 ## Live Connection Viewer
 
-- [ ] Display active connections and their current states.
-- [ ] Show available connection details, including domain, destination IP and port, matched rule, selected proxy mode, and traffic counters.
-- [ ] Make it clear when a field is unavailable or inferred rather than presenting it as confirmed information.
-- [ ] Support filtering and searching connections, plus copying useful details for troubleshooting.
-- [ ] Ensure connection inspection has bounded memory use and does not expose sensitive data unnecessarily.
+- [x] Display active connections and their current states.
+- [x] Show available connection details, including domain, destination IP and port, matched rule, selected proxy mode, and traffic counters.
+- [x] Make it clear when a field is unavailable or inferred rather than presenting it as confirmed information.
+- [x] Support filtering and searching connections, plus copying useful details for troubleshooting.
+- [x] Ensure connection inspection has bounded memory use and does not expose sensitive data unnecessarily.
 
 ## Rule Match Explanation
 
