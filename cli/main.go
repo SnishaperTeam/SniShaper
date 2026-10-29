@@ -67,7 +67,7 @@ func dispatchCommand(args []string, out cmdOut) int {
 
 	switch args[0] {
 	case "status":
-		return opStatus(out)
+		return opStatus(args[1:], out)
 	case "logs":
 		if len(args) > 1 {
 			switch args[1] {
