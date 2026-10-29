@@ -26,6 +26,7 @@ import checkCircle from '@iconify-icons/material-symbols/check-circle'
 import close from '@iconify-icons/material-symbols/close'
 import code from '@iconify-icons/material-symbols/code'
 import computer from '@iconify-icons/material-symbols/computer'
+import contentCopy from '@iconify-icons/material-symbols/content-copy'
 import darkMode from '@iconify-icons/material-symbols/dark-mode'
 import deleteIcon from '@iconify-icons/material-symbols/delete'
 import description from '@iconify-icons/material-symbols/description'
@@ -84,6 +85,7 @@ export const ChevronsUp = m(keyboardArrowUp)
 export const ChevronUp = m(keyboardArrowUp)
 export const Code2 = m(code)
 export const Cpu = m(memory)
+export const Copy = m(contentCopy)
 export const Delete = m(deleteIcon)
 export const Download = m(download)
 export const Edit = m(edit)

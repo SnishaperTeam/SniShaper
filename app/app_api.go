@@ -638,6 +638,15 @@ func (a *App) GetCore() *core.CoreClient {
 	return a.core
 }
 
+// GetActiveConnections 返回 core 进程的实时连接快照（有界注册表，
+// 最多 4096 条），供连接查看器轮询。core 未运行时返回空切片。
+func (a *App) GetActiveConnections() []proxy.ConnInfo {
+	if a.core == nil {
+		return []proxy.ConnInfo{}
+	}
+	return a.core.GetActiveConnections()
+}
+
 // GetAppRecentLogs returns only the app-side in-memory log lines.
 func (a *App) GetAppRecentLogs(limit int) string {
 	if limit <= 0 {

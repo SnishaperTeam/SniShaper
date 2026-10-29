@@ -6,6 +6,7 @@ import logoUrl from '../assets/logo.svg';
 import {
   Activity,
   FileText,
+  Link,
   Settings,
   Shield,
   RefreshCcw,
@@ -27,6 +28,7 @@ const getNavItems = (t: any) => [
   { path: '/dns', label: t('sidebar.dns'), icon: Antenna },
   { path: '/evolution', label: t('evolution.title'), icon: Bolt },
   { path: '/logs', label: t('sidebar.logs'), icon: FileText },
+  { path: '/connections', label: t('sidebar.connections'), icon: Link },
   { path: '/settings', label: t('sidebar.settings'), icon: Settings },
   { path: '/about', label: t('sidebar.about'), icon: Info },
 ];

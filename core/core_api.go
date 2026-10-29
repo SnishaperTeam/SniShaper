@@ -75,6 +75,10 @@ type SetModeArgs struct {
 	Mode string
 }
 
+type ActiveConnectionsReply struct {
+	Connections []proxy.ConnInfo
+}
+
 type LogsArgs struct {
 	Limit int
 }
@@ -206,6 +210,16 @@ func (s *coreService) ClearLogs(_ EmptyArgs, _ *EmptyArgs) error {
 
 func (s *coreService) GetRouteEvents(_ EmptyArgs, reply *RouteEventsReply) error {
 	reply.Events = s.runtime.popRouteEvents()
+	return nil
+}
+
+// GetActiveConnections 透传连接跟踪快照（有界注册表，见 core 的
+// proxy.ActiveConnections）；供 GUI 的实时连接查看器轮询。
+func (s *coreService) GetActiveConnections(_ EmptyArgs, reply *ActiveConnectionsReply) error {
+	reply.Connections = s.runtime.proxyServer.ActiveConnections()
+	if reply.Connections == nil {
+		reply.Connections = []proxy.ConnInfo{}
+	}
 	return nil
 }
 
