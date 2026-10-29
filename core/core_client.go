@@ -328,6 +328,19 @@ func (c *CoreClient) GetRouteEvents() []RouteEvent {
 	return reply.Events
 }
 
+// GetActiveConnections 返回 core 进程的实时连接快照；core 未运行或
+// RPC 失败时返回空切片（调用方按"无数据"呈现，而非错误）。
+func (c *CoreClient) GetActiveConnections() []proxy.ConnInfo {
+	var reply ActiveConnectionsReply
+	if err := c.Call("Core.GetActiveConnections", EmptyArgs{}, &reply); err != nil {
+		return []proxy.ConnInfo{}
+	}
+	if reply.Connections == nil {
+		return []proxy.ConnInfo{}
+	}
+	return reply.Connections
+}
+
 func (c *CoreClient) SetProxyMode(mode string) error {
 	if err := c.EnsureRunning(); err != nil {
 		return err

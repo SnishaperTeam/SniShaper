@@ -69,6 +69,9 @@ export const GetProxyDiagnostics = () => appCall('GetProxyDiagnostics');
 export const GetProxyMode = () => appCall('GetProxyMode');
 export const GetRecentLogs = (limit: number) => appCall('GetRecentLogs', limit);
 
+// Live connection viewer
+export const GetActiveConnections = () => appCall('GetActiveConnections');
+
 export const GetSiteGroups = () => appCall('GetSiteGroups');
 export const GetStats = () => appCall('GetStats');
 export const GetSystemProxyStatus = () => appCall('GetSystemProxyStatus');
