@@ -3,7 +3,7 @@ module snishaper
 go 1.27.0
 
 require (
-	github.com/SnishaperTeam/snishaper-core v0.7.0
+	github.com/SnishaperTeam/snishaper-core v0.8.0
 	github.com/admpub/go-download/v2 v2.2.0
 	github.com/gdamore/tcell/v2 v2.13.10
 	github.com/miekg/dns v1.1.73
@@ -134,7 +134,7 @@ require (
 	github.com/tailscale/go-winio v0.0.0-20231025203758-c4f33415bf55 // indirect
 	github.com/tailscale/hujson v0.0.0-20221223112325-20486734a56a // indirect
 	github.com/tailscale/peercred v0.0.0-20250107143737-35a0c7bd7edc // indirect
-	github.com/things-go/go-socks5 v0.1.3 // indirect
+	github.com/things-go/go-socks5 v0.1.4 // indirect
 	github.com/u-root/uio v0.0.0-20230220225925-ffce2a382923 // indirect
 	github.com/vishvananda/netns v0.0.5 // indirect
 	github.com/vmihailenco/msgpack/v5 v5.4.1 // indirect
