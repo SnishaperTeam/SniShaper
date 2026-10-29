@@ -14,10 +14,10 @@
 
 [**FlowWeaver**](https://github.com/SnishaperTeam/FlowWeaver) 是本项目的全功能分支，由原作者主导开发，两者**并行维护**：
 
-| | SniShaper（本仓库） | [FlowWeaver](https://github.com/SnishaperTeam/FlowWeaver) |
-|---|---|---|
-| 定位 | 轻量级代理服务端 | 功能全面的客户端 / 网关 |
-| 核心能力 | ECH 注入、TLS 分片、会话迁移 | Clash 订阅适配、全协议节点、WireGuard、TUN 网关 |
+|          | SniShaper（本仓库）          | [FlowWeaver](https://github.com/SnishaperTeam/FlowWeaver) |
+| -------- | ---------------------------- | --------------------------------------------------------- |
+| 定位     | 轻量级代理服务端             | 功能全面的客户端 / 网关                                   |
+| 核心能力 | ECH 注入、TLS 分片、会话迁移 | Clash 订阅适配、全协议节点、WireGuard、TUN 网关           |
 
 两者代码库独立，可各自演进；订阅与规则文件格式兼容。如果你需要**机场订阅导入、多协议节点选择或 WireGuard 隧道**，请使用 FlowWeaver。
 
@@ -28,6 +28,12 @@
 ## 交流群组
 
 欢迎加入 QQ 群 **[Snishaper and FlowWeaver building](https://qm.qq.com/q/GtBOkAOiME)**，与 SniShaper 与 FlowWeaver 的用户和开发者直接交流、反馈问题与提交建议。
+
+---
+
+## TODO
+
+了解下一步的开发计划及已完成的任务，请参阅[todo.md](todo.md)。
 
 ---
 

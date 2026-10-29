@@ -14,9 +14,9 @@ This project provides cross-platform support. See **[Platform_EN.md](docs/Platfo
 
 [**FlowWeaver**](https://github.com/SnishaperTeam/FlowWeaver) is the full-featured branch of this project, led by the same maintainer. Both are **actively maintained**:
 
-| | SniShaper (this repository) | [FlowWeaver](https://github.com/SnishaperTeam/FlowWeaver) |
-|---|---|---|
-| Focus | Lightweight proxy server | Full-featured client / gateway |
+|                | SniShaper (this repository)                         | [FlowWeaver](https://github.com/SnishaperTeam/FlowWeaver)         |
+| -------------- | --------------------------------------------------- | ----------------------------------------------------------------- |
+| Focus          | Lightweight proxy server                            | Full-featured client / gateway                                    |
 | Core strengths | ECH injection, TLS fragmentation, session migration | Clash subscriptions, multi-protocol nodes, WireGuard, TUN gateway |
 
 They keep separate codebases and evolve independently. Subscription and rule files are format-compatible. If you need **subscription import, multi-protocol node selection or WireGuard tunnels**, use FlowWeaver.
@@ -28,6 +28,12 @@ Both projects take their proxy engine from the standalone **[snishaper-core](htt
 ## Community
 
 Join the QQ group **[Snishaper and FlowWeaver building](https://qm.qq.com/q/GtBOkAOiME)** to talk directly with SniShaper and FlowWeaver users and developers, report issues and send suggestions.
+
+---
+
+## TODO
+
+To learn about the next development plan and completed tasks, please refer to [todo.md](todo.md).
 
 ---
 
