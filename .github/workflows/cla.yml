@@ -1,14 +1,22 @@
 name: cla
 
 # Contributor-agreement gate driven by the SniShaper Policy Bot App identity.
-#   pull_request[opened]   -> exemption check -> sign-guidance comment
-#                             (anchor upsert) + cla-pending label
+#   pull_request_target[opened,reopened] -> exemption check -> sign-guidance
+#                                          comment (anchor upsert) +
+#                                          cla-pending label
 #   issue_comment[created] -> PR comments only, non-exempt commenter,
 #                             /agree/i detection (idempotent) ->
 #                             cla-signed label + anchored confirmation reply
+#
+# The guidance flow MUST use pull_request_target, not pull_request: fork PRs
+# hide repository secrets from plain pull_request events, so the policy-bot
+# App token step would always fail exactly for external contributors. This
+# workflow never checks out the fork head - checkout stays on the base ref
+# and the jobs only call the GitHub API - so pull_request_target is safe
+# here.
 on:
-  pull_request:
-    types: [opened]
+  pull_request_target:
+    types: [opened, reopened]
   issue_comment:
     types: [created]
 
@@ -19,7 +27,7 @@ permissions:
 jobs:
   guidance:
     name: Sign-guidance comment (policy-bot)
-    if: github.event_name == 'pull_request'
+    if: github.event_name == 'pull_request_target'
     runs-on: ubuntu-latest
     permissions:
       contents: read
