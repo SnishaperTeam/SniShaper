@@ -4,8 +4,11 @@ name: cla
 #   pull_request_target[opened,reopened] -> exemption check -> sign-guidance
 #                                          comment (anchor upsert) +
 #                                          cla-pending label
-#   issue_comment[created] -> PR comments only, non-exempt commenter,
-#                             /agree/i detection (idempotent) ->
+#   issue_comment[created] -> PR comments only: the PR author signs with
+#                             'agree'; a maintainer (OWNER/MEMBER/
+#                             COLLABORATOR association) may also comment
+#                             'agree' to unlock CI on the author's behalf
+#                             (idempotent) ->
 #                             cla-signed label + anchored confirmation reply
 #
 # The guidance flow MUST use pull_request_target, not pull_request: fork PRs
@@ -105,16 +108,21 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           PR_NUMBER: ${{ github.event.issue.number }}
           COMMENTER: ${{ github.event.comment.user.login }}
+          COMMENTER_ASSOC: ${{ github.event.comment.author_association }}
           AUTHOR: ${{ github.event.issue.user.login }}
           BODY: ${{ github.event.comment.body }}
         run: |
           set -euo pipefail
           source .github/scripts/bots/common.sh
           ok=false
+          maintainer=false
+          case "$COMMENTER_ASSOC" in
+            OWNER|MEMBER|COLLABORATOR) maintainer=true ;;
+          esac
           if is_exempt "$COMMENTER"; then
             echo "commenter is exempt - ignoring"
-          elif [ "$COMMENTER" != "$AUTHOR" ]; then
-            echo "commenter is not the PR author - ignoring"
+          elif [ "$COMMENTER" != "$AUTHOR" ] && [ "$maintainer" != "true" ]; then
+            echo "commenter is neither the PR author nor a maintainer - ignoring"
           elif ! grep -qi 'agree' <<<"$BODY"; then
             echo "comment does not contain 'agree' - ignoring"
           elif grep -qx 'cla-signed' <<<"$(gh_retry gh api "repos/${GH_REPO}/issues/${PR_NUMBER}/labels" --jq '.[].name')"; then
@@ -136,12 +144,19 @@ jobs:
         env:
           GH_TOKEN: ${{ steps.policy_token.outputs.token }}
           PR_NUMBER: ${{ github.event.issue.number }}
+          COMMENTER: ${{ github.event.comment.user.login }}
+          AUTHOR: ${{ github.event.issue.user.login }}
         run: |
           set -euo pipefail
           source .github/scripts/bots/common.sh
           sync_labels "$PR_NUMBER" "cla-signed" "cla-pending"
-          body="<!-- snishaper-bot:cla-confirmation -->
-          ✅ Contributor agreement signed — thank you! The \`cla-signed\` label has been applied and CI will start automatically."
+          if [ "$COMMENTER" = "$AUTHOR" ]; then
+            body="<!-- snishaper-bot:cla-confirmation -->
+            ✅ Contributor agreement signed — thank you! The \`cla-signed\` label has been applied and CI will start automatically."
+          else
+            body="<!-- snishaper-bot:cla-confirmation -->
+            🔓 CI gate unlocked by maintainer \`@${COMMENTER}\` — the \`cla-signed\` label has been applied and CI will start automatically."
+          fi
           bot_comment "$PR_NUMBER" "snishaper-bot:cla-confirmation" "$body"
 
       - name: Assign reviewers (policy-bot, idempotent)
