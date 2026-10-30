@@ -86,11 +86,11 @@ This file tracks planned work only. Existing features are intentionally omitted 
 
 ## Proxy Performance Benchmarks
 
-- [ ] Create repeatable benchmarks for supported proxy modes and relevant network paths.
-- [ ] Measure throughput, latency, CPU usage, and memory usage under defined test conditions.
-- [ ] Include representative workloads such as short connections, sustained transfers, and many concurrent connections.
-- [ ] Record test environment and configuration so results can be compared across releases.
-- [ ] Use benchmark results to validate performance changes rather than treating a single run as conclusive.
+- [x] Create repeatable benchmarks for supported proxy modes and relevant network paths.
+- [x] Measure throughput, latency, CPU usage, and memory usage under defined test conditions.
+- [x] Include representative workloads such as short connections, sustained transfers, and many concurrent connections.
+- [x] Record test environment and configuration so results can be compared across releases.
+- [x] Use benchmark results to validate performance changes rather than treating a single run as conclusive.
 
 ## Configuration Migration and Compatibility
 
