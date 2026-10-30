@@ -83,6 +83,17 @@ export const RevealDiagnosticsExport = (path: string) => appCall('RevealDiagnost
 // Startup network recovery (leftover system proxy from a crashed run)
 export const GetNetworkRecoveryReport = () => appCall('GetNetworkRecoveryReport');
 
+// Configuration profiles (named snapshots of settings + rules)
+export const ListProfiles = () => appCall('ListProfiles');
+export const GetActiveProfile = () => appCall('GetActiveProfile');
+export const CreateProfile = (name: string) => appCall('CreateProfile', name);
+export const RenameProfile = (oldName: string, newName: string) => appCall('RenameProfile', oldName, newName);
+export const DuplicateProfile = (srcName: string, dstName: string) => appCall('DuplicateProfile', srcName, dstName);
+export const SwitchProfile = (name: string) => appCall('SwitchProfile', name);
+export const ExportProfile = (name: string) => appCall('ExportProfile', name);
+export const ImportProfile = (bundleJson: string) => appCall('ImportProfile', bundleJson);
+export const RevealProfileExport = (path: string) => appCall('RevealProfileExport', path);
+
 export const GetSiteGroups = () => appCall('GetSiteGroups');
 export const GetStats = () => appCall('GetStats');
 export const GetSystemProxyStatus = () => appCall('GetSystemProxyStatus');
