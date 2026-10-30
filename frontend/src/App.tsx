@@ -12,7 +12,8 @@ import {
   GetShowMainWindowOnAutoStart, GetAutoEnableProxyOnAutoStart, GetAutoEnableSysProxyOnAutoStart, GetAutoUpdateRules,
   GetTUNConfig, GetTUNStatus, GetCloudflareConfig,
   GetCAInstallStatus, GetInstalledCerts, GetCloudflareIPStats,
-  GetLanguage, GetTheme, SetTheme, GetIPv6Available, GetTutorialDone, GetAppearanceMode, EventsOn
+  GetLanguage, GetTheme, SetTheme, GetIPv6Available, GetTutorialDone, GetAppearanceMode, EventsOn,
+  GetNetworkRecoveryReport
 } from './api/bindings';
 import { I18nProvider, useTranslation } from './i18n/I18nContext';
 import { toast } from './lib/toast';
@@ -274,6 +275,24 @@ const AppContent: React.FC<{ settingsCache: SettingsCache, updateSettingsCache: 
       toast.error(t('network.ipv6_disabled'));
     }
   }, [settingsCache.ipv6Available, t]);
+
+  // 启动时后端会检测上次崩溃遗留的系统代理设置；前端挂载且语言就绪后拉取报告并提示。
+  const recoveryLanguage = settingsCache.language;
+  useEffect(() => {
+    if (!recoveryLanguage) return;
+    GetNetworkRecoveryReport().then((report: any) => {
+      if (!report || !report.detected) return;
+      if (report.action === 'recovered') {
+        toast.success(t('network.recovery_recovered'), report.server);
+      } else if (report.action === 'left') {
+        toast.info(t('network.recovery_left'), report.server);
+      } else if (report.action === 'error') {
+        toast.error(t('network.recovery_failed'), report.error || '');
+      }
+    }).catch(() => { /* report is best-effort UI */ });
+    // 只需在语言就绪后执行一次；报告在后端整个会话期间有效。
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [recoveryLanguage]);
 
   // 外观模式（浅色/深色/跟随系统）以 settings.json 为准；MUI 会先从 localStorage
   // 恢复避免闪烁，后端有已保存值时再覆盖。旧版本未写过该字段时保持本地选择。

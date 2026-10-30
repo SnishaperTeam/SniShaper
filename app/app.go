@@ -66,6 +66,7 @@ type App struct {
 	cancel              context.CancelFunc
 	launchedAtStartup   bool
 	autoProxyAtStartup  bool
+	recoveryReport      LeftoverSystemProxyReport
 	core                *core.CoreClient
 	// ifaces 用于 UI 侧网卡列举与配置变更后的缓存失效。
 	ifaces *netiface.Selector
@@ -291,6 +292,11 @@ func (a *App) startupV3() {
 			a.appendLog("[startup] Core process synchronized successfully")
 		}
 	}
+
+	// Recover network state a crashed previous instance may have left behind
+	// (system proxy still pointing at a dead listener). Runs before the
+	// auto-enable logic so a re-enable lands on top of a clean state.
+	a.recoveryReport = a.recoverLeftoverSystemProxy()
 
 	if a.ShouldAutoEnableProxyOnAutoStart() {
 		a.appendLog("[startup] AutoStart: Auto-enabling proxy as configured")
