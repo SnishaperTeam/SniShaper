@@ -80,6 +80,9 @@ export const PreviewDiagnosticsExport = () => appCall('PreviewDiagnosticsExport'
 export const ExportDiagnostics = () => appCall('ExportDiagnostics');
 export const RevealDiagnosticsExport = (path: string) => appCall('RevealDiagnosticsExport', path);
 
+// Startup network recovery (leftover system proxy from a crashed run)
+export const GetNetworkRecoveryReport = () => appCall('GetNetworkRecoveryReport');
+
 export const GetSiteGroups = () => appCall('GetSiteGroups');
 export const GetStats = () => appCall('GetStats');
 export const GetSystemProxyStatus = () => appCall('GetSystemProxyStatus');

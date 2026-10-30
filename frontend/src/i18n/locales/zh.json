@@ -447,7 +447,10 @@
     "ipv6_only_will_fail": "当前为纯 IPv4 网络，仅 IPv6 会连接失败",
     "ipv6_nat64_will_fail": "当前为纯 IPv4 网络，NAT64 需要 IPv6 才能生效",
     "ipv6_warn_suffix": "当前为纯 IPv4 环境，无法测试 IPv6 连通性",
-    "ipv6_restored": "已检测到 IPv6：NAT64、IPv6 规则等功能已恢复"
+    "ipv6_restored": "已检测到 IPv6：NAT64、IPv6 规则等功能已恢复",
+    "recovery_recovered": "检测到上次异常退出遗留的系统代理，已自动恢复网络设置",
+    "recovery_left": "检测到上次遗留的系统代理记录，但当前系统代理已被其他程序修改，未做任何更改",
+    "recovery_failed": "检测到上次遗留的系统代理，但恢复失败（可能需要管理员权限）"
   },
   "settings": {
     "title": "系统设置",

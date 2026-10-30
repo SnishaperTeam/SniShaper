@@ -44,12 +44,12 @@ This file tracks planned work only. Existing features are intentionally omitted 
 
 ## Network Failure Recovery
 
-- [ ] Detect and report network settings that may have been left behind after an unexpected exit or crash.
-- [ ] Provide a safe recovery process for SniShaper-managed system proxy settings, routes, and DNS changes.
-- [ ] Record enough state to distinguish settings created by SniShaper from settings owned by the user or other applications.
-- [ ] Restore only changes that SniShaper can confidently identify as its own; never blindly overwrite user settings.
-- [ ] Test recovery after forced termination, failed startup, interrupted shutdown, and system restart.
-- [ ] Show what was detected and changed, and provide actionable error messages if administrator permissions are required.
+- [x] Detect and report network settings that may have been left behind after an unexpected exit or crash.
+- [x] Provide a safe recovery process for SniShaper-managed system proxy settings, routes, and DNS changes.
+- [x] Record enough state to distinguish settings created by SniShaper from settings owned by the user or other applications.
+- [x] Restore only changes that SniShaper can confidently identify as its own; never blindly overwrite user settings.
+- [x] Test recovery after forced termination, failed startup, interrupted shutdown, and system restart.
+- [x] Show what was detected and changed, and provide actionable error messages if administrator permissions are required.
 
 ## Network Regression Test Suite
 

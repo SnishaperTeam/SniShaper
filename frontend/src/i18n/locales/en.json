@@ -447,7 +447,10 @@
     "ipv6_only_will_fail": "IPv4-only network: IPv6-only will fail to connect",
     "ipv6_nat64_will_fail": "IPv4-only network: NAT64 requires IPv6 to work",
     "ipv6_warn_suffix": "IPv4-only environment: IPv6 connectivity cannot be tested",
-    "ipv6_restored": "IPv6 detected: NAT64, IPv6 rules and other features are back"
+    "ipv6_restored": "IPv6 detected: NAT64, IPv6 rules and other features are back",
+    "recovery_recovered": "Leftover system proxy from the previous crashed run detected; network settings restored automatically",
+    "recovery_left": "Leftover system proxy marker detected, but the current system proxy was changed by another program; nothing was modified",
+    "recovery_failed": "Leftover system proxy detected, but recovery failed (administrator rights may be required)"
   },
   "settings": {
     "title": "Settings",
