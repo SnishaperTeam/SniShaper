@@ -396,7 +396,20 @@
     "capture_on": "ЗАХВАТ ВКЛ",
     "capture_off": "ЗАХВАТ ВЫКЛ",
     "buffer": "БУФЕР: {count} СТРОК",
-    "refresh_paused": "ОБНОВЛЕНИЕ ПРИОСТАНОВЛЕНО"
+    "refresh_paused": "ОБНОВЛЕНИЕ ПРИОСТАНОВЛЕНО",
+    "diag_button": "Диагностика",
+    "diag_title": "Экспорт пакета диагностики",
+    "diag_hint": "Перед экспортом проверьте состав файлов и обезличенные поля; пакет предназначен для сообщений об ошибках.",
+    "diag_files_title": "Состав пакета",
+    "diag_redacted_title": "Обезличенные поля",
+    "diag_redacted_api_key": "API-ключи (api_key)",
+    "diag_redacted_url_credentials": "Учётные данные в URL (user:pass@)",
+    "diag_redacted_query_token": "Токены в параметрах запроса (token=…)",
+    "diag_redacted_bearer": "Bearer-токены",
+    "diag_export": "Экспортировать",
+    "diag_exporting": "Экспорт…",
+    "diag_success": "Пакет диагностики экспортирован",
+    "diag_failed": "Не удалось экспортировать пакет диагностики"
   },
   "routing": {
     "title": "Автоматическая маршрутизация",

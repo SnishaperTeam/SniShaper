@@ -396,7 +396,20 @@
     "capture_on": "CAPTURE ON",
     "capture_off": "CAPTURE OFF",
     "buffer": "BUFFER: {count} LINES",
-    "refresh_paused": "REFRESH PAUSED"
+    "refresh_paused": "REFRESH PAUSED",
+    "diag_button": "Diagnostics",
+    "diag_title": "Export diagnostics package",
+    "diag_hint": "Review the included files and redacted fields before export; the package is meant for bug reports.",
+    "diag_files_title": "Included files",
+    "diag_redacted_title": "Redacted fields",
+    "diag_redacted_api_key": "API keys (api_key)",
+    "diag_redacted_url_credentials": "URL credentials (user:pass@)",
+    "diag_redacted_query_token": "Query parameter tokens (token=…)",
+    "diag_redacted_bearer": "Bearer tokens",
+    "diag_export": "Export",
+    "diag_exporting": "Exporting…",
+    "diag_success": "Diagnostics package exported",
+    "diag_failed": "Failed to export diagnostics package"
   },
   "routing": {
     "title": "Auto Routing",

@@ -36,11 +36,11 @@ This file tracks planned work only. Existing features are intentionally omitted 
 
 ## Diagnostic Export
 
-- [ ] Provide a one-click way to export a diagnostic package for bug reports.
-- [ ] Include relevant application version and build information, sanitized logs, network status, and configuration details needed to reproduce problems.
-- [ ] Redact passwords, tokens, private keys, credentials, and other sensitive values before packaging files.
-- [ ] Preview the files and sensitive fields that will be included before export.
-- [ ] Document the package format and verify that export failures do not affect the running proxy.
+- [x] Provide a one-click way to export a diagnostic package for bug reports.
+- [x] Include relevant application version and build information, sanitized logs, network status, and configuration details needed to reproduce problems.
+- [x] Redact passwords, tokens, private keys, credentials, and other sensitive values before packaging files.
+- [x] Preview the files and sensitive fields that will be included before export.
+- [x] Document the package format and verify that export failures do not affect the running proxy.
 
 ## Network Failure Recovery
 

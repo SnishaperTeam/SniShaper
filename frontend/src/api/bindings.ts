@@ -75,6 +75,11 @@ export const GetActiveConnections = () => appCall('GetActiveConnections');
 // Rule match explanation (simulated, same pipeline as live matching)
 export const ExplainMatch = (host: string, process: string) => appCall('ExplainMatch', host, process);
 
+// Diagnostic export (sanitized zip for bug reports)
+export const PreviewDiagnosticsExport = () => appCall('PreviewDiagnosticsExport');
+export const ExportDiagnostics = () => appCall('ExportDiagnostics');
+export const RevealDiagnosticsExport = (path: string) => appCall('RevealDiagnosticsExport', path);
+
 export const GetSiteGroups = () => appCall('GetSiteGroups');
 export const GetStats = () => appCall('GetStats');
 export const GetSystemProxyStatus = () => appCall('GetSystemProxyStatus');
