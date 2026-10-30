@@ -55,6 +55,8 @@ func NewApp() *App {
 		cancel:             cancel,
 		proxyServer:        proxyServer,
 		ruleManager:        ruleManager,
+		settingsPath:       settingsPath,
+		rulesPath:          rulesPath,
 		certPath:           common.ConfigCertDir(execDir),
 		proxyMarkerPath:    common.ConfigProxyMarker(execDir),
 		ifaces:             netiface.NewSelector(),
