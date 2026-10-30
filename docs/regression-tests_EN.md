@@ -1,10 +1,10 @@
 # Network Regression Test Suite
 
-Scope, execution and limits of the network regression tests in this repository. Goal: automate every network-state regression case that runs reliably in CI without elevation or real TUN hardware, and document the rest.
+Scope, execution and limits of the network regression tests in this repository. Goal: automate every network-state regression case that runs reliably without elevation or real TUN hardware, and document the rest.
 
-## Cases that run in CI (no elevation required)
+## Automated cases (no elevation required, run locally)
 
-The CI `tests` job (`.github/workflows/build.yml`) runs on Windows and Ubuntu:
+CI is build-and-smoke only and does not run the tests; developers run the following locally (see the verification commands in `AGENTS.md`):
 
 ```pwsh
 go test -race -tags with_gvisor ./...
@@ -46,5 +46,5 @@ Engine-level tests live in the `github.com/SnishaperTeam/snishaper-core` reposit
 - `proxy/dnsmode_test.go` — DNS mode decisions
 - `proxy/tun_config_test.go` — TUN config validation
 - `proxy/config_migration_test.go` — configuration migration compatibility
-- `proxy/bench_test.go` — performance benchmarks (see `docs/benchmarks.md`)
+ - `proxy/bench_test.go` — performance benchmarks (see `docs/benchmarks_EN.md`)
 - `netiface`, `singtun`, `sysproxy` — unit tests for interface enumeration, TUN, and per-platform system proxy implementations
