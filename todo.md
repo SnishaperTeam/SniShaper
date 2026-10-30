@@ -61,11 +61,11 @@ This file tracks planned work only. Existing features are intentionally omitted 
 
 ## Linux Package Formats
 
-- [ ] Evaluate Linux distribution formats in addition to the existing archive distribution.
-- [ ] Assess AppImage, Debian packages (`.deb`), and RPM packages based on maintenance cost and distribution coverage.
-- [ ] Ensure packages install the correct binaries, desktop entries, icons, and required metadata.
-- [ ] Define upgrade and uninstall behavior, including cleanup of application-owned files without deleting user data.
-- [ ] Document supported distributions and clearly state any runtime or permission requirements.
+- [x] Evaluate Linux distribution formats in addition to the existing archive distribution.
+- [x] Assess AppImage, Debian packages (`.deb`), and RPM packages based on maintenance cost and distribution coverage.
+- [x] Ensure packages install the correct binaries, desktop entries, icons, and required metadata.
+- [x] Define upgrade and uninstall behavior, including cleanup of application-owned files without deleting user data.
+- [x] Document supported distributions and clearly state any runtime or permission requirements.
 
 ## Multiple Configuration Profiles
 

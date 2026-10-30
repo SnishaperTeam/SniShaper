@@ -1,0 +1,14 @@
+[Desktop Entry]
+Type=Application
+Version=1.0
+Name=SniShaper
+GenericName=Proxy Tool
+Comment=TLS proxy with ECH injection, fragmentation and QUIC rebuilding
+Comment[zh_CN]=TLS 代理：ECH 注入、分片与 QUIC 重建
+Comment[ru]=TLS-прокси: ECH-инъекция, фрагментация и перестройка QUIC
+Exec=SniShaper
+Icon=snishaper
+Terminal=false
+Categories=Network;Utility;
+Keywords=proxy;tls;ech;vpn;network;
+StartupWMClass=SniShaper
