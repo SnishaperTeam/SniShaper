@@ -193,8 +193,17 @@ func (a *App) DisableSystemProxy() error {
 	return nil
 }
 
+// Platform seams for the regression tests: tests swap these package vars to
+// simulate system proxy state without mutating the proxy settings of the
+// machine the tests run on. Production code must call these, never the
+// sysproxy package directly.
+var (
+	sysproxyStatusFn  = sysproxy.GetSystemProxyStatus
+	sysproxyDisableFn = sysproxy.DisableSystemProxy
+)
+
 func (a *App) GetSystemProxyStatus() SystemProxyStatus {
-	status := sysproxy.GetSystemProxyStatus()
+	status := sysproxyStatusFn()
 	return SystemProxyStatus{
 		Enabled:  status.Enabled,
 		Server:   status.Server,
