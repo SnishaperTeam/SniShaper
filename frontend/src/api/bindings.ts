@@ -190,3 +190,6 @@ export const GetMigrationServer = () => appCall('GetMigrationServer');
 export const SetMigrationServer = (server: string) => appCall('SetMigrationServer', server);
 export const TestMigration = (server: string) => appCall('TestMigration', server);
 
+// Config migration report (startup config load; unrelated to the migration proxy mode)
+export const GetLastMigrationReport = () => appCall('GetLastMigrationReport');
+

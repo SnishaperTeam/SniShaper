@@ -94,9 +94,9 @@ This file tracks planned work only. Existing features are intentionally omitted 
 
 ## Configuration Migration and Compatibility
 
-- [ ] Add explicit configuration versioning and migration steps where needed.
-- [ ] Check old configurations for removed fields, invalid values, conflicting rules, and unsupported options during upgrades.
-- [ ] Provide a clear migration report describing changes, warnings, and errors.
-- [ ] Preserve a backup of the original configuration before applying a migration.
-- [ ] Avoid silently changing behavior when a configuration cannot be migrated safely.
-- [ ] Add compatibility tests using representative configurations from previous releases.
+- [x] Add explicit configuration versioning and migration steps where needed.
+- [x] Check old configurations for removed fields, invalid values, conflicting rules, and unsupported options during upgrades.
+- [x] Provide a clear migration report describing changes, warnings, and errors.
+- [x] Preserve a backup of the original configuration before applying a migration.
+- [x] Avoid silently changing behavior when a configuration cannot be migrated safely.
+- [x] Add compatibility tests using representative configurations from previous releases.

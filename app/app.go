@@ -69,6 +69,9 @@ type App struct {
 	launchedAtStartup   bool
 	autoProxyAtStartup  bool
 	recoveryReport      LeftoverSystemProxyReport
+	// startupMigrationReport 是启动加载配置时产生的迁移/校验报告，
+	// 由 GetLastMigrationReport 暴露给前端展示（无内容时各列表为空）。
+	startupMigrationReport proxy.MigrationReport
 	core                *core.CoreClient
 	// ifaces 用于 UI 侧网卡列举与配置变更后的缓存失效。
 	ifaces *netiface.Selector
