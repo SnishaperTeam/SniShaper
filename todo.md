@@ -28,11 +28,11 @@ This file tracks planned work only. Existing features are intentionally omitted 
 
 ## Rule Match Explanation
 
-- [ ] Add a tool that accepts a domain or destination and explains how SniShaper would handle it.
-- [ ] Show the matched rule, the resulting proxy mode, and relevant DNS and routing decisions.
-- [ ] Explain rule priority and why a more general rule did not win when that information is available.
-- [ ] Distinguish a simulated result from the decision made for a real connection.
-- [ ] Keep the explanation consistent with the actual rule engine to avoid maintaining separate, conflicting matching logic.
+- [x] Add a tool that accepts a domain or destination and explains how SniShaper would handle it.
+- [x] Show the matched rule, the resulting proxy mode, and relevant DNS and routing decisions.
+- [x] Explain rule priority and why a more general rule did not win when that information is available.
+- [x] Distinguish a simulated result from the decision made for a real connection.
+- [x] Keep the explanation consistent with the actual rule engine to avoid maintaining separate, conflicting matching logic.
 
 ## Diagnostic Export
 

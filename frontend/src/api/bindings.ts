@@ -72,6 +72,9 @@ export const GetRecentLogs = (limit: number) => appCall('GetRecentLogs', limit);
 // Live connection viewer
 export const GetActiveConnections = () => appCall('GetActiveConnections');
 
+// Rule match explanation (simulated, same pipeline as live matching)
+export const ExplainMatch = (host: string, process: string) => appCall('ExplainMatch', host, process);
+
 export const GetSiteGroups = () => appCall('GetSiteGroups');
 export const GetStats = () => appCall('GetStats');
 export const GetSystemProxyStatus = () => appCall('GetSystemProxyStatus');

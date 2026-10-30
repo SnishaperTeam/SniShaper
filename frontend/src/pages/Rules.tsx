@@ -4,10 +4,10 @@ import {
 } from '../lib/icons';
 import {
   GetSiteGroups, DeleteSiteGroup, ExportConfig, EventsOn, UpdateRules,
-  GetRulesLayerInfo, RevertSiteGroupToUpstream
+  GetRulesLayerInfo, RevertSiteGroupToUpstream, ExplainMatch
 } from '../api/bindings';
 import {
-  Box, Typography, Button, IconButton, TextField, InputAdornment,
+  Box, Typography, Button, IconButton, TextField, InputAdornment, Chip, Divider,
 } from '@mui/material';
 import { alpha } from '@mui/material/styles';
 import Modal from '../components/Modal';
@@ -201,6 +201,11 @@ const Rules: React.FC = () => {
   const [pendingDeleteGroup, setPendingDeleteGroup] = useState<any>(null);
   const [pendingRevertGroup, setPendingRevertGroup] = useState<any>(null);
   const [updatingRules, setUpdatingRules] = useState(false);
+  const [isExplainOpen, setIsExplainOpen] = useState(false);
+  const [explainHost, setExplainHost] = useState('');
+  const [explainProcess, setExplainProcess] = useState('');
+  const [explainResult, setExplainResult] = useState<any>(null);
+  const [explainLoading, setExplainLoading] = useState(false);
 
   const loadData = async () => {
     try {
@@ -218,6 +223,24 @@ const Rules: React.FC = () => {
   }, []);
 
   const handleAdd = () => { setEditingGroup(null); setIsModalOpen(true); };
+
+  // 模拟查询：与真实连接同一匹配管线，但只是预测，不产生路由事件。
+  const handleExplain = async () => {
+    const host = explainHost.trim();
+    if (!host || explainLoading) return;
+    setExplainLoading(true);
+    try {
+      const result = await ExplainMatch(host, explainProcess.trim());
+      setExplainResult(result || null);
+    } catch {
+      setExplainResult(null);
+    }
+    setExplainLoading(false);
+  };
+  const openExplain = () => {
+    setExplainResult(null);
+    setIsExplainOpen(true);
+  };
   const handleEdit = (group: any) => { setEditingGroup(group); setIsModalOpen(true); };
   const handleDelete = async (id: string) => {
     const target = groups.find((group) => group.id === id);
@@ -330,6 +353,15 @@ const Rules: React.FC = () => {
           <Typography variant="h5" data-tut="rules-title" sx={{ fontWeight: 700, letterSpacing: '-0.02em' }}>{t('rules.title')}</Typography>
         </Box>
         <Box sx={{ display: 'flex', gap: 1 }}>
+          <Button
+            onClick={openExplain}
+            variant="outlined"
+            size="small"
+            aria-label={t('rules.explain_title')}
+            startIcon={<Search size={16} />}
+          >
+            {t('rules.explain_button')}
+          </Button>
           <Button
             onClick={handleUpdateRules}
             disabled={updatingRules}
@@ -453,6 +485,93 @@ const Rules: React.FC = () => {
           <Button type="submit" form="rule-form" variant="contained" color="primary" size="small" startIcon={<Bolt size={16} />}>{editingGroup ? t('common.save') : t('common.save')}</Button>
         </>}>
         <RuleForm initialData={editingGroup} onSuccess={() => { setIsModalOpen(false); loadData(); }} onCancel={() => setIsModalOpen(false)} />
+      </Modal>
+
+      <Modal isOpen={isExplainOpen} onClose={() => setIsExplainOpen(false)} title={t('rules.explain_title')} subtitle={t('rules.explain_subtitle')} maxWidth="34rem"
+        footer={<>
+          <Button type="button" onClick={() => setIsExplainOpen(false)} variant="outlined" size="small">{t('common.close')}</Button>
+          <Button type="button" onClick={handleExplain} variant="contained" color="primary" size="small" disabled={!explainHost.trim() || explainLoading}>
+            {explainLoading ? t('rules.explain_running') : t('rules.explain_run')}
+          </Button>
+        </>}>
+        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+          <Box sx={{ display: 'flex', gap: 1 }}>
+            <TextField
+              autoFocus
+              fullWidth
+              size="small"
+              label={t('rules.explain_host_label')}
+              placeholder="example.com"
+              value={explainHost}
+              onChange={(e) => setExplainHost(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Enter') void handleExplain(); }}
+            />
+            <TextField
+              size="small"
+              label={t('rules.explain_process_label')}
+              placeholder="chrome.exe"
+              value={explainProcess}
+              onChange={(e) => setExplainProcess(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Enter') void handleExplain(); }}
+              sx={{ minWidth: 150 }}
+            />
+          </Box>
+
+          {explainResult && (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+              <Chip size="small" label={t('rules.explain_simulated_badge')} color="warning" variant="outlined" sx={{ alignSelf: 'flex-start' }} />
+              <Box sx={{ display: 'grid', gridTemplateColumns: 'auto 1fr', gap: 0.5, columnGap: 2, fontSize: '0.8rem', alignItems: 'baseline' }}>
+                <Typography variant="body2" color="text.secondary">{t('rules.explain_host')}</Typography>
+                <Typography variant="body2" sx={{ fontWeight: 700, wordBreak: 'break-all' }}>{explainResult.Host}</Typography>
+                <Typography variant="body2" color="text.secondary">{t('rules.explain_mode')}</Typography>
+                <Typography variant="body2" sx={{ fontWeight: 700 }}>{String(explainResult.Mode || '—').toUpperCase()}</Typography>
+                <Typography variant="body2" color="text.secondary">{t('rules.explain_source')}</Typography>
+                <Typography variant="body2">{explainResult.Source || '—'}</Typography>
+                <Typography variant="body2" color="text.secondary">{t('rules.explain_rule')}</Typography>
+                <Typography variant="body2" sx={{ wordBreak: 'break-all' }}>{explainResult.RuleDomain || '—'}</Typography>
+                <Typography variant="body2" color="text.secondary">{t('rules.explain_upstream')}</Typography>
+                <Typography variant="body2">{explainResult.Upstream || '—'}</Typography>
+                {explainResult.DNSMode && (<>
+                  <Typography variant="body2" color="text.secondary">{t('rules.explain_dns')}</Typography>
+                  <Typography variant="body2">{explainResult.DNSMode}</Typography>
+                </>)}
+                {explainResult.SniFake && (<>
+                  <Typography variant="body2" color="text.secondary">{t('rules.explain_sni_fake')}</Typography>
+                  <Typography variant="body2" sx={{ wordBreak: 'break-all' }}>{explainResult.SniFake}</Typography>
+                </>)}
+                <Typography variant="body2" color="text.secondary">ECH</Typography>
+                <Typography variant="body2">{explainResult.ECHEnabled ? t('common.enabled') : t('common.disabled')}</Typography>
+              </Box>
+
+              {explainResult.Downgraded && (
+                <Typography variant="body2" color="warning.main" sx={{ fontWeight: 700 }}>{t('rules.explain_downgraded')}</Typography>
+              )}
+
+              {Array.isArray(explainResult.Candidates) && explainResult.Candidates.length > 1 && (<>
+                <Divider />
+                <Typography variant="caption" sx={{ fontWeight: 900, textTransform: 'uppercase', letterSpacing: '0.1em' }} color="text.secondary">
+                  {t('rules.explain_candidates')}
+                </Typography>
+                <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.25 }}>
+                  {explainResult.Candidates.map((c: any, i: number) => (
+                    <Box key={i} sx={{ display: 'flex', gap: 1, alignItems: 'baseline', fontSize: '0.75rem' }}>
+                      <Box component="span" sx={{ fontVariantNumeric: 'tabular-nums', color: 'text.secondary', minWidth: 42 }}>{String(c.score)}</Box>
+                      <Box component="span" sx={{ fontWeight: i === 0 ? 700 : 400, wordBreak: 'break-all' }}>{c.domain}</Box>
+                      <Box component="span" sx={{ color: 'text.secondary', ml: 'auto', flexShrink: 0 }}>{String(c.mode || '').toUpperCase()}</Box>
+                    </Box>
+                  ))}
+                </Box>
+              </>)}
+
+              {Array.isArray(explainResult.Notes) && explainResult.Notes.length > 0 && (<>
+                <Divider />
+                {explainResult.Notes.map((note: string, i: number) => (
+                  <Typography key={i} variant="body2" color="text.secondary">• {note}</Typography>
+                ))}
+              </>)}
+            </Box>
+          )}
+        </Box>
       </Modal>
 
       <Modal isOpen={Boolean(pendingDeleteGroup)} onClose={() => setPendingDeleteGroup(null)} title={t('rules.delete_rule')} subtitle={t('rules.delete_hint')} maxWidth="28rem"
