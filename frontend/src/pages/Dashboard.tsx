@@ -32,6 +32,7 @@ import {
   GetCAInstallStatus,
   OpenCAFile,
   InstallCA,
+  GetLastMigrationReport,
   EventsOn
 } from '../api/bindings';
 import Modal from '../components/Modal';
@@ -49,6 +50,8 @@ import {
   ListSubheader,
   Tooltip,
   CircularProgress,
+  Alert,
+  AlertTitle,
 } from '@mui/material';
 
 const Dashboard: React.FC = () => {
@@ -75,6 +78,8 @@ const Dashboard: React.FC = () => {
   const [isInstallingCert, setIsInstallingCert] = useState(false);
   const [portOccupant, setPortOccupant] = useState<{ port: number; pid: number; name: string } | null>(null);
   const [showKillDialog, setShowKillDialog] = useState(false);
+  const [migrationReport, setMigrationReport] = useState<any | null>(null);
+  const [migrationDismissed, setMigrationDismissed] = useState(false);
 
   const refresh = async () => {
     try {
@@ -183,6 +188,10 @@ const Dashboard: React.FC = () => {
   useEffect(() => {
     refresh();
     loadInterfaces();
+    // One-shot: surface the startup config-migration report (if anything happened).
+    GetLastMigrationReport()
+      .then((report: any) => setMigrationReport(report || null))
+      .catch(() => {});
     const getInterval = () => {
       if (!isPageVisible) return 60000;
       if (!isActive) return 30000;
@@ -456,6 +465,41 @@ const Dashboard: React.FC = () => {
           </Tooltip>
         </Box>
       </Box>
+
+      {migrationReport && !migrationDismissed &&
+        ((migrationReport.changes?.length || 0) + (migrationReport.warnings?.length || 0) + (migrationReport.errors?.length || 0) > 0) && (
+        <Alert
+          severity={migrationReport.errors?.length ? 'error' : migrationReport.warnings?.length ? 'warning' : 'info'}
+          onClose={() => setMigrationDismissed(true)}
+          sx={{ mx: 3, mb: 2 }}
+        >
+          <AlertTitle>{t('dashboard.migration_report.title')}</AlertTitle>
+          {(() => {
+            const labels: Record<string, string> = {
+              errors: t('dashboard.migration_report.errors'),
+              warnings: t('dashboard.migration_report.warnings'),
+              changes: t('dashboard.migration_report.changes'),
+            };
+            return ['errors', 'warnings', 'changes'].map((field) => {
+              const items: string[] = Array.isArray(migrationReport[field]) ? migrationReport[field] : [];
+              if (items.length === 0) return null;
+              return (
+                <Box key={field} sx={{ mb: 0.5 }}>
+                  <Typography variant="caption" sx={{ fontWeight: 700, display: 'block' }}>{labels[field]}</Typography>
+                  {items.map((item: string, i: number) => (
+                    <Typography key={i} variant="caption" sx={{ display: 'block', fontSize: 11 }}>{item}</Typography>
+                  ))}
+                </Box>
+              );
+            });
+          })()}
+          {Array.isArray(migrationReport.backup_paths) && migrationReport.backup_paths.length > 0 && (
+            <Typography variant="caption" sx={{ display: 'block', mt: 0.5, fontSize: 10, opacity: 0.8 }}>
+              {t('dashboard.migration_report.backups')}: {migrationReport.backup_paths.join(' · ')}
+            </Typography>
+          )}
+        </Alert>
+      )}
 
       <Box sx={{ flexGrow: 1, minHeight: 0, overflowY: 'auto', overflowX: 'hidden', width: '100%', pb: 6 }}>
       <Grid container spacing={3}>

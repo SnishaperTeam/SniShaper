@@ -91,6 +91,13 @@
   },
   "dashboard": {
     "title": "主页",
+    "migration_report": {
+      "title": "配置迁移报告",
+      "changes": "已应用的修改",
+      "warnings": "警告",
+      "errors": "错误",
+      "backups": "原配置备份"
+    },
     "proxy_start": "开启代理",
     "proxy_stop": "停止代理",
     "sys_proxy": "系统代理",

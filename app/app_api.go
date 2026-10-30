@@ -38,7 +38,10 @@ func NewApp() *App {
 
 	ruleManager := proxy.NewRuleManager(settingsPath, rulesPath,
 		proxy.WithLogger(corelog.Std), proxy.WithRouterDebug(os.Getenv("SNISHAPER_ROUTER_DEBUG") == "1"))
-	if err := ruleManager.LoadConfig(); err != nil {
+	// 带迁移报告加载：版本升级/字段修复/备份路径通过
+	// GetLastMigrationReport 展示给用户，加载失败保持原有回退行为。
+	migrationReport, err := ruleManager.LoadConfigWithMigration()
+	if err != nil {
 		log.Printf("[warn] Failed to load config at init: %v", err)
 	}
 
@@ -62,6 +65,7 @@ func NewApp() *App {
 		ifaces:             netiface.NewSelector(),
 		launchedAtStartup:  HasLaunchArg("--startup"),
 		autoProxyAtStartup: HasLaunchArg("--autoproxy"),
+		startupMigrationReport: migrationReport,
 		core:               core.NewCoreClient(),
 	}
 
@@ -1506,6 +1510,13 @@ func (a *App) TestNAT64Profile(prefix string) (int64, error) {
 
 func (a *App) GetMigrationEnabled() bool {
 	return a.ruleManager.GetMigrationEnabled()
+}
+
+// GetLastMigrationReport 返回启动加载配置时产生的迁移/校验报告
+// （版本迁移、字段修复、备份路径；Errors 非空表示配置无法安全迁移）。
+// 与 GetMigrationEnabled 的「会话迁移代理模式」无关。
+func (a *App) GetLastMigrationReport() proxy.MigrationReport {
+	return a.startupMigrationReport
 }
 
 func (a *App) SetMigrationEnabled(enabled bool) error {
