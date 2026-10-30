@@ -5,8 +5,6 @@ import (
 	"fmt"
 	"os"
 	"strings"
-
-	"snishaper/pkg/sysproxy"
 )
 
 // LeftoverSystemProxyReport describes network state detected at startup that
@@ -99,7 +97,7 @@ func (a *App) recoverLeftoverSystemProxy() LeftoverSystemProxyReport {
 	case "recover":
 		report.Action = "recover"
 		a.appendLog(fmt.Sprintf("[recovery] crashed run left the system proxy enabled at %s; disabling", status.Server))
-		if err := sysproxy.DisableSystemProxy(); err != nil {
+		if err := sysproxyDisableFn(); err != nil {
 			report.Action = "error"
 			report.Error = err.Error()
 			a.appendLog("[recovery] failed to disable leftover system proxy: " + err.Error())
