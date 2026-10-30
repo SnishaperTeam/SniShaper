@@ -1,0 +1,102 @@
+name: linux-packages
+
+# Linux distribution packages (.deb / .rpm / AppImage).
+# Manual-only on purpose: packaging artifacts are release-time outputs and
+# must not gate merges — build.yml stays the CI authority for builds.
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Package version (defaults to the manifest version)"
+        required: false
+        default: ""
+
+permissions:
+  contents: read
+
+concurrency:
+  group: linux-packages-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  packages:
+    name: packages ${{ matrix.arch }} on ${{ matrix.runner }}
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: amd64
+            path_arch: x64
+            runner: ubuntu-26.04
+          - arch: arm64
+            path_arch: arm64
+            runner: ubuntu-26.04-arm
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install GUI build dependencies (GTK4 / WebKitGTK)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgtk-4-dev libwebkitgtk-6.0-dev
+
+      - name: Install nfpm
+        run: go install github.com/goreleaser/nfpm/v2/cmd/nfpm@latest
+
+      - name: Fetch linuxdeploy
+        run: |
+          chmod +x packaging/fetch-linuxdeploy.sh
+          ./packaging/fetch-linuxdeploy.sh "${{ matrix.arch }}"
+
+      - name: Build CLI + GUI
+        run: |
+          chmod +x build.sh
+          ./build.sh --ci --platform linux --arch "${{ matrix.path_arch }}" --type cli --type gui
+
+      - name: Resolve package version
+        id: ver
+        run: |
+          v="${{ github.event.inputs.version }}"
+          if [ -z "$v" ]; then
+            v="$(sed -n 's/.*<rel:Version>\([^<]*\)<\/rel:Version>.*/\1/p' Package.appxmanifest | head -1)"
+          fi
+          if [ -z "$v" ]; then v="0.0.0-ci"; fi
+          echo "version=$v" >> "$GITHUB_OUTPUT"
+
+      - name: Build packages
+        run: |
+          chmod +x packaging/build-packages.sh
+          ./packaging/build-packages.sh "${{ matrix.arch }}" "${{ steps.ver.outputs.version }}"
+
+      - name: Verify packages
+        run: |
+          out="build/dist/linux/${{ matrix.arch }}"
+          ls -l "$out"
+          for f in \
+            "$out/snishaper_${{ steps.ver.outputs.version }}_${{ matrix.arch }}.deb" \
+            "$out/snishaper-${{ steps.ver.outputs.version }}_${{ matrix.arch }}.rpm"; do
+            if [ ! -f "$f" ]; then echo "::error::missing $f"; exit 1; fi
+          done
+          # deb must carry the desktop entry, the icon and both binaries
+          dpkg-deb -c "$out/snishaper_${{ steps.ver.outputs.version }}_${{ matrix.arch }}.deb" | tee deb.list
+          for want in usr/bin/SniShaper usr/bin/snishaper usr/share/applications/snishaper.desktop usr/share/icons/hicolor/512x512/apps/snishaper.png; do
+            grep -q "$want" deb.list || { echo "::error::deb missing $want"; exit 1; }
+          done
+
+      - name: Upload package artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: snishaper-linux-packages-${{ matrix.arch }}
+          path: build/dist/linux/${{ matrix.arch }}/
+          if-no-files-found: error
