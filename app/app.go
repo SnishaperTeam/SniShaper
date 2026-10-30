@@ -47,6 +47,8 @@ type App struct {
 	proxyServer         *proxy.ProxyServer
 	certManager         *certmanager.CertManager
 	ruleManager         *proxy.RuleManager
+	settingsPath        string
+	rulesPath           string
 	evolutionTester     *evolution.Tester
 	evolutionTesterMu   sync.Mutex
 	certPath            string

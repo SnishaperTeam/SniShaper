@@ -69,12 +69,12 @@ This file tracks planned work only. Existing features are intentionally omitted 
 
 ## Multiple Configuration Profiles
 
-- [ ] Support multiple named configuration profiles for different networks or usage scenarios.
-- [ ] Allow users to create, rename, duplicate, switch, import, and export profiles.
-- [ ] Keep each profile's rules, DNS settings, and proxy mode isolated from other profiles.
-- [ ] Validate an imported profile before applying it and explain invalid or conflicting settings.
-- [ ] Define safe behavior when switching profiles while connections are active, including whether a restart is required.
-- [ ] Preserve existing configurations when introducing profile support.
+- [x] Support multiple named configuration profiles for different networks or usage scenarios.
+- [x] Allow users to create, rename, duplicate, switch, import, and export profiles.
+- [x] Keep each profile's rules, DNS settings, and proxy mode isolated from other profiles.
+- [x] Validate an imported profile before applying it and explain invalid or conflicting settings.
+- [x] Define safe behavior when switching profiles while connections are active, including whether a restart is required.
+- [x] Preserve existing configurations when introducing profile support.
 
 ## Per-Application Routing
 
