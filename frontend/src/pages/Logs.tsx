@@ -1,15 +1,18 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback, useDeferredValue } from 'react';
 import {
-  FileText, Delete, Pause, Play, Search, ChevronsUp, Antenna, ArrowDown, Download, X
+  FileText, Delete, Pause, Play, Search, ChevronsUp, Antenna, ArrowDown, Download, X, Save
 } from '../lib/icons';
 import {
   ClearLogs, GetRecentLogs, IsLogCaptureEnabled,
-  StartLogCapture, StopLogCapture
+  StartLogCapture, StopLogCapture,
+  PreviewDiagnosticsExport, ExportDiagnostics, RevealDiagnosticsExport
 } from '../api/bindings';
 import { useTranslation } from '../i18n/I18nContext';
-import { Box, Typography, Button, TextField, InputAdornment, IconButton } from '@mui/material';
+import { Box, Typography, Button, TextField, InputAdornment, IconButton, Chip } from '@mui/material';
 import { alpha } from '@mui/material/styles';
 import { keyframes } from '@emotion/react';
+import Modal from '../components/Modal';
+import { toast } from '../lib/toast';
 
 const RE_ERROR = /error|failed|panic/i;
 const RE_WARN = /warn/i;
@@ -148,6 +151,53 @@ const Logs: React.FC = () => {
     URL.revokeObjectURL(url);
   };
 
+  // ---- Diagnostic export: preview first, then export the sanitized zip ----
+  const [diagPreview, setDiagPreview] = useState<any>(null);
+  const [isDiagOpen, setIsDiagOpen] = useState(false);
+  const [isDiagExporting, setIsDiagExporting] = useState(false);
+
+  const openDiagPreview = async () => {
+    try {
+      const preview = await PreviewDiagnosticsExport();
+      setDiagPreview(preview);
+      setIsDiagOpen(true);
+    } catch {
+      toast.error(t('logs.diag_failed'));
+    }
+  };
+
+  const formatSize = (n: number): string => {
+    if (!Number.isFinite(n) || n <= 0) return '0 B';
+    if (n < 1024) return `${n} B`;
+    if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KiB`;
+    return `${(n / 1024 / 1024).toFixed(1)} MiB`;
+  };
+
+  const redactedFieldLabels: Record<string, string> = {
+    api_key: t('logs.diag_redacted_api_key'),
+    url_credentials: t('logs.diag_redacted_url_credentials'),
+    query_token: t('logs.diag_redacted_query_token'),
+    bearer: t('logs.diag_redacted_bearer'),
+  };
+
+  const handleDiagExport = async () => {
+    if (isDiagExporting) return;
+    setIsDiagExporting(true);
+    try {
+      const path = await ExportDiagnostics();
+      setIsDiagOpen(false);
+      if (typeof path === 'string' && path) {
+        RevealDiagnosticsExport(path);
+        toast.success(t('logs.diag_success'), path);
+      } else {
+        toast.error(t('logs.diag_failed'));
+      }
+    } catch {
+      toast.error(t('logs.diag_failed'));
+    }
+    setIsDiagExporting(false);
+  };
+
   const renderedContent = useMemo(() => {
     if (!captureEnabled || filteredLines.length === 0) return null;
     let lastDate = '';
@@ -199,6 +249,9 @@ const Logs: React.FC = () => {
           <Button onClick={handleExport} disabled={!captureEnabled || filteredLines.length === 0}
             variant="outlined" size="small" startIcon={<Download size={14} />}>
             {t('logs.export')}
+          </Button>
+          <Button onClick={openDiagPreview} variant="outlined" size="small" startIcon={<Save size={14} />}>
+            {t('logs.diag_button')}
           </Button>
         </Box>
       </Box>
@@ -291,6 +344,49 @@ const Logs: React.FC = () => {
           )}
         </Box>
       </Box>
+
+      <Modal
+        isOpen={isDiagOpen}
+        onClose={() => setIsDiagOpen(false)}
+        title={t('logs.diag_title')}
+        subtitle={t('logs.diag_hint')}
+        maxWidth="30rem"
+        footer={<>
+          <Button type="button" onClick={() => setIsDiagOpen(false)} variant="outlined" size="small">{t('common.cancel')}</Button>
+          <Button type="button" onClick={handleDiagExport} variant="contained" color="primary" size="small" disabled={isDiagExporting}>
+            {isDiagExporting ? t('logs.diag_exporting') : t('logs.diag_export')}
+          </Button>
+        </>}
+      >
+        {diagPreview && (
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+            <Box>
+              <Typography variant="caption" sx={{ fontWeight: 900, textTransform: 'uppercase', letterSpacing: '0.1em' }} color="text.secondary">
+                {t('logs.diag_files_title')}
+              </Typography>
+              <Box sx={{ mt: 1, display: 'flex', flexDirection: 'column', gap: 0.5 }}>
+                {(diagPreview.files || []).map((f: any) => (
+                  <Box key={f.name} sx={{ display: 'flex', gap: 1.5, alignItems: 'baseline', fontSize: '0.8rem' }}>
+                    <Box component="span" sx={{ fontWeight: 700, fontFamily: 'monospace' }}>{f.name}</Box>
+                    <Box component="span" sx={{ color: 'text.secondary', fontVariantNumeric: 'tabular-nums' }}>{formatSize(f.size || 0)}</Box>
+                    <Box component="span" sx={{ color: 'text.secondary', ml: 'auto', textAlign: 'right' }}>{f.description}</Box>
+                  </Box>
+                ))}
+              </Box>
+            </Box>
+            <Box>
+              <Typography variant="caption" sx={{ fontWeight: 900, textTransform: 'uppercase', letterSpacing: '0.1em' }} color="text.secondary">
+                {t('logs.diag_redacted_title')}
+              </Typography>
+              <Box sx={{ mt: 1, display: 'flex', flexWrap: 'wrap', gap: 0.75 }}>
+                {(diagPreview.redacted_fields || []).map((k: string) => (
+                  <Chip key={k} size="small" label={redactedFieldLabels[k] || k} variant="outlined" sx={{ height: 22, fontSize: '0.7rem' }} />
+                ))}
+              </Box>
+            </Box>
+          </Box>
+        )}
+      </Modal>
     </Box>
   );
 };

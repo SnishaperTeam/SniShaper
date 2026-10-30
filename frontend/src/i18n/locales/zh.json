@@ -396,7 +396,20 @@
     "capture_on": "CAPTURE ON",
     "capture_off": "CAPTURE OFF",
     "buffer": "BUFFER: {count} LINES",
-    "refresh_paused": "REFRESH PAUSED"
+    "refresh_paused": "REFRESH PAUSED",
+    "diag_button": "诊断包",
+    "diag_title": "导出诊断包",
+    "diag_hint": "导出前请检查包含的文件与已脱敏的字段；诊断包用于 bug 报告。",
+    "diag_files_title": "包含文件",
+    "diag_redacted_title": "已脱敏字段",
+    "diag_redacted_api_key": "API 密钥（api_key）",
+    "diag_redacted_url_credentials": "URL 内嵌凭据（user:pass@）",
+    "diag_redacted_query_token": "查询参数中的令牌（token=…）",
+    "diag_redacted_bearer": "Bearer 令牌",
+    "diag_export": "导出",
+    "diag_exporting": "导出中…",
+    "diag_success": "诊断包已导出",
+    "diag_failed": "诊断包导出失败"
   },
   "routing": {
     "title": "自动分流",
