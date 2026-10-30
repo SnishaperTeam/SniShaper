@@ -1,10 +1,10 @@
 # 网络回归测试（Network Regression Test Suite）
 
-本仓库网络回归测试的范围、运行方式与限制。目标：在不提权、不依赖真实 TUN 硬件的前提下，把可在 CI 稳定运行的网络状态回归用例自动化，其余用例文档化。
+本仓库网络回归测试的范围、运行方式与限制。目标：在不提权、不依赖真实 TUN 硬件的前提下，把网络状态回归用例自动化，其余用例文档化。
 
-## CI 自动运行的用例（无提权要求）
+## 自动化用例（无提权要求，本地运行）
 
-CI（`.github/workflows/build.yml` 的 `tests` job）在 Windows 与 Ubuntu 两个平台运行：
+CI 只做构建冒烟，不跑测试；以下用例由开发者在本地运行（见 `AGENTS.md` 的验证命令）：
 
 ```pwsh
 go test -race -tags with_gvisor ./...
