@@ -31,12 +31,23 @@ done
 
 ARCH="$(uname -m)"
 
+# build.sh 的产物目录用 x64/x86/arm64 命名，而 go env GOARCH 返回
+# amd64/386/arm64 —— 必须归一化，否则 Intel 机器上找不到 CLI 产物。
+goarch_normalize() {
+    case "$1" in
+        amd64|x86_64) printf '%s' "x64" ;;
+        386)          printf '%s' "x86" ;;
+        *)            printf '%s' "$1" ;;
+    esac
+}
+CLI_ARCH="$(goarch_normalize "$(go env GOARCH)")"
+
 # ---- 1. headless CLI -----------------------------------------------------
 if [ -z "$CLI_BIN" ]; then
     echo "[bundle] building headless CLI ($ARCH)..."
     chmod +x "$ROOT/build.sh"
-    "$ROOT/build.sh" --ci --platform darwin --arch "$(go env GOARCH)" --type cli
-    CLI_BIN="$ROOT/build/bin/cli/Darwin/$(go env GOARCH)/snishaper"
+    "$ROOT/build.sh" --ci --platform darwin --arch "$CLI_ARCH" --type cli
+    CLI_BIN="$ROOT/build/bin/cli/Darwin/$CLI_ARCH/snishaper"
 fi
 if [ ! -x "$CLI_BIN" ]; then
     echo "[bundle] CLI binary not found or not executable: $CLI_BIN" >&2

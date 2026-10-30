@@ -29,7 +29,7 @@ cd macos && swift build -c release
 
 Output: `build/bin/macos/SniShaper.app` and `SniShaper-macos-<arch>.zip`.
 
-CI builds and bundles on native Apple Silicon and Intel macOS runners (`.github/workflows/macos.yml`).
+CI builds and bundles on native Apple Silicon and Intel macOS runners (the `darwin` job in `.github/workflows/build.yml`).
 
 ## Installing
 

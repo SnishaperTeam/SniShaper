@@ -29,7 +29,7 @@ cd macos && swift build -c release
 
 产物：`build/bin/macos/SniShaper.app` 与 `SniShaper-macos-<arch>.zip`。
 
-CI 在 Apple Silicon 与 Intel 的原生 macOS runner 上构建并打包验证（`.github/workflows/macos.yml`）。
+CI 在 Apple Silicon 与 Intel 的原生 macOS runner 上构建并打包验证（`.github/workflows/build.yml` 的 `darwin` job）。
 
 ## 安装
 

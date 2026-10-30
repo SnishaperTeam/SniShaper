@@ -290,12 +290,16 @@ jobs:
           if ($LASTEXITCODE -ne 0) { Write-Host "::error::CLI help failed"; exit 1 }
 
   # ------------------------------------------------------------------
-  # CLI: Darwin, built natively and smoke-tested on real macOS runners.
+  # Darwin, built natively and smoke-tested on real macOS runners:
   #   darwin/x64  -> macos-26-intel (last x86_64 image, EOL Aug 2027)
   #   darwin/arm64-> macos-26      (Apple Silicon)
+  # Builds the headless CLI plus the macOS menu bar app (SnishaperBar,
+  # macos/) and bundles SniShaper.app. The bar binary itself is never
+  # executed in CI — it enters an NSApplication event loop and does not
+  # exit.
   # ------------------------------------------------------------------
-  darwin-cli:
-    name: CLI ${{ matrix.platform }}/${{ matrix.arch }} on ${{ matrix.runner }}
+  darwin:
+    name: darwin ${{ matrix.arch }} on ${{ matrix.runner }}
     needs: gate
     if: >-
       always() && !cancelled() &&
@@ -343,6 +347,33 @@ jobs:
           if [ -z "$V" ]; then echo "::error::empty CLI version"; exit 1; fi
           "$BIN" help >/dev/null
 
+      # Status contract: the menu bar app polls `snishaper status --json`
+      # every 3 seconds, so the JSON shape (at minimum the "service" key)
+      # is asserted on both architectures.
+      - name: Verify status --json contract
+        shell: bash
+        run: |
+          set -euo pipefail
+          BIN="build/bin/cli/Darwin/${{ matrix.arch }}/snishaper"
+          OUT="$("$BIN" status --json)"
+          echo "status --json: $OUT"
+          echo "$OUT" | python3 -c 'import json,sys; d=json.load(sys.stdin); assert "service" in d, "missing service key"'
+
+      - name: Bundle SniShaper.app
+        shell: bash
+        run: |
+          set -euo pipefail
+          chmod +x macos/scripts/bundle-app.sh
+          # --cli reuses the binary built above; bundle-app.sh would
+          # otherwise rebuild it via build.sh.
+          macos/scripts/bundle-app.sh --cli "$PWD/build/bin/cli/Darwin/${{ matrix.arch }}/snishaper"
+          APP="build/bin/macos/SniShaper.app"
+          test -x "$APP/Contents/MacOS/SnishaperBar"
+          test -x "$APP/Contents/Resources/bin/snishaper"
+          test -f "$APP/Contents/Info.plist"
+          test -f "build/bin/macos/SniShaper-macos-$(uname -m).zip"
+          echo "::notice::bundled SniShaper.app ($(uname -m))"
+
   # ------------------------------------------------------------------
   # Stable single-point summary used as the required status check in
   # branch protection ("ci"). Succeeds when every build job succeeded
@@ -351,7 +382,7 @@ jobs:
   # ------------------------------------------------------------------
   ci:
     name: ci
-    needs: [gate, matrix-build, cli-build, darwin-cli]
+    needs: [gate, matrix-build, cli-build, darwin]
     if: always() && !cancelled()
     runs-on: ubuntu-latest
     steps:
