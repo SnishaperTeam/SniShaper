@@ -78,11 +78,11 @@ This file tracks planned work only. Existing features are intentionally omitted 
 
 ## Per-Application Routing
 
-- [ ] Investigate per-application proxying so users can select applications to proxy or bypass.
-- [ ] Define platform-specific support and limitations before exposing the feature in the UI.
-- [ ] Specify how application identity is detected and how rules interact with domain-based and IP-based routing.
-- [ ] Provide clear feedback when an application cannot be identified or per-application routing is unsupported.
-- [ ] Add tests for conflicts between application, domain, IP, and default routing rules.
+- [x] Investigate per-application proxying so users can select applications to proxy or bypass.
+- [x] Define platform-specific support and limitations before exposing the feature in the UI.
+- [x] Specify how application identity is detected and how rules interact with domain-based and IP-based routing.
+- [x] Provide clear feedback when an application cannot be identified or per-application routing is unsupported.
+- [x] Add tests for conflicts between application, domain, IP, and default routing rules.
 
 ## Proxy Performance Benchmarks
 
