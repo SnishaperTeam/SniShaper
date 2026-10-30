@@ -2,7 +2,8 @@ import React, { useState, useEffect, useCallback } from 'react';
 import {
   ShieldAlert, Download, FolderOpen, RefreshCcw, Monitor, Anchor,
   Cpu, Globe, BellRing, Activity, Bolt, Delete,
-  AlertCircle, Sun, Moon, Wifi, FileText, Settings as SettingsIcon
+  AlertCircle, Sun, Moon, Wifi, FileText, Settings as SettingsIcon,
+  Map as ProfilesIcon,
 } from '../lib/icons';
 import {
   GetListenPort, SetListenPort, GetCloseToTray, SetCloseToTray,
@@ -35,6 +36,7 @@ import { alpha } from '@mui/material/styles';
 import { toast } from '../lib/toast';
 import { parseLatencyMs } from '../lib/utils';
 import { useTranslation } from '../i18n/I18nContext';
+import ProfilesSection from '../components/ProfilesSection';
 import { useColorScheme } from '@mui/material';
 import { availableThemes } from '../theme';
 
@@ -1306,6 +1308,13 @@ const Settings: React.FC<SettingsProps> = ({ cache, onCacheUpdate, currentThemeI
                 </Box>
               )}
             </StackedRow>
+          </Box>
+        </Grid>
+
+        <Grid size={12}>
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+            <SectionHeader icon={<ProfilesIcon size={18} />} label={t('profiles.title')} />
+            <ProfilesSection />
           </Box>
         </Grid>
       </Grid>
