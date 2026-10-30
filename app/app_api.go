@@ -647,6 +647,13 @@ func (a *App) GetActiveConnections() []proxy.ConnInfo {
 	return a.core.GetActiveConnections()
 }
 
+// ExplainMatch 用与真实连接完全相同的匹配管线模拟 host 的处理决策
+//（不产生路由事件）。全局模式取运行中的 core；process 为可选的
+// 进程名（per-app 规则模拟）。
+func (a *App) ExplainMatch(host, process string) proxy.MatchExplanation {
+	return a.ruleManager.ExplainMatch(host, a.GetProxyMode(), process)
+}
+
 // GetAppRecentLogs returns only the app-side in-memory log lines.
 func (a *App) GetAppRecentLogs(limit int) string {
 	if limit <= 0 {
