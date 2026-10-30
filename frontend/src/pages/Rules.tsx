@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import {
-  Plus, Search, Filter, Edit, ExternalLink, Delete, Activity, Bolt, RefreshCcw, X, History
+  Plus, Search, Filter, Edit, ExternalLink, Delete, Activity, Bolt, RefreshCcw, X, History, Monitor
 } from '../lib/icons';
 import {
   GetSiteGroups, DeleteSiteGroup, ExportConfig, EventsOn, UpdateRules,
@@ -158,6 +158,11 @@ const RuleItem: React.FC<{ group: any; layer?: string; onEdit: (group: any) => v
           ))}
           {(group.domains || []).length > 4 && (
             <Typography variant="caption" sx={{ fontSize: 10, color: 'text.secondary', fontWeight: 700, px: 0.5, opacity: 0.5 }}>+{(group.domains || []).length - 4}</Typography>
+          )}
+          {group.process && (
+            <Typography variant="caption" sx={{ fontSize: 9, bgcolor: 'action.hover', px: 1, py: 0.25, borderRadius: 1, border: 1, borderColor: 'divider', color: 'text.secondary', whiteSpace: 'nowrap', display: 'inline-flex', alignItems: 'center', gap: 0.5 }} title={group.process}>
+              <Monitor size={9} aria-hidden />{group.process}
+            </Typography>
           )}
         </Box>
       </Box>

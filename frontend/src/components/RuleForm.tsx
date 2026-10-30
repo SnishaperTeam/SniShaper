@@ -111,6 +111,7 @@ const RuleForm: React.FC<RuleFormProps> = ({ initialData, onSuccess, onCancel })
     mode: 'mitm',
     upstream: '',
     domains: [] as string[],
+    process: '',
     dns_mode: '',
     sni_fake: '',
     enabled: true,
@@ -153,6 +154,7 @@ const RuleForm: React.FC<RuleFormProps> = ({ initialData, onSuccess, onCancel })
       data.nat64_enabled = Boolean(data.nat64_enabled);
       data.nat64_profile_id = String(data.nat64_profile_id || '');
       data.ip_pool = String(data.ip_pool || '');
+      data.process = String(data.process || '');
       setFormData(data);
       setFrag(fragFromBackend(data.frag));
     }
@@ -435,6 +437,19 @@ const RuleForm: React.FC<RuleFormProps> = ({ initialData, onSuccess, onCancel })
                 })}
               </Box>
             </Box>
+          </Box>
+
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.75 }}>
+            <Typography variant="caption" sx={sectionLabelSx}>{t('rules.form.process')}</Typography>
+            <TextField
+              type="text"
+              size="small"
+              value={formData.process || ''}
+              onChange={(e) => setFormData({ ...formData, process: e.target.value })}
+              placeholder={t('rules.form.process_placeholder')}
+              sx={inputSx}
+            />
+            <Typography variant="caption" sx={{ fontSize: 10, color: 'text.secondary', lineHeight: 1.5 }}>{t('rules.form.process_hint')}</Typography>
           </Box>
 
           <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: '1fr 1fr' }, gap: 3 }}>
