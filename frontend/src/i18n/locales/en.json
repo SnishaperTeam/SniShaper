@@ -91,6 +91,13 @@
   },
   "dashboard": {
     "title": "Home",
+    "migration_report": {
+      "title": "Configuration migration report",
+      "changes": "Applied changes",
+      "warnings": "Warnings",
+      "errors": "Errors",
+      "backups": "Backups of the original configuration"
+    },
     "proxy_start": "Start Proxy",
     "proxy_stop": "Stop Proxy",
     "sys_proxy": "System Proxy",
