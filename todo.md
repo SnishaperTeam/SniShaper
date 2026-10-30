@@ -53,11 +53,11 @@ This file tracks planned work only. Existing features are intentionally omitted 
 
 ## Network Regression Test Suite
 
-- [ ] Add automated regression tests for TUN startup, shutdown, restart, and repeated enable/disable cycles.
-- [ ] Test DNS resolution, IPv4 and IPv6 behavior, route installation and cleanup, and system proxy restoration.
-- [ ] Test concurrent connections, connection churn, long-running sessions, and resource usage over time.
-- [ ] Cover startup failures, interrupted shutdowns, permission failures, and recovery from partial setup.
-- [ ] Run applicable tests in CI and document tests that require particular operating systems or elevated permissions.
+- [x] Add automated regression tests for TUN startup, shutdown, restart, and repeated enable/disable cycles.
+- [x] Test DNS resolution, IPv4 and IPv6 behavior, route installation and cleanup, and system proxy restoration.
+- [x] Test concurrent connections, connection churn, long-running sessions, and resource usage over time.
+- [x] Cover startup failures, interrupted shutdowns, permission failures, and recovery from partial setup.
+- [x] Run applicable tests in CI and document tests that require particular operating systems or elevated permissions.
 
 ## Linux Package Formats
 
