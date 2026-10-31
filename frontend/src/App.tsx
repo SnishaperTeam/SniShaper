@@ -31,6 +31,7 @@ const Routing = lazy(() => import('./pages/Routing'));
 const Logs = lazy(() => import('./pages/Logs'));
 const Connections = lazy(() => import('./pages/Connections'));
 const Settings = lazy(() => import('./pages/Settings'));
+const Profiles = lazy(() => import('./pages/Profiles'));
 const DNS = lazy(() => import('./pages/DNS'));
 const About = lazy(() => import('./pages/About'));
 const Evolution = lazy(() => import('./pages/Evolution'));
@@ -96,6 +97,7 @@ const App: React.FC = () => {
     void import('./pages/Logs');
     void import('./pages/Connections');
     void import('./pages/Settings');
+    void import('./pages/Profiles');
     void import('./pages/About');
   }, []);
 
@@ -241,6 +243,7 @@ const AppRoutes: React.FC<{ settingsCache: SettingsCache, updateSettingsCache: a
             <Route path="/logs" element={<Logs />} />
             <Route path="/connections" element={<Connections />} />
             <Route path="/settings" element={<Settings cache={settingsCache} onCacheUpdate={updateSettingsCache} currentThemeId={themeId} onThemeChange={onThemeChange} />} />
+            <Route path="/profiles" element={<Profiles />} />
             <Route path="/about" element={<About />} />
           </Routes>
         </Suspense>
