@@ -10,8 +10,10 @@
 #        Contents/MacOS/SnishaperBar              菜单栏应用
 #        Contents/Resources/bin/snishaper         headless CLI（代理引擎）
 #        Contents/Info.plist
-#   3. zip 为 SniShaper-macos-<arch>.zip（未签名/未公证——首次运行需在
-#      系统设置中放行，见 docs/macos-app.md）
+#   3. ad-hoc 签名（codesign --sign -）：arm64 上完全未签名的二进制无法
+#      通过 AMFI，ad-hoc 签名后可直接运行；未公证的 app 首次运行仍需在
+#      系统设置中放行，见 docs/macos-app.md
+#   4. zip 为 SniShaper-macos-<arch>.zip
 #
 # --cli 缺省时自动用 build.sh 构建当前架构的 headless CLI。
 set -euo pipefail
@@ -97,7 +99,14 @@ cat > "$APP/Contents/Info.plist" <<'PLIST'
 </plist>
 PLIST
 
-# ---- 4. zip --------------------------------------------------------------
+# ---- 4. ad-hoc 签名 -------------------------------------------------------
+# arm64 macOS 拒绝运行完全未签名的二进制（AMFI），ad-hoc 签名（无身份，
+# "signed to run locally"）让发布包可直接启动；公证（notarization）需要
+# Apple Developer 账号，发布版暂不处理。
+codesign --force --deep --sign - "$APP"
+codesign --verify --strict "$APP"
+
+# ---- 5. zip --------------------------------------------------------------
 mkdir -p "$OUT_DIR"
 ZIP="$OUT_DIR/SniShaper-macos-$ARCH.zip"
 rm -f "$ZIP"

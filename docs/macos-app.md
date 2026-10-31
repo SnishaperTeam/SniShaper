@@ -35,7 +35,7 @@ CI 在 Apple Silicon 与 Intel 的原生 macOS runner 上构建并打包验证�
 
 1. 下载 `SniShaper-macos-<arch>.zip` 并解压。
 2. 将 `SniShaper.app` 拖入 `/Applications`（或 `~/Applications`）。
-3. 首次运行：**构建产物未签名/未公证**，Gatekeeper 会拦截。放行方式任选其一：
+3. 首次运行：**构建产物为 ad-hoc 签名、未公证**，Gatekeeper 会拦截。放行方式任选其一：
    - 在 `SniShaper.app` 上右键 →「打开」→ 确认（推荐，只放行这一个应用）；
    - 或系统设置 → 隐私与安全性 → 底部出现「已阻止…」→「仍要打开」。
 4. 菜单栏出现 ⬢ 图标即运行中。
@@ -58,7 +58,7 @@ CI 在 Apple Silicon 与 Intel 的原生 macOS runner 上构建并打包验证�
 
 ## 限制
 
-- **未签名/未公证**：每次升级后需重新放行 Gatekeeper。
+- **ad-hoc 签名/未公证**：每次升级后需重新放行 Gatekeeper。
 - **首次打开可能不显示授权提示**：服务进程（CLI）需要管理员权限才能开启 TUN / 修改系统代理设置；macOS 上系统代理通过 `networksetup` 生效，TUN 依赖 utun，均可能触发授权弹窗。
 - 菜单栏应用当前提供核心控制（服务、代理、系统代理、诊断、日志），完整功能请配合 CLI 使用。
 - 平台支持细节见 [Platform.md](Platform.md)。
