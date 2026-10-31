@@ -32,16 +32,19 @@ contents:
     dst: /usr/share/icons/hicolor/512x512/apps/snishaper.png
     file_info:
       mode: 0644
-deb:
-  # GUI 是 Wails v3 (GTK4 + WebKitGTK 6.0)。WebKit 的 deb 包名在发行版间
-  # 有差异（libwebkitgtk-6.0-4 / -1），故 GTK 用硬依赖、WebKit 走 recommends，
-  # 缺库时 GUI 启动报错信息足够定位，CLI 不受影响。
-  depends:
-    - libgtk-4-1
-  recommends:
-    - libwebkitgtk-6.0-4
-rpm:
-  # Fedora 40+ 包名。openSUSE 命名不同，用户自行 zypper install。
-  depends:
-    - gtk4
-    - webkitgtk6.0
+# nfpm 的 depends/recommends 是 Overridables 顶层字段，deb:/rpm: 段内
+# 不存在这两个键；按格式区分依赖要用 overrides（见 nfpm.go Overridables）。
+overrides:
+  deb:
+    # GUI 是 Wails v3 (GTK4 + WebKitGTK 6.0)。WebKit 的 deb 包名在发行版间
+    # 有差异（libwebkitgtk-6.0-4 / -1），故 GTK 用硬依赖、WebKit 走 recommends，
+    # 缺库时 GUI 启动报错信息足够定位，CLI 不受影响。
+    depends:
+      - libgtk-4-1
+    recommends:
+      - libwebkitgtk-6.0-4
+  rpm:
+    # Fedora 40+ 包名。openSUSE 命名不同，用户自行 zypper install。
+    depends:
+      - gtk4
+      - webkitgtk6.0
