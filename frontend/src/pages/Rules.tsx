@@ -527,38 +527,38 @@ const Rules: React.FC = () => {
               <Chip size="small" label={t('rules.explain_simulated_badge')} color="warning" variant="outlined" sx={{ alignSelf: 'flex-start' }} />
               <Box sx={{ display: 'grid', gridTemplateColumns: 'auto 1fr', gap: 0.5, columnGap: 2, fontSize: '0.8rem', alignItems: 'baseline' }}>
                 <Typography variant="body2" color="text.secondary">{t('rules.explain_host')}</Typography>
-                <Typography variant="body2" sx={{ fontWeight: 700, wordBreak: 'break-all' }}>{explainResult.Host}</Typography>
+                <Typography variant="body2" sx={{ fontWeight: 700, wordBreak: 'break-all' }}>{explainResult.host}</Typography>
                 <Typography variant="body2" color="text.secondary">{t('rules.explain_mode')}</Typography>
-                <Typography variant="body2" sx={{ fontWeight: 700 }}>{String(explainResult.Mode || '—').toUpperCase()}</Typography>
+                <Typography variant="body2" sx={{ fontWeight: 700 }}>{String(explainResult.mode || '—').toUpperCase()}</Typography>
                 <Typography variant="body2" color="text.secondary">{t('rules.explain_source')}</Typography>
-                <Typography variant="body2">{explainResult.Source || '—'}</Typography>
+                <Typography variant="body2">{explainResult.source || '—'}</Typography>
                 <Typography variant="body2" color="text.secondary">{t('rules.explain_rule')}</Typography>
-                <Typography variant="body2" sx={{ wordBreak: 'break-all' }}>{explainResult.RuleDomain || '—'}</Typography>
+                <Typography variant="body2" sx={{ wordBreak: 'break-all' }}>{explainResult.rule_domain || '—'}</Typography>
                 <Typography variant="body2" color="text.secondary">{t('rules.explain_upstream')}</Typography>
-                <Typography variant="body2">{explainResult.Upstream || '—'}</Typography>
-                {explainResult.DNSMode && (<>
+                <Typography variant="body2">{explainResult.upstream || '—'}</Typography>
+                {explainResult.dns_mode && (<>
                   <Typography variant="body2" color="text.secondary">{t('rules.explain_dns')}</Typography>
-                  <Typography variant="body2">{explainResult.DNSMode}</Typography>
+                  <Typography variant="body2">{explainResult.dns_mode}</Typography>
                 </>)}
-                {explainResult.SniFake && (<>
+                {explainResult.sni_fake && (<>
                   <Typography variant="body2" color="text.secondary">{t('rules.explain_sni_fake')}</Typography>
-                  <Typography variant="body2" sx={{ wordBreak: 'break-all' }}>{explainResult.SniFake}</Typography>
+                  <Typography variant="body2" sx={{ wordBreak: 'break-all' }}>{explainResult.sni_fake}</Typography>
                 </>)}
                 <Typography variant="body2" color="text.secondary">ECH</Typography>
-                <Typography variant="body2">{explainResult.ECHEnabled ? t('common.enabled') : t('common.disabled')}</Typography>
+                <Typography variant="body2">{explainResult.ech_enabled ? t('common.enabled') : t('common.disabled')}</Typography>
               </Box>
 
-              {explainResult.Downgraded && (
+              {explainResult.downgraded && (
                 <Typography variant="body2" color="warning.main" sx={{ fontWeight: 700 }}>{t('rules.explain_downgraded')}</Typography>
               )}
 
-              {Array.isArray(explainResult.Candidates) && explainResult.Candidates.length > 1 && (<>
+              {Array.isArray(explainResult.candidates) && explainResult.candidates.length > 1 && (<>
                 <Divider />
                 <Typography variant="caption" sx={{ fontWeight: 900, textTransform: 'uppercase', letterSpacing: '0.1em' }} color="text.secondary">
                   {t('rules.explain_candidates')}
                 </Typography>
                 <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.25 }}>
-                  {explainResult.Candidates.map((c: any, i: number) => (
+                  {explainResult.candidates.map((c: any, i: number) => (
                     <Box key={i} sx={{ display: 'flex', gap: 1, alignItems: 'baseline', fontSize: '0.75rem' }}>
                       <Box component="span" sx={{ fontVariantNumeric: 'tabular-nums', color: 'text.secondary', minWidth: 42 }}>{String(c.score)}</Box>
                       <Box component="span" sx={{ fontWeight: i === 0 ? 700 : 400, wordBreak: 'break-all' }}>{c.domain}</Box>
@@ -568,9 +568,9 @@ const Rules: React.FC = () => {
                 </Box>
               </>)}
 
-              {Array.isArray(explainResult.Notes) && explainResult.Notes.length > 0 && (<>
+              {Array.isArray(explainResult.notes) && explainResult.notes.length > 0 && (<>
                 <Divider />
-                {explainResult.Notes.map((note: string, i: number) => (
+                {explainResult.notes.map((note: string, i: number) => (
                   <Typography key={i} variant="body2" color="text.secondary">• {note}</Typography>
                 ))}
               </>)}

@@ -8,19 +8,20 @@ import {
 } from '@mui/material';
 import { alpha } from '@mui/material/styles';
 
+// Wails 绑定按 Go JSON tag 序列化（proxy.ConnInfo），字段为 snake_case。
 interface ConnInfo {
-  ID: number;
-  Protocol: string;
-  Host: string;
-  DstAddr: string;
-  Rule: string;
-  RuleDomain: string;
-  Mode: string;
-  Source: string;
-  State: string;
-  StartedAt: string;
-  BytesUp: number;
-  BytesDown: number;
+  id: number;
+  protocol: string;
+  host: string;
+  dst_addr: string;
+  rule: string;
+  rule_domain: string;
+  mode: string;
+  source: string;
+  state: string;
+  started_at: string;
+  bytes_up: number;
+  bytes_down: number;
 }
 
 const formatBytes = (n: number): string => {
@@ -70,19 +71,19 @@ const Connections: React.FC = () => {
   const filtered = conns.filter((c) => {
     const q = deferredSearch.trim().toLowerCase();
     if (!q) return true;
-    return `${c.Host} ${c.DstAddr} ${c.Rule} ${c.Mode} ${c.Protocol}`.toLowerCase().includes(q);
+    return `${c.host} ${c.dst_addr} ${c.rule} ${c.mode} ${c.protocol}`.toLowerCase().includes(q);
   });
 
   const copyDetail = (c: ConnInfo) => {
     const text = JSON.stringify(c, null, 2);
     void navigator.clipboard.writeText(text).then(() => {
-      setCopiedId(c.ID);
-      setTimeout(() => setCopiedId((prev) => (prev === c.ID ? null : prev)), 1200);
+      setCopiedId(c.id);
+      setTimeout(() => setCopiedId((prev) => (prev === c.id ? null : prev)), 1200);
     }).catch(() => {});
   };
 
-  const totalUp = conns.reduce((s, c) => s + (c.BytesUp || 0), 0);
-  const totalDown = conns.reduce((s, c) => s + (c.BytesDown || 0), 0);
+  const totalUp = conns.reduce((s, c) => s + (c.bytes_up || 0), 0);
+  const totalDown = conns.reduce((s, c) => s + (c.bytes_down || 0), 0);
 
   return (
     <Box sx={{ p: 3, height: '100%', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 2 }}>
@@ -144,24 +145,24 @@ const Connections: React.FC = () => {
             </TableHead>
             <TableBody>
               {filtered.map((c) => (
-                <TableRow key={c.ID} hover>
-                  <TableCell sx={{ maxWidth: 260, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={c.Host || undefined}>
-                    {c.Host || '—'}
+                <TableRow key={c.id} hover>
+                  <TableCell sx={{ maxWidth: 260, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={c.host || undefined}>
+                    {c.host || '—'}
                   </TableCell>
-                  <TableCell sx={{ maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums' }} title={c.DstAddr || undefined}>
-                    {c.DstAddr || '—'}
+                  <TableCell sx={{ maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums' }} title={c.dst_addr || undefined}>
+                    {c.dst_addr || '—'}
                   </TableCell>
-                  <TableCell>{c.Rule || '—'}</TableCell>
-                  <TableCell>{c.Mode || '—'}</TableCell>
-                  <TableCell align="right" sx={{ fontVariantNumeric: 'tabular-nums' }}>{formatBytes(c.BytesUp)}</TableCell>
-                  <TableCell align="right" sx={{ fontVariantNumeric: 'tabular-nums' }}>{formatBytes(c.BytesDown)}</TableCell>
-                  <TableCell align="right" sx={{ fontVariantNumeric: 'tabular-nums' }}>{formatAge(c.StartedAt, now, t)}</TableCell>
+                  <TableCell>{c.rule || '—'}</TableCell>
+                  <TableCell>{c.mode || '—'}</TableCell>
+                  <TableCell align="right" sx={{ fontVariantNumeric: 'tabular-nums' }}>{formatBytes(c.bytes_up)}</TableCell>
+                  <TableCell align="right" sx={{ fontVariantNumeric: 'tabular-nums' }}>{formatBytes(c.bytes_down)}</TableCell>
+                  <TableCell align="right" sx={{ fontVariantNumeric: 'tabular-nums' }}>{formatAge(c.started_at, now, t)}</TableCell>
                   <TableCell>
                     <Chip
                       size="small"
-                      label={c.State === 'active' ? t('connections.state_active') : (c.State || '—')}
-                      color={c.State === 'active' ? 'success' : 'default'}
-                      variant={c.State === 'active' ? 'filled' : 'outlined'}
+                      label={c.state === 'active' ? t('connections.state_active') : (c.state || '—')}
+                      color={c.state === 'active' ? 'success' : 'default'}
+                      variant={c.state === 'active' ? 'filled' : 'outlined'}
                       sx={{ height: 20, fontSize: '0.7rem' }}
                     />
                   </TableCell>
@@ -174,7 +175,7 @@ const Connections: React.FC = () => {
                         aria-label={t('connections.copy_detail')}
                         onClick={() => copyDetail(c)}
                         onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') copyDetail(c); }}
-                        sx={{ cursor: 'pointer', display: 'inline-flex', color: copiedId === c.ID ? 'success.main' : 'text.secondary', '&:hover': { color: 'primary.main' } }}
+                        sx={{ cursor: 'pointer', display: 'inline-flex', color: copiedId === c.id ? 'success.main' : 'text.secondary', '&:hover': { color: 'primary.main' } }}
                       >
                         <Copy size={15} aria-hidden />
                       </Box>
