@@ -64,6 +64,7 @@ jobs:
       RELEASE_BOT_NAME: SnishaperTeam-ReleaseBot
       RELEASE_BOT_EMAIL: dongle2823@163.com
       SIGNING_READY: ${{ secrets.GPG_PRIVATE_KEY != '' && secrets.GPG_PASSPHRASE != '' }}
+      RELEASE_BOT_READY: ${{ secrets.RELEASE_BOT_APP_ID != '' && secrets.RELEASE_BOT_PRIVATE_KEY != '' }}
     outputs:
       version: ${{ steps.resolve.outputs.version }}
       tag: ${{ steps.resolve.outputs.tag }}
@@ -74,10 +75,25 @@ jobs:
       identity_version: ${{ steps.resolve.outputs.identity_version }}
       skip: ${{ steps.release-check.outputs.skip }}
     steps:
+      # Pushes to main authenticate as the release bot app (in the
+      # main-branch-protection ruleset bypass list); GITHUB_TOKEN pushes
+      # are attributed to github-actions[bot] and can never satisfy the
+      # required status checks on a direct push.
+      - name: Generate release bot token
+        id: bot
+        if: env.RELEASE_BOT_READY == 'true'
+        continue-on-error: true
+        uses: actions/create-github-app-token@v3
+        with:
+          app-id: ${{ secrets.RELEASE_BOT_APP_ID }}
+          private-key: ${{ secrets.RELEASE_BOT_PRIVATE_KEY }}
+          permission-contents: write
+
       - name: Checkout
         uses: actions/checkout@v7
         with:
           fetch-depth: 0
+          token: ${{ steps.bot.outputs.token || github.token }}
 
       - name: Import release bot signing key
         if: env.SIGNING_READY == 'true'
