@@ -3,7 +3,7 @@ module snishaper
 go 1.27.0
 
 require (
-	github.com/SnishaperTeam/snishaper-core v0.8.0
+	github.com/SnishaperTeam/snishaper-core v0.8.1
 	github.com/admpub/go-download/v2 v2.2.0
 	github.com/gdamore/tcell/v2 v2.13.10
 	github.com/miekg/dns v1.1.73
