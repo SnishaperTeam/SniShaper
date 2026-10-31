@@ -7,6 +7,7 @@ import {
   Activity,
   FileText,
   Link,
+  Map,
   Settings,
   Shield,
   RefreshCcw,
@@ -29,6 +30,7 @@ const getNavItems = (t: any) => [
   { path: '/evolution', label: t('evolution.title'), icon: Bolt },
   { path: '/logs', label: t('sidebar.logs'), icon: FileText },
   { path: '/connections', label: t('sidebar.connections'), icon: Link },
+  { path: '/profiles', label: t('sidebar.profiles'), icon: Map },
   { path: '/settings', label: t('sidebar.settings'), icon: Settings },
   { path: '/about', label: t('sidebar.about'), icon: Info },
 ];

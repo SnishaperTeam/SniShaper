@@ -25,7 +25,8 @@
     "imported": "Profile imported",
     "imported_with_warnings": "Profile imported with warnings",
     "import_invalid": "Import failed: invalid profile bundle",
-    "action_failed": "Action failed"
+    "action_failed": "Action failed",
+    "empty": "No profiles yet — create one from the current configuration"
   },
   "common": {
     "loading": "Loading...",
@@ -62,6 +63,7 @@
     "dns": "DNS Settings",
     "logs": "Real-time Logs",
     "connections": "Live Connections",
+    "profiles": "Profiles",
     "settings": "Settings",
     "about": "About",
     "light_mode": "Light mode",

@@ -25,7 +25,8 @@
     "imported": "配置文件已导入",
     "imported_with_warnings": "配置文件已导入，但有警告",
     "import_invalid": "导入失败：配置文件无效",
-    "action_failed": "操作失败"
+    "action_failed": "操作失败",
+    "empty": "暂无配置文件，可从当前配置创建一个"
   },
   "common": {
     "loading": "正在加载...",
@@ -62,6 +63,7 @@
     "dns": "DNS 设置",
     "logs": "实时日志",
     "connections": "实时连接",
+    "profiles": "配置文件",
     "settings": "系统设置",
     "about": "关于",
     "light_mode": "浅色模式",
