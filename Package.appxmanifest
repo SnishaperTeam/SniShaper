@@ -14,7 +14,7 @@
   <Identity
     Name="dongle.Snishaper"
     Publisher="CN=9C81AFF4-83F7-49D8-BC9D-3FB4B60AE536"
-    Version="1.29.1.0" />
+    Version="1.30.0.0" />
 
   <Properties>
     <DisplayName>Snishaper</DisplayName>
@@ -49,6 +49,6 @@
     <rescap:Capability Name="runFullTrust" />
   </Capabilities>
 
-  <rel:ReleaseChannel>stable</rel:ReleaseChannel>
-  <rel:Version>1.29.1</rel:Version>
+  <rel:ReleaseChannel>alpha.1</rel:ReleaseChannel>
+  <rel:Version>1.30.0</rel:Version>
 </Package>
