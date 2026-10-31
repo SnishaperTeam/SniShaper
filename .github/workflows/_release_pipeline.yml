@@ -795,12 +795,203 @@ jobs:
           retention-days: 3
 
   # ------------------------------------------------------------------
+  # macOS build (macos-26-intel / macos-26): headless CLI plus the
+  # SnishaperBar menu bar app, bundled into SniShaper.app by
+  # macos/scripts/bundle-app.sh (ad-hoc signed, not notarized — first
+  # launch needs a Gatekeeper allow, see docs/macos-app.md). build.yml's
+  # darwin job verifies the same bundle path; this job stamps release
+  # metadata and attaches the per-arch zips to the release.
+  # ------------------------------------------------------------------
+  build-macos:
+    name: Build macOS/${{ matrix.arch }} (${{ inputs.channel }})
+    needs: check
+    if: needs.check.outputs.skip != 'true'
+    runs-on: ${{ matrix.runner }}
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-26-intel
+            arch: x64
+          - runner: macos-26
+            arch: arm64
+    steps:
+      - name: Checkout full history
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Setup Go
+        uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+
+      - name: Inject release metadata into manifest
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $script = Join-Path $env:GITHUB_WORKSPACE '.github/scripts/inject-manifest-release.ps1'
+          if (-not (Test-Path $script)) {
+            Write-Host "::error::inject-manifest-release.ps1 missing: $script"
+            exit 1
+          }
+          & $script -RepoRoot $env:GITHUB_WORKSPACE `
+            -ReleaseVersion "${{ needs.check.outputs.version }}" `
+            -ReleaseChannel "${{ needs.check.outputs.rel_channel }}" `
+            -IdentityVersion "${{ needs.check.outputs.identity_version }}"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Build CLI (build.sh --ci)
+        shell: bash
+        run: |
+          set -o pipefail
+          chmod +x build.sh
+          ./build.sh --ci --platform darwin --arch "${{ matrix.arch }}" --type cli 2>&1 | tee build.log
+          if grep -Eqi 'aarch64-linux-gnu|osxcross' build.log; then
+            echo "::error::cross toolchain detected in a CI build"
+            exit 1
+          fi
+
+      - name: Bundle SniShaper.app (ad-hoc signed)
+        shell: bash
+        run: |
+          set -euo pipefail
+          chmod +x macos/scripts/bundle-app.sh
+          # --cli reuses the binary built above; bundle-app.sh would
+          # otherwise rebuild it via build.sh.
+          macos/scripts/bundle-app.sh --cli "$PWD/build/bin/cli/Darwin/${{ matrix.arch }}/snishaper"
+          APP="build/bin/macos/SniShaper.app"
+          test -x "$APP/Contents/MacOS/SnishaperBar"
+          test -x "$APP/Contents/Resources/bin/snishaper"
+          test -f "$APP/Contents/Info.plist"
+          test -f "build/bin/macos/SniShaper-macos-$(uname -m).zip"
+          echo "::notice::bundled and ad-hoc signed SniShaper.app ($(uname -m))"
+
+      - name: Upload macOS artifacts
+        uses: actions/upload-artifact@v7
+        with:
+          name: macos-artifacts-${{ matrix.arch }}
+          path: build/bin/macos/SniShaper-macos-*.zip
+          retention-days: 3
+
+  # ------------------------------------------------------------------
+  # Linux distribution packages (.deb / .rpm / AppImage) for each arch,
+  # using the same packaging scripts as the manual linux-packages.yml
+  # workflow. Uploaded to the release alongside the plain tar.gz
+  # archives. AppImage is best-effort (build-packages.sh warns and
+  # continues); deb/rpm are hard requirements.
+  # ------------------------------------------------------------------
+  build-linux-packages:
+    name: Build Linux packages/${{ matrix.arch }} (${{ inputs.channel }})
+    needs: check
+    if: needs.check.outputs.skip != 'true'
+    runs-on: ${{ matrix.runner }}
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-26.04
+            arch: amd64
+            path_arch: x64
+          - runner: ubuntu-26.04-arm
+            arch: arm64
+            path_arch: arm64
+    steps:
+      - name: Checkout full history
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Setup Go
+        uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+
+      - name: Setup Node
+        uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install GTK4/WebKitGTK dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgtk-4-dev libwebkitgtk-6.0-dev
+
+      - name: Inject release metadata into manifest
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $script = Join-Path $env:GITHUB_WORKSPACE '.github/scripts/inject-manifest-release.ps1'
+          if (-not (Test-Path $script)) {
+            Write-Host "::error::inject-manifest-release.ps1 missing: $script"
+            exit 1
+          }
+          & $script -RepoRoot $env:GITHUB_WORKSPACE `
+            -ReleaseVersion "${{ needs.check.outputs.version }}" `
+            -ReleaseChannel "${{ needs.check.outputs.rel_channel }}" `
+            -IdentityVersion "${{ needs.check.outputs.identity_version }}"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Install nfpm
+        run: go install github.com/goreleaser/nfpm/v2/cmd/nfpm@latest
+
+      - name: Fetch linuxdeploy
+        run: |
+          chmod +x packaging/fetch-linuxdeploy.sh
+          ./packaging/fetch-linuxdeploy.sh "${{ matrix.arch }}"
+
+      - name: Build CLI + GUI
+        run: |
+          set -o pipefail
+          chmod +x build.sh
+          ./build.sh --ci --platform linux --arch "${{ matrix.path_arch }}" --type cli --type gui --install-deps 2>&1 | tee build.log
+          if grep -Eqi 'aarch64-linux-gnu|osxcross' build.log; then
+            echo "::error::cross toolchain detected in a CI build"
+            exit 1
+          fi
+
+      - name: Build packages
+        run: |
+          set -euo pipefail
+          chmod +x packaging/build-packages.sh
+          ./packaging/build-packages.sh "${{ matrix.arch }}" "${{ needs.check.outputs.version }}"
+
+      - name: Verify packages
+        run: |
+          set -euo pipefail
+          out="build/dist/linux/${{ matrix.arch }}"
+          ls -l "$out"
+          for f in \
+            "$out/snishaper_${{ needs.check.outputs.version }}_${{ matrix.arch }}.deb" \
+            "$out/snishaper-${{ needs.check.outputs.version }}_${{ matrix.arch }}.rpm"; do
+            if [ ! -f "$f" ]; then echo "::error::missing $f"; exit 1; fi
+          done
+          # deb must carry the desktop entry, the icon and both binaries
+          dpkg-deb -c "$out/snishaper_${{ needs.check.outputs.version }}_${{ matrix.arch }}.deb" | tee deb.list
+          for want in usr/bin/SniShaper usr/bin/snishaper usr/share/applications/snishaper.desktop usr/share/icons/hicolor/512x512/apps/snishaper.png; do
+            grep -q "$want" deb.list || { echo "::error::deb missing $want"; exit 1; }
+          done
+
+      - name: Upload Linux package artifacts
+        uses: actions/upload-artifact@v7
+        with:
+          name: linux-packages-${{ matrix.arch }}
+          path: build/dist/linux/${{ matrix.arch }}/
+          retention-days: 3
+
+  # ------------------------------------------------------------------
   # Publish (windows-2025): merge artifacts from all platforms, generate
   # release notes via Ollama, and create the GitHub release.
   # ------------------------------------------------------------------
   publish:
     name: Publish Release (${{ inputs.channel }})
-    needs: [check, build-windows, build-linux, build-cli]
+    needs: [check, build-windows, build-linux, build-cli, build-macos, build-linux-packages]
     if: needs.check.outputs.skip != 'true'
     runs-on: windows-2025
     permissions:
@@ -842,6 +1033,20 @@ jobs:
         with:
           name: cli-artifacts
           path: staging
+
+      - name: Download macOS artifacts (every architecture)
+        uses: actions/download-artifact@v8
+        with:
+          pattern: macos-artifacts-*
+          path: staging
+          merge-multiple: true
+
+      - name: Download Linux package artifacts (every architecture)
+        uses: actions/download-artifact@v8
+        with:
+          pattern: linux-packages-*
+          path: staging
+          merge-multiple: true
 
       - name: Determine previous release tag
         id: prev-tag
@@ -1076,12 +1281,33 @@ jobs:
                     $exe = if ($os -eq 'windows') { 'snishaper.exe' } else { './snishaper' }
                     return "CLI (headless): $osLabel $archLabel, extract and run $exe, includes config/ and rules/ seed files"
                 }
+                '^SniShaper-macos-(x86_64|arm64)\.zip$' {
+                    $a = $Matches[1]
+                    $label = if ($a -eq 'x86_64') { 'Intel' } else { 'Apple Silicon' }
+                    return "macOS menu bar app ($label): SniShaper.app with SnishaperBar + headless CLI, ad-hoc signed but not notarized - first launch needs a Gatekeeper allow (see docs/macos-app.md)"
+                }
+                '^snishaper_.*_(amd64|arm64)\.deb$' {
+                    $a = $Matches[1]
+                    $label = if ($a -eq 'amd64') { 'amd64' } else { 'ARM64' }
+                    return "Linux Debian package ($label): installs GUI + CLI with desktop entry (deb)"
+                }
+                '^snishaper-.*_(amd64|arm64)\.rpm$' {
+                    $a = $Matches[1]
+                    $label = if ($a -eq 'amd64') { 'amd64' } else { 'ARM64' }
+                    return "Linux RPM package ($label): installs GUI + CLI with desktop entry (rpm)"
+                }
+                '^SniShaper-.*-(amd64|arm64)\.AppImage$' {
+                    $a = $Matches[1]
+                    $label = if ($a -eq 'amd64') { 'amd64' } else { 'ARM64' }
+                    return "Linux AppImage ($label): self-contained GUI, download, chmod +x and run"
+                }
                 default { return 'Release artifact' }
             }
           }
 
           # Fixed order: installers, signed bundle, unsigned MSIX, Windows
-          # portables, Linux portables, then every CLI target by name.
+          # portables, Linux portables, CLI targets, macOS app zips, then
+          # the Linux distribution packages by name.
           $ordered = @()
           $ordered += Get-ChildItem -Path $assetsDir -File -Filter '*Setup.exe' -ErrorAction SilentlyContinue
           $ordered += Get-ChildItem -Path $assetsDir -File -Filter 'dongle.*.7z' -ErrorAction SilentlyContinue
@@ -1089,6 +1315,10 @@ jobs:
           $ordered += Get-ChildItem -Path $assetsDir -File -Filter 'snishaper-windows-*.7z' -ErrorAction SilentlyContinue | Sort-Object Name
           $ordered += Get-ChildItem -Path $assetsDir -File -Filter 'snishaper-linux-*.tar.gz' -ErrorAction SilentlyContinue | Sort-Object Name
           $ordered += Get-ChildItem -Path $assetsDir -File -Filter 'snishaper-cli-*.7z' -ErrorAction SilentlyContinue | Sort-Object Name
+          $ordered += Get-ChildItem -Path $assetsDir -File -Filter 'SniShaper-macos-*.zip' -ErrorAction SilentlyContinue | Sort-Object Name
+          $ordered += Get-ChildItem -Path $assetsDir -File -Filter 'snishaper_*.deb' -ErrorAction SilentlyContinue | Sort-Object Name
+          $ordered += Get-ChildItem -Path $assetsDir -File -Filter 'snishaper-*.rpm' -ErrorAction SilentlyContinue | Sort-Object Name
+          $ordered += Get-ChildItem -Path $assetsDir -File -Filter 'SniShaper-*.AppImage' -ErrorAction SilentlyContinue | Sort-Object Name
 
           $listed = @{}
           foreach ($file in $ordered) {
@@ -1151,7 +1381,11 @@ jobs:
             (Join-Path $assetsDir 'dongle.*.7z'),
             (Join-Path $assetsDir 'snishaper-windows-*.7z'),
             (Join-Path $assetsDir 'snishaper-linux-*.tar.gz'),
-            (Join-Path $assetsDir 'snishaper-cli-*.7z')
+            (Join-Path $assetsDir 'snishaper-cli-*.7z'),
+            (Join-Path $assetsDir 'SniShaper-macos-*.zip'),
+            (Join-Path $assetsDir 'snishaper_*.deb'),
+            (Join-Path $assetsDir 'snishaper-*.rpm'),
+            (Join-Path $assetsDir 'SniShaper-*.AppImage')
           )
           $matched = @()
           foreach ($pattern in $patterns) {

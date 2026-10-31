@@ -52,6 +52,9 @@ nfpm package -f "${outdir}/nfpm.yaml" -p rpm -t "${outdir}/snishaper-${version}_
 rm -f "${outdir}/nfpm.yaml"
 
 # 2) AppImage via linuxdeploy (GUI only; the CLI ships as deb/rpm or archive).
+# Best-effort: the deb/rpm pair above is the hard requirement, so a failed
+# or unproven AppImage path (new linuxdeploy flags, plugin quirks) must not
+# kill the release job.
 linuxdeploy_bin="${LINUXDEPLOY:-packaging/tools/linuxdeploy-${arch}.AppImage}"
 if [ ! -f "$linuxdeploy_bin" ]; then
   echo "linuxdeploy not found at ${linuxdeploy_bin} — run packaging/fetch-linuxdeploy.sh ${arch}" >&2
@@ -65,12 +68,14 @@ cp "$gui_bin" "${appdir}/usr/bin/SniShaper"
 cp packaging/snishaper.desktop "${appdir}/snishaper.desktop"
 cp build/appicon.png "${appdir}/snishaper.png"
 
-ARCH="$arch" "${linuxdeploy_bin}" \
+if ! OUTPUT="${outdir}/SniShaper-${version}-${arch}.AppImage" ARCH="$arch" "${linuxdeploy_bin}" \
   --appdir "$appdir" \
   --desktop-file "${appdir}/snishaper.desktop" \
   --icon-file "${appdir}/snishaper.png" \
-  --output appimage \
-  --artifact-pathy "${outdir}/SniShaper-${version}-${arch}.AppImage"
+  --output appimage; then
+  echo "warning: AppImage build failed — shipping deb/rpm without AppImage" >&2
+  exit 0
+fi
 
 echo "packages in ${outdir}:"
 ls -l "$outdir"

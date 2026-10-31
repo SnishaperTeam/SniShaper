@@ -62,7 +62,9 @@ jobs:
       - name: Build CLI + GUI
         run: |
           chmod +x build.sh
-          ./build.sh --ci --platform linux --arch "${{ matrix.path_arch }}" --type cli --type gui
+          # --install-deps: frontend/dist is absent on a fresh runner, the
+          # GUI embed would fail without npm install first
+          ./build.sh --ci --platform linux --arch "${{ matrix.path_arch }}" --type cli --type gui --install-deps
 
       - name: Resolve package version
         id: ver
