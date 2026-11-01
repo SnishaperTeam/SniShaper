@@ -18,6 +18,8 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/SnishaperTeam/snishaper-core/proxy"
+
 	"snishaper/pkg/sysproxy"
 )
 
@@ -156,6 +158,70 @@ func TestRecoveryConcurrentDecisions(t *testing.T) {
 type testError struct{ msg string }
 
 func (e *testError) Error() string { return e.msg }
+
+// withRecordedDisable swaps the disable seam for one that records whether it
+// ran, and reports the flag after fn returns — so tests assert "the proxy
+// was (not) touched" without touching the machine.
+func withRecordedDisable(t *testing.T, fn func()) bool {
+	t.Helper()
+	oldDisable := sysproxyDisableFn
+	disabled := false
+	sysproxyDisableFn = func() error { disabled = true; return nil }
+	defer func() { sysproxyDisableFn = oldDisable }()
+	fn()
+	return disabled
+}
+
+// newForceCleanupTestApp builds an App with a real (empty) RuleManager:
+// ForceCleanup's ownership check goes through GetListenPort, which needs one.
+func newForceCleanupTestApp(t *testing.T) *App {
+	t.Helper()
+	dir := t.TempDir()
+	rulesPath := filepath.Join(dir, "rules.json")
+	if err := os.WriteFile(rulesPath, []byte(`{"site_groups":[],"upstreams":[]}`), 0o644); err != nil {
+		t.Fatalf("seed rules: %v", err)
+	}
+	rm := proxy.NewRuleManager(filepath.Join(dir, "settings.json"), rulesPath)
+	if err := rm.LoadConfig(); err != nil {
+		t.Fatalf("load rules: %v", err)
+	}
+	return &App{
+		proxyMarkerPath: filepath.Join(dir, "managed-sysproxy.marker.json"),
+		ruleManager:     rm,
+	}
+}
+
+// TestForceCleanupLeavesForeignProxyAlone: the crash/force-exit path must
+// not wipe a system proxy the app does not own (user's own or third-party).
+func TestForceCleanupLeavesForeignProxyAlone(t *testing.T) {
+	a := newForceCleanupTestApp(t)
+	// No marker and a foreign server: not ours.
+	var disabled bool
+	// withRecordedDisable nests INSIDE withSimulatedSystemProxy: the status
+	// helper also swaps the disable seam, so the recorder must win.
+	withSimulatedSystemProxy(t, true, "10.0.0.5:3128", nil, func() {
+		disabled = withRecordedDisable(t, func() { a.ForceCleanup() })
+	})
+	if disabled {
+		t.Fatal("ForceCleanup must not disable a system proxy the app does not own")
+	}
+}
+
+// TestForceCleanupDisablesOwnedProxy: when the live server is the app's own
+// listen address, the crash path must still clean up.
+func TestForceCleanupDisablesOwnedProxy(t *testing.T) {
+	a := newForceCleanupTestApp(t)
+	if err := a.saveManagedSystemProxyMarker("127.0.0.1:8080"); err != nil {
+		t.Fatal(err)
+	}
+	var disabled bool
+	withSimulatedSystemProxy(t, true, "127.0.0.1:8080", nil, func() {
+		disabled = withRecordedDisable(t, func() { a.ForceCleanup() })
+	})
+	if !disabled {
+		t.Fatal("ForceCleanup must disable the system proxy the app configured")
+	}
+}
 
 func itoa(n int) string {
 	if n == 0 {

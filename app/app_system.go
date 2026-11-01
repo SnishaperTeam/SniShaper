@@ -285,7 +285,9 @@ func (a *App) SetAutoEnableSysProxyOnAutoStart(enabled bool) error {
 }
 
 // ForceCleanup is a last-resort synchronous cleanup for crash/force-exit paths.
-// It stops TUN, core, proxy, and system proxy without checking state.
+// It stops TUN, core, proxy, and the system proxy this app configured. A
+// system proxy the app does not own (user's own or third-party) is left in
+// place, matching shutdown(), StopProxy and startup recovery.
 func (a *App) ForceCleanup() {
 	defer func() {
 		if r := recover(); r != nil {
@@ -301,8 +303,10 @@ func (a *App) ForceCleanup() {
 	if a.proxyServer != nil {
 		_ = a.proxyServer.Stop()
 	}
-	if err := sysproxy.DisableSystemProxy(); err != nil {
-		log.Printf("[ForceCleanup] sysproxy disable: %v", err)
+	if a.IsManagedSystemProxy() {
+		if err := sysproxyDisableFn(); err != nil {
+			log.Printf("[ForceCleanup] sysproxy disable: %v", err)
+		}
 	}
 	a.closeLogFile()
 }

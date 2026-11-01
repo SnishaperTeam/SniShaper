@@ -41,7 +41,7 @@ Engine and shared feature packages come from `github.com/SnishaperTeam/snishaper
 # Conventions
 
 - Go: standard layout, `snishaper` module path, no external DI framework
-- Frontend: React 19 + TypeScript 6, `@/` path alias for `./src/`, MUI v9 + emotion for styling, `@heroicons/react` for icons
+- Frontend: React 19 + TypeScript 6, `@/` path alias for `./src/`, MUI v9 + emotion for styling, `@iconify/react` + `@iconify-icons/*` for icons (see `frontend/src/lib/icons.tsx`)
 - Error handling: log via `a.appendLog()`, return errors to frontend; no panic except top-level recover in `main.go`
 - Naming: Go `camelCase` for unexported, `PascalCase` for exported; TS `camelCase` for functions/vars, `PascalCase` for components/types
 - Imports: Go stdlib → third-party → internal; TS: React → components → API → i18n

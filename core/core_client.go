@@ -12,6 +12,8 @@ import (
 	"sync"
 	"time"
 
+	"snishaper/common"
+
 	"github.com/SnishaperTeam/snishaper-core/proxy"
 )
 
@@ -28,11 +30,9 @@ func NewCoreClient() *CoreClient {
 }
 
 func (c *CoreClient) loadTokenFromDisk() string {
-	execPath, err := os.Executable()
-	if err != nil {
-		return ""
-	}
-	tokenPath := filepath.Join(filepath.Dir(execPath), "core_rpc_token")
+	// Must match the core's token location: per-user config dir, not the
+	// (possibly user-writable) exe dir.
+	tokenPath := filepath.Join(common.UserConfigDir(), "core_rpc_token")
 	data, err := os.ReadFile(tokenPath)
 	if err != nil {
 		return ""
@@ -55,9 +55,29 @@ func (c *CoreClient) invalidateToken() {
 	c.tokenMu.Unlock()
 }
 
+// announceToken sends the client's token announcement so the core can reject
+// connections from processes that never read the token file. One length byte
+// plus the token: the core reads exactly those bytes and the gob stream
+// starts after them.
+func announceToken(conn net.Conn, token string) error {
+	if token == "" || len(token) > maxRPCTokenLen {
+		return fmt.Errorf("rpc token unavailable")
+	}
+	_ = conn.SetWriteDeadline(time.Now().Add(coreRPCHandshakeTimeout))
+	buf := make([]byte, 0, 1+len(token))
+	buf = append(buf, byte(len(token)))
+	buf = append(buf, token...)
+	_, err := conn.Write(buf)
+	return err
+}
+
 func (c *CoreClient) dial() (*rpc.Client, error) {
 	conn, err := net.DialTimeout("tcp", coreRPCAddr, 400*time.Millisecond)
 	if err != nil {
+		return nil, err
+	}
+	if err := announceToken(conn, c.readToken()); err != nil {
+		_ = conn.Close()
 		return nil, err
 	}
 	return rpc.NewClient(conn), nil

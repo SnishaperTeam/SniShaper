@@ -75,8 +75,12 @@ func main() {
 			log.Printf("[main] Panic recovered, forcing cleanup: %v", r)
 		}
 		a.ForceCleanup()
-		// Force-disable system proxy even if ForceCleanup missed it
-		_ = sysproxy.DisableSystemProxy()
+		// Force-disable system proxy even if ForceCleanup missed it — but
+		// only when it is the proxy this app configured; a user's own or
+		// third-party proxy setting must survive our exit.
+		if a.IsManagedSystemProxy() {
+			_ = sysproxy.DisableSystemProxy()
+		}
 	}()
 
 	opts := application.Options{
