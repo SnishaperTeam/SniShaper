@@ -166,6 +166,10 @@ func (a *App) writeLogFile(s string) {
 	}
 }
 
+// Hoisted so appendLog's hot path (every log line) does not recompile or
+// re-lookup the pattern per call.
+var logLinePrefixRe = regexp.MustCompile(`^\d{4}/\d{2}/\d{2} \d{2}:\d{2}:\d{2}`)
+
 func (a *App) appendLog(message string) {
 	trimmed := strings.TrimSpace(message)
 	if trimmed == "" {
@@ -173,7 +177,7 @@ func (a *App) appendLog(message string) {
 	}
 
 	var formatted string
-	if matched, _ := regexp.MatchString(`^\d{4}/\d{2}/\d{2} \d{2}:\d{2}:\d{2}`, trimmed); matched {
+	if logLinePrefixRe.MatchString(trimmed) {
 		formatted = trimmed
 	} else {
 		formatted = time.Now().Format("2006/01/02 15:04:05.000000") + " " + trimmed
@@ -418,9 +422,10 @@ func (a *App) shutdown() {
 		}
 	}
 
-	// 2. Disable system proxy synchronously
-	status := a.GetSystemProxyStatus()
-	if status.Enabled {
+	// 2. Disable system proxy synchronously — only when it is the proxy this
+	// app configured. A user's own or third-party proxy setting must survive
+	// our exit (same rule as StopProxy and startup recovery).
+	if a.IsManagedSystemProxy() {
 		a.appendLog("[shutdown] Disabling system proxy...")
 		if err := a.applySystemProxySync(false, 0, true); err != nil {
 			errs = append(errs, "SystemProxy: "+err.Error())
