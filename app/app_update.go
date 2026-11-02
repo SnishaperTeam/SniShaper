@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"runtime"
 	"sort"
 	"strconv"
 	"strings"
@@ -497,6 +498,70 @@ func releaseRank(rel githubRelease) int {
 	}
 }
 
+// assetArchToken maps the architecture tokens used in release asset names to
+// one canonical value, so amd64/x64 and 386/x86 compare equal.
+func assetArchToken(lower string) string {
+	switch {
+	case strings.Contains(lower, "arm64"), strings.Contains(lower, "aarch64"):
+		return "arm64"
+	case strings.Contains(lower, "x86_64"), strings.Contains(lower, "amd64"),
+		strings.Contains(lower, "x64"):
+		return "x64"
+	case strings.Contains(lower, "386"), strings.Contains(lower, "x86"):
+		return "x86"
+	}
+	return ""
+}
+
+func runtimeAssetArch() string {
+	switch runtime.GOARCH {
+	case "amd64":
+		return "x64"
+	case "386":
+		return "x86"
+	case "arm64":
+		return "arm64"
+	}
+	return runtime.GOARCH
+}
+
+// assetOSToken resolves the target OS of an asset name; an installer named
+// only by its .exe suffix belongs to Windows.
+func assetOSToken(lower string) string {
+	switch {
+	case strings.Contains(lower, "windows"):
+		return "windows"
+	case strings.Contains(lower, "linux"):
+		return "linux"
+	case strings.Contains(lower, "darwin"), strings.Contains(lower, "macos"), strings.Contains(lower, "osx"):
+		return "darwin"
+	case strings.HasSuffix(lower, ".exe"):
+		return "windows"
+	}
+	return ""
+}
+
+func isCLIAsset(lower string) bool {
+	return strings.HasPrefix(lower, "snishaper-cli-")
+}
+
+// assetMatchesRuntime keeps only the packages the running process can install:
+// same OS, same architecture, and the flavour of this binary. The signed MSIX
+// bundle (dongle.*.7z) is dropped as well, since it carries no snishaper.exe
+// the in-app updater could extract.
+func assetMatchesRuntime(lower string) bool {
+	if strings.Contains(lower, "unsigned") || strings.HasPrefix(lower, "dongle.") {
+		return false
+	}
+	if isCLIAsset(lower) != headlessBuild {
+		return false
+	}
+	if osName := assetOSToken(lower); osName != "" && osName != runtime.GOOS {
+		return false
+	}
+	return assetArchToken(lower) == runtimeAssetArch()
+}
+
 func filterUpdateAssets(assets []githubAsset) []ReleaseAsset {
 	result := []ReleaseAsset{}
 	for _, asset := range assets {
@@ -505,13 +570,16 @@ func filterUpdateAssets(assets []githubAsset) []ReleaseAsset {
 		switch {
 		case strings.HasSuffix(lower, ".exe"):
 			kind = "exe"
-		case strings.HasSuffix(lower, ".7z") && !strings.Contains(lower, "_x64") && !strings.Contains(lower, "_x86") && !strings.Contains(lower, "_arm64") && !strings.Contains(lower, "unsigned"):
+		case strings.HasSuffix(lower, ".7z"):
 			kind = "7z"
 		case strings.HasSuffix(lower, ".tar.gz"):
 			// Portable bundle used by the Linux build, and the only archive
 			// the Linux installer can unpack on its own.
 			kind = "tar.gz"
 		default:
+			continue
+		}
+		if !assetMatchesRuntime(lower) {
 			continue
 		}
 		result = append(result, ReleaseAsset{
@@ -521,7 +589,22 @@ func filterUpdateAssets(assets []githubAsset) []ReleaseAsset {
 			Kind:        kind,
 		})
 	}
+	sort.SliceStable(result, func(i, j int) bool {
+		return assetKindRank(result[i].Kind) < assetKindRank(result[j].Kind)
+	})
 	return result
+}
+
+// assetKindRank orders the update list: installer first, then portable
+// archive, then the tarball the Linux build installs from.
+func assetKindRank(kind string) int {
+	switch kind {
+	case "exe":
+		return 0
+	case "7z":
+		return 1
+	}
+	return 2
 }
 
 func buildDownloadURLs(assetURL string, entries []downloadSourceEntry) []string {

@@ -2,6 +2,10 @@
 
 package app
 
+// headlessBuild marks the CLI flavour, whose update list only contains the
+// snishaper-cli-* archives instead of the desktop packages.
+const headlessBuild = true
+
 // SetUIAdapter wires an optional event sink (window/tray in the GUI build).
 func (a *App) SetUIAdapter(ui UIAdapter) { a.ui = ui }
 
