@@ -13,6 +13,10 @@ import (
 	"github.com/wailsapp/wails/v3/pkg/events"
 )
 
+// headlessBuild is false here: the desktop build lists the desktop packages,
+// never the snishaper-cli-* archives.
+const headlessBuild = false
+
 // Typed accessors for the GUI-only UI references (stored as `any` on App
 // so the headless build never links the wails runtime).
 
