@@ -22,6 +22,13 @@ updates:
     cooldown:
       default-days: 1
     open-pull-requests-limit: 10
+    # Registry mirrors (npmmirror) lag behind npmjs: @iconify-icons/material-symbols
+    # 2.0.8 is published upstream but missing from the mirror, so installs 404.
+    # Keep it pinned at 2.0.7 until the mirror catches up.
+    ignore:
+      - dependency-name: "@iconify-icons/material-symbols"
+        versions:
+          - ">2.0.7"
     groups:
       frontend-deps:
         patterns:
