@@ -202,7 +202,7 @@ cmd_record() {
   emit_line "| Build Target | Requested Tasks | Go Version | Build Time | Build Outcome | Artifact |"
   emit_line "| --- | --- | --- | --- | --- | --- |"
   local row label path resolved
-  for row in "${rows[@]}"; do
+  for row in ${rows[@]+"${rows[@]}"}; do
     [ -n "$row" ] || continue
     label="${row%%=*}"
     path="${row#*=}"
@@ -218,7 +218,7 @@ cmd_record() {
   fi
 
   local dir total=0 count_file f fsize
-  for dir in "${dirs[@]}"; do
+  for dir in ${dirs[@]+"${dirs[@]}"}; do
     [ -d "$dir" ] || continue
     total=0
     count_file=0
