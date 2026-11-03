@@ -285,6 +285,7 @@ jobs:
           fetch-depth: 0
 
       - name: Setup Go
+        id: go
         uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
@@ -604,6 +605,25 @@ jobs:
           path: staging/
           retention-days: 3
 
+      - name: Write build summary
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          chmod +x .github/scripts/ci/build-summary.sh
+          .github/scripts/ci/build-summary.sh record \
+            --project SniShaper \
+            --target "GUI windows (MSIX + installers)" \
+            --tasks "frontend, gui, msix, inno" \
+            --runner windows-2025 \
+            --outcome "${{ job.status }}" \
+            --cache-hit "${{ steps.go.outputs.cache-hit }}" \
+            --row "Windows/x64=build/bin/gui/Windows/x64/snishaper.exe" \
+            --row "Windows/x86=build/bin/gui/Windows/x86/snishaper.exe" \
+            --row "Windows/arm64=build/bin/gui/Windows/arm64/snishaper.exe" \
+            --row "MSIX=build/bin/gui/Windows/*.msix" \
+            --dir "staging"
+
   # ------------------------------------------------------------------
   # Linux build (ubuntu-26.04): portable tar.gz via build.sh.
   # ------------------------------------------------------------------
@@ -629,6 +649,7 @@ jobs:
           fetch-depth: 0
 
       - name: Setup Go
+        id: go
         uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
@@ -690,6 +711,21 @@ jobs:
           path: snishaper-linux-${{ matrix.arch }}.tar.gz
           retention-days: 3
 
+      - name: Write build summary
+        if: always()
+        run: |
+          set -euo pipefail
+          chmod +x .github/scripts/ci/build-summary.sh
+          .github/scripts/ci/build-summary.sh record \
+            --project SniShaper \
+            --target "GUI linux/${{ matrix.arch }}" \
+            --tasks "frontend, gui, tar.gz" \
+            --runner "${{ matrix.runner }}" \
+            --outcome "${{ job.status }}" \
+            --cache-hit "${{ steps.go.outputs.cache-hit }}" \
+            --row "linux/${{ matrix.arch }}=build/bin/gui/Linux/${{ matrix.arch }}/SniShaper" \
+            --row "tar.gz=snishaper-linux-${{ matrix.arch }}.tar.gz"
+
   # ------------------------------------------------------------------
   # CLI build (windows-2025): cross-compile the headless CLI for all six
   # targets (windows/linux/darwin x amd64/arm64) and package each target
@@ -712,6 +748,7 @@ jobs:
           fetch-depth: 0
 
       - name: Setup Go
+        id: go
         uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
@@ -794,6 +831,27 @@ jobs:
           path: snishaper-cli-*.7z
           retention-days: 3
 
+      - name: Write build summary
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          chmod +x .github/scripts/ci/build-summary.sh
+          .github/scripts/ci/build-summary.sh record \
+            --project SniShaper \
+            --target "CLI (7 targets, 7z each)" \
+            --tasks cli \
+            --runner windows-2025 \
+            --outcome "${{ job.status }}" \
+            --cache-hit "${{ steps.go.outputs.cache-hit }}" \
+            --row "Windows/x64=snishaper-cli-windows-amd64.7z" \
+            --row "Windows/x86=snishaper-cli-windows-386.7z" \
+            --row "Windows/arm64=snishaper-cli-windows-arm64.7z" \
+            --row "Linux/x64=snishaper-cli-linux-amd64.7z" \
+            --row "Linux/arm64=snishaper-cli-linux-arm64.7z" \
+            --row "Darwin/x64=snishaper-cli-darwin-amd64.7z" \
+            --row "Darwin/arm64=snishaper-cli-darwin-arm64.7z"
+
   # ------------------------------------------------------------------
   # macOS build (macos-26-intel / macos-26): headless CLI plus the
   # SnishaperBar menu bar app, bundled into SniShaper.app by
@@ -824,6 +882,7 @@ jobs:
           fetch-depth: 0
 
       - name: Setup Go
+        id: go
         uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
@@ -876,6 +935,22 @@ jobs:
           path: build/bin/macos/SniShaper-macos-*.zip
           retention-days: 3
 
+      - name: Write build summary
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          chmod +x .github/scripts/ci/build-summary.sh
+          .github/scripts/ci/build-summary.sh record \
+            --project SniShaper \
+            --target "CLI darwin/${{ matrix.arch }}" \
+            --tasks "cli, SnishaperBar app bundle" \
+            --runner "${{ matrix.runner }}" \
+            --outcome "${{ job.status }}" \
+            --cache-hit "${{ steps.go.outputs.cache-hit }}" \
+            --row "darwin/${{ matrix.arch }}=build/bin/cli/Darwin/${{ matrix.arch }}/snishaper" \
+            --row "SniShaper.app zip=build/bin/macos/SniShaper-macos-*.zip"
+
   # ------------------------------------------------------------------
   # Linux distribution packages (.deb / .rpm / AppImage) for each arch,
   # using the same packaging scripts as the manual linux-packages.yml
@@ -907,6 +982,7 @@ jobs:
           fetch-depth: 0
 
       - name: Setup Go
+        id: go
         uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
@@ -984,6 +1060,22 @@ jobs:
           name: linux-packages-${{ matrix.arch }}
           path: build/dist/linux/${{ matrix.arch }}/
           retention-days: 3
+
+      - name: Write build summary
+        if: always()
+        run: |
+          set -euo pipefail
+          chmod +x .github/scripts/ci/build-summary.sh
+          .github/scripts/ci/build-summary.sh record \
+            --project SniShaper \
+            --target "Packages linux/${{ matrix.arch }}" \
+            --tasks "cli, gui, deb, rpm, appimage" \
+            --runner "${{ matrix.runner }}" \
+            --outcome "${{ job.status }}" \
+            --cache-hit "${{ steps.go.outputs.cache-hit }}" \
+            --row "deb=build/dist/linux/${{ matrix.arch }}/*.deb" \
+            --row "rpm=build/dist/linux/${{ matrix.arch }}/*.rpm" \
+            --row "AppImage=build/dist/linux/${{ matrix.arch }}/*.AppImage"
 
   # ------------------------------------------------------------------
   # Publish (windows-2025): merge artifacts from all platforms, generate
@@ -1502,3 +1594,28 @@ jobs:
           }
           Write-Host "::endgroup::"
           Write-Host "::notice::Contributor section taken from GitHub generated notes"
+
+  # ------------------------------------------------------------------
+  # Run-level build summary (Android-CI style job summary): one overview
+  # table of every build job plus the run artifacts and caches. Purely
+  # informational — never gates the release.
+  # ------------------------------------------------------------------
+  summary:
+    name: Build summary
+    needs: [check, build-windows, build-linux, build-cli, build-macos, build-linux-packages, publish]
+    if: always() && !cancelled()
+    runs-on: ubuntu-26.04
+    permissions:
+      actions: read
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Write run summary
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          chmod +x .github/scripts/ci/build-summary.sh
+          .github/scripts/ci/build-summary.sh report --title "SniShaper Release Summary (${{ inputs.channel }})"
