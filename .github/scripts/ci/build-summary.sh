@@ -158,6 +158,9 @@ classify_job() {
   elif [[ "$name" =~ ^AAR[[:space:]]*\+[[:space:]]+APK/AAB ]]; then
     JOB_PIPELINE="Android"
     JOB_TARGET="android"
+  elif [[ "$name" =~ ^test[[:space:]]*\((.+)\)$ ]]; then
+    JOB_PIPELINE="Test"
+    JOB_TARGET="${BASH_REMATCH[1]}"
   fi
 }
 
