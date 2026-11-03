@@ -16,6 +16,7 @@ on:
 
 permissions:
   contents: write
+  actions: read
 
 jobs:
   publish:
