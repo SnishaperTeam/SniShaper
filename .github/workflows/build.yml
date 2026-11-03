@@ -163,6 +163,7 @@ jobs:
       - uses: actions/checkout@v7
 
       - uses: actions/setup-go@v7
+        id: go
         with:
           go-version-file: go.mod
 
@@ -210,6 +211,27 @@ jobs:
             exit 1
           }
 
+      - name: Write build summary
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          chmod +x .github/scripts/ci/build-summary.sh
+          plat="${{ matrix.platform }}"
+          cap="$(echo "${plat:0:1}" | tr '[:lower:]' '[:upper:]')${plat:1}"
+          bin="snishaper"
+          if [ "${{ runner.os }}" = "Linux" ]; then bin="SniShaper"; fi
+          if [ "${{ runner.os }}" = "Windows" ]; then bin="snishaper.exe"; fi
+          .github/scripts/ci/build-summary.sh record \
+            --project SniShaper \
+            --target "GUI ${plat}/${{ matrix.arch }}" \
+            --tasks "frontend, gui" \
+            --runner "${{ matrix.runner }}" \
+            --outcome "${{ job.status }}" \
+            --cache-hit "${{ steps.go.outputs.cache-hit }}" \
+            --row "${plat}/${{ matrix.arch }}=build/bin/gui/${cap}/${{ matrix.arch }}/${bin}" \
+            --dir "build/bin/gui/${cap}/${{ matrix.arch }}"
+
       - name: Verify artifacts (Unix)
         if: runner.os != 'Windows'
         shell: bash
@@ -253,6 +275,7 @@ jobs:
       - uses: actions/checkout@v7
 
       - uses: actions/setup-go@v7
+        id: go
         with:
           go-version-file: go.mod
 
@@ -289,6 +312,25 @@ jobs:
           & .\build\bin\cli\Windows\x64\snishaper.exe help | Out-Null
           if ($LASTEXITCODE -ne 0) { Write-Host "::error::CLI help failed"; exit 1 }
 
+      - name: Write build summary
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          chmod +x .github/scripts/ci/build-summary.sh
+          .github/scripts/ci/build-summary.sh record \
+            --project SniShaper \
+            --target "CLI (windows + linux, 5 targets)" \
+            --tasks cli \
+            --runner windows-latest \
+            --outcome "${{ job.status }}" \
+            --cache-hit "${{ steps.go.outputs.cache-hit }}" \
+            --row "Windows/x64=build/bin/cli/Windows/x64/snishaper.exe" \
+            --row "Windows/x86=build/bin/cli/Windows/x86/snishaper.exe" \
+            --row "Windows/arm64=build/bin/cli/Windows/arm64/snishaper.exe" \
+            --row "Linux/x64=build/bin/cli/Linux/x64/snishaper" \
+            --row "Linux/arm64=build/bin/cli/Linux/arm64/snishaper"
+
   # ------------------------------------------------------------------
   # Darwin, built natively and smoke-tested on real macOS runners:
   #   darwin/x64  -> macos-26-intel (last x86_64 image, EOL Aug 2027)
@@ -321,6 +363,7 @@ jobs:
       - uses: actions/checkout@v7
 
       - uses: actions/setup-go@v7
+        id: go
         with:
           go-version-file: go.mod
 
@@ -374,6 +417,22 @@ jobs:
           test -f "build/bin/macos/SniShaper-macos-$(uname -m).zip"
           echo "::notice::bundled SniShaper.app ($(uname -m))"
 
+      - name: Write build summary
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          chmod +x .github/scripts/ci/build-summary.sh
+          .github/scripts/ci/build-summary.sh record \
+            --project SniShaper \
+            --target "CLI darwin/${{ matrix.arch }}" \
+            --tasks "cli, SnishaperBar app bundle" \
+            --runner "${{ matrix.runner }}" \
+            --outcome "${{ job.status }}" \
+            --cache-hit "${{ steps.go.outputs.cache-hit }}" \
+            --row "darwin/${{ matrix.arch }}=build/bin/cli/Darwin/${{ matrix.arch }}/snishaper" \
+            --row "SniShaper.app zip=build/bin/macos/SniShaper-macos-*.zip"
+
   # ------------------------------------------------------------------
   # Stable single-point summary used as the required status check in
   # branch protection ("ci"). Succeeds when every build job succeeded
@@ -385,7 +444,12 @@ jobs:
     needs: [gate, matrix-build, cli-build, darwin]
     if: always() && !cancelled()
     runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: read
     steps:
+      - uses: actions/checkout@v7
+
       - name: Assert build outcome
         env:
           RESULTS: ${{ toJSON(needs) }}
@@ -396,6 +460,16 @@ jobs:
             exit 1
           fi
           echo "all required CI jobs succeeded (or were skipped)"
+
+      - name: Write run summary
+        if: always()
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          chmod +x .github/scripts/ci/build-summary.sh
+          .github/scripts/ci/build-summary.sh report --title "SniShaper Build Summary"
 
   # ------------------------------------------------------------------
   # Bots — invoked directly from the build (no separate listener
