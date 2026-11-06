@@ -230,28 +230,22 @@ jobs:
 
       - name: Build CLI (same platform/arch)
         if: matrix.platform == 'windows' || matrix.platform == 'linux'
+        shell: bash
         run: |
           # One CLI target per matrix entry, built natively by the same job
           # as the GUI (pure Go, CGO off) instead of cross-building all five
           # on a single runner.
           set -euo pipefail
           chmod +x build.sh
-          if [ "${{ matrix.script }}" = "sh" ]; then
-            ./build.sh --ci --platform "${{ matrix.platform }}" --arch "${{ matrix.arch }}" --type cli 2>&1 | tee build-cli.log
-            test -f "build/bin/cli/Linux/${{ matrix.arch }}/snishaper" || { echo "::error::CLI binary missing"; exit 1; }
+          if [ "${{ matrix.platform }}" = "linux" ]; then
+            ./build.sh --ci --platform linux --arch "${{ matrix.arch }}" --type cli 2>&1 | tee build-cli.log
+            test -f "build/bin/cli/Linux/${{ matrix.arch }}/snishaper"
             ./build/bin/cli/Linux/${{ matrix.arch }}/snishaper version
+          else
+            ./build_windows.ps1 -CI -Platform windows -Arch "${{ matrix.arch }}" -Type cli -Silent
+            test -f "build/bin/cli/Windows/${{ matrix.arch }}/snishaper.exe"
+            ./build/bin/cli/Windows/${{ matrix.arch }}/snishaper.exe version
           fi
-
-      - name: Build CLI (Windows matrix entry)
-        if: matrix.script == 'ps1'
-        shell: pwsh
-        run: |
-          $ErrorActionPreference = 'Stop'
-          ./build_windows.ps1 -CI -Platform windows -Arch "${{ matrix.arch }}" -Type cli -Silent
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          $v = (& ".\build\bin\cli\Windows\${{ matrix.arch }}\snishaper.exe" version).Trim()
-          Write-Host "::notice::CLI (${{ matrix.arch }}) version: $v"
-          if (-not $v) { Write-Host "::error::empty CLI version"; exit 1 }
 
       - name: Write build summary
         if: always()
