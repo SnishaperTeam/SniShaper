@@ -1,6 +1,4 @@
-//go:build headless
-
-package main
+package cliapp
 
 // commandEntry describes one entry of the CLI command catalogue. The catalogue
 // is the single source of truth for the plain help output and for the TUI

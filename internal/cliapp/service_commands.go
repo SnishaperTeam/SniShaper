@@ -1,6 +1,4 @@
-//go:build headless
-
-package main
+package cliapp
 
 import (
 	"fmt"
@@ -122,7 +120,7 @@ func opPort(args []string, out cmdOut) int {
 		if a == nil {
 			return 1
 		}
-		if err := a.KillPortOccupant(pid); err != nil {
+		if err := a.KillPortOccupant(a.GetListenPort(), pid); err != nil {
 			out("结束进程失败: " + err.Error())
 			return 1
 		}

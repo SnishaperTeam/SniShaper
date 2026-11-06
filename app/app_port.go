@@ -27,10 +27,16 @@ func (a *App) GetPortOccupant(port int) *PortOccupant {
 	return &PortOccupant{Port: port, PID: pid, Name: name}
 }
 
-// KillPortOccupant 强制结束指定 PID 的进程（含子进程树）。
-func (a *App) KillPortOccupant(pid int) error {
+// KillPortOccupant 强制结束指定 PID 的进程（含子进程树）。port 用于安装前的
+// 复核：调用方拿到 occupant 到真正点击结束之间，进程可能已退出且 PID 被系统
+// 复用——不复核就会以管理员权限误杀无关进程。
+func (a *App) KillPortOccupant(port, pid int) error {
 	if pid <= 0 {
 		return fmt.Errorf("invalid pid: %d", pid)
+	}
+	current := a.GetPortOccupant(port)
+	if current == nil || current.PID <= 0 || current.PID != pid {
+		return fmt.Errorf("process %d is no longer listening on port %d; refresh and retry", pid, port)
 	}
 	return proxy.KillProcessByPID(pid)
 }

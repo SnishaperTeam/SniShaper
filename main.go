@@ -8,6 +8,7 @@ import (
 
 	"snishaper/app"
 	"snishaper/core"
+	"snishaper/internal/cliapp"
 	"snishaper/pkg/sysproxy"
 
 	"github.com/wailsapp/wails/v3/pkg/application"
@@ -26,6 +27,22 @@ func main() {
 			log.Fatal(err)
 		}
 		return
+	}
+
+	// Bundled CLI mode. The desktop binary doubles as the headless CLI: an
+	// explicit marker (--cli, --serve, any CLI verb) or a launch without an
+	// interactive desktop (automation, services, winget's post-install
+	// executable validation runs the app in session 0, where a window cannot
+	// exist) routes into the shared dispatcher instead of the GUI. The
+	// headless defaults always apply here — no arguments print the command
+	// help and exit 0, and the interactive TUI stays with the standalone CLI
+	// binary — so an automated launcher can never be left hanging on a
+	// terminal that will never provide input.
+	if app.NonInteractiveSession() || cliapp.IsCLICommand(os.Args[1:]) {
+		if !app.NonInteractiveSession() {
+			app.AttachParentConsole()
+		}
+		os.Exit(cliapp.Run(os.Args[1:], true))
 	}
 
 	devSession := os.Getenv("FRONTEND_DEVSERVER_URL") != ""
