@@ -1,6 +1,4 @@
-//go:build headless
-
-package main
+package cliapp
 
 import (
 	"encoding/json"

@@ -1,6 +1,6 @@
-//go:build headless && !windows
+//go:build !windows
 
-package main
+package cliapp
 
 import (
 	"os/exec"
