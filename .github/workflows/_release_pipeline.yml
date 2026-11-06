@@ -557,6 +557,23 @@ jobs:
           }
           Write-Host "::notice::Inno Setup installer created"
 
+      - name: Build Windows CLI (native)
+        shell: pwsh
+        run: |
+          # The three Windows CLI targets build on the same runner (pure Go,
+          # CGO off; x86/arm64 are same-OS builds, not slow cross toolchains).
+          $ErrorActionPreference = 'Stop'
+          Write-Host "::group::build_windows.ps1 -CI -Type cli -Platform windows -Arch x64,x86,arm64 -Silent"
+          ./build_windows.ps1 -CI -Type cli -Platform windows -Arch x64,x86,arm64 -Silent
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          Write-Host "::endgroup::"
+          $v = & 'build\bin\cli\Windows\x64\snishaper.exe' version
+          Write-Host "::notice::CLI smoke version: $v"
+          if (-not $v) {
+            Write-Host "::error::CLI smoke version empty"
+            exit 1
+          }
+
       - name: Stage Windows artifacts
         shell: pwsh
         run: |
@@ -610,6 +627,28 @@ jobs:
             Write-Host "::notice::staged installer $($s.Name)"
           }
 
+          # Bundled CLI archives: the same runner builds the three Windows
+          # CLI targets natively (pure Go, CGO off) instead of the old
+          # single-job cross-compile of all seven targets.
+          $cliTargets = @(
+            @{ dir = 'build\bin\cli\Windows\x64';   name = 'snishaper-cli-windows-amd64' }
+            @{ dir = 'build\bin\cli\Windows\x86';   name = 'snishaper-cli-windows-386' }
+            @{ dir = 'build\bin\cli\Windows\arm64'; name = 'snishaper-cli-windows-arm64' }
+          )
+          foreach ($t in $cliTargets) {
+            if (-not (Test-Path (Join-Path $t.dir 'snishaper.exe'))) {
+              Write-Host "::error::missing CLI output $($t.dir)\snishaper.exe"
+              exit 1
+            }
+            Write-Host "::group::packaging $($t.name).7z"
+            7z a -mx=9 (Join-Path $assetsDir "$($t.name).7z") (Join-Path $t.dir '*')
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+            Write-Host "::endgroup::"
+          }
+          & (Join-Path $cliTargets[0].dir 'snishaper.exe') version | ForEach-Object {
+            Write-Host "::notice::CLI smoke version: $_"
+          }
+
           if (Test-Path (Join-Path $root 'devcert.cer')) { Write-Host "::notice::devcert.cer (public cert) ships inside the dongle bundle only" }
           if (Test-Path (Join-Path $root 'install.bat')) { Write-Host "::notice::install.bat ships inside the dongle bundle only" }
 
@@ -640,6 +679,7 @@ jobs:
             --row "Windows/x86=build/bin/gui/Windows/x86/snishaper.exe" \
             --row "Windows/arm64=build/bin/gui/Windows/arm64/snishaper.exe" \
             --row "MSIX=build/bin/gui/Windows/*.msix" \
+            --row "CLI=snishaper-cli-windows-*.7z" \
             --dir "staging"
 
   # ------------------------------------------------------------------
@@ -680,9 +720,26 @@ jobs:
           cache-dependency-path: frontend/package-lock.json
 
       - name: Install GTK4/WebKitGTK dependencies
+        timeout-minutes: 10
         run: |
+          # The Azure archive mirror stalls on large packages (observed on
+          # libjavascriptcoregtk-6.0-1 on the arm64 runner); point apt at the
+          # default Ubuntu archive and fail fast instead of retrying a dead
+          # connection.
+          sudo tee /etc/apt/apt.conf.d/99-ci-timeout <<'EOF'
+          Acquire::Retries "0";
+          Acquire::http::Timeout "20";
+          Acquire::https::Timeout "20";
+          DPkg::Lock::Timeout "120";
+          EOF
+          for f in /etc/apt/apt-mirrors.txt /etc/apt/sources.list.d/ubuntu.sources; do
+            if [ -f "$f" ]; then
+              sudo sed -i 's|azure\.archive\.ubuntu\.com|archive.ubuntu.com|g' "$f"
+            fi
+          done
           sudo apt-get update
-          sudo apt-get install -y libgtk-4-dev libwebkitgtk-6.0-dev
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+            libgtk-4-dev libwebkitgtk-6.0-dev p7zip-full
 
       - name: Inject release metadata into manifest
         shell: pwsh
@@ -714,6 +771,26 @@ jobs:
             exit 1
           fi
 
+      - name: Build and package CLI (native)
+        run: |
+          set -euo pipefail
+          chmod +x build.sh
+          echo "::group::build.sh --ci --platform linux --arch ${{ matrix.arch }} --type cli"
+          ./build.sh --ci --platform linux --arch "${{ matrix.arch }}" --type cli 2>&1 | tee build-cli.log
+          echo "::endgroup::"
+          BIN="build/bin/cli/Linux/${{ matrix.arch }}/snishaper"
+          test -f "$BIN" || { echo "::error::$BIN missing"; exit 1; }
+          if grep -Eqi 'aarch64-linux-gnu|osxcross' build-cli.log; then
+            echo "::error::cross toolchain detected in a CI build"
+            exit 1
+          fi
+          GOARCH_NAME="${{ matrix.arch }}"
+          if [ "$GOARCH_NAME" = "x64" ]; then GOARCH_NAME="amd64"; fi
+          ARCHIVE="snishaper-cli-linux-${GOARCH_NAME}.7z"
+          7z a -mx=9 "$ARCHIVE" "build/bin/cli/Linux/${{ matrix.arch }}/*"
+          ls -lh "$ARCHIVE"
+          echo "::notice::$ARCHIVE ready"
+
       - name: Create tar.gz archive
         run: |
           set -euo pipefail
@@ -726,7 +803,9 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: linux-artifacts-${{ matrix.arch }}
-          path: snishaper-linux-${{ matrix.arch }}.tar.gz
+          path: |
+            snishaper-linux-${{ matrix.arch }}.tar.gz
+            snishaper-cli-linux-*.7z
           retention-days: 3
 
       - name: Write build summary
@@ -737,146 +816,20 @@ jobs:
           .github/scripts/ci/build-summary.sh record \
             --project SniShaper \
             --target "GUI linux/${{ matrix.arch }}" \
-            --tasks "frontend, gui, tar.gz" \
+            --tasks "frontend, gui, tar.gz, cli 7z" \
             --runner "${{ matrix.runner }}" \
             --outcome "${{ job.status }}" \
             --cache-hit "${{ steps.go.outputs.cache-hit }}" \
             --row "linux/${{ matrix.arch }}=build/bin/gui/Linux/${{ matrix.arch }}/SniShaper" \
-            --row "tar.gz=snishaper-linux-${{ matrix.arch }}.tar.gz"
+            --row "tar.gz=snishaper-linux-${{ matrix.arch }}.tar.gz" \
+            --row "cli=snishaper-cli-linux-*.7z"
 
   # ------------------------------------------------------------------
-  # CLI build (windows-2025): cross-compile the headless CLI for all six
-  # targets (windows/linux/darwin x amd64/arm64) and package each target
-  # into its own 7z archive (binary + config/ + rules/ seed files).
-  # ------------------------------------------------------------------
-  build-cli:
-    name: Build CLI (${{ inputs.channel }})
-    needs: check
-    if: needs.check.outputs.skip != 'true'
-    runs-on: windows-2025
-    permissions:
-      contents: read
-    env:
-      DISPLAY_VERSION: ${{ needs.check.outputs.display_version }}
-      RELEASE_CHANNEL: ${{ inputs.channel }}
-    steps:
-      - name: Checkout full history
-        uses: actions/checkout@v7
-        with:
-          fetch-depth: 0
-
-      - name: Setup Go
-        id: go
-        uses: actions/setup-go@v7
-        with:
-          go-version-file: go.mod
-
-      - name: Install 7-Zip
-        run: choco install 7zip -y --no-progress
-
-      - name: Inject release metadata into manifest
-        shell: pwsh
-        run: |
-          $ErrorActionPreference = 'Stop'
-          $script = Join-Path $env:GITHUB_WORKSPACE '.github/scripts/inject-manifest-release.ps1'
-          if (-not (Test-Path $script)) {
-            Write-Host "::error::inject-manifest-release.ps1 missing: $script"
-            exit 1
-          }
-          & $script -RepoRoot $env:GITHUB_WORKSPACE `
-            -ReleaseVersion "${{ needs.check.outputs.version }}" `
-            -ReleaseChannel "${{ needs.check.outputs.rel_channel }}" `
-            -IdentityVersion "${{ needs.check.outputs.identity_version }}"
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-
-      - name: Build and package CLI (7 targets, one 7z each)
-        shell: pwsh
-        run: |
-          $ErrorActionPreference = 'Stop'
-          Write-Host "::group::build_windows.ps1 -CI -Type cli -All -Silent"
-          ./build_windows.ps1 -CI -Type cli -All -Silent
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          Write-Host "::endgroup::"
-          $targets = @(
-            @{ dir = 'build\bin\cli\Windows\x64';   name = 'snishaper-cli-windows-amd64' }
-            @{ dir = 'build\bin\cli\Windows\x86';   name = 'snishaper-cli-windows-386' }
-            @{ dir = 'build\bin\cli\Windows\arm64'; name = 'snishaper-cli-windows-arm64' }
-            @{ dir = 'build\bin\cli\Linux\x64';     name = 'snishaper-cli-linux-amd64' }
-            @{ dir = 'build\bin\cli\Linux\arm64';   name = 'snishaper-cli-linux-arm64' }
-            @{ dir = 'build\bin\cli\Darwin\x64';    name = 'snishaper-cli-darwin-amd64' }
-            @{ dir = 'build\bin\cli\Darwin\arm64';  name = 'snishaper-cli-darwin-arm64' }
-          )
-          foreach ($t in $targets) {
-            if (-not (Test-Path $t.dir)) {
-              Write-Host "::error::missing CLI output directory $($t.dir)"
-              exit 1
-            }
-            $archive = "$($t.name).7z"
-            Write-Host "::group::packaging $archive"
-            7z a -mx=9 $archive (Join-Path $t.dir '*')
-            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-            Write-Host "::endgroup::"
-          }
-
-      - name: Smoke test CLI binary
-        shell: pwsh
-        env:
-          DISPLAY_VERSION: ${{ needs.check.outputs.display_version }}
-          RELEASE_CHANNEL: ${{ inputs.channel }}
-        run: |
-          $ErrorActionPreference = 'Stop'
-          $LDFLAGS = "-s -w -X snishaper/app.buildVersion=$env:DISPLAY_VERSION"
-          if ($env:RELEASE_CHANNEL -and $env:RELEASE_CHANNEL -ne 'release') {
-            $LDFLAGS += " -X snishaper/app.buildChannel=$env:RELEASE_CHANNEL"
-          }
-          $env:GOOS = 'windows'; $env:GOARCH = 'amd64'; $env:CGO_ENABLED = '0'
-          go build -tags "with_gvisor headless" -ldflags="$LDFLAGS" -o cli-smoke.exe ./cli
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          $v = .\cli-smoke.exe version
-          Write-Host "::notice::CLI smoke version: $v (expected $env:DISPLAY_VERSION)"
-          if ($v.Trim() -ne $env:DISPLAY_VERSION.Trim()) {
-            Write-Host "::error::CLI smoke version mismatch: got '$v', expected '$env:DISPLAY_VERSION'"
-            exit 1
-          }
-          .\cli-smoke.exe help | Out-Null
-          Remove-Item Env:GOOS, Env:GOARCH, Env:CGO_ENABLED -ErrorAction SilentlyContinue
-          Remove-Item -Force cli-smoke.exe
-
-      - name: Upload CLI artifacts
-        uses: actions/upload-artifact@v7
-        with:
-          name: cli-artifacts
-          path: snishaper-cli-*.7z
-          retention-days: 3
-
-      - name: Write build summary
-        if: always()
-        shell: bash
-        run: |
-          set -euo pipefail
-          chmod +x .github/scripts/ci/build-summary.sh
-          .github/scripts/ci/build-summary.sh record \
-            --project SniShaper \
-            --target "CLI (7 targets, 7z each)" \
-            --tasks cli \
-            --runner windows-2025 \
-            --outcome "${{ job.status }}" \
-            --cache-hit "${{ steps.go.outputs.cache-hit }}" \
-            --row "Windows/x64=snishaper-cli-windows-amd64.7z" \
-            --row "Windows/x86=snishaper-cli-windows-386.7z" \
-            --row "Windows/arm64=snishaper-cli-windows-arm64.7z" \
-            --row "Linux/x64=snishaper-cli-linux-amd64.7z" \
-            --row "Linux/arm64=snishaper-cli-linux-arm64.7z" \
-            --row "Darwin/x64=snishaper-cli-darwin-amd64.7z" \
-            --row "Darwin/arm64=snishaper-cli-darwin-arm64.7z"
-
-  # ------------------------------------------------------------------
-  # macOS build (macos-26-intel / macos-26): headless CLI plus the
-  # SnishaperBar menu bar app, bundled into SniShaper.app by
-  # macos/scripts/bundle-app.sh (ad-hoc signed, not notarized — first
-  # launch needs a Gatekeeper allow, see docs/macos-app.md). build.yml's
-  # darwin job verifies the same bundle path; this job stamps release
-  # metadata and attaches the per-arch zips to the release.
+  # The CLI archives no longer have their own cross-compile job: each
+  # platform job above packages the CLI for its own platform natively
+  # (windows-2025 -> snishaper-cli-windows-*, ubuntu -> snishaper-cli-linux-*,
+  # macos -> snishaper-cli-darwin-*), which is faster than cross-compiling
+  # all seven targets on a single runner.
   # ------------------------------------------------------------------
   build-macos:
     name: Build macOS/${{ matrix.arch }} (${{ inputs.channel }})
@@ -946,11 +899,33 @@ jobs:
           test -f "build/bin/macos/SniShaper-macos-$(uname -m).zip"
           echo "::notice::bundled and ad-hoc signed SniShaper.app ($(uname -m))"
 
+      - name: Package CLI archive (7z)
+        shell: bash
+        run: |
+          # The CLI binary was already built above (bundle-app.sh --cli
+          # reuses it); pack the same payload the old cross-compile job
+          # shipped: binary + config/ + rules/ seed files.
+          set -euo pipefail
+          SEVENZIP="$(command -v 7z || command -v 7zz || true)"
+          if [ -z "$SEVENZIP" ]; then
+            brew install sevenzip
+            SEVENZIP="$(command -v 7zz || command -v 7z)"
+          fi
+          test -n "$SEVENZIP" || { echo "::error::no 7z/7zz on the runner"; exit 1; }
+          GOARCH_NAME="${{ matrix.arch }}"
+          if [ "$GOARCH_NAME" = "x64" ]; then GOARCH_NAME="amd64"; fi
+          ARCHIVE="snishaper-cli-darwin-${GOARCH_NAME}.7z"
+          "$SEVENZIP" a -mx=9 "$ARCHIVE" "build/bin/cli/Darwin/${{ matrix.arch }}/*"
+          ls -lh "$ARCHIVE"
+          echo "::notice::$ARCHIVE ready"
+
       - name: Upload macOS artifacts
         uses: actions/upload-artifact@v7
         with:
           name: macos-artifacts-${{ matrix.arch }}
-          path: build/bin/macos/SniShaper-macos-*.zip
+          path: |
+            build/bin/macos/SniShaper-macos-*.zip
+            snishaper-cli-darwin-*.7z
           retention-days: 3
 
       - name: Write build summary
@@ -967,7 +942,8 @@ jobs:
             --outcome "${{ job.status }}" \
             --cache-hit "${{ steps.go.outputs.cache-hit }}" \
             --row "darwin/${{ matrix.arch }}=build/bin/cli/Darwin/${{ matrix.arch }}/snishaper" \
-            --row "SniShaper.app zip=build/bin/macos/SniShaper-macos-*.zip"
+            --row "SniShaper.app zip=build/bin/macos/SniShaper-macos-*.zip" \
+            --row "cli 7z=snishaper-cli-darwin-*.7z"
 
   # ------------------------------------------------------------------
   # Linux distribution packages (.deb / .rpm / AppImage) for each arch,
@@ -1101,7 +1077,7 @@ jobs:
   # ------------------------------------------------------------------
   publish:
     name: Publish Release (${{ inputs.channel }})
-    needs: [check, build-windows, build-linux, build-cli, build-macos, build-linux-packages]
+    needs: [check, build-windows, build-linux, build-macos, build-linux-packages]
     if: needs.check.outputs.skip != 'true'
     runs-on: windows-2025
     permissions:
@@ -1137,12 +1113,6 @@ jobs:
           pattern: linux-artifacts-*
           path: staging
           merge-multiple: true
-
-      - name: Download CLI artifacts
-        uses: actions/download-artifact@v8
-        with:
-          name: cli-artifacts
-          path: staging
 
       - name: Download macOS artifacts (every architecture)
         uses: actions/download-artifact@v8
@@ -1620,7 +1590,7 @@ jobs:
   # ------------------------------------------------------------------
   summary:
     name: Build summary
-    needs: [check, build-windows, build-linux, build-cli, build-macos, build-linux-packages, publish]
+    needs: [check, build-windows, build-linux, build-macos, build-linux-packages, publish]
     if: always() && !cancelled()
     runs-on: ubuntu-26.04
     permissions:

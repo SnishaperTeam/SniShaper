@@ -179,9 +179,26 @@ jobs:
 
       - name: Install Linux GUI dependencies (GTK4 / WebKitGTK)
         if: runner.os == 'Linux'
+        timeout-minutes: 10
         run: |
+          # The Azure archive mirror stalls on large packages (observed on
+          # libjavascriptcoregtk-6.0-1 on the arm64 runner); point apt at the
+          # default Ubuntu archive and fail fast instead of retrying a dead
+          # connection.
+          sudo tee /etc/apt/apt.conf.d/99-ci-timeout <<'EOF'
+          Acquire::Retries "0";
+          Acquire::http::Timeout "20";
+          Acquire::https::Timeout "20";
+          DPkg::Lock::Timeout "120";
+          EOF
+          for f in /etc/apt/apt-mirrors.txt /etc/apt/sources.list.d/ubuntu.sources; do
+            if [ -f "$f" ]; then
+              sudo sed -i 's|azure\.archive\.ubuntu\.com|archive.ubuntu.com|g' "$f"
+            fi
+          done
           sudo apt-get update
-          sudo apt-get install -y libgtk-4-dev libwebkitgtk-6.0-dev
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+            libgtk-4-dev libwebkitgtk-6.0-dev
 
       - name: Build GUI (build.sh --ci)
         if: matrix.script == 'sh'
@@ -211,6 +228,31 @@ jobs:
             exit 1
           }
 
+      - name: Build CLI (same platform/arch)
+        if: matrix.platform == 'windows' || matrix.platform == 'linux'
+        run: |
+          # One CLI target per matrix entry, built natively by the same job
+          # as the GUI (pure Go, CGO off) instead of cross-building all five
+          # on a single runner.
+          set -euo pipefail
+          chmod +x build.sh
+          if [ "${{ matrix.script }}" = "sh" ]; then
+            ./build.sh --ci --platform "${{ matrix.platform }}" --arch "${{ matrix.arch }}" --type cli 2>&1 | tee build-cli.log
+            test -f "build/bin/cli/Linux/${{ matrix.arch }}/snishaper" || { echo "::error::CLI binary missing"; exit 1; }
+            ./build/bin/cli/Linux/${{ matrix.arch }}/snishaper version
+          fi
+
+      - name: Build CLI (Windows matrix entry)
+        if: matrix.script == 'ps1'
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          ./build_windows.ps1 -CI -Platform windows -Arch "${{ matrix.arch }}" -Type cli -Silent
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $v = (& ".\build\bin\cli\Windows\${{ matrix.arch }}\snishaper.exe" version).Trim()
+          Write-Host "::notice::CLI (${{ matrix.arch }}) version: $v"
+          if (-not $v) { Write-Host "::error::empty CLI version"; exit 1 }
+
       - name: Write build summary
         if: always()
         shell: bash
@@ -222,14 +264,18 @@ jobs:
           bin="snishaper"
           if [ "${{ runner.os }}" = "Linux" ]; then bin="SniShaper"; fi
           if [ "${{ runner.os }}" = "Windows" ]; then bin="snishaper.exe"; fi
+          cliRow=""
+          if [ "${{ matrix.platform }}" = "windows" ]; then cliRow="--row cli=build/bin/cli/Windows/${{ matrix.arch }}/snishaper.exe"; fi
+          if [ "${{ matrix.platform }}" = "linux" ]; then cliRow="--row cli=build/bin/cli/Linux/${{ matrix.arch }}/snishaper"; fi
           .github/scripts/ci/build-summary.sh record \
             --project SniShaper \
             --target "GUI ${plat}/${{ matrix.arch }}" \
-            --tasks "frontend, gui" \
+            --tasks "frontend, gui, cli" \
             --runner "${{ matrix.runner }}" \
             --outcome "${{ job.status }}" \
             --cache-hit "${{ steps.go.outputs.cache-hit }}" \
             --row "${plat}/${{ matrix.arch }}=build/bin/gui/${cap}/${{ matrix.arch }}/${bin}" \
+            $cliRow \
             --dir "build/bin/gui/${cap}/${{ matrix.arch }}"
 
       - name: Verify artifacts (Unix)
@@ -260,85 +306,9 @@ jobs:
           }
 
   # ------------------------------------------------------------------
-  # CLI: Windows + Linux, cross-built once on a Windows runner. Pure Go,
-  # CGO_ENABLED=0, no cross toolchain. Darwin is handled natively below.
-  # ------------------------------------------------------------------
-  cli-build:
-    name: CLI (windows + linux, 5 targets)
-    needs: gate
-    if: >-
-      always() && !cancelled() &&
-      (github.event_name != 'pull_request' || needs.gate.outputs.proceed == 'true')
-    runs-on: windows-latest
-
-    steps:
-      - uses: actions/checkout@v7
-
-      - uses: actions/setup-go@v7
-        id: go
-        with:
-          go-version-file: go.mod
-
-      - name: Build CLI targets
-        shell: pwsh
-        run: |
-          $ErrorActionPreference = 'Stop'
-          ./build_windows.ps1 -CI -Platform windows,linux -Type cli -Silent
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-
-      - name: Verify all five targets exist
-        shell: pwsh
-        run: |
-          $ErrorActionPreference = 'Stop'
-          $expected = @(
-            'build\bin\cli\Windows\x64\snishaper.exe',
-            'build\bin\cli\Windows\x86\snishaper.exe',
-            'build\bin\cli\Windows\arm64\snishaper.exe',
-            'build\bin\cli\Linux\x64\snishaper',
-            'build\bin\cli\Linux\arm64\snishaper'
-          )
-          foreach ($f in $expected) {
-            if (-not (Test-Path $f)) { Write-Host "::error::missing $f"; exit 1 }
-            Write-Host "built: $f"
-          }
-
-      - name: Smoke test
-        shell: pwsh
-        run: |
-          $ErrorActionPreference = 'Stop'
-          $v = (& .\build\bin\cli\Windows\x64\snishaper.exe version).Trim()
-          Write-Host "::notice::CLI version: $v"
-          if (-not $v) { Write-Host "::error::empty CLI version"; exit 1 }
-          & .\build\bin\cli\Windows\x64\snishaper.exe help | Out-Null
-          if ($LASTEXITCODE -ne 0) { Write-Host "::error::CLI help failed"; exit 1 }
-
-      - name: Write build summary
-        if: always()
-        shell: bash
-        run: |
-          set -euo pipefail
-          chmod +x .github/scripts/ci/build-summary.sh
-          .github/scripts/ci/build-summary.sh record \
-            --project SniShaper \
-            --target "CLI (windows + linux, 5 targets)" \
-            --tasks cli \
-            --runner windows-latest \
-            --outcome "${{ job.status }}" \
-            --cache-hit "${{ steps.go.outputs.cache-hit }}" \
-            --row "Windows/x64=build/bin/cli/Windows/x64/snishaper.exe" \
-            --row "Windows/x86=build/bin/cli/Windows/x86/snishaper.exe" \
-            --row "Windows/arm64=build/bin/cli/Windows/arm64/snishaper.exe" \
-            --row "Linux/x64=build/bin/cli/Linux/x64/snishaper" \
-            --row "Linux/arm64=build/bin/cli/Linux/arm64/snishaper"
-
-  # ------------------------------------------------------------------
-  # Darwin, built natively and smoke-tested on real macOS runners:
-  #   darwin/x64  -> macos-26-intel (last x86_64 image, EOL Aug 2027)
-  #   darwin/arm64-> macos-26      (Apple Silicon)
-  # Builds the headless CLI plus the macOS menu bar app (SnishaperBar,
-  # macos/) and bundles SniShaper.app. The bar binary itself is never
-  # executed in CI — it enters an NSApplication event loop and does not
-  # exit.
+  # CLI: Windows + Linux targets are built natively by the matrix jobs
+  # above (one target per matrix entry, same job as the GUI). Darwin is
+  # handled natively below.
   # ------------------------------------------------------------------
   darwin:
     name: darwin ${{ matrix.arch }} on ${{ matrix.runner }}
@@ -441,7 +411,7 @@ jobs:
   # ------------------------------------------------------------------
   ci:
     name: ci
-    needs: [gate, matrix-build, cli-build, darwin]
+    needs: [gate, matrix-build, darwin]
     if: always() && !cancelled()
     runs-on: ubuntu-latest
     permissions:
