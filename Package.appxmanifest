@@ -49,6 +49,6 @@
     <rescap:Capability Name="runFullTrust" />
   </Capabilities>
 
-  <rel:ReleaseChannel>alpha.2</rel:ReleaseChannel>
+  <rel:ReleaseChannel>stable</rel:ReleaseChannel>
   <rel:Version>1.30.0</rel:Version>
 </Package>
