@@ -8,7 +8,6 @@ require (
 	github.com/gdamore/tcell/v2 v2.13.10
 	github.com/miekg/dns v1.1.73
 	github.com/rivo/tview v0.42.0
-	github.com/vishvananda/netlink v1.3.1
 	github.com/wailsapp/wails/v3 v3.1.0
 	golang.org/x/sys v0.49.0
 )
@@ -134,6 +133,7 @@ require (
 	github.com/tailscale/peercred v0.0.0-20250107143737-35a0c7bd7edc // indirect
 	github.com/things-go/go-socks5 v0.1.4 // indirect
 	github.com/u-root/uio v0.0.0-20230220225925-ffce2a382923 // indirect
+	github.com/vishvananda/netlink v1.3.1 // indirect
 	github.com/vishvananda/netns v0.0.5 // indirect
 	github.com/vmihailenco/msgpack/v5 v5.4.1 // indirect
 	github.com/vmihailenco/tagparser/v2 v2.0.0 // indirect

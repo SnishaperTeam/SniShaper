@@ -260,7 +260,7 @@ const Dashboard: React.FC = () => {
     operatingRef.current = true;
     setIsOperating(true);
     try {
-      await KillPortOccupant(portOccupant.pid);
+      await KillPortOccupant(port, portOccupant.pid);
       await new Promise(r => setTimeout(r, 400));
       await StartProxy();
     } catch (err) {

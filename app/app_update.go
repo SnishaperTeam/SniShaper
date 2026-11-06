@@ -789,32 +789,33 @@ const (
 	defaultDownloadChunkSize   = 8 * 1024 * 1024
 )
 
+// initDownloadTuning resolves the env-tunable download settings once at
+// startup, so the download goroutines read plain fields instead of racing on
+// lazy writes.
+func initDownloadTuning() (concurrency int, chunkSize int64) {
+	concurrency = defaultDownloadConcurrency
+	if v, err := strconv.Atoi(strings.TrimSpace(os.Getenv("DOWNLOAD_CONCURRENCY"))); err == nil && v > 0 {
+		concurrency = v
+	}
+	chunkSize = defaultDownloadChunkSize
+	if v, err := strconv.ParseInt(strings.TrimSpace(os.Getenv("DOWNLOAD_CHUNK_SIZE")), 10, 64); err == nil && v > 0 {
+		chunkSize = v
+	}
+	return concurrency, chunkSize
+}
+
 func (a *App) getDownloadConcurrency() int {
 	if a.downloadConcurrency > 0 {
 		return a.downloadConcurrency
 	}
-	n := defaultDownloadConcurrency
-	if s := strings.TrimSpace(os.Getenv("DOWNLOAD_CONCURRENCY")); s != "" {
-		if v, err := strconv.Atoi(s); err == nil && v > 0 {
-			n = v
-		}
-	}
-	a.downloadConcurrency = n
-	return n
+	return defaultDownloadConcurrency
 }
 
 func (a *App) getDownloadChunkSize() int64 {
 	if a.downloadChunkSize > 0 {
 		return a.downloadChunkSize
 	}
-	n := int64(defaultDownloadChunkSize)
-	if s := strings.TrimSpace(os.Getenv("DOWNLOAD_CHUNK_SIZE")); s != "" {
-		if v, err := strconv.ParseInt(s, 10, 64); err == nil && v > 0 {
-			n = v
-		}
-	}
-	a.downloadChunkSize = n
-	return n
+	return defaultDownloadChunkSize
 }
 
 func (a *App) downloadConcurrencyFn() download.ConcurrencyFn {
@@ -1012,21 +1013,27 @@ func (a *App) setPendingUpdateVerified(path, expectedSHA string) {
 }
 
 func (a *App) InstallUpdateAsset(localPath string) error {
-	// Re-verify the pending download before executing it, so a file swapped
-	// or modified on disk after the download cannot be installed.
+	// Only the file this session downloaded and hash-verified may be
+	// installed. This binding executes a binary with the app's privileges,
+	// so an arbitrary caller-supplied path must never reach the installer —
+	// anything else goes through DownloadUpdateAsset first.
 	a.pendingUpdateMu.Lock()
 	pendingPath, expectedSHA := a.pendingUpdatePath, a.pendingUpdateSHA
 	a.pendingUpdateMu.Unlock()
-	if expectedSHA != "" && strings.EqualFold(localPath, pendingPath) {
-		sum, err := fileSHA256Hex(localPath)
-		if err != nil {
-			return fmt.Errorf("update integrity re-check failed: %v", err)
-		}
-		if !strings.EqualFold(sum, expectedSHA) {
-			return fmt.Errorf("update file changed after download (sha256 mismatch), refusing to install")
-		}
+	if pendingPath == "" || expectedSHA == "" {
+		return fmt.Errorf("no verified update download; run the update download step first")
 	}
-	err := a.installUpdateAsset(localPath)
+	if !strings.EqualFold(localPath, pendingPath) {
+		return fmt.Errorf("refusing to install %s: it is not the verified update download", localPath)
+	}
+	sum, err := fileSHA256Hex(localPath)
+	if err != nil {
+		return fmt.Errorf("update integrity re-check failed: %v", err)
+	}
+	if !strings.EqualFold(sum, expectedSHA) {
+		return fmt.Errorf("update file changed after download (sha256 mismatch), refusing to install")
+	}
+	err = a.installUpdateAsset(localPath)
 	if err == nil {
 		a.SetPendingUpdate("")
 	}

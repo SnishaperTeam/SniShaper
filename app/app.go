@@ -46,6 +46,7 @@ type App struct {
 
 	proxyServer         *proxy.ProxyServer
 	certManager         *certmanager.CertManager
+	certManagerMu       sync.Mutex // 保护 certManager：GUI 绑定与启动钩子并发初始化
 	ruleManager         *proxy.RuleManager
 	settingsPath        string
 	rulesPath           string
@@ -277,11 +278,10 @@ func (a *App) startupV3() {
 			a.launchedAtStartup, a.autoProxyAtStartup, a.GetAutoEnableProxyOnAutoStart()))
 	}
 
-	var err error
-	a.certManager, err = certmanager.InitCertManager(a.certPath)
-	if err != nil {
-		a.appendLog("[startup] Failed to init cert manager: " + err.Error())
+	if cm, cmErr := certmanager.InitCertManager(a.certPath); cmErr != nil {
+		a.appendLog("[startup] Failed to init cert manager: " + cmErr.Error())
 	} else {
+		a.setCertManager(cm)
 		a.appendLog("[startup] Cert manager initialized: " + a.certPath)
 	}
 
@@ -372,9 +372,12 @@ func (a *App) autoEnableProxyAtStartup() {
 
 // startRouteEventsPoller forwards route events from the core process to the
 // frontend (app:route), since the core RPC only buffers them for polling.
+// Each poll is a fresh RPC connection, so an idle proxy backs off: 500 ms
+// while events keep arriving, growing to 4 s when there is nothing to fetch.
 func (a *App) startRouteEventsPoller() {
 	a.runSafeAsync("route events poller", func() {
-		ticker := time.NewTicker(500 * time.Millisecond)
+		interval := 500 * time.Millisecond
+		ticker := time.NewTicker(interval)
 		defer ticker.Stop()
 		for {
 			select {
@@ -387,7 +390,18 @@ func (a *App) startRouteEventsPoller() {
 			}
 			events := a.core.GetRouteEvents()
 			if len(events) == 0 {
+				// Empty (or the core is unreachable): poll less often. The
+				// core buffers at most 200 events, so a 4 s idle interval
+				// still drains everything long before the buffer turns over.
+				if interval < 4*time.Second {
+					interval *= 2
+					ticker.Reset(interval)
+				}
 				continue
+			}
+			if interval != 500*time.Millisecond {
+				interval = 500 * time.Millisecond
+				ticker.Reset(interval)
 			}
 			for _, e := range events {
 				a.invokeAsync(func() {
