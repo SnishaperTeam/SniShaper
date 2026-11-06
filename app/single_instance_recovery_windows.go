@@ -86,11 +86,23 @@ func RecoverBrokenSingleInstance(uniqueID string) {
 
 	currentPID := uint32(os.Getpid())
 	killedAny := false
-	for _, pid := range findProcessesByName(exeName) {
-		if pid == 0 || pid == currentPID {
+	entries := findProcessesByName(exeName)
+	// Core children run the same executable with --core, so a name-only kill
+	// would take down the elevated core subprocess together with the stale
+	// instance. A child's parent PID is another live SniShaper process —
+	// skip those and let them follow their owner.
+	byPid := make(map[uint32]processEntry32, len(entries))
+	for _, e := range entries {
+		byPid[e.ProcessID] = e
+	}
+	for _, e := range entries {
+		if e.ProcessID == 0 || e.ProcessID == currentPID {
 			continue
 		}
-		proc, err := windows.OpenProcess(windows.PROCESS_TERMINATE, false, pid)
+		if parent, ok := byPid[e.ParentProcessID]; ok && parent.ProcessID == e.ParentProcessID {
+			continue // child of another SniShaper process (the --core runtime)
+		}
+		proc, err := windows.OpenProcess(windows.PROCESS_TERMINATE, false, e.ProcessID)
 		if err != nil {
 			continue
 		}
@@ -287,7 +299,7 @@ func mustGetwd() string {
 	return dir
 }
 
-func findProcessesByName(name string) []uint32 {
+func findProcessesByName(name string) []processEntry32 {
 	snapshot, _, _ := siCreateToolhelp32Snapshot.Call(th32csSnapProcess, 0)
 	if snapshot == uintptr(windows.InvalidHandle) {
 		return nil
@@ -297,15 +309,15 @@ func findProcessesByName(name string) []uint32 {
 	entry := processEntry32{}
 	entry.Size = uint32(unsafe.Sizeof(entry))
 
-	var pids []uint32
+	var entries []processEntry32
 	ret, _, _ := siProcess32FirstW.Call(snapshot, uintptr(unsafe.Pointer(&entry)))
 	for ret != 0 {
 		exe := strings.ToLower(windows.UTF16ToString(entry.ExeFile[:]))
 		if exe == name {
-			pids = append(pids, entry.ProcessID)
+			entries = append(entries, entry)
 		}
 		entry.Size = uint32(unsafe.Sizeof(entry))
 		ret, _, _ = siProcess32NextW.Call(snapshot, uintptr(unsafe.Pointer(&entry)))
 	}
-	return pids
+	return entries
 }

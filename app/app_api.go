@@ -54,20 +54,23 @@ func NewApp() *App {
 	proxyServer := proxy.NewProxyServer("127.0.0.1:"+port, proxy.WithLogger(corelog.Std))
 	proxyServer.SetRuleManager(ruleManager)
 	a := &App{
-		ctx:                ctx,
-		cancel:             cancel,
-		proxyServer:        proxyServer,
-		ruleManager:        ruleManager,
-		settingsPath:       settingsPath,
-		rulesPath:          rulesPath,
-		certPath:           common.ConfigCertDir(execDir),
-		proxyMarkerPath:    common.ConfigProxyMarker(execDir),
-		ifaces:             netiface.NewSelector(),
-		launchedAtStartup:  HasLaunchArg("--startup"),
-		autoProxyAtStartup: HasLaunchArg("--autoproxy"),
+		ctx:                    ctx,
+		cancel:                 cancel,
+		proxyServer:            proxyServer,
+		ruleManager:            ruleManager,
+		settingsPath:           settingsPath,
+		rulesPath:              rulesPath,
+		certPath:               common.ConfigCertDir(execDir),
+		proxyMarkerPath:        common.ConfigProxyMarker(execDir),
+		ifaces:                 netiface.NewSelector(),
+		launchedAtStartup:      HasLaunchArg("--startup"),
+		autoProxyAtStartup:     HasLaunchArg("--autoproxy"),
 		startupMigrationReport: migrationReport,
-		core:               core.NewCoreClient(),
+		core:                   core.NewCoreClient(),
 	}
+	// Download tuning is env-tunable but fixed for the process lifetime:
+	// resolving it here keeps the download goroutines off lazy field writes.
+	a.downloadConcurrency, a.downloadChunkSize = initDownloadTuning()
 
 	a.proxyServer.SetCFRefreshCallback(func() {
 		a.RefreshCloudflareIPPool()
@@ -830,16 +833,36 @@ func (a *App) GetStats() core.StatsReply {
 	}
 }
 
-func (a *App) GetCACertPath() string {
-	if a.certManager == nil && a.certPath != "" {
+// setCertManager stores the cert manager under the protecting mutex; both the
+// startup hook and the lazy GUI path funnel through here.
+func (a *App) setCertManager(cm *certmanager.CertManager) {
+	a.certManagerMu.Lock()
+	a.certManager = cm
+	a.certManagerMu.Unlock()
+}
+
+// ensureCertManager lazily initializes the cert manager for bindings that can
+// run before the startup hook (or in config-only CLI commands). Concurrent
+// callers are serialized by certManagerMu, so the pointer write is race-free.
+func (a *App) ensureCertManager() {
+	a.certManagerMu.Lock()
+	defer a.certManagerMu.Unlock()
+	if a.certManager == nil {
 		if cm, err := certmanager.InitCertManager(a.certPath); err == nil {
 			a.certManager = cm
 		}
 	}
-	if a.certManager != nil {
-		return a.certManager.GetCACertPath()
+}
+
+func (a *App) GetCACertPath() string {
+	a.ensureCertManager()
+	a.certManagerMu.Lock()
+	cm := a.certManager
+	a.certManagerMu.Unlock()
+	if cm == nil {
+		return ""
 	}
-	return ""
+	return cm.GetCACertPath()
 }
 
 func (a *App) GetCACertPEM() string {
@@ -850,21 +873,18 @@ func (a *App) GetCACertPEM() string {
 }
 
 func (a *App) GetCAInstallStatus() CAInstallStatus {
-	if a.certManager == nil {
-		if a.certPath != "" {
-			if cm, err := certmanager.InitCertManager(a.certPath); err == nil {
-				a.certManager = cm
-			}
-		}
-	}
-	if a.certManager == nil {
+	a.ensureCertManager()
+	a.certManagerMu.Lock()
+	cm := a.certManager
+	a.certManagerMu.Unlock()
+	if cm == nil {
 		return CAInstallStatus{
 			CertPath:    a.certPath,
 			Platform:    runtime.GOOS,
 			InstallHelp: "证书状态初始化中",
 		}
 	}
-	status := a.certManager.GetCAInstallStatus()
+	status := cm.GetCAInstallStatus()
 	return CAInstallStatus{
 		Installed:   status.Installed,
 		Platform:    status.Platform,

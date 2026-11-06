@@ -31,7 +31,7 @@ on:
         description: "MSIX signing certificate password (default: password)"
         required: false
       MSIX_PFX_BASE64:
-        description: Base64 content of devcert.pfx signing certificate (used when repo has no certificate)
+        description: Base64 content of the MSIX signing certificate (devcert.pfx); without it an ephemeral certificate is generated per build
         required: false
       OLLAMA_MODEL:
         description: "Local Ollama model for release notes summary (default: qwen3.5:2b); used when LLM_API_KEY is not set"
@@ -338,10 +338,12 @@ jobs:
           if ($env:MSIX_PFX_BASE64) {
             [IO.File]::WriteAllBytes($certPath, [Convert]::FromBase64String($env:MSIX_PFX_BASE64))
             Write-Host "::notice::devcert.pfx restored from secret MSIX_PFX_BASE64"
-          } elseif (Test-Path $certPath) {
-            Write-Host "::notice::using repo devcert.pfx"
           } else {
-            Write-Host "::warning::devcert.pfx not found and MSIX_PFX_BASE64 not set; build_windows.ps1 will generate a certificate"
+            # No secret cert: build_windows.ps1 generates an ephemeral
+            # certificate from the manifest. The repository never carries a
+            # signing key, so without the secret the package is signed with a
+            # throwaway cert that must not be trusted by end users.
+            Write-Host "::warning::MSIX_PFX_BASE64 not set; an ephemeral certificate will be generated for signing"
           }
 
       - name: Inject release metadata into manifest
@@ -455,6 +457,8 @@ jobs:
 
       - name: Create cert install batch
         shell: pwsh
+        env:
+          MSIX_PFX_PASSWORD: ${{ secrets.MSIX_PFX_PASSWORD }}
         run: |
           $ErrorActionPreference = 'Stop'
           $pkgDir = Join-Path $env:GITHUB_WORKSPACE 'build/bin/gui/Windows'
@@ -465,29 +469,41 @@ jobs:
             Write-Host "::error::no signed package found for install.bat"
             exit 1
           }
+          # Sideloading only needs the PUBLIC certificate to be trusted; the
+          # private key and its password must never ship in a release bundle.
+          # Export the .cer (public part) from the signing pfx and bundle
+          # only that.
+          $pfxPath = Join-Path $env:GITHUB_WORKSPACE 'devcert.pfx'
+          if (-not (Test-Path $pfxPath)) {
+            Write-Host "::error::signing certificate devcert.pfx not found; cannot export the public certificate for install.bat"
+            exit 1
+          }
           $password = if ($env:MSIX_PFX_PASSWORD) { $env:MSIX_PFX_PASSWORD } else { 'password' }
+          $cert = New-Object System.Security.Cryptography.X509Certificates.X509Certificate2($pfxPath, $password)
+          $cerPath = Join-Path $env:GITHUB_WORKSPACE 'devcert.cer'
+          [IO.File]::WriteAllBytes($cerPath, $cert.Export([System.Security.Cryptography.X509Certificates.X509ContentType]::Cert))
           $bat = @(
             '@echo off'
             'chcp 65001 > nul'
             'echo Installing certificate to Trusted Root Certification Authorities...'
-            "certutil -f -importpfx `"%~dp0devcert.pfx`" $password"
+            "certutil -addstore -f Root `"%~dp0devcert.cer`""
             'echo Installing MSIX package...'
             "powershell -Command `"Add-AppxPackage -Path '%~dp0$($msix.Name)'`""
             'echo Done!'
             'pause'
           )
           $bat -join "`r`n" | Set-Content -Path install.bat
-          Write-Host "::notice::install.bat created for $($msix.Name)"
+          Write-Host "::notice::install.bat created for $($msix.Name) (public certificate only)"
 
       - name: Create signed bundle 7z
         shell: pwsh
-        env:
-          MSIX_PFX_PASSWORD: ${{ secrets.MSIX_PFX_PASSWORD }}
         run: |
-          # Bundle the signed MSIX + cert + install.bat + signing password
+          # Bundle the signed MSIX + public certificate (.cer) + install.bat
           # into one 7z named after the MSIX base name, so users get a
           # single self-contained archive
           # (e.g. dongle.Snishaper_1.29.0.0_x64_x86_arm64.7z).
+          # The private key (devcert.pfx) and its password deliberately stay
+          # out: sideloading only needs the public certificate trusted.
           $ErrorActionPreference = 'Stop'
           $root = $env:GITHUB_WORKSPACE
           $msix = Get-ChildItem -Path (Join-Path $root 'build/bin/gui/Windows') -File |
@@ -504,11 +520,13 @@ jobs:
             Write-Host "::error::install.bat not found"
             exit 1
           }
-          $password = if ($env:MSIX_PFX_PASSWORD) { $env:MSIX_PFX_PASSWORD } else { 'password' }
-          $passwordFile = Join-Path $root 'msix-signing-password.txt'
-          [IO.File]::WriteAllText($passwordFile, $password)
-          Write-Host "::group::7z a $bundleName (msix + devcert.pfx + install.bat + password)"
-          7z a -mx=9 $bundlePath $msix.FullName (Join-Path $root 'devcert.pfx') $installBat $passwordFile
+          $cerPath = Join-Path $root 'devcert.cer'
+          if (-not (Test-Path $cerPath)) {
+            Write-Host "::error::devcert.cer not found; run the cert install batch step first"
+            exit 1
+          }
+          Write-Host "::group::7z a $bundleName (msix + devcert.cer + install.bat)"
+          7z a -mx=9 $bundlePath $msix.FullName $cerPath $installBat
           if ($LASTEXITCODE -ne 0) {
             Write-Host "::error::7z bundle failed (exit $LASTEXITCODE)"
             exit 1
@@ -557,7 +575,7 @@ jobs:
             exit 1
           }
           # The signed MSIX ships only inside the dongle.*.7z bundle (with
-          # devcert.pfx, install.bat and the signing password); staging it as
+          # devcert.cer and install.bat); staging it as
           # a loose file would make the verify step demand an upload that no
           # pattern provides. Only the unsigned Partner Center package is a
           # standalone asset.
@@ -576,7 +594,7 @@ jobs:
           }
 
           # Signed MSIX bundle archive (named after the MSIX, contains
-          # devcert.pfx + install.bat + signing password).
+          # devcert.cer + install.bat).
           $bundle = Get-ChildItem -Path $root -Filter '*_x64*.7z' -ErrorAction SilentlyContinue |
                     Where-Object { $_.Name -notlike 'snishaper-windows-*' } | Select-Object -First 1
           if ($bundle) { Copy-Item $bundle.FullName $assetsDir\ -ErrorAction Stop }
@@ -592,7 +610,7 @@ jobs:
             Write-Host "::notice::staged installer $($s.Name)"
           }
 
-          if (Test-Path (Join-Path $root 'devcert.pfx')) { Write-Host "::notice::devcert.pfx ships inside the dongle bundle only" }
+          if (Test-Path (Join-Path $root 'devcert.cer')) { Write-Host "::notice::devcert.cer (public cert) ships inside the dongle bundle only" }
           if (Test-Path (Join-Path $root 'install.bat')) { Write-Host "::notice::install.bat ships inside the dongle bundle only" }
 
           Write-Host "Staged files:" -ForegroundColor Green
@@ -1345,7 +1363,7 @@ jobs:
           function Get-AssetPurpose([string]$name) {
             switch -Regex ($name) {
                 '^dongle\.Snishaper_.*\.7z$' {
-                    return 'Signed bundle: mixed-architecture MSIX package + signing certificate (devcert.pfx) + install.bat + signing password, for one-click sideload'
+                    return 'Signed bundle: mixed-architecture MSIX package + public signing certificate (devcert.cer) + install.bat, for one-click sideload'
                 }
                 '^unsigned_.*\.msix(bundle)?$' {
                     return 'Unsigned mixed-architecture MSIX package for Microsoft Partner Center submission (re-signed by Microsoft on upload)'
@@ -1466,7 +1484,7 @@ jobs:
           # 7z, all Linux tar.gz, all CLI 7z, plus the signed MSIX bundle
           # archive and the unsigned Partner Center package. The signed MSIX
           # itself ships inside the dongle.*.7z archive together with
-          # devcert.pfx, install.bat and the signing password.
+          # devcert.cer (public cert) and install.bat.
           $patterns = @(
             (Join-Path $assetsDir 'unsigned_*.msix*'),
             (Join-Path $assetsDir '*Setup.exe'),
