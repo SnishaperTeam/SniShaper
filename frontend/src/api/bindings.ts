@@ -193,3 +193,5 @@ export const TestMigration = (server: string) => appCall('TestMigration', server
 // Config migration report (startup config load; unrelated to the migration proxy mode)
 export const GetLastMigrationReport = () => appCall('GetLastMigrationReport');
 
+export const GetNotices = (force: boolean) => appCall('GetNotices', force);
+
