@@ -289,6 +289,19 @@ jobs:
         uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
+          cache-dependency-path: go.sum
+
+      - name: Cache Go build cache
+        uses: actions/cache@v6
+        with:
+          path: |
+            ~/AppData/Local/go-build
+            ~/.cache/go-build
+            ~/Library/Caches/go-build
+          key: go-build-${{ runner.os }}-${{ matrix.arch }}-${{ hashFiles('go.sum') }}
+          restore-keys: |
+            go-build-${{ runner.os }}-${{ matrix.arch }}-
+            go-build-${{ runner.os }}-
 
       - name: Setup Node
         uses: actions/setup-node@v7
@@ -711,6 +724,19 @@ jobs:
         uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
+          cache-dependency-path: go.sum
+
+      - name: Cache Go build cache
+        uses: actions/cache@v6
+        with:
+          path: |
+            ~/AppData/Local/go-build
+            ~/.cache/go-build
+            ~/Library/Caches/go-build
+          key: go-build-${{ runner.os }}-${{ matrix.arch }}-${{ hashFiles('go.sum') }}
+          restore-keys: |
+            go-build-${{ runner.os }}-${{ matrix.arch }}-
+            go-build-${{ runner.os }}-
 
       - name: Setup Node
         uses: actions/setup-node@v7
@@ -719,9 +745,24 @@ jobs:
           cache: npm
           cache-dependency-path: frontend/package-lock.json
 
+      - name: Cache apt packages
+        uses: actions/cache@v6
+        with:
+          path: ${{ runner.temp }}/apt-archives
+          key: apt-${{ matrix.runner }}-v1
+          restore-keys: |
+            apt-${{ matrix.runner }}-
+
       - name: Install GTK4/WebKitGTK dependencies
         timeout-minutes: 10
         run: |
+          set -euo pipefail
+          cache="${{ runner.temp }}/apt-archives"
+          mkdir -p "$cache"
+          if compgen -G "$cache/*.deb" > /dev/null; then
+            sudo cp -n "$cache"/*.deb /var/cache/apt/archives/ || true
+            echo "::notice::restored $(ls -1 "$cache"/*.deb | wc -l) cached .deb files"
+          fi
           # The Azure archive mirror stalls on large packages (observed on
           # libjavascriptcoregtk-6.0-1 on the arm64 runner); point apt at the
           # default Ubuntu archive and fail fast instead of retrying a dead
@@ -740,6 +781,8 @@ jobs:
           sudo apt-get update
           sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
             libgtk-4-dev libwebkitgtk-6.0-dev p7zip-full
+          cp -n /var/cache/apt/archives/*.deb "$cache"/ 2>/dev/null || true
+          echo "::notice::apt archive cache now holds $(ls -1 "$cache"/*.deb 2>/dev/null | wc -l) files"
 
       - name: Inject release metadata into manifest
         shell: pwsh
@@ -857,6 +900,19 @@ jobs:
         uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
+          cache-dependency-path: go.sum
+
+      - name: Cache Go build cache
+        uses: actions/cache@v6
+        with:
+          path: |
+            ~/AppData/Local/go-build
+            ~/.cache/go-build
+            ~/Library/Caches/go-build
+          key: go-build-${{ runner.os }}-${{ matrix.arch }}-${{ hashFiles('go.sum') }}
+          restore-keys: |
+            go-build-${{ runner.os }}-${{ matrix.arch }}-
+            go-build-${{ runner.os }}-
 
       - name: Inject release metadata into manifest
         shell: pwsh
@@ -980,6 +1036,19 @@ jobs:
         uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
+          cache-dependency-path: go.sum
+
+      - name: Cache Go build cache
+        uses: actions/cache@v6
+        with:
+          path: |
+            ~/AppData/Local/go-build
+            ~/.cache/go-build
+            ~/Library/Caches/go-build
+          key: go-build-${{ runner.os }}-${{ matrix.arch }}-${{ hashFiles('go.sum') }}
+          restore-keys: |
+            go-build-${{ runner.os }}-${{ matrix.arch }}-
+            go-build-${{ runner.os }}-
 
       - name: Setup Node
         uses: actions/setup-node@v7
@@ -988,10 +1057,27 @@ jobs:
           cache: npm
           cache-dependency-path: frontend/package-lock.json
 
+      - name: Cache apt packages
+        uses: actions/cache@v6
+        with:
+          path: ${{ runner.temp }}/apt-archives
+          key: apt-${{ runner.os }}-v1
+          restore-keys: |
+            apt-${{ runner.os }}-
+
       - name: Install GTK4/WebKitGTK dependencies
         run: |
+          set -euo pipefail
+          cache="${{ runner.temp }}/apt-archives"
+          mkdir -p "$cache"
+          if compgen -G "$cache/*.deb" > /dev/null; then
+            sudo cp -n "$cache"/*.deb /var/cache/apt/archives/ || true
+            echo "::notice::restored $(ls -1 "$cache"/*.deb | wc -l) cached .deb files"
+          fi
           sudo apt-get update
           sudo apt-get install -y libgtk-4-dev libwebkitgtk-6.0-dev
+          cp -n /var/cache/apt/archives/*.deb "$cache"/ 2>/dev/null || true
+          echo "::notice::apt archive cache now holds $(ls -1 "$cache"/*.deb 2>/dev/null | wc -l) files"
 
       - name: Inject release metadata into manifest
         shell: pwsh
