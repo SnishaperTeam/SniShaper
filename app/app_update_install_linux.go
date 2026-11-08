@@ -182,16 +182,5 @@ func extractTarGz(src, dest string) error {
 	}
 }
 
-// findStageRoot locates the payload root inside an extracted bundle. When
-// the archive has a single top-level directory, that directory is the root;
-// otherwise the stage itself is.
-func findStageRoot(stage string) string {
-	entries, err := os.ReadDir(stage)
-	if err != nil || len(entries) == 0 {
-		return ""
-	}
-	if len(entries) == 1 && entries[0].IsDir() {
-		return filepath.Join(stage, entries[0].Name())
-	}
-	return stage
-}
+// findStageRoot lives in app_update_archive.go: the Windows portable updater
+// needs the same payload-root detection for its zip staging directory.

@@ -8,31 +8,36 @@ import (
 
 func releaseAssetsForTest() []githubAsset {
 	names := []string{
-		"dongle.Snishaper_1.29.1.0_x64_x86_arm64.7z",
-		"Snishaper-1.29.1-arm64Setup.exe",
-		"Snishaper-1.29.1-x64Setup.exe",
-		"Snishaper-1.29.1-x86Setup.exe",
-		"Snishaper-1.30.0-amd64.AppImage",
-		"Snishaper-1.30.0-arm64.AppImage",
-		"snishaper-1.30.0_amd64.rpm",
-		"snishaper-cli-darwin-amd64.7z",
-		"snishaper-cli-darwin-arm64.7z",
-		"snishaper-cli-linux-amd64.7z",
-		"snishaper-cli-linux-arm64.7z",
-		"snishaper-cli-windows-386.7z",
-		"snishaper-cli-windows-amd64.7z",
-		"snishaper-cli-windows-arm64.7z",
+		"dongle.Snishaper_1.31.0.0_x64_x86_arm64.zip",
+		"Snishaper-1.31.0-arm64Setup.exe",
+		"Snishaper-1.31.0-x64Setup.exe",
+		"Snishaper-1.31.0-x86Setup.exe",
+		"Snishaper-1.31.0-amd64.AppImage",
+		"Snishaper-1.31.0-arm64.AppImage",
+		"snishaper-1.31.0_amd64.rpm",
+		"snishaper-cli-darwin-amd64.zip",
+		"snishaper-cli-darwin-arm64.zip",
+		"snishaper-cli-linux-amd64.tar.gz",
+		"snishaper-cli-linux-arm64.tar.gz",
+		"snishaper-cli-windows-386.zip",
+		"snishaper-cli-windows-amd64.zip",
+		"snishaper-cli-windows-arm64.zip",
 		"snishaper-linux-amd64.tar.gz",
 		"snishaper-linux-arm64.tar.gz",
 		"snishaper-linux-x64.tar.gz",
-		"snishaper-windows-386.7z",
-		"snishaper-windows-amd64.7z",
-		"snishaper-windows-arm64.7z",
-		"snishaper_1.30.0_amd64.deb",
-		"snishaper_1.30.0_arm64.deb",
-		"unsigned_dongle.Snishaper_1.29.1.0_x64_x86_arm64.msixbundle",
+		"snishaper-windows-386.zip",
+		"snishaper-windows-amd64.zip",
+		"snishaper-windows-arm64.zip",
+		"snishaper_1.31.0_amd64.deb",
+		"snishaper_1.31.0_arm64.deb",
+		"unsigned_dongle.Snishaper_1.31.0.0_x64_x86_arm64.msixbundle",
 		"SniShaper-macos-arm64.zip",
 		"SniShaper-macos-x86_64.zip",
+		// Assets published before the switch to zip: they must still be
+		// offered to installs that predate it.
+		"dongle.Snishaper_1.29.1.0_x64_x86_arm64.7z",
+		"snishaper-cli-windows-amd64.7z",
+		"snishaper-windows-amd64.7z",
 	}
 	assets := make([]githubAsset, 0, len(names))
 	for _, name := range names {
@@ -70,7 +75,13 @@ func TestFilterUpdateAssetsWindowsAmd64Shortlist(t *testing.T) {
 		t.Skip("shortlist assertion is for the desktop windows/amd64 build")
 	}
 	got := filterUpdateAssets(releaseAssetsForTest())
-	want := []string{"Snishaper-1.29.1-x64Setup.exe", "snishaper-windows-amd64.7z"}
+	// Installer first, then the zip every Windows 10 can open, then the
+	// legacy 7z kept for old releases.
+	want := []string{
+		"Snishaper-1.31.0-x64Setup.exe",
+		"snishaper-windows-amd64.zip",
+		"snishaper-windows-amd64.7z",
+	}
 	if len(got) != len(want) {
 		t.Fatalf("unexpected asset count: got %d (%v), want %d (%v)", len(got), assetNames(got), len(want), want)
 	}
@@ -79,22 +90,48 @@ func TestFilterUpdateAssetsWindowsAmd64Shortlist(t *testing.T) {
 			t.Errorf("asset %d = %s, want %s", i, got[i].Name, name)
 		}
 	}
-	if got[0].Kind != "exe" || got[1].Kind != "7z" {
-		t.Errorf("unexpected ordering: %s(%s), %s(%s)", got[0].Name, got[0].Kind, got[1].Name, got[1].Kind)
+	wantKinds := []string{"exe", "zip", "7z"}
+	for i, kind := range wantKinds {
+		if got[i].Kind != kind {
+			t.Errorf("asset %d kind = %s, want %s", i, got[i].Kind, kind)
+		}
+	}
+}
+
+func TestFilterUpdateAssetsLegacyReleaseStillOffers7z(t *testing.T) {
+	if runtime.GOOS != "windows" || headlessBuild {
+		t.Skip("legacy archive assertion is for the desktop windows build")
+	}
+	legacy := []githubAsset{
+		{Name: "Snishaper-1.29.1-x64Setup.exe", Size: 1, DownloadURL: "https://example.invalid/installer.exe"},
+		{Name: "snishaper-windows-amd64.7z", Size: 1, DownloadURL: "https://example.invalid/portable.7z"},
+		{Name: "snishaper-windows-amd64.zip", Size: 1, DownloadURL: "https://example.invalid/portable.zip"},
+	}
+	got := filterUpdateAssets(legacy)
+	if len(got) < 2 {
+		t.Fatalf("expected both archives to be offered, got %v", assetNames(got))
+	}
+	var kinds []string
+	for _, asset := range got {
+		kinds = append(kinds, asset.Kind)
+	}
+	if kinds[len(kinds)-1] != "7z" {
+		t.Fatalf("legacy 7z must stay selectable last, got %v", kinds)
 	}
 }
 
 func TestAssetArchToken(t *testing.T) {
 	cases := map[string]string{
+		"snishaper-windows-amd64.zip":           "x64",
+		"snishaper-windows-386.zip":             "x86",
+		"snishaper-windows-arm64.zip":           "arm64",
 		"snishaper-windows-amd64.7z":            "x64",
-		"snishaper-windows-386.7z":              "x86",
-		"snishaper-windows-arm64.7z":            "arm64",
 		"Snishaper-1.29.1-x86Setup.exe":         "x86",
 		"Snishaper-1.29.1-x64Setup.exe":         "x64",
 		"snishaper-linux-x64.tar.gz":            "x64",
+		"snishaper-cli-linux-amd64.tar.gz":      "x64",
 		"SniShaper-macos-x86_64.zip":            "x64",
-		"snishaper-cli-darwin-arm64.7z":         "arm64",
-		"snishaper-cli-linux-amd64.7z":          "x64",
+		"snishaper-cli-darwin-arm64.zip":        "arm64",
 		"Snishaper-1.30.0-alpha.1-x64Setup.exe": "x64",
 	}
 	for name, want := range cases {

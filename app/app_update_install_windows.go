@@ -11,6 +11,16 @@ import (
 	"syscall"
 )
 
+// updateArchiveFormat identifies how a portable update package is packed.
+// zip is the format the updater produces now; 7z is only kept so releases
+// published before the switch can still be installed.
+type updateArchiveFormat int
+
+const (
+	archiveZip updateArchiveFormat = iota
+	archive7z
+)
+
 // installUpdateAsset dispatches installation of a downloaded update asset
 // based on its file type (Windows-specific formats).
 func (a *App) installUpdateAsset(localPath string) error {
@@ -18,8 +28,10 @@ func (a *App) installUpdateAsset(localPath string) error {
 	switch {
 	case strings.HasSuffix(lower, ".exe"):
 		return a.launchInstaller(localPath)
+	case strings.HasSuffix(lower, ".zip"):
+		return a.installPortableArchive(localPath, archiveZip)
 	case strings.HasSuffix(lower, ".7z"):
-		return a.installSevenZ(localPath)
+		return a.installPortableArchive(localPath, archive7z)
 	default:
 		return fmt.Errorf("unsupported update file type: %s", localPath)
 	}
@@ -38,7 +50,14 @@ func (a *App) launchInstaller(localPath string) error {
 	return nil
 }
 
-func (a *App) installSevenZ(localPath string) error {
+// installPortableArchive unpacks a portable package into a staging directory
+// and hands the rest of the swap to a detached PowerShell script.
+//
+// zip is unpacked here with archive/zip: no tar.exe or 7z.exe is needed, which
+// is what makes the update path work on a stock Windows 10. The legacy 7z
+// format keeps its script-side extraction of tar.exe (bsdtar, shipped since
+// Windows 10 1803) with a 7z.exe fallback, because Go has no 7z reader.
+func (a *App) installPortableArchive(localPath string, format updateArchiveFormat) error {
 	execPath, err := os.Executable()
 	if err != nil {
 		return fmt.Errorf("cannot locate application directory: %v", err)
@@ -47,14 +66,36 @@ func (a *App) installSevenZ(localPath string) error {
 	if !isDirWritable(execDir) {
 		return fmt.Errorf("dir_not_writable")
 	}
+
 	base := filepath.Join(os.TempDir(), "snishaper-update")
 	stage := filepath.Join(base, "stage")
-	os.RemoveAll(stage)
+	os.RemoveAll(base)
 	if err := os.MkdirAll(stage, 0755); err != nil {
 		return err
 	}
+
+	legacyArchive := ""
+	switch format {
+	case archiveZip:
+		a.appendLog("[update] Extracting update package (zip)...")
+		if err := extractZip(localPath, stage); err != nil {
+			os.RemoveAll(base)
+			a.appendLog("[update] zip extraction failed: " + err.Error())
+			return fmt.Errorf("extract_failed")
+		}
+		root := findStageRoot(stage)
+		if root == "" {
+			os.RemoveAll(base)
+			a.appendLog("[update] update package has no payload")
+			return fmt.Errorf("bad_archive")
+		}
+		stage = root
+	default:
+		legacyArchive = localPath
+	}
+
 	script := filepath.Join(base, "apply-update.ps1")
-	content := buildUpdateScript(localPath, stage, execDir, base)
+	content := buildUpdateScript(legacyArchive, stage, execDir, base)
 	bom := append([]byte{0xEF, 0xBB, 0xBF}, []byte(content)...)
 	if err := os.WriteFile(script, bom, 0644); err != nil {
 		return err
@@ -71,7 +112,7 @@ func (a *App) installSevenZ(localPath string) error {
 	go func() {
 		_ = launcher.Wait()
 	}()
-	a.appendLog("[update] 7z update script launched (pwsh, visible window)")
+	a.appendLog("[update] portable update script launched (pwsh, visible window)")
 	return nil
 }
 
@@ -80,8 +121,11 @@ func psQuoteSingle(s string) string {
 	return strings.ReplaceAll(s, "'", "''")
 }
 
-func buildUpdateScript(archive, stage, execDir, base string) string {
-	archive = psQuoteSingle(archive)
+// buildUpdateScript renders the detached updater. legacyArchive is the 7z file
+// the script has to unpack itself; it is empty when the payload is already
+// staged (zip), in which case the script only verifies it.
+func buildUpdateScript(legacyArchive, stage, execDir, base string) string {
+	legacyArchive = psQuoteSingle(legacyArchive)
 	stage = psQuoteSingle(stage)
 	execDir = psQuoteSingle(execDir)
 	base = psQuoteSingle(base)
@@ -93,18 +137,35 @@ Write-Host '          SniShaper 便携版更新' -ForegroundColor Cyan
 Write-Host '========================================' -ForegroundColor Cyan
 Write-Host ''
 
-$archive = '` + archive + `'
+$archive = '` + legacyArchive + `'
 $stage = '` + stage + `'
 $execDir = '` + execDir + `'
 $base = '` + base + `'
 $exe = Join-Path $execDir 'snishaper.exe'
+$stagedExe = Join-Path $stage 'snishaper.exe'
 
-Write-Host '[1/5] 正在解压更新包...' -ForegroundColor Yellow
-& tar -xf $archive -C $stage | Out-Null
-if ($LASTEXITCODE -ne 0 -or -not (Test-Path (Join-Path $stage 'snishaper.exe'))) {
-    Write-Host '[错误] 解压更新包失败。' -ForegroundColor Red
-    Read-Host '按回车键退出'
-    exit 1
+if ($archive -ne '') {
+    Write-Host '[1/5] 正在解压更新包...' -ForegroundColor Yellow
+    & tar -xf $archive -C $stage | Out-Null
+    if ($LASTEXITCODE -ne 0 -or -not (Test-Path $stagedExe)) {
+        $sevenZip = Get-Command '7z.exe' -ErrorAction SilentlyContinue
+        if ($sevenZip) {
+            Write-Host '      正在改用 7-Zip 解压...' -ForegroundColor Yellow
+            & $sevenZip.Source x $archive "-o$stage" -y | Out-Null
+        }
+    }
+    if (-not (Test-Path $stagedExe)) {
+        Write-Host '[错误] 解压更新包失败，请手动下载最新版本。' -ForegroundColor Red
+        Read-Host '按回车键退出'
+        exit 1
+    }
+} else {
+    Write-Host '[1/5] 更新包已解压。' -ForegroundColor Yellow
+    if (-not (Test-Path $stagedExe)) {
+        Write-Host '[错误] 更新包内容不完整。' -ForegroundColor Red
+        Read-Host '按回车键退出'
+        exit 1
+    }
 }
 Write-Host '      解压完成。' -ForegroundColor Green
 
@@ -120,7 +181,7 @@ Write-Host '[3/5] 正在覆盖程序文件...' -ForegroundColor Yellow
 $ok = $false
 for ($i = 0; $i -lt 10; $i++) {
     try {
-        Copy-Item -Path (Join-Path $stage 'snishaper.exe') -Destination $exe -Force -ErrorAction Stop
+        Copy-Item -LiteralPath $stagedExe -Destination $exe -Force -ErrorAction Stop
         $ok = $true
         break
     } catch { Start-Sleep -Seconds 1 }
@@ -130,7 +191,7 @@ if (-not $ok) {
     Read-Host '按回车键退出'
     exit 2
 }
-Copy-Item -Path (Join-Path $stage 'rules') -Destination $execDir -Recurse -Force
+Copy-Item -LiteralPath (Join-Path $stage 'rules') -Destination $execDir -Recurse -Force -ErrorAction SilentlyContinue
 Write-Host '      文件已更新（保留个人设置）。' -ForegroundColor Green
 
 Write-Host '[4/5] 正在启动新版本...' -ForegroundColor Yellow

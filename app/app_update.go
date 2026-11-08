@@ -547,8 +547,8 @@ func isCLIAsset(lower string) bool {
 
 // assetMatchesRuntime keeps only the packages the running process can install:
 // same OS, same architecture, and the flavour of this binary. The signed MSIX
-// bundle (dongle.*.7z) is dropped as well, since it carries no snishaper.exe
-// the in-app updater could extract.
+// bundle (dongle.*.zip / dongle.*.7z) is dropped as well, since it carries no
+// snishaper.exe the in-app updater could extract.
 func assetMatchesRuntime(lower string) bool {
 	if strings.Contains(lower, "unsigned") || strings.HasPrefix(lower, "dongle.") {
 		return false
@@ -570,7 +570,13 @@ func filterUpdateAssets(assets []githubAsset) []ReleaseAsset {
 		switch {
 		case strings.HasSuffix(lower, ".exe"):
 			kind = "exe"
+		case strings.HasSuffix(lower, ".zip"):
+			// Portable bundle in the format every supported Windows version
+			// can open on its own; macOS ships its .app as a zip as well.
+			kind = "zip"
 		case strings.HasSuffix(lower, ".7z"):
+			// Legacy archive kept for releases published before the switch
+			// to zip: the Windows installer still understands it.
 			kind = "7z"
 		case strings.HasSuffix(lower, ".tar.gz"):
 			// Portable bundle used by the Linux build, and the only archive
@@ -595,16 +601,20 @@ func filterUpdateAssets(assets []githubAsset) []ReleaseAsset {
 	return result
 }
 
-// assetKindRank orders the update list: installer first, then portable
-// archive, then the tarball the Linux build installs from.
+// assetKindRank orders the update list: installer first, then the portable
+// zip, then the legacy 7z archive, then the tarball the Linux build installs
+// from. A release that ships both formats therefore offers the one Windows 10
+// can open natively.
 func assetKindRank(kind string) int {
 	switch kind {
 	case "exe":
 		return 0
-	case "7z":
+	case "zip":
 		return 1
+	case "7z":
+		return 2
 	}
-	return 2
+	return 3
 }
 
 func buildDownloadURLs(assetURL string, entries []downloadSourceEntry) []string {

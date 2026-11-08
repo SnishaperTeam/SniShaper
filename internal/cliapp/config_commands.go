@@ -948,13 +948,18 @@ func resolveUpdateAsset(out cmdOut, a *app.App, selector string) (app.ReleaseAss
 		return app.ReleaseAsset{}, false
 	}
 
-	preferred := "exe"
+	// Preferred order per platform: the installer first when the platform has
+	// one, then the portable zip, then the legacy 7z archive kept for older
+	// releases, then the Linux tarball.
+	preferred := []string{"exe", "zip", "7z"}
 	if runtime.GOOS == "linux" || runtime.GOOS == "darwin" {
-		preferred = "tar.gz"
+		preferred = []string{"tar.gz", "zip", "7z"}
 	}
-	for _, asset := range res.Assets {
-		if asset.Kind == preferred {
-			return asset, true
+	for _, kind := range preferred {
+		for _, asset := range res.Assets {
+			if asset.Kind == kind {
+				return asset, true
+			}
 		}
 	}
 	for _, asset := range res.Assets {

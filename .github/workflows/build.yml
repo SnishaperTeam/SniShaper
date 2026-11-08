@@ -121,7 +121,7 @@ jobs:
   #
   # Every job also greps its build log for aarch64-linux-gnu / osxcross and
   # fails if a cross toolchain shows up. This workflow is build + smoke only:
-  # packaging (MSIX / 7z / tar.gz) happens in the release pipeline.
+  # packaging (MSIX / zip / tar.gz) happens in the release pipeline.
   #
   # Runs unconditionally for direct pushes / manual dispatches; for pull
   # requests only when the gate passed.
