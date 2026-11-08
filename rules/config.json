@@ -994,6 +994,7 @@
       "id": "sg-1771319670672-67",
       "name": "mega.io",
       "mode": "mitm",
+      "sni_fake": "mega-io",
       "sni_policy": "fake",
       "domains": [
         "mega.io"
@@ -1016,6 +1017,7 @@
       "id": "sg-1771319670672-68",
       "name": "mega.nz",
       "mode": "mitm",
+      "sni_fake": "mega-nz",
       "sni_policy": "fake",
       "domains": [
         "mega.nz"
