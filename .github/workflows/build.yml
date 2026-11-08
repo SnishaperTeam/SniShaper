@@ -253,9 +253,14 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           $bin = ".\build\bin\cli\Windows\${{ matrix.arch }}\snishaper.exe"
           if (-not (Test-Path $bin)) { Write-Host "::error::CLI binary missing"; exit 1 }
-          $v = (& $bin version).Trim()
-          Write-Host "::notice::CLI (${{ matrix.arch }}) version: $v"
-          if (-not $v) { Write-Host "::error::empty CLI version"; exit 1 }
+          # An ARM64 PE cannot execute on the x64 runner (Windows only emulates
+          # x64 on ARM64, never the other way round), so arm64 gets a PE machine
+          # type assertion in "Verify artifacts (Windows)" instead of a smoke run.
+          if ('${{ matrix.arch }}' -ne 'arm64') {
+            $v = (& $bin version).Trim()
+            Write-Host "::notice::CLI (${{ matrix.arch }}) version: $v"
+            if (-not $v) { Write-Host "::error::empty CLI version"; exit 1 }
+          }
 
       - name: Write build summary
         if: always()
@@ -293,20 +298,38 @@ jobs:
         shell: pwsh
         run: |
           $machines = @{ 0x8664 = 'x64'; 0xAA64 = 'arm64'; 0x014C = 'x86' }
+          function Get-PeMachine([string] $path) {
+            $fs = [System.IO.File]::OpenRead($path)
+            try {
+              $fs.Seek(0x3C, 'Begin') | Out-Null
+              $buf = New-Object byte[] 4
+              $fs.Read($buf, 0, 4) | Out-Null
+              $pe = [BitConverter]::ToUInt32($buf, 0)
+              $fs.Seek($pe + 4, 'Begin') | Out-Null
+              $m = New-Object byte[] 2
+              $fs.Read($m, 0, 2) | Out-Null
+              return [int][BitConverter]::ToUInt16($m, 0)
+            } finally {
+              $fs.Close()
+            }
+          }
           $bins = Get-ChildItem -Path build\bin -Recurse -Include 'snishaper.exe'
           if (-not $bins) { Write-Host "::error::no binary produced"; exit 1 }
           $bins | ForEach-Object {
-            $fs = [System.IO.File]::OpenRead($_.FullName)
-            $fs.Seek(0x3C, 'Begin') | Out-Null
-            $buf = New-Object byte[] 4
-            $fs.Read($buf, 0, 4) | Out-Null
-            $pe = [BitConverter]::ToUInt32($buf, 0)
-            $fs.Seek($pe + 4, 'Begin') | Out-Null
-            $m = New-Object byte[] 2
-            $fs.Read($m, 0, 2) | Out-Null
-            $fs.Close()
-            $id = [BitConverter]::ToUInt16($m, 0)
+            $id = Get-PeMachine $_.FullName
             Write-Host ("{0} -> {1}" -f $_.FullName, $machines[$id])
+          }
+          # The CLI built in this job cannot be smoke run on an ARM64 matrix
+          # entry, so its PE machine type is what proves the target was right.
+          $cli = "build\bin\cli\Windows\${{ matrix.arch }}\snishaper.exe"
+          if (Test-Path $cli) {
+            $want = $machines.Keys | Where-Object { $machines[$_] -eq '${{ matrix.arch }}' }
+            $got = Get-PeMachine $cli
+            if ($got -ne $want) {
+              Write-Host ("::error::CLI PE machine is {0}, expected {1}" -f $machines[$got], '${{ matrix.arch }}')
+              exit 1
+            }
+            Write-Host "::notice::CLI PE machine matches ${{ matrix.arch }}"
           }
 
   # ------------------------------------------------------------------
