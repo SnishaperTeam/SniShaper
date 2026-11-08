@@ -16,7 +16,7 @@ import (
 
 const (
 	noticesEndpoint       = "https://jetcpp.ccwu.cc/api/notices?all=1"
-	noticesMirrorEndpoint = "https://cdn.jsdelivr.net/gh/dongzheyu/dongzheyu.github.io@main/build/vue-app/notices/notices.json"
+	noticesMirrorEndpoint = "https://cdn.jsdelivr.net/gh/SnishaperTeam/Website@main/build/vue-app/notices/notices.json"
 	noticesCacheTTL       = 10 * time.Minute
 	noticesTimeout        = 8 * time.Second
 	noticesCacheName      = "notices_cache.json"
