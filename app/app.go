@@ -89,6 +89,10 @@ type App struct {
 	sourceRankAt        map[string]time.Time
 	rulesWatchMu        sync.Mutex
 	rulesWatchStop      func()
+
+	noticesMu      sync.Mutex
+	noticesPayload *NoticesPayload
+	noticesFetched time.Time
 }
 
 // ShouldQuit returns whether the app should quit.

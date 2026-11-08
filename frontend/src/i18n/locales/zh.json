@@ -91,6 +91,21 @@
     "s5": { "title": "TUN 模式", "text": "想让所有应用无需配置直接走代理时，在「设置 → TUN」开启 TUN 模式（需管理员权限）。" },
     "s6": { "title": "学习更多", "text": "恭喜完成基础引导！高级功能（CLI、DNS、Cloudflare IP 优选、进化模式等）请查看 GitHub Wiki，遇到问题可先阅读 FAQ。" }
   },
+  "notices": {
+    "title": "公告中心",
+    "subtitle": "共 {count} 条公告，按发布时间倒序排列",
+    "pinned": "置顶",
+    "expired": "已过期",
+    "empty": "暂无公告",
+    "refresh": "刷新",
+    "close": "关闭",
+    "view_all": "查看全部",
+    "mark_read": "标记为已读",
+    "more_unread": "另有 {count} 条未读",
+    "history_entry": "历史公告 · {count} 条",
+    "stale": "公告服务暂时不可达，当前显示本地缓存内容",
+    "link_default": "查看详情"
+  },
   "dashboard": {
     "title": "主页",
     "migration_report": {

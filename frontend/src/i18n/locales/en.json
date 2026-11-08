@@ -91,6 +91,21 @@
     "s5": { "title": "TUN Mode", "text": "Enable TUN under \"Settings → TUN\" (admin rights required) when every app should use the proxy without extra configuration." },
     "s6": { "title": "Learn More", "text": "Congrats on finishing the basics! For advanced features (CLI, DNS, Cloudflare IP selection, Evolution mode, etc.) visit the GitHub Wiki, and check the FAQ first when you run into problems." }
   },
+  "notices": {
+    "title": "Announcements",
+    "subtitle": "{count} announcements, newest first",
+    "pinned": "Pinned",
+    "expired": "Expired",
+    "empty": "No announcements",
+    "refresh": "Refresh",
+    "close": "Close",
+    "view_all": "View all",
+    "mark_read": "Mark as read",
+    "more_unread": "{count} more unread",
+    "history_entry": "All announcements · {count}",
+    "stale": "Announcement service unreachable, showing cached content",
+    "link_default": "Learn more"
+  },
   "dashboard": {
     "title": "Home",
     "migration_report": {

@@ -36,6 +36,7 @@ import {
   EventsOn
 } from '../api/bindings';
 import Modal from '../components/Modal';
+import NoticeCenter from '../components/NoticeCenter';
 import { toast } from '../lib/toast';
 import { formatSpeed, extractErrorMessage } from '../lib/utils';
 import { useTranslation } from '../i18n/I18nContext';
@@ -465,6 +466,8 @@ const Dashboard: React.FC = () => {
           </Tooltip>
         </Box>
       </Box>
+
+      <NoticeCenter />
 
       {migrationReport && !migrationDismissed &&
         ((migrationReport.changes?.length || 0) + (migrationReport.warnings?.length || 0) + (migrationReport.errors?.length || 0) > 0) && (
