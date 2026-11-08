@@ -265,8 +265,10 @@ jobs:
           exit 1
 
   # ------------------------------------------------------------------
-  # Windows build (windows-2025): MSIX (signed + unsigned), portable 7z,
-  # signed bundle 7z, Inno Setup installer. No release publishing here.
+  # Windows build (windows-2025): MSIX (signed + unsigned), portable zip,
+  # signed bundle zip, Inno Setup installer. No release publishing here.
+  # Archives are zip (not 7z): every supported Windows version opens it
+  # without third-party tools, which is what the in-app updater relies on.
   # ------------------------------------------------------------------
   build-windows:
     name: Build Windows (${{ inputs.channel }})
@@ -336,9 +338,6 @@ jobs:
             Write-Host "::error::winapp is not available after install"
             exit 1
           }
-
-      - name: Install 7-Zip
-        run: choco install 7zip -y --no-progress
 
       - name: Install Inno Setup
         run: choco install innosetup -y --no-progress
@@ -435,18 +434,24 @@ jobs:
           Write-Host "::endgroup::"
           Write-Host "::notice::Unsigned package ready: $unsignedPath"
 
-      - name: Create 7z archives (every built architecture)
+      - name: Create portable zip archives (every built architecture)
         shell: pwsh
         run: |
           # One portable archive per Windows GUI architecture the build
           # scripts produced, so the release set matches the build matrix
           # (windows x64/x86/arm64) instead of x64 only.
+          #
+          # zip, not 7z: Windows has handled zip natively since before 10, so
+          # users can extract without installing anything and the in-app
+          # updater can unpack it with archive/zip.
           $ErrorActionPreference = 'Stop'
-          $guiRoot = Join-Path $env:GITHUB_WORKSPACE 'build/bin/gui/Windows'
+          Add-Type -AssemblyName System.IO.Compression.FileSystem
+          $root = $env:GITHUB_WORKSPACE
+          $guiRoot = Join-Path $root 'build/bin/gui/Windows'
           $archFileNames = @{
-            'x64'   = 'snishaper-windows-amd64.7z'
-            'x86'   = 'snishaper-windows-386.7z'
-            'arm64' = 'snishaper-windows-arm64.7z'
+            'x64'   = 'snishaper-windows-amd64.zip'
+            'x86'   = 'snishaper-windows-386.zip'
+            'arm64' = 'snishaper-windows-arm64.zip'
           }
           $packed = @()
           foreach ($arch in @('x64', 'x86', 'arm64')) {
@@ -455,10 +460,12 @@ jobs:
               Write-Host "::warning::no Windows GUI payload for '$arch'; skipping its portable archive"
               continue
             }
-            $archive = $archFileNames[$arch]
-            Write-Host "::group::7z a $archive (windows/$arch)"
-            7z a -mx=9 $archive (Join-Path $dir '*')
-            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+            $archive = Join-Path $root $archFileNames[$arch]
+            if (Test-Path $archive) { Remove-Item $archive -Force }
+            Write-Host "::group::Compress-Archive $($archFileNames[$arch]) (windows/$arch)"
+            [System.IO.Compression.ZipFile]::CreateFromDirectory(
+              $dir, $archive,
+              [System.IO.Compression.CompressionLevel]::Optimal, $false)
             Write-Host "::endgroup::"
             $packed += $arch
           }
@@ -508,16 +515,18 @@ jobs:
           $bat -join "`r`n" | Set-Content -Path install.bat
           Write-Host "::notice::install.bat created for $($msix.Name) (public certificate only)"
 
-      - name: Create signed bundle 7z
+      - name: Create signed bundle zip
         shell: pwsh
         run: |
           # Bundle the signed MSIX + public certificate (.cer) + install.bat
-          # into one 7z named after the MSIX base name, so users get a
+          # into one zip named after the MSIX base name, so users get a
           # single self-contained archive
-          # (e.g. dongle.Snishaper_1.29.0.0_x64_x86_arm64.7z).
+          # (e.g. dongle.Snishaper_1.29.0.0_x64_x86_arm64.zip).
           # The private key (devcert.pfx) and its password deliberately stay
           # out: sideloading only needs the public certificate trusted.
           $ErrorActionPreference = 'Stop'
+          Add-Type -AssemblyName System.IO.Compression
+          Add-Type -AssemblyName System.IO.Compression.FileSystem
           $root = $env:GITHUB_WORKSPACE
           $msix = Get-ChildItem -Path (Join-Path $root 'build/bin/gui/Windows') -File |
                   Where-Object { $_.Name -match '\.msix(bundle)?$' -and $_.Name -notlike 'unsigned_*' } |
@@ -526,7 +535,7 @@ jobs:
             Write-Host "::error::no signed package found for bundle"
             exit 1
           }
-          $bundleName = $msix.BaseName + '.7z'
+          $bundleName = $msix.BaseName + '.zip'
           $bundlePath = Join-Path $root $bundleName
           $installBat = Join-Path $root 'install.bat'
           if (-not (Test-Path $installBat)) {
@@ -538,11 +547,17 @@ jobs:
             Write-Host "::error::devcert.cer not found; run the cert install batch step first"
             exit 1
           }
-          Write-Host "::group::7z a $bundleName (msix + devcert.cer + install.bat)"
-          7z a -mx=9 $bundlePath $msix.FullName $cerPath $installBat
-          if ($LASTEXITCODE -ne 0) {
-            Write-Host "::error::7z bundle failed (exit $LASTEXITCODE)"
-            exit 1
+          if (Test-Path $bundlePath) { Remove-Item $bundlePath -Force }
+          Write-Host "::group::$bundleName (msix + devcert.cer + install.bat)"
+          $zip = [System.IO.Compression.ZipFile]::Open($bundlePath, 'Create')
+          try {
+            foreach ($file in @($msix, $cerPath, $installBat)) {
+              [void][System.IO.Compression.ZipFileExtensions]::CreateEntryFromFile(
+                $zip, $file, (Split-Path $file -Leaf),
+                [System.IO.Compression.CompressionLevel]::Optimal)
+            }
+          } finally {
+            $zip.Dispose()
           }
           Write-Host "::endgroup::"
           Write-Host "::notice::Signed bundle ready: $bundlePath"
@@ -604,7 +619,7 @@ jobs:
             Write-Host "::error::no signed package found under $pkgDir"
             exit 1
           }
-          # The signed MSIX ships only inside the dongle.*.7z bundle (with
+          # The signed MSIX ships only inside the dongle.*.zip bundle (with
           # devcert.cer and install.bat); staging it as
           # a loose file would make the verify step demand an upload that no
           # pattern provides. Only the unsigned Partner Center package is a
@@ -612,8 +627,8 @@ jobs:
           $unsigned = Get-ChildItem -Path $pkgDir -File -Filter 'unsigned_*' | Select-Object -First 1
           if ($unsigned) { Copy-Item $unsigned.FullName $assetsDir\ -ErrorAction Stop }
 
-          # Portable 7z: one per built Windows GUI architecture.
-          $portables = Get-ChildItem -Path $root -File -Filter 'snishaper-windows-*.7z' -ErrorAction SilentlyContinue
+          # Portable zip: one per built Windows GUI architecture.
+          $portables = Get-ChildItem -Path $root -File -Filter 'snishaper-windows-*.zip' -ErrorAction SilentlyContinue
           if (-not $portables) {
             Write-Host "::error::no Windows portable archive produced"
             exit 1
@@ -625,8 +640,8 @@ jobs:
 
           # Signed MSIX bundle archive (named after the MSIX, contains
           # devcert.cer + install.bat).
-          $bundle = Get-ChildItem -Path $root -Filter '*_x64*.7z' -ErrorAction SilentlyContinue |
-                    Where-Object { $_.Name -notlike 'snishaper-windows-*' } | Select-Object -First 1
+          $bundle = Get-ChildItem -Path $root -Filter 'dongle.*.zip' -ErrorAction SilentlyContinue |
+                    Select-Object -First 1
           if ($bundle) { Copy-Item $bundle.FullName $assetsDir\ -ErrorAction Stop }
 
           # Inno Setup installers: one per built architecture.
@@ -643,6 +658,7 @@ jobs:
           # Bundled CLI archives: the same runner builds the three Windows
           # CLI targets natively (pure Go, CGO off) instead of the old
           # single-job cross-compile of all seven targets.
+          Add-Type -AssemblyName System.IO.Compression.FileSystem
           $cliTargets = @(
             @{ dir = 'build\bin\cli\Windows\x64';   name = 'snishaper-cli-windows-amd64' }
             @{ dir = 'build\bin\cli\Windows\x86';   name = 'snishaper-cli-windows-386' }
@@ -653,9 +669,11 @@ jobs:
               Write-Host "::error::missing CLI output $($t.dir)\snishaper.exe"
               exit 1
             }
-            Write-Host "::group::packaging $($t.name).7z"
-            7z a -mx=9 (Join-Path $assetsDir "$($t.name).7z") (Join-Path $t.dir '*')
-            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+            $archive = Join-Path $assetsDir "$($t.name).zip"
+            Write-Host "::group::packaging $($t.name).zip"
+            [System.IO.Compression.ZipFile]::CreateFromDirectory(
+              (Join-Path $root $t.dir), $archive,
+              [System.IO.Compression.CompressionLevel]::Optimal, $false)
             Write-Host "::endgroup::"
           }
           & (Join-Path $cliTargets[0].dir 'snishaper.exe') version | ForEach-Object {
@@ -692,7 +710,7 @@ jobs:
             --row "Windows/x86=build/bin/gui/Windows/x86/snishaper.exe" \
             --row "Windows/arm64=build/bin/gui/Windows/arm64/snishaper.exe" \
             --row "MSIX=build/bin/gui/Windows/*.msix" \
-            --row "CLI=snishaper-cli-windows-*.7z" \
+            --row "CLI=snishaper-cli-windows-*.zip" \
             --dir "staging"
 
   # ------------------------------------------------------------------
@@ -780,7 +798,7 @@ jobs:
           done
           sudo apt-get update
           sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
-            libgtk-4-dev libwebkitgtk-6.0-dev p7zip-full
+            libgtk-4-dev libwebkitgtk-6.0-dev
           cp -n /var/cache/apt/archives/*.deb "$cache"/ 2>/dev/null || true
           echo "::notice::apt archive cache now holds $(ls -1 "$cache"/*.deb 2>/dev/null | wc -l) files"
 
@@ -829,8 +847,8 @@ jobs:
           fi
           GOARCH_NAME="${{ matrix.arch }}"
           if [ "$GOARCH_NAME" = "x64" ]; then GOARCH_NAME="amd64"; fi
-          ARCHIVE="snishaper-cli-linux-${GOARCH_NAME}.7z"
-          7z a -mx=9 "$ARCHIVE" "build/bin/cli/Linux/${{ matrix.arch }}/*"
+          ARCHIVE="snishaper-cli-linux-${GOARCH_NAME}.tar.gz"
+          tar -czf "$ARCHIVE" -C "build/bin/cli/Linux/${{ matrix.arch }}" .
           ls -lh "$ARCHIVE"
           echo "::notice::$ARCHIVE ready"
 
@@ -848,7 +866,7 @@ jobs:
           name: linux-artifacts-${{ matrix.arch }}
           path: |
             snishaper-linux-${{ matrix.arch }}.tar.gz
-            snishaper-cli-linux-*.7z
+            snishaper-cli-linux-*.tar.gz
           retention-days: 3
 
       - name: Write build summary
@@ -859,13 +877,13 @@ jobs:
           .github/scripts/ci/build-summary.sh record \
             --project SniShaper \
             --target "GUI linux/${{ matrix.arch }}" \
-            --tasks "frontend, gui, tar.gz, cli 7z" \
+            --tasks "frontend, gui, tar.gz, cli tar.gz" \
             --runner "${{ matrix.runner }}" \
             --outcome "${{ job.status }}" \
             --cache-hit "${{ steps.go.outputs.cache-hit }}" \
             --row "linux/${{ matrix.arch }}=build/bin/gui/Linux/${{ matrix.arch }}/SniShaper" \
             --row "tar.gz=snishaper-linux-${{ matrix.arch }}.tar.gz" \
-            --row "cli=snishaper-cli-linux-*.7z"
+            --row "cli=snishaper-cli-linux-*.tar.gz"
 
   # ------------------------------------------------------------------
   # The CLI archives no longer have their own cross-compile job: each
@@ -955,23 +973,21 @@ jobs:
           test -f "build/bin/macos/SniShaper-macos-$(uname -m).zip"
           echo "::notice::bundled and ad-hoc signed SniShaper.app ($(uname -m))"
 
-      - name: Package CLI archive (7z)
+      - name: Package CLI archive (zip)
         shell: bash
         run: |
           # The CLI binary was already built above (bundle-app.sh --cli
           # reuses it); pack the same payload the old cross-compile job
           # shipped: binary + config/ + rules/ seed files.
           set -euo pipefail
-          SEVENZIP="$(command -v 7z || command -v 7zz || true)"
-          if [ -z "$SEVENZIP" ]; then
-            brew install sevenzip
-            SEVENZIP="$(command -v 7zz || command -v 7z)"
-          fi
-          test -n "$SEVENZIP" || { echo "::error::no 7z/7zz on the runner"; exit 1; }
           GOARCH_NAME="${{ matrix.arch }}"
           if [ "$GOARCH_NAME" = "x64" ]; then GOARCH_NAME="amd64"; fi
-          ARCHIVE="snishaper-cli-darwin-${GOARCH_NAME}.7z"
-          "$SEVENZIP" a -mx=9 "$ARCHIVE" "build/bin/cli/Darwin/${{ matrix.arch }}/*"
+          ARCHIVE="snishaper-cli-darwin-${GOARCH_NAME}.zip"
+          ARCHIVE_PATH="$(pwd)/$ARCHIVE"
+          rm -f "$ARCHIVE_PATH"
+          # zip keeps the Unix mode bits, so the packed ./snishaper stays
+          # executable after extraction.
+          (cd "build/bin/cli/Darwin/${{ matrix.arch }}" && zip -q -r -9 "$ARCHIVE_PATH" .)
           ls -lh "$ARCHIVE"
           echo "::notice::$ARCHIVE ready"
 
@@ -981,7 +997,7 @@ jobs:
           name: macos-artifacts-${{ matrix.arch }}
           path: |
             build/bin/macos/SniShaper-macos-*.zip
-            snishaper-cli-darwin-*.7z
+            snishaper-cli-darwin-*.zip
           retention-days: 3
 
       - name: Write build summary
@@ -999,7 +1015,7 @@ jobs:
             --cache-hit "${{ steps.go.outputs.cache-hit }}" \
             --row "darwin/${{ matrix.arch }}=build/bin/cli/Darwin/${{ matrix.arch }}/snishaper" \
             --row "SniShaper.app zip=build/bin/macos/SniShaper-macos-*.zip" \
-            --row "cli 7z=snishaper-cli-darwin-*.7z"
+            --row "cli zip=snishaper-cli-darwin-*.zip"
 
   # ------------------------------------------------------------------
   # Linux distribution packages (.deb / .rpm / AppImage) for each arch,
@@ -1418,7 +1434,7 @@ jobs:
           # hard-coded to a single architecture.
           function Get-AssetPurpose([string]$name) {
             switch -Regex ($name) {
-                '^dongle\.Snishaper_.*\.7z$' {
+                '^dongle\.Snishaper_.*\.zip$' {
                     return 'Signed bundle: mixed-architecture MSIX package + public signing certificate (devcert.cer) + install.bat, for one-click sideload'
                 }
                 '^unsigned_.*\.msix(bundle)?$' {
@@ -1429,17 +1445,17 @@ jobs:
                     $label = switch ($a) { 'x64' { 'x64' } 'x86' { 'x86 (32-bit)' } '386' { 'x86 (32-bit)' } 'arm64' { 'ARM64' } default { $a } }
                     return "Windows installer (Inno Setup, $label): classic guided installation with license and desktop shortcut, for regular users"
                 }
-                '^snishaper-windows-(amd64|386|arm64)\.7z$' {
+                '^snishaper-windows-(amd64|386|arm64)\.zip$' {
                     $a = $Matches[1]
                     $label = switch ($a) { 'amd64' { 'x64' } '386' { 'x86 (32-bit)' } 'arm64' { 'ARM64' } default { $a } }
-                    return "Windows portable build ($label): extract and run snishaper.exe directly, no installation required"
+                    return "Windows portable build ($label), zip: extract with the built-in Windows extractor and run snishaper.exe, no installation required"
                 }
                 '^snishaper-linux-(amd64|arm64|x64)\.tar\.gz$' {
                     $a = $Matches[1]
                     $label = if ($a -eq 'amd64') { 'amd64' } elseif ($a -eq 'x64') { 'x64' } else { 'ARM64' }
                     return "Linux portable build ($label): extract and run ./SniShaper, requires GTK4/WebKitGTK runtime"
                 }
-                '^snishaper-cli-(windows|linux|darwin)-(amd64|arm64|386)\.7z$' {
+                '^snishaper-cli-(windows|linux|darwin)-(amd64|arm64|386)\.(zip|tar\.gz)$' {
                     $os = $Matches[1]
                     $a = $Matches[2]
                     $osLabel = switch ($os) { 'windows' { 'Windows' } 'linux' { 'Linux' } 'darwin' { 'macOS' } default { $os } }
@@ -1472,15 +1488,16 @@ jobs:
           }
 
           # Fixed order: installers, signed bundle, unsigned MSIX, Windows
-          # portables, Linux portables, CLI targets, macOS app zips, then
+          # portables, Linux portables, CLI archives, macOS app zips, then
           # the Linux distribution packages by name.
           $ordered = @()
           $ordered += Get-ChildItem -Path $assetsDir -File -Filter '*Setup.exe' -ErrorAction SilentlyContinue
-          $ordered += Get-ChildItem -Path $assetsDir -File -Filter 'dongle.*.7z' -ErrorAction SilentlyContinue
+          $ordered += Get-ChildItem -Path $assetsDir -File -Filter 'dongle.*.zip' -ErrorAction SilentlyContinue
           $ordered += Get-ChildItem -Path $assetsDir -File -Filter 'unsigned_*.msix*' -ErrorAction SilentlyContinue
-          $ordered += Get-ChildItem -Path $assetsDir -File -Filter 'snishaper-windows-*.7z' -ErrorAction SilentlyContinue | Sort-Object Name
+          $ordered += Get-ChildItem -Path $assetsDir -File -Filter 'snishaper-windows-*.zip' -ErrorAction SilentlyContinue | Sort-Object Name
           $ordered += Get-ChildItem -Path $assetsDir -File -Filter 'snishaper-linux-*.tar.gz' -ErrorAction SilentlyContinue | Sort-Object Name
-          $ordered += Get-ChildItem -Path $assetsDir -File -Filter 'snishaper-cli-*.7z' -ErrorAction SilentlyContinue | Sort-Object Name
+          $ordered += Get-ChildItem -Path $assetsDir -File -Filter 'snishaper-cli-*.zip' -ErrorAction SilentlyContinue | Sort-Object Name
+          $ordered += Get-ChildItem -Path $assetsDir -File -Filter 'snishaper-cli-*.tar.gz' -ErrorAction SilentlyContinue | Sort-Object Name
           $ordered += Get-ChildItem -Path $assetsDir -File -Filter 'SniShaper-macos-*.zip' -ErrorAction SilentlyContinue | Sort-Object Name
           $ordered += Get-ChildItem -Path $assetsDir -File -Filter 'snishaper_*.deb' -ErrorAction SilentlyContinue | Sort-Object Name
           $ordered += Get-ChildItem -Path $assetsDir -File -Filter 'snishaper-*.rpm' -ErrorAction SilentlyContinue | Sort-Object Name
@@ -1537,17 +1554,18 @@ jobs:
           Write-Host "::group::gh release create $tag"
           # Glob patterns (not literal paths) so every architecture the build
           # jobs produced is attached: all Setup exes, all Windows portable
-          # 7z, all Linux tar.gz, all CLI 7z, plus the signed MSIX bundle
-          # archive and the unsigned Partner Center package. The signed MSIX
-          # itself ships inside the dongle.*.7z archive together with
-          # devcert.cer (public cert) and install.bat.
+          # zips, all Linux tar.gz, all CLI zips/tarballs, plus the signed
+          # MSIX bundle archive and the unsigned Partner Center package. The
+          # signed MSIX itself ships inside the dongle.*.zip archive together
+          # with devcert.cer (public cert) and install.bat.
           $patterns = @(
             (Join-Path $assetsDir 'unsigned_*.msix*'),
             (Join-Path $assetsDir '*Setup.exe'),
-            (Join-Path $assetsDir 'dongle.*.7z'),
-            (Join-Path $assetsDir 'snishaper-windows-*.7z'),
+            (Join-Path $assetsDir 'dongle.*.zip'),
+            (Join-Path $assetsDir 'snishaper-windows-*.zip'),
             (Join-Path $assetsDir 'snishaper-linux-*.tar.gz'),
-            (Join-Path $assetsDir 'snishaper-cli-*.7z'),
+            (Join-Path $assetsDir 'snishaper-cli-*.zip'),
+            (Join-Path $assetsDir 'snishaper-cli-*.tar.gz'),
             (Join-Path $assetsDir 'SniShaper-macos-*.zip'),
             (Join-Path $assetsDir 'snishaper_*.deb'),
             (Join-Path $assetsDir 'snishaper-*.rpm'),

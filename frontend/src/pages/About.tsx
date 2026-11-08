@@ -146,15 +146,14 @@ const About: React.FC = () => {
     if (!localPath) return;
     try {
       await InstallUpdateAsset(localPath);
-      const is7z = localPath.toLowerCase().endsWith('.7z');
+      const isArchive = /\.(zip|7z)$/i.test(localPath);
       setShowRestartPrompt(false);
       setPendingUpdate(null);
       setShowUpdateModal(false);
-      toast.success(is7z ? t('about.install_7z_started') : t('about.install_started'));
+      toast.success(isArchive ? t('about.install_archive_started') : t('about.install_started'));
     } catch (err: any) {
       const msg = String(err?.message || err);
       const keyMap: Record<string, string> = {
-        sevenzip_missing: t('about.sevenzip_missing'),
         dir_not_writable: t('about.dir_not_writable'),
         extract_failed: t('about.extract_failed'),
         bad_archive: t('about.bad_archive'),
@@ -171,7 +170,7 @@ const About: React.FC = () => {
       const result = await DownloadUpdateAsset(asset.download_url);
       await refreshPending();
       toast.success(t('about.download_done'), asset.name);
-      if (asset.kind === '7z') {
+      if (asset.kind === 'zip' || asset.kind === '7z') {
         setShowRestartPrompt(true);
       } else {
         await handleInstall(result?.local_path || '');
@@ -380,20 +379,21 @@ const About: React.FC = () => {
                     {t('about.choose_download')}
                   </Typography>
                   {updateInfo.assets.map((asset) => {
-                    const is7z = asset.kind === '7z';
+                    const isArchive = asset.kind === 'zip' || asset.kind === '7z';
+                    const archiveLabel = asset.kind === 'zip' ? 'about.asset_zip' : asset.kind === '7z' ? 'about.asset_7z' : 'about.asset_exe';
                     const isDownloading = downloadingRef.current === asset.name;
                     return (
                       <Box key={asset.name} sx={{ p: 1.5, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1.5, border: 1, borderColor: 'divider', borderRadius: 1.5, bgcolor: 'background.default' }}>
                         <Box sx={{ display: 'flex', gap: 1.5, alignItems: 'center', minWidth: 0, flex: 1 }}>
-                          <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 36, height: 36, borderRadius: 1, flexShrink: 0, bgcolor: is7z ? 'rgba(234,179,8,0.12)' : 'rgba(33,150,243,0.12)', color: is7z ? 'warning.main' : 'primary.main' }}>
-                            {is7z ? <FolderOpen size={18} /> : <Download size={18} />}
+                          <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 36, height: 36, borderRadius: 1, flexShrink: 0, bgcolor: isArchive ? 'rgba(234,179,8,0.12)' : 'rgba(33,150,243,0.12)', color: isArchive ? 'warning.main' : 'primary.main' }}>
+                            {isArchive ? <FolderOpen size={18} /> : <Download size={18} />}
                           </Box>
                           <Box sx={{ minWidth: 0 }}>
                             <Typography sx={{ fontSize: '0.75rem', fontWeight: 'bold', color: 'text.primary', wordBreak: 'break-all', display: 'block' }}>
                               {asset.name}
                             </Typography>
                             <Typography variant="caption" sx={{ fontSize: '0.6875rem', color: 'text.secondary', display: 'block' }}>
-                              {t(is7z ? 'about.asset_7z' : 'about.asset_exe')} · {t('about.asset_size')}: {fmtSize(asset.size)}
+                              {t(archiveLabel)} · {t('about.asset_size')}: {fmtSize(asset.size)}
                             </Typography>
                           </Box>
                         </Box>

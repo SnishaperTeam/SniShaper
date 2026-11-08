@@ -73,7 +73,7 @@ Windows 端 PowerShell 对同一个命名参数只绑定一次，重复取值请
 
 ### CI：ARM64 必须原生构建
 
-普通 CI（build.yml，push/PR）只做**构建 + 冒烟**，不做打包/上传。GUI 矩阵按"每作业一个平台/架构"拆分，ARM64 GUI 只在原生 ARM 运行器上编译；CLI 是纯 Go（`CGO_ENABLED=0`），7 个目标统一由 `cli-build` 单作业交叉产出（不涉及任何工具链），因此没有重复构建。打包（MSIX/7z/tar.gz）只在发布流水线（tag/手动触发）里做。
+普通 CI（build.yml，push/PR）只做**构建 + 冒烟**，不做打包/上传。GUI 矩阵按"每作业一个平台/架构"拆分，ARM64 GUI 只在原生 ARM 运行器上编译；CLI 是纯 Go（`CGO_ENABLED=0`），每个矩阵作业顺带产出本平台/架构的那个目标（Windows/Linux 在 windows-latest、ubuntu，Darwin 在 macOS 运行器），不涉及交叉工具链。打包（MSIX/zip/tar.gz）只在发布流水线（tag/手动触发）里做。
 
 | GUI 目标 | 运行器 | 说明 |
 | --- | --- | --- |
@@ -259,7 +259,7 @@ Windows 与 Linux 构建均从此文件读取版本信息，并通过 ldflags �
 双平台 CI 流水线：
 
 - **`build.yml`**：每次 push / PR 触发，在 `windows-2025` 上构建 Windows、在 `ubuntu-24.04` 上构建 Linux，并执行编译与二进制冒烟验证。
-- **`_release_pipeline.yml`**：发布流水线。Windows runner 产出 MSIX 与 `snishaper-windows-amd64.7z` 便携包，Ubuntu runner 产出 `snishaper-linux-amd64.tar.gz`，最后在 Windows runner 合并两个平台的产物并创建 GitHub Release。Release notes 优先由 runner 本地 Ollama（默认 `qwen3.5:2b`）生成摘要；Ollama 不可用时降级为分类 commit 列表。
+- **`_release_pipeline.yml`**：发布流水线。Windows runner 产出 MSIX 与 `snishaper-windows-amd64.zip` 便携包，Ubuntu runner 产出 `snishaper-linux-amd64.tar.gz`，最后在 Windows runner 合并两个平台的产物并创建 GitHub Release。Release notes 优先由 runner 本地 Ollama（默认 `qwen3.5:2b`）生成摘要；Ollama 不可用时降级为分类 commit 列表。
 
 ---
 
