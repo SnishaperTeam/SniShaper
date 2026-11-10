@@ -9,7 +9,7 @@ require (
 	github.com/miekg/dns v1.1.73
 	github.com/rivo/tview v0.42.0
 	github.com/wailsapp/wails/v3 v3.1.0
-	golang.org/x/sys v0.49.0
+	golang.org/x/sys v0.50.0
 )
 
 require (
