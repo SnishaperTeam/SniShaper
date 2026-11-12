@@ -14,7 +14,7 @@ $installerDir = Join-Path $RepoRoot 'installer'
 $updaterRoot = Join-Path $RepoRoot 'build\bin\updater\Windows'
 if (-not (Test-Path $installerDir)) {
     Write-Host "::error::installer directory not found: $installerDir"
-    exit 1
+    throw "installer directory not found"
 }
 if (-not (Test-Path $AssetsDir)) {
     New-Item -ItemType Directory -Path $AssetsDir -Force | Out-Null
@@ -35,7 +35,7 @@ foreach ($setup in Get-ChildItem -Path $installerDir -File -Filter '*Setup.exe')
     $updater = Join-Path $updaterRoot "$arch\SniShaperUpdater.exe"
     if (-not (Test-Path $updater)) {
         Write-Host "::error::portable updater missing for ${arch}: $updater"
-        exit 1
+        throw "portable updater missing for $arch"
     }
 
     $zipName = "snishaper-$Version-windows-$arch-update.zip"
@@ -83,6 +83,6 @@ foreach ($setup in Get-ChildItem -Path $installerDir -File -Filter '*Setup.exe')
 
 if ($count -eq 0) {
     Write-Host "::error::no Inno Setup installer matched under $installerDir"
-    exit 1
+    throw "no Inno Setup installer matched"
 }
 Write-Host ("::notice::{0} updater bundle(s) staged in {1}" -f $count, $AssetsDir)
