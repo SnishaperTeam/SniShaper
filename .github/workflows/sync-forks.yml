@@ -1,0 +1,229 @@
+name: weekly fork sync
+
+on:
+  schedule:
+    - cron: "19 4 * * 1"
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: Report stale forks without creating pull requests
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: weekly-fork-sync
+  cancel-in-progress: true
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check forks and open sync pull requests
+        shell: bash
+        env:
+          FORK_SYNC_TOKEN: ${{ secrets.FORK_SYNC_TOKEN }}
+          RENOVATE_TOKEN: ${{ secrets.RENOVATE_TOKEN }}
+          DEFAULT_TOKEN: ${{ github.token }}
+          UPSTREAM_REPO: SnishaperTeam/SniShaper
+          UPSTREAM_BRANCH: main
+          DRY_RUN: ${{ inputs.dry_run == true }}
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import http.client
+          import json
+          import os
+          import time
+          import urllib.error
+          import urllib.parse
+          import urllib.request
+
+          fork_sync_token = os.environ.get("FORK_SYNC_TOKEN", "").strip()
+          renovate_token = os.environ.get("RENOVATE_TOKEN", "").strip()
+          default_token = os.environ.get("DEFAULT_TOKEN", "").strip()
+          token = fork_sync_token or renovate_token or default_token
+          token_source = "FORK_SYNC_TOKEN" if fork_sync_token else ("RENOVATE_TOKEN" if renovate_token else "GITHUB_TOKEN")
+          cross_repo = bool(fork_sync_token or renovate_token)
+          upstream = os.environ.get("UPSTREAM_REPO", "SnishaperTeam/SniShaper")
+          owner, repo = upstream.split("/", 1)
+          branch = os.environ.get("UPSTREAM_BRANCH", "main")
+          head_label = owner + ":" + branch
+          dry_run = os.environ.get("DRY_RUN", "false").lower() == "true"
+          no_token_dry_run = not cross_repo and not dry_run
+          effective_dry_run = dry_run or no_token_dry_run
+
+          print("::notice::upstream=%s head=%s token=%s" % (upstream, head_label, token_source))
+          if no_token_dry_run:
+              print("::warning::FORK_SYNC_TOKEN is not configured; running in report-only mode. Add a classic PAT with public_repo scope to enable pull request creation.")
+          if dry_run:
+              print("::notice::dry_run enabled; no pull requests will be created")
+
+          def api(method, path, payload=None):
+              url = "https://api.github.com" + path
+              data = None if payload is None else json.dumps(payload).encode("utf-8")
+              headers = {
+                  "Accept": "application/vnd.github+json",
+                  "Authorization": "Bearer " + token,
+                  "X-GitHub-Api-Version": "2022-11-28",
+                  "User-Agent": "snishaper-fork-sync",
+              }
+              if data is not None:
+                  headers["Content-Type"] = "application/json"
+              for attempt in range(3):
+                  request = urllib.request.Request(url, data=data, headers=headers, method=method)
+                  try:
+                      with urllib.request.urlopen(request, timeout=30) as response:
+                          raw = response.read()
+                          return json.loads(raw) if raw else {}
+                  except urllib.error.HTTPError as error:
+                      body = error.read().decode("utf-8", "replace")[:300]
+                      if error.code in (429, 500, 502, 503, 504) and attempt < 2:
+                          time.sleep(2 * (attempt + 1))
+                          continue
+                      raise RuntimeError("HTTP %d %s %s: %s" % (error.code, method, path, body)) from None
+                  except (urllib.error.URLError, TimeoutError, http.client.HTTPException, ConnectionError) as error:
+                      if attempt < 2:
+                          time.sleep(2 * (attempt + 1))
+                          continue
+                      raise RuntimeError("%s %s: %s" % (method, path, error)) from None
+              raise RuntimeError("request failed: %s %s" % (method, path))
+
+          def paged(path):
+              items = []
+              page = 1
+              while True:
+                  separator = "&" if "?" in path else "?"
+                  chunk = api("GET", "%s%sper_page=100&page=%d" % (path, separator, page))
+                  items.extend(chunk)
+                  if len(chunk) < 100:
+                      return items
+                  page += 1
+
+          def branch_sha(repository, ref):
+              data = api("GET", "/repos/%s/branches/%s" % (repository, urllib.parse.quote(ref, safe="")))
+              return (data.get("commit") or {}).get("sha") or ""
+
+          def linked_to_upstream(pr):
+              head = pr.get("head") or {}
+              head_repo = (head.get("repo") or {}).get("full_name") or ""
+              label = head.get("label") or ""
+              return head_repo == upstream or (head_repo == "" and label == head_label)
+
+          def build_body(fork, base, ahead, status):
+              lines = [
+                  "This pull request syncs `%s` with upstream `%s@%s`." % (fork, upstream, branch),
+                  "",
+              ]
+              if ahead > 0:
+                  lines.append("- Upstream is %d commit(s) ahead of `%s`." % (ahead, base))
+              else:
+                  lines.append("- Upstream HEAD differs from this fork's `%s` HEAD (compare API unavailable)." % base)
+              lines.append("- Head: `%s`, the upstream default branch, so later upstream commits appear in this PR automatically." % head_label)
+              lines.append("- Created by the weekly `sync-forks` workflow. Forks with an open PR linked to upstream are skipped.")
+              if status == "diverged":
+                  lines.append("- This fork also has local commits; conflicts may need manual resolution.")
+              lines.extend([
+                  "",
+                  "Merge this PR to bring the fork up to date. Closing it without merging creates a new PR on the next weekly run.",
+              ])
+              return "\n".join(lines)
+
+          upstream_sha = ""
+          try:
+              upstream_sha = branch_sha(upstream, branch)
+          except RuntimeError as error:
+              print("::warning::cannot resolve upstream branch SHA: %s" % error)
+
+          forks = paged("/repos/%s/forks?sort=newest" % upstream)
+          print("::notice::found %d forks" % len(forks))
+
+          created = 0
+          skipped_linked = 0
+          skipped_fresh = 0
+          skipped_inactive = 0
+          skipped_unrelated = 0
+          failures = []
+
+          for fork in forks:
+              full = fork.get("full_name") or ""
+              if not full:
+                  continue
+              if fork.get("archived") or fork.get("disabled"):
+                  print("SKIP %s: archived or disabled" % full)
+                  skipped_inactive += 1
+                  continue
+              base = fork.get("default_branch") or branch
+              try:
+                  pulls = paged("/repos/%s/pulls?state=open" % full)
+              except RuntimeError:
+                  print("SKIP %s: repository unavailable" % full)
+                  skipped_inactive += 1
+                  continue
+              linked = [str(pr.get("number")) for pr in pulls if linked_to_upstream(pr)]
+              if linked:
+                  print("SKIP %s: open upstream PR #%s" % (full, ", #".join(linked)))
+                  skipped_linked += 1
+                  continue
+              compare_path = "/repos/%s/compare/%s...%s?per_page=1" % (
+                  full,
+                  urllib.parse.quote(base, safe=""),
+                  urllib.parse.quote(head_label, safe=":"),
+              )
+              try:
+                  comparison = api("GET", compare_path)
+                  ahead = int(comparison.get("ahead_by") or 0)
+                  status = comparison.get("status") or ""
+              except RuntimeError as error:
+                  message = str(error)
+                  if "No common ancestor" in message:
+                      print("SKIP %s: no common ancestor with upstream" % full)
+                      skipped_unrelated += 1
+                      continue
+                  try:
+                      fork_sha = branch_sha(full, base)
+                  except RuntimeError:
+                      fork_sha = ""
+                  if not upstream_sha or not fork_sha:
+                      failures.append("%s: %s" % (full, message))
+                      print("::warning::%s: %s" % (full, message))
+                      continue
+                  if fork_sha == upstream_sha:
+                      print("OK %s: up to date (SHA fallback)" % full)
+                      skipped_fresh += 1
+                      continue
+                  print("::warning::%s: compare unavailable, using branch SHAs" % full)
+                  ahead = -1
+                  status = "unknown"
+              if ahead == 0:
+                  print("OK %s: up to date (%s)" % (full, status))
+                  skipped_fresh += 1
+                  continue
+              if ahead > 0:
+                  print("BEHIND %s: %d upstream commit(s), status=%s" % (full, ahead, status))
+              else:
+                  print("BEHIND %s: branch SHAs differ, status=%s" % (full, status))
+              if effective_dry_run:
+                  continue
+              try:
+                  pr = api("POST", "/repos/%s/pulls" % full, {
+                      "title": "chore: sync with upstream %s" % upstream,
+                      "head": head_label,
+                      "base": base,
+                      "body": build_body(full, base, ahead, status),
+                  })
+              except RuntimeError as error:
+                  message = "%s: %s" % (full, error)
+                  failures.append(message)
+                  print("::warning::" + message)
+                  continue
+              created += 1
+              print("CREATED %s: %s" % (full, pr.get("html_url") or ""))
+
+          print("::notice::checked=%d created=%d skipped_linked=%d up_to_date=%d inactive=%d unrelated=%d failed=%d" % (
+              len(forks), created, skipped_linked, skipped_fresh, skipped_inactive, skipped_unrelated, len(failures)))
+          for message in failures:
+              print("::warning::" + message)
+          PY
