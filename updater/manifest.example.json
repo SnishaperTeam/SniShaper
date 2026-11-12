@@ -1,0 +1,21 @@
+{
+  "version": "1.30.1",
+  "channel": "stable",
+  "notes": "Bug fixes and TUN stability improvements.",
+  "package": {
+    "name": "snishaper-1.30.1-windows-x64-update.zip",
+    "url": "https://releases.example.com/snishaper/stable/snishaper-1.30.1-windows-x64-update.zip",
+    "sha256": "REPLACE_WITH_SHA256_OF_THE_ZIP",
+    "size": 12345678
+  },
+  "installer": {
+    "name": "Snishaper-1.30.1-x64Setup.exe",
+    "sha256": "REPLACE_WITH_SHA256_OF_THE_SETUP_EXE",
+    "size": 0
+  },
+  "updater": {
+    "name": "",
+    "sha256": ""
+  },
+  "published_at": "2026-11-11T00:00:00Z"
+}

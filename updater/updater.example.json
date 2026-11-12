@@ -1,0 +1,18 @@
+{
+  "manifest_url": "https://releases.example.com/snishaper/stable/manifest.json",
+  "mirror_urls": [],
+  "public_key": "BASE64_ED25519_PUBLIC_KEY_32_BYTES",
+  "channel": "stable",
+  "arch": "auto",
+  "installer_pattern": "*Setup.exe",
+  "installer_name": "",
+  "process_names": ["snishaper.exe", "snishaper-core.exe"],
+  "app_id": "{3F2E4DA1-5C8B-4ECD-BDC4-426A5965F8D4}",
+  "install_dir": "",
+  "local_version": "auto",
+  "verify_authenticode": false,
+  "restart_after_install": false,
+  "http_timeout_minutes": 30,
+  "max_retries": 3,
+  "max_extract_bytes": 1073741824
+}
