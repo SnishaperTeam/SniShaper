@@ -29,7 +29,7 @@ jobs:
           DEFAULT_TOKEN: ${{ github.token }}
           UPSTREAM_REPO: SnishaperTeam/SniShaper
           UPSTREAM_BRANCH: main
-          DRY_RUN: ${{ inputs.dry_run == true }}
+          DRY_RUN: ${{ inputs.dry_run }}
         run: |
           set -euo pipefail
           python3 - <<'PY'
