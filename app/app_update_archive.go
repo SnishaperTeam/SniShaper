@@ -34,11 +34,36 @@ func extractZip(src, dest string) error {
 	}
 	defer r.Close()
 
-	cleanDest := filepath.Clean(dest)
+	absDest, err := filepath.Abs(dest)
+	if err != nil {
+		return err
+	}
+	absDest = filepath.Clean(absDest)
+	if err := os.MkdirAll(absDest, 0755); err != nil {
+		return err
+	}
+	sep := string(filepath.Separator)
 	for _, f := range r.File {
-		target := filepath.Join(cleanDest, f.Name)
-		if target != cleanDest && !strings.HasPrefix(target, cleanDest+string(filepath.Separator)) {
-			return fmt.Errorf("archive path escapes destination: %s", f.Name)
+		name := strings.ReplaceAll(f.Name, "\\", "/")
+		if name == "" || strings.Contains(name, "\x00") {
+			return fmt.Errorf("invalid archive entry %q", f.Name)
+		}
+		if strings.Contains(name, "..") {
+			return fmt.Errorf("archive entry escapes destination: %q", f.Name)
+		}
+		if strings.HasPrefix(name, "/") || (len(name) >= 2 && name[1] == ':') {
+			return fmt.Errorf("absolute archive entry %q", f.Name)
+		}
+		if !filepath.IsLocal(filepath.FromSlash(name)) {
+			return fmt.Errorf("non-local archive entry %q", f.Name)
+		}
+		if f.Mode()&os.ModeSymlink != 0 {
+			return fmt.Errorf("symlink archive entry rejected: %q", f.Name)
+		}
+		target := filepath.Join(absDest, filepath.FromSlash(name))
+		rel, err := filepath.Rel(absDest, target)
+		if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+sep) || filepath.IsAbs(rel) {
+			return fmt.Errorf("archive path escapes destination: %q", f.Name)
 		}
 		if f.FileInfo().IsDir() {
 			if err := os.MkdirAll(target, 0755); err != nil {
