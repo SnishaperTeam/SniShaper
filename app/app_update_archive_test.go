@@ -33,8 +33,8 @@ func TestExtractZipRoundTrip(t *testing.T) {
 	dir := t.TempDir()
 	archive := filepath.Join(dir, "pkg.zip")
 	writeTestZip(t, archive, map[string]string{
-		"snishaper.exe":       "binary",
-		"rules/config.json":   "{}",
+		"snishaper.exe":        "binary",
+		"rules/config.json":    "{}",
 		"config/settings.json": "{}",
 	})
 	stage := filepath.Join(dir, "stage")
@@ -67,6 +67,64 @@ func TestExtractZipRejectsTraversal(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(dir, "escaped.txt")); err == nil {
 		t.Fatal("archive escaped the destination directory")
+	}
+}
+
+func TestExtractZipRejectsUnsafeEntries(t *testing.T) {
+	dir := t.TempDir()
+	stage := filepath.Join(dir, "stage")
+	if err := os.MkdirAll(stage, 0755); err != nil {
+		t.Fatal(err)
+	}
+	archive := filepath.Join(dir, "evil.zip")
+	for _, name := range []string{
+		"..\\escaped.txt",
+		"a/../../escaped.txt",
+		"/escaped.txt",
+		"//server/share/escaped.txt",
+		"C:/escaped.txt",
+		"nested/..escaped.txt",
+		"\x00escaped.txt",
+	} {
+		writeTestZip(t, archive, map[string]string{name: "nope"})
+		if err := extractZip(archive, stage); err == nil {
+			t.Errorf("expected entry %q to be rejected", name)
+		}
+		if _, err := os.Stat(filepath.Join(dir, "escaped.txt")); err == nil {
+			t.Fatal("archive escaped the destination directory")
+		}
+	}
+}
+
+func TestExtractZipRejectsSymlinkEntry(t *testing.T) {
+	dir := t.TempDir()
+	archive := filepath.Join(dir, "link.zip")
+	f, err := os.Create(archive)
+	if err != nil {
+		t.Fatal(err)
+	}
+	zw := zip.NewWriter(f)
+	header := &zip.FileHeader{Name: "payload/link", Method: zip.Deflate}
+	header.SetMode(os.ModeSymlink | 0777)
+	w, err := zw.CreateHeader(header)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := w.Write([]byte("../../escaped.txt")); err != nil {
+		t.Fatal(err)
+	}
+	if err := zw.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.Close(); err != nil {
+		t.Fatal(err)
+	}
+	stage := filepath.Join(dir, "stage")
+	if err := extractZip(archive, stage); err == nil {
+		t.Fatal("expected symlink entry to be rejected")
+	}
+	if _, err := os.Stat(filepath.Join(dir, "escaped.txt")); err == nil {
+		t.Fatal("symlink entry escaped the destination directory")
 	}
 }
 
