@@ -280,6 +280,8 @@ jobs:
     env:
       MSIX_PFX_PASSWORD: ${{ secrets.MSIX_PFX_PASSWORD }}
       MSIX_PFX_BASE64: ${{ secrets.MSIX_PFX_BASE64 }}
+      UPDATER_SIGNING_READY: ${{ secrets.UPDATER_ED25519_SEED != '' }}
+      UPDATER_ED25519_SEED: ${{ secrets.UPDATER_ED25519_SEED }}
     steps:
       - name: Checkout full history
         uses: actions/checkout@v7
@@ -685,6 +687,64 @@ jobs:
 
           Write-Host "Staged files:" -ForegroundColor Green
           Get-ChildItem $assetsDir | ForEach-Object { Write-Host "  $($_.Name) ($($_.Length) bytes)" }
+
+      - name: Build portable updater
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $archMap = @{ 'x64' = 'amd64'; 'x86' = '386'; 'arm64' = 'arm64' }
+          foreach ($a in $archMap.Keys) {
+            $out = Join-Path $env:GITHUB_WORKSPACE "build/bin/updater/Windows/$a/SniShaperUpdater.exe"
+            New-Item -ItemType Directory -Force -Path (Split-Path $out) | Out-Null
+            $env:GOOS = 'windows'
+            $env:CGO_ENABLED = '0'
+            $env:GOARCH = $archMap[$a]
+            & go build -trimpath -ldflags '-s -w' -o $out ./updater
+            if ($LASTEXITCODE -ne 0) {
+              Write-Host "::error::updater build failed for $a"
+              exit 1
+            }
+            Write-Host "::notice::portable updater built for $a"
+          }
+          Remove-Item Env:GOOS, Env:GOARCH, Env:CGO_ENABLED -ErrorAction SilentlyContinue
+
+      - name: Package updater bundles
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $script = Join-Path $env:GITHUB_WORKSPACE '.github/scripts/build-updater-bundle.ps1'
+          & $script `
+            -RepoRoot $env:GITHUB_WORKSPACE `
+            -Version "${{ needs.check.outputs.display_version }}" `
+            -Tag "${{ needs.check.outputs.tag }}" `
+            -Channel "${{ inputs.channel }}" `
+            -Repository "${{ github.repository }}" `
+            -AssetsDir (Join-Path $env:GITHUB_WORKSPACE 'staging')
+          if ($LASTEXITCODE -ne 0) {
+            Write-Host "::error::updater bundle packaging failed"
+            exit 1
+          }
+
+      - name: Sign updater manifests
+        if: env.UPDATER_SIGNING_READY == 'true'
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $assetsDir = Join-Path $env:GITHUB_WORKSPACE 'staging'
+          $pubOut = Join-Path $assetsDir 'updater-public-key.txt'
+          $manifests = @(Get-ChildItem -Path $assetsDir -File -Filter 'updater-manifest-*.json')
+          if ($manifests.Count -eq 0) {
+            Write-Host "::error::no updater manifests to sign"
+            exit 1
+          }
+          foreach ($m in $manifests) {
+            & go run ./updater/signmanifest -in $m.FullName -pub-out $pubOut
+            if ($LASTEXITCODE -ne 0) {
+              Write-Host "::error::manifest signing failed for $($m.Name)"
+              exit 1
+            }
+          }
+          Write-Host "::notice::signed $($manifests.Count) updater manifest(s)"
 
       - name: Upload Windows artifacts
         uses: actions/upload-artifact@v7
@@ -1483,6 +1543,21 @@ jobs:
                     $label = if ($a -eq 'amd64') { 'amd64' } else { 'ARM64' }
                     return "Linux AppImage ($label): self-contained GUI, download, chmod +x and run"
                 }
+                '^SniShaperUpdater-.*-(x64|x86|arm64)\.exe$' {
+                    return 'Portable auto-updater (native Win32, no runtime or shell dependencies): downloads, verifies and launches the Inno Setup installer in normal interactive mode'
+                }
+                '^snishaper-.*-windows-(x64|x86|arm64)-update\.zip$' {
+                    return 'Updater bundle: Inno Setup installer plus portable updater, consumed by SniShaperUpdater.exe'
+                }
+                '^updater-manifest-.*\.json$' {
+                    return 'Updater manifest: version, SHA-256 digests and download URL for the matching architecture'
+                }
+                '^updater-manifest-.*\.json\.sig$' {
+                    return 'Ed25519 signature over the corresponding updater manifest'
+                }
+                '^updater-public-key\.txt$' {
+                    return 'Base64 Ed25519 public key for verifying updater manifests (set as public_key in updater.json)'
+                }
                 default { return 'Release artifact' }
             }
           }
@@ -1502,6 +1577,11 @@ jobs:
           $ordered += Get-ChildItem -Path $assetsDir -File -Filter 'snishaper_*.deb' -ErrorAction SilentlyContinue | Sort-Object Name
           $ordered += Get-ChildItem -Path $assetsDir -File -Filter 'snishaper-*.rpm' -ErrorAction SilentlyContinue | Sort-Object Name
           $ordered += Get-ChildItem -Path $assetsDir -File -Filter 'SniShaper-*.AppImage' -ErrorAction SilentlyContinue | Sort-Object Name
+          $ordered += Get-ChildItem -Path $assetsDir -File -Filter 'SniShaperUpdater-*.exe' -ErrorAction SilentlyContinue | Sort-Object Name
+          $ordered += Get-ChildItem -Path $assetsDir -File -Filter 'snishaper-*-windows-*-update.zip' -ErrorAction SilentlyContinue | Sort-Object Name
+          $ordered += Get-ChildItem -Path $assetsDir -File -Filter 'updater-manifest-*.json' -ErrorAction SilentlyContinue | Sort-Object Name
+          $ordered += Get-ChildItem -Path $assetsDir -File -Filter 'updater-manifest-*.json.sig' -ErrorAction SilentlyContinue | Sort-Object Name
+          $ordered += Get-ChildItem -Path $assetsDir -File -Filter 'updater-public-key.txt' -ErrorAction SilentlyContinue
 
           $listed = @{}
           foreach ($file in $ordered) {
@@ -1569,7 +1649,11 @@ jobs:
             (Join-Path $assetsDir 'SniShaper-macos-*.zip'),
             (Join-Path $assetsDir 'snishaper_*.deb'),
             (Join-Path $assetsDir 'snishaper-*.rpm'),
-            (Join-Path $assetsDir 'SniShaper-*.AppImage')
+            (Join-Path $assetsDir 'SniShaper-*.AppImage'),
+            (Join-Path $assetsDir 'SniShaperUpdater-*.exe'),
+            (Join-Path $assetsDir 'snishaper-*-windows-*-update.zip'),
+            (Join-Path $assetsDir 'updater-manifest-*.json*'),
+            (Join-Path $assetsDir 'updater-public-key.txt')
           )
           $matched = @()
           foreach ($pattern in $patterns) {

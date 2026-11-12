@@ -1,0 +1,58 @@
+#define MyAppName "Snishaper"
+#define MyAppVersion "1.30.1"
+#define MyAppPublisher "SnishaperTeam And JetCPPTeam"
+#define MyAppURL "https://jetcpp.ccwu.cc/"
+#define MyAppExeName "snishaper.exe"
+
+[Setup]
+AppId={{3F2E4DA1-5C8B-4ECD-BDC4-426A5965F8D4}
+AppName={#MyAppName}
+AppVersion={#MyAppVersion}
+AppVerName={#MyAppName} {#MyAppVersion}
+AppPublisher={#MyAppPublisher}
+AppPublisherURL={#MyAppURL}
+AppSupportURL={#MyAppURL}
+AppUpdatesURL={#MyAppURL}
+DefaultDirName={autopf}\{#MyAppName}
+DefaultGroupName={#MyAppName}
+UninstallDisplayIcon={app}\{#MyAppExeName}
+ArchitecturesAllowed=x64compatible
+ArchitecturesInstallIn64BitMode=x64compatible
+PrivilegesRequired=admin
+UsePreviousAppDir=yes
+CloseApplications=yes
+RestartApplications=no
+Uninstallable=yes
+DisableProgramGroupPage=yes
+LicenseFile="LICENSE"
+OutputDir="installer"
+OutputBaseFilename="Snishaper-{#MyAppVersion}-x64Setup"
+SolidCompression=yes
+WizardStyle=modern polar
+
+[Languages]
+Name: "english"; MessagesFile: "compiler:Default.isl"
+Name: "chinesesimplified_2"; MessagesFile: "compiler:Languages\ChineseSimplified_2.isl"
+Name: "russian"; MessagesFile: "compiler:Languages\Russian.isl"
+
+[Tasks]
+Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked
+
+[Files]
+Source: "build\bin\gui\Windows\x64\{#MyAppExeName}"; DestDir: "{app}"; Flags: ignoreversion overwritereadonly restartreplace
+Source: "build\bin\gui\Windows\x64\*"; DestDir: "{app}"; Flags: ignoreversion overwritereadonly restartreplace recursesubdirs createallsubdirs
+
+[InstallDelete]
+Type: files; Name: "{app}\legacy-component.exe"
+
+[Registry]
+Root: HKLM; Subkey: "Software\Snishaper"; ValueType: string; ValueName: "Version"; ValueData: "{#MyAppVersion}"; Flags: uninsdeletevalue
+Root: HKLM; Subkey: "Software\Snishaper"; ValueType: string; ValueName: "InstallPath"; ValueData: "{app}"; Flags: uninsdeletevalue
+Root: HKLM; Subkey: "Software\Snishaper"; ValueType: string; ValueName: "Publisher"; ValueData: "{#MyAppPublisher}"; Flags: uninsdeletevalue
+
+[Icons]
+Name: "{autoprograms}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"
+Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; Tasks: desktopicon
+
+[Run]
+Filename: "{app}\{#MyAppExeName}"; Description: "{cm:LaunchProgram,{#StringChange(MyAppName, '&', '&&')}}"; Flags: nowait postinstall skipifsilent

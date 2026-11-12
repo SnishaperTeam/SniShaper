@@ -34,6 +34,8 @@
 
     [switch]$Wails,
 
+    [switch]$Updater,
+
     [switch]$Help
 )
 
@@ -192,6 +194,7 @@ if (-not $isAdmin) {
     if ($CI)          { $params += "-CI" }
     if ($Cross)       { $params += "-Cross" }
     if ($Wails)       { $params += "-Wails" }
+    if ($Updater)     { $params += "-Updater" }
     $paramStr = $params -join ' '
     Start-Process powershell.exe -Verb RunAs -ArgumentList "-NoProfile -ExecutionPolicy Bypass -File `"$PSCommandPath`" $paramStr"
     exit
@@ -1066,6 +1069,42 @@ function Invoke-BuildTarget {
     return $true
 }
 
+function Invoke-UpdaterBuild {
+    param([string]$Arch)
+
+    $goArch = switch ($Arch) {
+        "x64"   { "amd64" }
+        "x86"   { "386" }
+        "arm64" { "arm64" }
+        default { $null }
+    }
+    if (-not $goArch) {
+        Write-Host "[UPDATER] unsupported architecture: $Arch" -ForegroundColor Red
+        return $false
+    }
+
+    $outDir = Join-Path $ProjectRoot "build\bin\updater\Windows\$Arch"
+    $out = Join-Path $outDir "SniShaperUpdater.exe"
+    New-Item -ItemType Directory -Force -Path $outDir | Out-Null
+    Write-Host "[BUILD] UPDATER Windows/$Arch ($goArch) -> build\bin\updater\Windows\$Arch\SniShaperUpdater.exe" -ForegroundColor Green
+
+    try {
+        $env:GOOS = "windows"
+        $env:GOARCH = $goArch
+        $env:CGO_ENABLED = "0"
+        go build -trimpath -ldflags="-s -w" -o $out ./updater
+        $rc = $LASTEXITCODE
+    } finally {
+        Remove-Item Env:GOOS, Env:GOARCH, Env:CGO_ENABLED -ErrorAction SilentlyContinue
+    }
+    if ($rc -ne 0 -or -not (Test-Path $out)) {
+        Write-Host "[BUILD] UPDATER FAILED for $Arch" -ForegroundColor Red
+        return $false
+    }
+    Write-Host "[BUILD] UPDATER OK: build\bin\updater\Windows\$Arch\SniShaperUpdater.exe" -ForegroundColor Green
+    return $true
+}
+
 # ---------------------------------------------------------------------------
 # Main build loop
 # ---------------------------------------------------------------------------
@@ -1078,6 +1117,24 @@ try {
 } catch {
     Write-Host "[ERROR] Go is not installed or not in PATH." -ForegroundColor Red
     exit 1
+}
+
+if ($Updater) {
+    $updaterArchs = @()
+    if ($Arch) {
+        foreach ($a in $Arch) {
+            $norm = Get-NormalizedArch $a
+            if ($norm -and $norm -ne "all") { $updaterArchs += $norm }
+        }
+    }
+    if ($updaterArchs.Count -eq 0) { $updaterArchs = @("x64", "x86", "arm64") }
+    foreach ($a in @($updaterArchs | Sort-Object -Unique)) {
+        if (-not (Invoke-UpdaterBuild -Arch $a)) { exit 1 }
+    }
+    if (-not $BuildBackend) {
+        Write-Host (msg -Key "AllDone") -ForegroundColor Cyan
+        exit 0
+    }
 }
 
 if (-not $BuildBackend) {

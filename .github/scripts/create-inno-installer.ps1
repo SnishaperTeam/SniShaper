@@ -88,12 +88,17 @@ AppPublisherURL={#MyAppURL}
 AppSupportURL={#MyAppURL}
 AppUpdatesURL={#MyAppURL}
 DefaultDirName={autopf}\{#MyAppName}
+DefaultGroupName={#MyAppName}
 UninstallDisplayIcon={app}\{#MyAppExeName}
 ArchitecturesAllowed=__ARCHALLOWED__
 ArchitecturesInstallIn64BitMode=__ARCHMODE64__
+PrivilegesRequired=admin
+UsePreviousAppDir=yes
+CloseApplications=yes
+RestartApplications=no
+Uninstallable=yes
 DisableProgramGroupPage=yes
 LicenseFile="__LICENSE__"
-PrivilegesRequiredOverridesAllowed=dialog
 OutputDir="__OUTDIR__"
 OutputBaseFilename="__OUTNAME__"
 SolidCompression=yes
@@ -108,8 +113,13 @@ Name: "russian"; MessagesFile: "compiler:Languages\Russian.isl"
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked
 
 [Files]
-Source: "__BINDIR__\{#MyAppExeName}"; DestDir: "{app}"; Flags: ignoreversion
-Source: "__BINDIR__\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "__BINDIR__\{#MyAppExeName}"; DestDir: "{app}"; Flags: ignoreversion overwritereadonly restartreplace
+Source: "__BINDIR__\*"; DestDir: "{app}"; Flags: ignoreversion overwritereadonly restartreplace recursesubdirs createallsubdirs
+
+[Registry]
+Root: HKLM; Subkey: "Software\Snishaper"; ValueType: string; ValueName: "Version"; ValueData: "{#MyAppVersion}"; Flags: uninsdeletevalue
+Root: HKLM; Subkey: "Software\Snishaper"; ValueType: string; ValueName: "InstallPath"; ValueData: "{app}"; Flags: uninsdeletevalue
+Root: HKLM; Subkey: "Software\Snishaper"; ValueType: string; ValueName: "Publisher"; ValueData: "{#MyAppPublisher}"; Flags: uninsdeletevalue
 
 [Icons]
 Name: "{autoprograms}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"
