@@ -720,10 +720,6 @@ jobs:
             -Channel "${{ inputs.channel }}" `
             -Repository "${{ github.repository }}" `
             -AssetsDir (Join-Path $env:GITHUB_WORKSPACE 'staging')
-          if ($LASTEXITCODE -ne 0) {
-            Write-Host "::error::updater bundle packaging failed"
-            exit 1
-          }
 
       - name: Sign updater manifests
         if: env.UPDATER_SIGNING_READY == 'true'
