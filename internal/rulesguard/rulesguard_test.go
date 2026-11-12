@@ -1,5 +1,5 @@
 // Package rulesguard 存放 rules/config.json 的数据守卫测试：内置规则数据必须
-// 继续覆盖关键下载域名，且 GitHub 资产域名规则的上游保持腾讯反代兜底。
+// 继续覆盖关键下载域名，且 GitHub 资产域名规则走 MITM 直连官方 IP。
 // 匹配语义复用 snishaper-core 导出的 proxy.MatchDomainScore，保证与数据面一致。
 package rulesguard
 
@@ -79,10 +79,10 @@ func TestBuiltinRulesCoverDownloadDomains(t *testing.T) {
 	}
 }
 
-// TestBuiltinGitHubAssetsUseTencentReverseProxy GitHub 资产域名规则经腾讯
-// EdgeOne 反代（106.55.101.131）兜底，实测该反代比直连 Fastly anycast 更稳。
-// 要求这类规则的上游首位必须是腾讯反代。
-func TestBuiltinGitHubAssetsUseTencentReverseProxy(t *testing.T) {
+// TestBuiltinGitHubAssetsUseMITMOfficialIP GitHub 资产域名规则改用官方 IP 直连
+// 并走 MITM，不再经腾讯 EdgeOne 反代（106.55.101.131）。要求这类规则模式为
+// mitm 且上游首位属于官方 IP 列表。
+func TestBuiltinGitHubAssetsUseMITMOfficialIP(t *testing.T) {
 	data, err := os.ReadFile(filepath.Join("..", "..", "rules", "config.json"))
 	if err != nil {
 		t.Skipf("rules/config.json not available: %v", err)
@@ -90,6 +90,17 @@ func TestBuiltinGitHubAssetsUseTencentReverseProxy(t *testing.T) {
 	var cfg proxy.RulesConfig
 	if err := json.Unmarshal(data, &cfg); err != nil {
 		t.Fatalf("parse rules/config.json: %v", err)
+	}
+
+	official := map[string]bool{
+		"20.205.243.168": true,
+		"185.199.110.154": true,
+		"185.199.108.133": true,
+		"140.82.113.18":  true,
+		"140.82.114.17":  true,
+		"20.205.243.165": true,
+		"20.27.177.113":  true,
+		"140.82.113.22":  true,
 	}
 
 	for _, sg := range cfg.SiteGroups {
@@ -107,9 +118,13 @@ func TestBuiltinGitHubAssetsUseTencentReverseProxy(t *testing.T) {
 		if !coversAsset {
 			continue
 		}
+		if sg.Mode != "mitm" {
+			t.Errorf("site group %q covers GitHub asset domains but mode is %q, want mitm", sg.Name, sg.Mode)
+		}
 		first := firstUpstreamCandidate(sg.Upstream)
-		if host, _, err := net.SplitHostPort(first); err != nil || host != "106.55.101.131" {
-			t.Errorf("site group %q covers GitHub asset domains but upstream primary is %q, want Tencent reverse proxy 106.55.101.131",
+		host, _, err := net.SplitHostPort(first)
+		if err != nil || !official[host] {
+			t.Errorf("site group %q covers GitHub asset domains but upstream primary is %q, want official GitHub IP",
 				sg.Name, first)
 		}
 	}
