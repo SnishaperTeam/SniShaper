@@ -34,8 +34,6 @@
 
     [switch]$Wails,
 
-    [switch]$Updater,
-
     [switch]$Help
 )
 
@@ -194,7 +192,6 @@ if (-not $isAdmin) {
     if ($CI)          { $params += "-CI" }
     if ($Cross)       { $params += "-Cross" }
     if ($Wails)       { $params += "-Wails" }
-    if ($Updater)     { $params += "-Updater" }
     $paramStr = $params -join ' '
     Start-Process powershell.exe -Verb RunAs -ArgumentList "-NoProfile -ExecutionPolicy Bypass -File `"$PSCommandPath`" $paramStr"
     exit
@@ -1045,6 +1042,15 @@ function Invoke-BuildTarget {
         }
     }
 
+    # The portable updater always ships next to the application: the
+    # installer, the portable archive and the MSIX package are all built
+    # from this folder, so the updater and its config must live in it too.
+    if ($Target.Type -eq "gui" -and $Target.GoOs -eq "windows") {
+        if (-not (Build-UpdaterPayload -Arch $Target.Arch -GoArch $Target.GoArch -DestDir $outDir)) {
+            return $false
+        }
+    }
+
     # Seed folders:
     # - rules: force-overwrite CONTENTS on every build so rule updates land.
     #   Copy-Item -Recurse against an existing destination would nest the
@@ -1075,67 +1081,74 @@ $updaterAppIds = @{
     'arm64' = '{3F2E4DA1-5C8B-4ECD-BDC4-426A5965F8D6}'
 }
 
-function Invoke-UpdaterBuild {
-    param([string]$Arch)
+function Build-UpdaterPayload {
+    param([string]$Arch, [string]$GoArch, [string]$DestDir)
 
-    $goArch = switch ($Arch) {
-        "x64"   { "amd64" }
-        "x86"   { "386" }
-        "arm64" { "arm64" }
-        default { $null }
-    }
-    if (-not $goArch) {
+    if (-not $updaterAppIds.ContainsKey($Arch)) {
         Write-Host "[UPDATER] unsupported architecture: $Arch" -ForegroundColor Red
         return $false
     }
 
-    $outDir = Join-Path $ProjectRoot "build\bin\updater\Windows\$Arch"
-    $out = Join-Path $outDir "SniShaperUpdater.exe"
-    New-Item -ItemType Directory -Force -Path $outDir | Out-Null
-    Write-Host "[BUILD] UPDATER Windows/$Arch ($goArch) -> build\bin\updater\Windows\$Arch\SniShaperUpdater.exe" -ForegroundColor Green
+    $updaterRoot = Join-Path $ProjectRoot "build\bin\updater\Windows\$Arch"
+    $updaterExe = Join-Path $updaterRoot "SniShaperUpdater.exe"
+    $updaterConfig = Join-Path $updaterRoot "updater.json"
 
-    try {
-        $env:GOOS = "windows"
-        $env:GOARCH = $goArch
-        $env:CGO_ENABLED = "0"
-        go build -trimpath -ldflags="-s -w" -o $out ./updater
-        $rc = $LASTEXITCODE
-    } finally {
-        Remove-Item Env:GOOS, Env:GOARCH, Env:CGO_ENABLED -ErrorAction SilentlyContinue
-    }
-    if ($rc -ne 0 -or -not (Test-Path $out)) {
-        Write-Host "[BUILD] UPDATER FAILED for $Arch" -ForegroundColor Red
-        return $false
-    }
-    $pubKey = ''
-    $seed = $env:UPDATER_ED25519_SEED
-    if ($seed) {
-        $pubOut = Join-Path $outDir 'updater-public-key.txt'
-        & go run ./updater/signmanifest -pub-out $pubOut
-        if ($LASTEXITCODE -eq 0 -and (Test-Path $pubOut)) {
-            $pubKey = (Get-Content -LiteralPath $pubOut -Raw).Trim()
+    if (-not (Test-Path $updaterExe)) {
+        New-Item -ItemType Directory -Force -Path $updaterRoot | Out-Null
+        Write-Host "[BUILD] UPDATER Windows/$Arch ($GoArch) -> build\bin\updater\Windows\$Arch\SniShaperUpdater.exe" -ForegroundColor Green
+        try {
+            $env:GOOS = "windows"
+            $env:GOARCH = $GoArch
+            $env:CGO_ENABLED = "0"
+            go build -trimpath -ldflags="-s -w" -o $updaterExe ./updater
+            $rc = $LASTEXITCODE
+        } finally {
+            Remove-Item Env:GOOS, Env:GOARCH, Env:CGO_ENABLED -ErrorAction SilentlyContinue
         }
+        if ($rc -ne 0 -or -not (Test-Path $updaterExe)) {
+            Write-Host "[BUILD] UPDATER FAILED for $Arch" -ForegroundColor Red
+            return $false
+        }
+    } else {
+        Write-Host "[BUILD] UPDATER Windows/$Arch reused: $updaterExe" -ForegroundColor Green
     }
-    $config = [ordered]@{
-        manifest_url = "https://github.com/SnishaperTeam/SniShaper/releases/latest/download/updater-manifest-$Arch.json"
-        mirror_urls = @()
-        public_key = $pubKey
-        channel = 'stable'
-        arch = $Arch
-        installer_pattern = '*Setup.exe'
-        installer_name = ''
-        process_names = @('snishaper.exe')
-        app_id = $updaterAppIds[$Arch]
-        install_dir = ''
-        local_version = 'auto'
-        verify_authenticode = $false
-        restart_after_install = $false
-        http_timeout_minutes = 30
-        max_retries = 3
-        max_extract_bytes = 1073741824
+
+    if (-not (Test-Path $updaterConfig)) {
+        $pubKey = ''
+        $seed = $env:UPDATER_ED25519_SEED
+        if ($seed) {
+            $pubOut = Join-Path $updaterRoot 'updater-public-key.txt'
+            & go run ./updater/signmanifest -pub-out $pubOut
+            if ($LASTEXITCODE -eq 0 -and (Test-Path $pubOut)) {
+                $pubKey = (Get-Content -LiteralPath $pubOut -Raw).Trim()
+            }
+        }
+        $config = [ordered]@{
+            manifest_url = "https://github.com/SnishaperTeam/SniShaper/releases/latest/download/updater-manifest-$Arch.json"
+            mirror_urls = @()
+            public_key = $pubKey
+            channel = 'stable'
+            arch = $Arch
+            installer_pattern = '*Setup.exe'
+            installer_name = ''
+            process_names = @('snishaper.exe')
+            app_id = $updaterAppIds[$Arch]
+            install_dir = ''
+            local_version = 'auto'
+            verify_authenticode = $false
+            restart_after_install = $false
+            http_timeout_minutes = 30
+            max_retries = 3
+            max_extract_bytes = 1073741824
+        }
+        [System.IO.File]::WriteAllText($updaterConfig, ($config | ConvertTo-Json -Depth 6), [System.Text.UTF8Encoding]::new($false))
     }
-    [System.IO.File]::WriteAllText((Join-Path $outDir 'updater.json'), ($config | ConvertTo-Json -Depth 6), [System.Text.UTF8Encoding]::new($false))
-    Write-Host "[BUILD] UPDATER OK: build\bin\updater\Windows\$Arch\SniShaperUpdater.exe" -ForegroundColor Green
+
+    Copy-Item -LiteralPath $updaterExe -Destination (Join-Path $DestDir 'SniShaperUpdater.exe') -Force
+    if (Test-Path $updaterConfig) {
+        Copy-Item -LiteralPath $updaterConfig -Destination (Join-Path $DestDir 'updater.json') -Force
+    }
+    Write-Host "[BUILD] UPDATER bundled into $DestDir" -ForegroundColor Green
     return $true
 }
 
@@ -1151,24 +1164,6 @@ try {
 } catch {
     Write-Host "[ERROR] Go is not installed or not in PATH." -ForegroundColor Red
     exit 1
-}
-
-if ($Updater) {
-    $updaterArchs = @()
-    if ($Arch) {
-        foreach ($a in $Arch) {
-            $norm = Get-NormalizedArch $a
-            if ($norm -and $norm -ne "all") { $updaterArchs += $norm }
-        }
-    }
-    if ($updaterArchs.Count -eq 0) { $updaterArchs = @("x64", "x86", "arm64") }
-    foreach ($a in @($updaterArchs | Sort-Object -Unique)) {
-        if (-not (Invoke-UpdaterBuild -Arch $a)) { exit 1 }
-    }
-    if (-not $BuildBackend) {
-        Write-Host (msg -Key "AllDone") -ForegroundColor Cyan
-        exit 0
-    }
 }
 
 if (-not $BuildBackend) {

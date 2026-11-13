@@ -336,9 +336,13 @@ Inno Setup 官方 "Setup Exit Codes"：0 成功；1 初始化失败；2 安装�
 
 ## 8. 构建与部署
 
+普通构建即可，不需要任何额外参数：
+
 ```powershell
-.\build_windows.ps1 -Updater -Arch x64,x86,arm64 -Silent
+.\build_windows.ps1 -Build all -Silent
 ```
+
+每个 Windows GUI 目标构建时都会顺带编译对应架构的 `SniShaperUpdater.exe`、生成 `updater.json`，并把两者放进 `build\bin\gui\Windows\<arch>\`。安装包、便携 zip、MSIX 全部由这个目录打包，所以更新器始终与主程序在一起。
 
 单独编译与校验：
 
@@ -364,7 +368,7 @@ CI 侧由 `_release_pipeline.yml` 的 `build-windows` 任务负责三架构编�
 
 `app/app_update_test.go` 断言 `filterUpdateAssets` 排除 `SniShaperUpdater-*.exe` 与 `*-update.zip`，避免 GUI 把更新器或更新包当成安装包下载；`app/app_update_install_windows_test.go` 静态断言安装路径源码里不出现 `powershell`、`cmd`、`tar`、`7z.exe`、`os/exec`。
 
-安装包与便携 zip 都会带上更新器：`create-inno-installer.ps1` 在 `[Files]` 追加对应架构的 `SniShaperUpdater.exe` 与 `updater.json`；CI 的便携 zip 打包步骤把这两个文件放到压缩包根目录（便携用户解压后主程序与更新器同目录，GUI 点更新即直接启动更新器）。配置由 CI 生成（指向 `releases/latest/download/updater-manifest-<arch>.json`、该架构的 `AppId`、签名公钥），本地 `build_windows.ps1 -Updater` 生成同名配置，并在设置了 `UPDATER_ED25519_SEED` 时派生公钥。MSIX 不含更新器：沙箱应用不允许下载并执行未随包签名的可执行文件。
+更新器始终与主程序打包在一起：Windows GUI 构建把 `SniShaperUpdater.exe` 与 `updater.json` 放进 `build\bin\gui\Windows\<arch>\`，Inno 安装包（`Source: "__BINDIR__\*"`）、便携 zip（`CreateFromDirectory`）与 MSIX（`winapp pack`）都从该目录打包，因此三者都自带更新器。配置由 CI 生成（指向 `releases/latest/download/updater-manifest-<arch>.json`、该架构的 `AppId`、签名公钥），本地普通构建生成同名配置，并在设置了 `UPDATER_ED25519_SEED` 时派生公钥。MSIX 里的更新器随包签名，但沙箱应用仍不能在运行时下载并执行新文件，MSIX 的更新由系统商店负责。
 
 ### 8.2 发版公告
 

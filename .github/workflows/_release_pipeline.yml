@@ -509,7 +509,6 @@ jobs:
           Add-Type -AssemblyName System.IO.Compression.FileSystem
           $root = $env:GITHUB_WORKSPACE
           $guiRoot = Join-Path $root 'build/bin/gui/Windows'
-          $updaterRoot = Join-Path $root 'build/bin/updater/Windows'
           $archFileNames = @{
             'x64'   = 'snishaper-windows-amd64.zip'
             'x86'   = 'snishaper-windows-386.zip'
@@ -528,22 +527,6 @@ jobs:
             [System.IO.Compression.ZipFile]::CreateFromDirectory(
               $dir, $archive,
               [System.IO.Compression.CompressionLevel]::Optimal, $false)
-            $updaterDir = Join-Path $updaterRoot $arch
-            $updaterExe = Join-Path $updaterDir 'SniShaperUpdater.exe'
-            $updaterConfig = Join-Path $updaterDir 'updater.json'
-            if (Test-Path $updaterExe) {
-              $zip = [System.IO.Compression.ZipFile]::Open($archive, [System.IO.Compression.ZipArchiveMode]::Update)
-              try {
-                [void][System.IO.Compression.ZipFileExtensions]::CreateEntryFromFile($zip, $updaterExe, 'SniShaperUpdater.exe')
-                if (Test-Path $updaterConfig) {
-                  [void][System.IO.Compression.ZipFileExtensions]::CreateEntryFromFile($zip, $updaterConfig, 'updater.json')
-                }
-              } finally {
-                $zip.Dispose()
-              }
-            } else {
-              Write-Host "::warning::no portable updater for '$arch'; the archive ships without it"
-            }
             Write-Host "::endgroup::"
             $packed += $arch
           }
