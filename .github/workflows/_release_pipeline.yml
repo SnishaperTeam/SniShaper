@@ -295,6 +295,65 @@ jobs:
           go-version-file: go.mod
           cache-dependency-path: go.sum
 
+      - name: Build portable updater
+        shell: pwsh
+        env:
+          UPDATER_PUBLIC_KEY_READY: ${{ secrets.UPDATER_ED25519_SEED != '' }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $root = $env:GITHUB_WORKSPACE
+          $repo = "${{ github.repository }}"
+          $appIds = @{
+            'x64' = '{3F2E4DA1-5C8B-4ECD-BDC4-426A5965F8D4}'
+            'x86' = '{3F2E4DA1-5C8B-4ECD-BDC4-426A5965F8D5}'
+            'arm64' = '{3F2E4DA1-5C8B-4ECD-BDC4-426A5965F8D6}'
+          }
+          $pubKey = ''
+          if ($env:UPDATER_PUBLIC_KEY_READY -eq 'true') {
+            $pubOut = Join-Path $env:TEMP 'snishaper-updater-public-key.txt'
+            & go run ./updater/signmanifest -pub-out $pubOut
+            if ($LASTEXITCODE -ne 0) {
+              Write-Host "::error::cannot derive updater public key"
+              exit 1
+            }
+            $pubKey = (Get-Content -LiteralPath $pubOut -Raw).Trim()
+          }
+          $archMap = @{ 'x64' = 'amd64'; 'x86' = '386'; 'arm64' = 'arm64' }
+          foreach ($a in $archMap.Keys) {
+            $dir = Join-Path $root "build/bin/updater/Windows/$a"
+            New-Item -ItemType Directory -Force -Path $dir | Out-Null
+            $out = Join-Path $dir 'SniShaperUpdater.exe'
+            $env:GOOS = 'windows'
+            $env:CGO_ENABLED = '0'
+            $env:GOARCH = $archMap[$a]
+            & go build -trimpath -ldflags '-s -w' -o $out ./updater
+            if ($LASTEXITCODE -ne 0) {
+              Write-Host "::error::updater build failed for $a"
+              exit 1
+            }
+            $config = [ordered]@{
+              manifest_url = "https://github.com/$repo/releases/latest/download/updater-manifest-$a.json"
+              mirror_urls = @()
+              public_key = $pubKey
+              channel = 'stable'
+              arch = $a
+              installer_pattern = '*Setup.exe'
+              installer_name = ''
+              process_names = @('snishaper.exe')
+              app_id = $appIds[$a]
+              install_dir = ''
+              local_version = 'auto'
+              verify_authenticode = $false
+              restart_after_install = $false
+              http_timeout_minutes = 30
+              max_retries = 3
+              max_extract_bytes = 1073741824
+            }
+            [System.IO.File]::WriteAllText((Join-Path $dir 'updater.json'), ($config | ConvertTo-Json -Depth 6), [System.Text.UTF8Encoding]::new($false))
+            Write-Host "::notice::portable updater built for $a"
+          }
+          Remove-Item Env:GOOS, Env:GOARCH, Env:CGO_ENABLED -ErrorAction SilentlyContinue
+
       - name: Cache Go build cache
         uses: actions/cache@v6
         with:
@@ -687,26 +746,6 @@ jobs:
 
           Write-Host "Staged files:" -ForegroundColor Green
           Get-ChildItem $assetsDir | ForEach-Object { Write-Host "  $($_.Name) ($($_.Length) bytes)" }
-
-      - name: Build portable updater
-        shell: pwsh
-        run: |
-          $ErrorActionPreference = 'Stop'
-          $archMap = @{ 'x64' = 'amd64'; 'x86' = '386'; 'arm64' = 'arm64' }
-          foreach ($a in $archMap.Keys) {
-            $out = Join-Path $env:GITHUB_WORKSPACE "build/bin/updater/Windows/$a/SniShaperUpdater.exe"
-            New-Item -ItemType Directory -Force -Path (Split-Path $out) | Out-Null
-            $env:GOOS = 'windows'
-            $env:CGO_ENABLED = '0'
-            $env:GOARCH = $archMap[$a]
-            & go build -trimpath -ldflags '-s -w' -o $out ./updater
-            if ($LASTEXITCODE -ne 0) {
-              Write-Host "::error::updater build failed for $a"
-              exit 1
-            }
-            Write-Host "::notice::portable updater built for $a"
-          }
-          Remove-Item Env:GOOS, Env:GOARCH, Env:CGO_ENABLED -ErrorAction SilentlyContinue
 
       - name: Package updater bundles
         shell: pwsh
@@ -1243,6 +1282,9 @@ jobs:
     env:
       LLM_CONFIGURED: ${{ secrets.LLM_API_KEY != '' }}
       RELEASE_BOT_READY: ${{ secrets.RELEASE_BOT_APP_ID != '' && secrets.RELEASE_BOT_PRIVATE_KEY != '' }}
+      ANNOUNCEMENT_READY: ${{ secrets.ANNOUNCEMENT_ADMIN_EMAIL != '' && secrets.ANNOUNCEMENT_ADMIN_PASSWORD != '' }}
+      ANNOUNCEMENT_ADMIN_EMAIL: ${{ secrets.ANNOUNCEMENT_ADMIN_EMAIL }}
+      ANNOUNCEMENT_ADMIN_PASSWORD: ${{ secrets.ANNOUNCEMENT_ADMIN_PASSWORD }}
     steps:
       - name: Generate release bot token
         id: bot
@@ -1766,6 +1808,51 @@ jobs:
           }
           Write-Host "::endgroup::"
           Write-Host "::notice::Contributor section taken from GitHub generated notes"
+
+      - name: Publish release announcement
+        if: env.ANNOUNCEMENT_READY == 'true'
+        continue-on-error: true
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $base = 'https://jetcpp.ccwu.cc'
+          $tag = "${{ needs.check.outputs.tag }}"
+          $displayVersion = "${{ needs.check.outputs.display_version }}"
+          $repo = "${{ github.repository }}"
+          $prerelease = "${{ inputs.prerelease }}".ToLowerInvariant()
+          $link = "https://github.com/$repo/releases/tag/$tag"
+          $notesPath = Join-Path $env:GITHUB_WORKSPACE 'staging\RELEASE_NOTES.md'
+          $changes = ''
+          if (Test-Path $notesPath) {
+            $notes = Get-Content -LiteralPath $notesPath -Raw
+            $match = [regex]::Match($notes, '(?s)##\s*Changes\s*\r?\n(.*?)(?=\r?\n##\s|\z)')
+            if ($match.Success) { $changes = $match.Groups[1].Value.Trim() }
+            if (-not $changes) { $changes = $notes.Trim() }
+          }
+          if ($changes.Length -gt 1600) { $changes = $changes.Substring(0, 1600).TrimEnd() + '...' }
+          if (-not $changes) { $changes = "SniShaper v$displayVersion" }
+          $level = if ($prerelease -eq 'true') { 'info' } else { 'important' }
+          $loginJson = @{ email = $env:ANNOUNCEMENT_ADMIN_EMAIL; password = $env:ANNOUNCEMENT_ADMIN_PASSWORD } | ConvertTo-Json -Compress
+          $login = Invoke-RestMethod -Method Post -Uri "$base/api/admin/session" -ContentType 'application/json; charset=utf-8' -Body ([System.Text.Encoding]::UTF8.GetBytes($loginJson)) -TimeoutSec 30
+          if (-not $login.admin -or -not $login.token) { throw 'admin login failed' }
+          $notice = [ordered]@{
+            id = "release-$tag"
+            title = "SniShaper v$displayVersion 发布"
+            title_en = "SniShaper v$displayVersion released"
+            title_ru = "Выпущен SniShaper v$displayVersion"
+            body = "本次更新内容：`n$changes`n`n完整更新日志与下载资产见本次发版页面：$link"
+            body_en = "What's new in this release:`n$changes`n`nFull release notes and downloadable assets: $link"
+            body_ru = "Что нового в этом выпуске:`n$changes`n`nПолные примечания и файлы выпуска: $link"
+            level = $level
+            published_at = (Get-Date).ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ssZ')
+            link = $link
+            link_text = '查看本次发版说明'
+            pinned = $false
+          }
+          $noticeJson = $notice | ConvertTo-Json -Depth 6
+          $response = Invoke-RestMethod -Method Post -Uri "$base/api/notices" -Headers @{ Authorization = "Bearer $($login.token)" } -ContentType 'application/json; charset=utf-8' -Body ([System.Text.Encoding]::UTF8.GetBytes($noticeJson)) -TimeoutSec 30
+          if (-not $response.ok) { throw 'announcement publish failed' }
+          Write-Host "::notice::announcement published for $tag (id release-$tag, link $link)"
 
   # ------------------------------------------------------------------
   # Run-level build summary (Android-CI style job summary): one overview
