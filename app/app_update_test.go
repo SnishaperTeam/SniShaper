@@ -148,3 +148,32 @@ func assetNames(assets []ReleaseAsset) []string {
 	}
 	return names
 }
+
+func TestFilterUpdateAssetsExcludesUpdaterArtifacts(t *testing.T) {
+	if runtime.GOOS != "windows" || runtime.GOARCH != "amd64" || headlessBuild {
+		t.Skip("updater artefact assertion is for the desktop windows/amd64 build")
+	}
+	assets := []githubAsset{
+		{Name: "Snishaper-1.31.0-x64Setup.exe", Size: 1, DownloadURL: "https://example.invalid/setup.exe"},
+		{Name: "SniShaperUpdater-1.31.0-x64.exe", Size: 1, DownloadURL: "https://example.invalid/updater.exe"},
+		{Name: "snishaper-1.31.0-windows-x64-update.zip", Size: 1, DownloadURL: "https://example.invalid/bundle.zip"},
+		{Name: "updater-manifest-x64.json", Size: 1, DownloadURL: "https://example.invalid/manifest.json"},
+		{Name: "snishaper-windows-amd64.zip", Size: 1, DownloadURL: "https://example.invalid/portable.zip"},
+	}
+	got := filterUpdateAssets(assets)
+	for _, asset := range got {
+		lower := strings.ToLower(asset.Name)
+		if strings.HasPrefix(lower, "snishaperupdater-") || strings.HasSuffix(lower, "-update.zip") {
+			t.Errorf("updater artefact leaked into update list: %s", asset.Name)
+		}
+	}
+	want := []string{"Snishaper-1.31.0-x64Setup.exe", "snishaper-windows-amd64.zip"}
+	if len(got) != len(want) {
+		t.Fatalf("unexpected asset count: got %v, want %v", assetNames(got), want)
+	}
+	for i, name := range want {
+		if got[i].Name != name {
+			t.Errorf("asset %d = %s, want %s", i, got[i].Name, name)
+		}
+	}
+}
