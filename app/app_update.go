@@ -553,6 +553,9 @@ func assetMatchesRuntime(lower string) bool {
 	if strings.Contains(lower, "unsigned") || strings.HasPrefix(lower, "dongle.") {
 		return false
 	}
+	if strings.HasPrefix(lower, "snishaperupdater-") || strings.HasSuffix(lower, "-update.zip") {
+		return false
+	}
 	if isCLIAsset(lower) != headlessBuild {
 		return false
 	}
