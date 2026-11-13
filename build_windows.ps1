@@ -1069,6 +1069,12 @@ function Invoke-BuildTarget {
     return $true
 }
 
+$updaterAppIds = @{
+    'x64'   = '{3F2E4DA1-5C8B-4ECD-BDC4-426A5965F8D4}'
+    'x86'   = '{3F2E4DA1-5C8B-4ECD-BDC4-426A5965F8D5}'
+    'arm64' = '{3F2E4DA1-5C8B-4ECD-BDC4-426A5965F8D6}'
+}
+
 function Invoke-UpdaterBuild {
     param([string]$Arch)
 
@@ -1101,6 +1107,34 @@ function Invoke-UpdaterBuild {
         Write-Host "[BUILD] UPDATER FAILED for $Arch" -ForegroundColor Red
         return $false
     }
+    $pubKey = ''
+    $seed = $env:UPDATER_ED25519_SEED
+    if ($seed) {
+        $pubOut = Join-Path $outDir 'updater-public-key.txt'
+        & go run ./updater/signmanifest -pub-out $pubOut
+        if ($LASTEXITCODE -eq 0 -and (Test-Path $pubOut)) {
+            $pubKey = (Get-Content -LiteralPath $pubOut -Raw).Trim()
+        }
+    }
+    $config = [ordered]@{
+        manifest_url = "https://github.com/SnishaperTeam/SniShaper/releases/latest/download/updater-manifest-$Arch.json"
+        mirror_urls = @()
+        public_key = $pubKey
+        channel = 'stable'
+        arch = $Arch
+        installer_pattern = '*Setup.exe'
+        installer_name = ''
+        process_names = @('snishaper.exe')
+        app_id = $updaterAppIds[$Arch]
+        install_dir = ''
+        local_version = 'auto'
+        verify_authenticode = $false
+        restart_after_install = $false
+        http_timeout_minutes = 30
+        max_retries = 3
+        max_extract_bytes = 1073741824
+    }
+    [System.IO.File]::WriteAllText((Join-Path $outDir 'updater.json'), ($config | ConvertTo-Json -Depth 6), [System.Text.UTF8Encoding]::new($false))
     Write-Host "[BUILD] UPDATER OK: build\bin\updater\Windows\$Arch\SniShaperUpdater.exe" -ForegroundColor Green
     return $true
 }

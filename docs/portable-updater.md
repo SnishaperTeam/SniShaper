@@ -364,7 +364,7 @@ CI 侧由 `_release_pipeline.yml` 的 `build-windows` 任务负责三架构编�
 
 `app/app_update_test.go` 断言 `filterUpdateAssets` 排除 `SniShaperUpdater-*.exe` 与 `*-update.zip`，避免 GUI 把更新器或更新包当成安装包下载；`app/app_update_install_windows_test.go` 静态断言安装路径源码里不出现 `powershell`、`cmd`、`tar`、`7z.exe`、`os/exec`。
 
-安装包会带上更新器：`create-inno-installer.ps1` 在 `[Files]` 追加对应架构的 `SniShaperUpdater.exe` 与 `updater.json`（CI 生成的配置，指向 `releases/latest/download/updater-manifest-<arch>.json`、该架构的 `AppId`、签名公钥）。
+安装包与便携 zip 都会带上更新器：`create-inno-installer.ps1` 在 `[Files]` 追加对应架构的 `SniShaperUpdater.exe` 与 `updater.json`；CI 的便携 zip 打包步骤把这两个文件放到压缩包根目录（便携用户解压后主程序与更新器同目录，GUI 点更新即直接启动更新器）。配置由 CI 生成（指向 `releases/latest/download/updater-manifest-<arch>.json`、该架构的 `AppId`、签名公钥），本地 `build_windows.ps1 -Updater` 生成同名配置，并在设置了 `UPDATER_ED25519_SEED` 时派生公钥。MSIX 不含更新器：沙箱应用不允许下载并执行未随包签名的可执行文件。
 
 ### 8.2 发版公告
 
