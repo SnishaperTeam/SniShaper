@@ -115,6 +115,7 @@ Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{
 [Files]
 Source: "__BINDIR__\{#MyAppExeName}"; DestDir: "{app}"; Flags: ignoreversion overwritereadonly restartreplace
 Source: "__BINDIR__\*"; DestDir: "{app}"; Flags: ignoreversion overwritereadonly restartreplace recursesubdirs createallsubdirs
+__UPDATERFILES__
 
 [Registry]
 Root: HKLM; Subkey: "Software\Snishaper"; ValueType: string; ValueName: "Version"; ValueData: "{#MyAppVersion}"; Flags: uninsdeletevalue
@@ -160,6 +161,16 @@ foreach ($entry in $built) {
     $iss = $iss.Replace('__ARCHMODE64__', $archTokens[$setupArch].Mode64)
     $iss = $iss.Replace('__APPID__', $appIds[$setupArch])
     $iss = $iss.Replace('__ZH_LANG__', $zhLangLine)
+
+    $updaterDir = Join-Path $RepoRoot "build/bin/updater/Windows/$setupArch"
+    $updaterFiles = ''
+    if (Test-Path (Join-Path $updaterDir 'SniShaperUpdater.exe')) {
+        $updaterFiles += "Source: `"$updaterDir\SniShaperUpdater.exe`"; DestDir: `"{app}`"; Flags: ignoreversion overwritereadonly restartreplace`n"
+        if (Test-Path (Join-Path $updaterDir 'updater.json')) {
+            $updaterFiles += "Source: `"$updaterDir\updater.json`"; DestDir: `"{app}`"; Flags: ignoreversion overwritereadonly`n"
+        }
+    }
+    $iss = $iss.Replace('__UPDATERFILES__', $updaterFiles)
 
     $issPath = Join-Path $RepoRoot "installer-$setupArch.iss"
     [System.IO.File]::WriteAllText($issPath, $iss, [System.Text.Encoding]::UTF8)

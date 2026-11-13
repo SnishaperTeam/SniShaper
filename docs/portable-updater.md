@@ -351,6 +351,38 @@ go build -trimpath -ldflags "-s -w" -o build/bin/updater/Windows/x64/SniShaperUp
 
 CI 侧由 `_release_pipeline.yml` 的 `build-windows` 任务负责三架构编译、更新包打包、清单生成与可选 Ed25519 签名；发布阶段把新资产（更新器 exe、更新包 zip、清单、签名、公钥）加入资产表、上传 pattern 与下载校验，asset 表新增对应用途说明。
 
+### 8.1 GUI 内置更新路径（无 cmd / pwsh / tar / 7z）
+
+`app/app_update_install_windows.go` 重写后，安装版更新不再生成或启动任何脚本：
+
+| 环节 | 实现 |
+| --- | --- |
+| `InstallUpdateAsset` | 先找同目录 `SniShaperUpdater.exe`；找到就用 `ShellExecuteW("open")` 启动，参数 `-config "<安装目录>\updater.json"` |
+| 没有更新器（旧版本首次升级） | `.exe` 资产回退：`ShellExecuteW("runas")` 正常 UI 启动下载的 Inno 安装包，不传任何静默参数 |
+| `.zip` / `.7z` 资产且没有更新器 | 返回明确错误，提示从发版页手动下载安装包；不再拉起 `cmd /c start powershell` |
+| 主程序退出 | 不主动杀进程：更新器自己做"请保存数据"提示 → `WM_CLOSE` → 必要时询问强制结束 |
+
+`app/app_update_test.go` 断言 `filterUpdateAssets` 排除 `SniShaperUpdater-*.exe` 与 `*-update.zip`，避免 GUI 把更新器或更新包当成安装包下载；`app/app_update_install_windows_test.go` 静态断言安装路径源码里不出现 `powershell`、`cmd`、`tar`、`7z.exe`、`os/exec`。
+
+安装包会带上更新器：`create-inno-installer.ps1` 在 `[Files]` 追加对应架构的 `SniShaperUpdater.exe` 与 `updater.json`（CI 生成的配置，指向 `releases/latest/download/updater-manifest-<arch>.json`、该架构的 `AppId`、签名公钥）。
+
+### 8.2 发版公告
+
+`publish` 任务在 release 创建、资产校验、贡献者列表补齐之后执行 `Publish release announcement`：
+
+1. `POST https://jetcpp.ccwu.cc/api/admin/session`，body `{email, password}`，取回 `token`。
+2. `POST https://jetcpp.ccwu.cc/api/notices`，`Authorization: Bearer <token>`，body 为公告对象。
+3. 公告字段：`id = release-<tag>`（幂等，重复发版替换同一条）、`title` / `title_en` / `title_ru`、`body` / `body_en` / `body_ru`（本次更新内容取自 `RELEASE_NOTES.md` 的 Changes 段，三语各一份）、`level`（正式版 `important`，预发布 `info`）、`published_at`、`link` = 具体 release 页面 `https://github.com/<repo>/releases/tag/<tag>`、`link_text`、`pinned = false`。
+
+凭据走仓库 secret，缺失时整个 step 跳过，发版不受影响：
+
+| Secret | 用途 |
+| --- | --- |
+| `ANNOUNCEMENT_ADMIN_EMAIL` | 公告后台管理员邮箱 |
+| `ANNOUNCEMENT_ADMIN_PASSWORD` | 公告后台管理员密码 |
+| `UPDATER_ED25519_SEED` | 32 字节 Ed25519 私钥种子（base64）；CI 用它签清单并把公钥写进 `updater.json` |
+
+
 部署布局（全部便携，无需安装）：
 
 ```
@@ -393,3 +425,5 @@ updater-work-*/      (运行时生成，成功后删除)
 - 更新器只读注册表（卸载项），不写任何注册表来模拟安装；注册表更新全部由 Inno 脚本完成。
 - 按 `AGENTS.md` 约定，新增 `updater/` 与 `docs/` 文件已同步更新 GitHub Wiki：`Portable-Updater.md`、`EN-Portable-Updater.md` 与 `_Sidebar.md`。
 - CI 签名需要 `UPDATER_ED25519_SEED` secret；未配置时只产出无签名清单，更新器在 `public_key` 为空时以 WARNING 跳过验签，不会拒绝更新。
+- 安装包内的 `updater.json` 指向 `releases/latest/download/...`，即正式版通道；预发布通道用户需把 `manifest_url` 改成对应 release 的资产地址，并同步 `channel`。
+- 公告发布依赖 `ANNOUNCEMENT_ADMIN_EMAIL` / `ANNOUNCEMENT_ADMIN_PASSWORD`；缺失时 CI 跳过该 step，不影响 release 发布。

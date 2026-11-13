@@ -45,6 +45,10 @@ foreach ($setup in Get-ChildItem -Path $installerDir -File -Filter '*Setup.exe')
     try {
         [void][System.IO.Compression.ZipFileExtensions]::CreateEntryFromFile($zip, $setup.FullName, $setup.Name)
         [void][System.IO.Compression.ZipFileExtensions]::CreateEntryFromFile($zip, $updater, 'SniShaperUpdater.exe')
+        $config = Join-Path $updaterRoot "$arch\updater.json"
+        if (Test-Path $config) {
+            [void][System.IO.Compression.ZipFileExtensions]::CreateEntryFromFile($zip, $config, 'updater.json')
+        }
     } finally {
         $zip.Dispose()
     }
