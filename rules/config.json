@@ -601,6 +601,7 @@
       "name": "et.nytimes.com",
       "mode": "mitm",
       "sni_policy": "fake",
+      "sni_fake": "www-nytimes-com",
       "domains": [
         "et.nytimes.com",
         "nyt.com",
