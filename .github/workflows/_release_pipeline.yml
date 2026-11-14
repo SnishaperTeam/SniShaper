@@ -139,10 +139,17 @@ jobs:
             $parts = $pkgVersion.Split('.')
             if ($parts.Count -eq 4 -and $parts[3] -eq '0') {
               $version = ($parts[0..2] -join '.')
+              $identityVersion = "$version.0"
+            } elseif ($parts.Count -eq 4) {
+              # Four part hotfix version (e.g. 1.30.3.1): the build part is
+              # significant, so it is both the release version and the
+              # MSIX identity version as-is.
+              $version = $pkgVersion
+              $identityVersion = $pkgVersion
             } else {
               $version = $pkgVersion
+              $identityVersion = "$version.0"
             }
-            $identityVersion = "$version.0"
           }
 
           $channel = "${{ inputs.channel }}"
