@@ -48,6 +48,8 @@ func TestOverlayTree(t *testing.T) {
 		}
 	}
 	writeDst("snishaper.exe", "old-exe")
+	writeDst("config/settings.json", "user-settings")
+	writeDst("rules/config.json", "user-rules")
 	writeDst("local-notes.txt", "keep-me")
 
 	l := NewLogger(t.TempDir())
@@ -65,11 +67,11 @@ func TestOverlayTree(t *testing.T) {
 	if got := read("snishaper.exe"); got != "new-exe" {
 		t.Errorf("snishaper.exe = %q, want new-exe", got)
 	}
-	if got := read("config/settings.json"); got != "new-settings" {
-		t.Errorf("config/settings.json = %q, want new-settings", got)
+	if got := read("config/settings.json"); got != "user-settings" {
+		t.Errorf("config/settings.json = %q, want user-settings preserved", got)
 	}
-	if got := read("rules/config.json"); got != "new-rules" {
-		t.Errorf("rules/config.json = %q, want new-rules", got)
+	if got := read("rules/config.json"); got != "user-rules" {
+		t.Errorf("rules/config.json = %q, want user-rules preserved", got)
 	}
 	if got := read("local-notes.txt"); got != "keep-me" {
 		t.Errorf("local-notes.txt = %q, want preserved", got)

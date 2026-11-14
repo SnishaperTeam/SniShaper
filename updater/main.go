@@ -365,7 +365,15 @@ func installPortable(cfg Config, payloadRoot, baseDir string, l *Logger) error {
 	return nil
 }
 
-// overlayTree 把 src 下所有文件覆盖到 dst，保留 dst 中 src 未包含的文件。
+// preservedFiles 是覆盖安装时保留用户本地版本的文件（相对路径，小写、
+// 正斜杠）：设置与规则由应用内页面管理，更新程序不覆盖。
+var preservedFiles = map[string]bool{
+	"config/settings.json": true,
+	"rules/config.json":    true,
+}
+
+// overlayTree 把 src 下所有文件覆盖到 dst，保留 dst 中 src 未包含的文件，
+// 以及 preservedFiles 中由用户维护的设置/规则文件。
 // 目标被占用时短暂重试；覆盖到正在运行的更新器自身时先改名让位（运行
 // 中的 exe 可改名不可写），旧文件登记为重启后删除。
 func overlayTree(src, dst string, l *Logger) error {
@@ -379,6 +387,10 @@ func overlayTree(src, dst string, l *Logger) error {
 			return err
 		}
 		target := filepath.Join(dst, rel)
+		if preservedFiles[filepath.ToSlash(strings.ToLower(rel))] {
+			l.Logf("preserved user file: %s", rel)
+			return nil
+		}
 		if d.IsDir() {
 			return os.MkdirAll(target, 0755)
 		}
