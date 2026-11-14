@@ -1809,6 +1809,24 @@ jobs:
           Write-Host "::endgroup::"
           Write-Host "::notice::Contributor section taken from GitHub generated notes"
 
+      - name: Generate localized announcement summaries
+        if: env.ANNOUNCEMENT_READY == 'true'
+        continue-on-error: true
+        shell: pwsh
+        env:
+          LLM_API_KEY: ${{ secrets.LLM_API_KEY }}
+          LLM_MODEL: ${{ secrets.LLM_MODEL }}
+          LLM_BASE_URL: ${{ secrets.LLM_BASE_URL }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $script = Join-Path $env:GITHUB_WORKSPACE '.github/scripts/generate-notice-summaries.ps1'
+          & $script `
+            -ReleaseNotesPath (Join-Path $env:GITHUB_WORKSPACE 'staging\RELEASE_NOTES.md') `
+            -OutputPath (Join-Path $env:GITHUB_WORKSPACE 'staging\notice-summaries.md')
+          if ($LASTEXITCODE -ne 0) {
+            Write-Host "::warning::notice summaries generation failed; the announcement will fall back to the raw changes text"
+          }
+
       - name: Publish release announcement
         if: env.ANNOUNCEMENT_READY == 'true'
         continue-on-error: true
@@ -1821,16 +1839,39 @@ jobs:
           $repo = "${{ github.repository }}"
           $prerelease = "${{ inputs.prerelease }}".ToLowerInvariant()
           $link = "https://github.com/$repo/releases/tag/$tag"
-          $notesPath = Join-Path $env:GITHUB_WORKSPACE 'staging\RELEASE_NOTES.md'
-          $changes = ''
-          if (Test-Path $notesPath) {
-            $notes = Get-Content -LiteralPath $notesPath -Raw
-            $match = [regex]::Match($notes, '(?s)##\s*Changes\s*\r?\n(.*?)(?=\r?\n##\s|\z)')
-            if ($match.Success) { $changes = $match.Groups[1].Value.Trim() }
-            if (-not $changes) { $changes = $notes.Trim() }
+          $summariesPath = Join-Path $env:GITHUB_WORKSPACE 'staging\notice-summaries.md'
+          $body = $null
+          $body_en = $null
+          $body_ru = $null
+          if (Test-Path $summariesPath) {
+            $md = Get-Content -LiteralPath $summariesPath -Raw
+            $zh = [regex]::Match($md, '(?sim)^##\s*zh\s*\r?\n(.*?)(?=\r?\n\s*##\s|\z)').Groups[1].Value.Trim()
+            $en = [regex]::Match($md, '(?sim)^##\s*en\s*\r?\n(.*?)(?=\r?\n\s*##\s|\z)').Groups[1].Value.Trim()
+            $ru = [regex]::Match($md, '(?sim)^##\s*ru\s*\r?\n(.*?)(?=\r?\n\s*##\s|\z)').Groups[1].Value.Trim()
+            if ($zh -and $en -and $ru) {
+              # AI-generated plain-text summaries, one per notice language.
+              $body = "$zh`n`n完整更新日志与下载资产见本次发版页面：$link"
+              $body_en = "$en`n`nFull release notes and downloadable assets: $link"
+              $body_ru = "$ru`n`nПолные примечания и файлы выпуска: $link"
+              Write-Host "::notice::using AI-generated localized announcement summaries"
+            }
           }
-          if ($changes.Length -gt 1600) { $changes = $changes.Substring(0, 1600).TrimEnd() + '...' }
-          if (-not $changes) { $changes = "SniShaper v$displayVersion" }
+          if (-not $body) {
+            $notesPath = Join-Path $env:GITHUB_WORKSPACE 'staging\RELEASE_NOTES.md'
+            $changes = ''
+            if (Test-Path $notesPath) {
+              $notes = Get-Content -LiteralPath $notesPath -Raw
+              $match = [regex]::Match($notes, '(?s)##\s*Changes\s*\r?\n(.*?)(?=\r?\n##\s|\z)')
+              if ($match.Success) { $changes = $match.Groups[1].Value.Trim() }
+              if (-not $changes) { $changes = $notes.Trim() }
+            }
+            if ($changes.Length -gt 1600) { $changes = $changes.Substring(0, 1600).TrimEnd() + '...' }
+            if (-not $changes) { $changes = "SniShaper v$displayVersion" }
+            Write-Host "::notice::AI summaries unavailable, falling back to the raw changes text"
+            $body = "本次更新内容：`n$changes`n`n完整更新日志与下载资产见本次发版页面：$link"
+            $body_en = "What's new in this release:`n$changes`n`nFull release notes and downloadable assets: $link"
+            $body_ru = "Что нового в этом выпуске:`n$changes`n`nПолные примечания и файлы выпуска: $link"
+          }
           $level = if ($prerelease -eq 'true') { 'info' } else { 'important' }
           $loginJson = @{ email = $env:ANNOUNCEMENT_ADMIN_EMAIL; password = $env:ANNOUNCEMENT_ADMIN_PASSWORD } | ConvertTo-Json -Compress
           $login = Invoke-RestMethod -Method Post -Uri "$base/api/admin/session" -ContentType 'application/json; charset=utf-8' -Body ([System.Text.Encoding]::UTF8.GetBytes($loginJson)) -TimeoutSec 30
@@ -1840,9 +1881,9 @@ jobs:
             title = "SniShaper v$displayVersion 发布"
             title_en = "SniShaper v$displayVersion released"
             title_ru = "Выпущен SniShaper v$displayVersion"
-            body = "本次更新内容：`n$changes`n`n完整更新日志与下载资产见本次发版页面：$link"
-            body_en = "What's new in this release:`n$changes`n`nFull release notes and downloadable assets: $link"
-            body_ru = "Что нового в этом выпуске:`n$changes`n`nПолные примечания и файлы выпуска: $link"
+            body = $body
+            body_en = $body_en
+            body_ru = $body_ru
             level = $level
             published_at = (Get-Date).ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ssZ')
             link = $link
