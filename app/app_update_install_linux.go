@@ -16,7 +16,8 @@ import (
 
 // installUpdateAsset dispatches installation of a downloaded update asset
 // based on its file type (Linux-specific formats).
-func (a *App) installUpdateAsset(localPath string) error {
+func (a *App) installUpdateAsset(localPath, expectedSHA string) error {
+	_ = expectedSHA // 包完整性已在 InstallUpdateAsset 中校验；Linux 直解包安装
 	lower := strings.ToLower(localPath)
 	switch {
 	case strings.HasSuffix(lower, ".tar.gz"):

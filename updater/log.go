@@ -48,6 +48,8 @@ func (l *Logger) Logf(format string, args ...any) {
 		_, _ = l.f.WriteString(line)
 		_ = l.f.Sync()
 	}
+	// 更新器按控制台子系统构建：同步回显到控制台，黑框窗口才能看到步骤。
+	_, _ = os.Stdout.WriteString(line)
 }
 
 func (l *Logger) Close() {

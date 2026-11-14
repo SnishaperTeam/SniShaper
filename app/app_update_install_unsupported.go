@@ -9,7 +9,8 @@ import (
 
 // installUpdateAsset has no implementation on this platform: the release has no
 // bundle this app can unpack and replace itself with.
-func (a *App) installUpdateAsset(localPath string) error {
+func (a *App) installUpdateAsset(localPath, expectedSHA string) error {
+	_ = expectedSHA
 	lower := strings.ToLower(localPath)
 	switch {
 	case strings.HasSuffix(lower, ".dmg"), strings.HasSuffix(lower, ".pkg"):

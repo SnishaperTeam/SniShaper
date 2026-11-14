@@ -3,8 +3,6 @@
 package main
 
 import (
-	"context"
-	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
@@ -20,8 +18,6 @@ var (
 	errElevationCancelled = errors.New("elevation declined")
 	errInstallCancelled   = errors.New("installer cancelled")
 	errRestartRequired    = errors.New("restart required")
-	errNoUpdate           = errors.New("no update")
-	errNetwork            = errors.New("network")
 	errIntegrity          = errors.New("integrity")
 	errExtract            = errors.New("extract")
 	errInstall            = errors.New("install")
@@ -29,18 +25,18 @@ var (
 )
 
 type options struct {
-	configPath string
-	resume     string
-	checkOnly  bool
-	force      bool
+	configPath  string
+	packagePath string
+	sha256      string
+	resume      string
 }
 
 func parseOptions() options {
 	var o options
 	flag.StringVar(&o.configPath, "config", "", "")
+	flag.StringVar(&o.packagePath, "package", "", "update package downloaded by the main app")
+	flag.StringVar(&o.sha256, "sha256", "", "expected sha256 of the package")
 	flag.StringVar(&o.resume, "resume", "", "")
-	flag.BoolVar(&o.checkOnly, "check-only", false, "")
-	flag.BoolVar(&o.force, "force", false, "")
 	flag.Parse()
 	return o
 }
@@ -78,21 +74,6 @@ func resolveConfigPath(o options, state *ResumeState, baseDir string) string {
 		return o.configPath
 	}
 	return filepath.Join(baseDir, "updater.json")
-}
-
-func resolvePackageURL(manifestURL, u string) string {
-	lower := strings.ToLower(u)
-	if strings.HasPrefix(lower, "https://") || strings.HasPrefix(lower, "http://") {
-		return u
-	}
-	base := manifestURL
-	if i := strings.Index(base, "?"); i >= 0 {
-		base = base[:i]
-	}
-	if i := strings.LastIndex(base, "/"); i >= 0 {
-		return base[:i+1] + strings.TrimLeft(u, "/")
-	}
-	return u
 }
 
 func isWritable(dir string) bool {
@@ -149,7 +130,7 @@ func findByName(root, name string) string {
 	return found
 }
 
-func maybeRelocate(cfg Config, cfgPath, baseDir string, l *Logger) (bool, error) {
+func maybeRelocate(o options, cfg Config, cfgPath, baseDir string, l *Logger) (bool, error) {
 	exe, err := os.Executable()
 	if err != nil {
 		return false, err
@@ -161,7 +142,7 @@ func maybeRelocate(cfg Config, cfgPath, baseDir string, l *Logger) (bool, error)
 	if installDir == "" || !pathWithin(exe, installDir) {
 		return false, nil
 	}
-	stage, err := os.MkdirTemp(os.TempDir(), "snishaper-updater-")
+	stage, err := os.MkdirTemp(os.TempDir(), "snishaper-updater")
 	if err != nil {
 		return false, err
 	}
@@ -184,16 +165,52 @@ func maybeRelocate(cfg Config, cfgPath, baseDir string, l *Logger) (bool, error)
 	if err := writeResumeState(statePath, s); err != nil {
 		return false, err
 	}
-	if _, err := shellExecute("open", clone, `--resume "`+statePath+`"`, stage, false); err != nil {
+	// 克隆进程必须带上 -package/-sha256：run() 在缺少二者时直接退出，
+	// 且状态文件里不保存它们。
+	params := `--resume "` + statePath + `"`
+	if o.packagePath != "" {
+		params += ` -package "` + o.packagePath + `"`
+	}
+	if o.sha256 != "" {
+		params += ` -sha256 "` + o.sha256 + `"`
+	}
+	if _, err := shellExecute("open", clone, params, stage, false); err != nil {
 		return false, err
 	}
 	l.Logf("relocated updater to %s to avoid locking the install directory", clone)
 	return true, nil
 }
 
+const stagedUpdaterName = "SniShaperUpdater.exe"
+
+// scheduleUpdaterSelfUpdate 把解压目录里的新版更新器登记为下次重启时替换
+// 当前更新器。整包 sha256 已由 -sha256 校验通过，包内文件无需再单独校验。
+func scheduleUpdaterSelfUpdate(stage, baseDir string, l *Logger) {
+	staged := findByName(stage, stagedUpdaterName)
+	if staged == "" {
+		return
+	}
+	currentExe, err := os.Executable()
+	if err != nil {
+		return
+	}
+	pending := filepath.Join(baseDir, "updater.pending.exe")
+	if err := copyFile(staged, pending); err != nil {
+		l.Logf("WARNING: staged updater copy failed: %v", err)
+		return
+	}
+	if err := scheduleReplacement(pending, currentExe); err != nil {
+		l.Logf("WARNING: delayed self-replacement not registered: %v", err)
+		return
+	}
+	l.Logf("updater self-replacement scheduled for next reboot")
+}
+
+// execute 校验并安装主程序已下载好的更新包。更新器自身不发起任何网络
+// 请求：下载、镜像选择、版本判断都由主程序完成。
 func execute(o options, state *ResumeState, cfg Config, cfgPath, baseDir string, l *Logger) error {
 	if o.resume == "" {
-		relocated, err := maybeRelocate(cfg, cfgPath, baseDir, l)
+		relocated, err := maybeRelocate(o, cfg, cfgPath, baseDir, l)
 		if err != nil {
 			return err
 		}
@@ -205,48 +222,7 @@ func execute(o options, state *ResumeState, cfg Config, cfgPath, baseDir string,
 	if state != nil && state.InstallDir != "" {
 		installed.Dir = state.InstallDir
 	}
-	local := localVersion(cfg, baseDir, installed)
-	l.Logf("arch=%s channel=%s local=%s install_dir=%s", resolveArch(cfg), cfg.Channel, local, installed.Dir)
-
-	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(cfg.HTTPTimeoutMinutes*2)*time.Minute)
-	defer cancel()
-	h := newHTTPClient(cfg, l)
-	body, err := h.get(ctx, cfg.ManifestURL, 4<<20)
-	if err != nil {
-		return fmt.Errorf("%w: manifest download: %v", errNetwork, err)
-	}
-	if cfg.PublicKey != "" {
-		sig, sigErr := h.get(ctx, cfg.ManifestURL+".sig", 4096)
-		if sigErr != nil {
-			return fmt.Errorf("%w: manifest signature download: %v", errIntegrity, sigErr)
-		}
-		if err := verifyManifestSignature(body, string(sig), cfg.PublicKey); err != nil {
-			return fmt.Errorf("%w: %v", errIntegrity, err)
-		}
-		l.Logf("manifest Ed25519 signature verified")
-	} else {
-		l.Logf("WARNING: public_key empty, manifest signature check skipped")
-	}
-	var m Manifest
-	if err := json.Unmarshal(body, &m); err != nil {
-		return fmt.Errorf("%w: invalid manifest: %v", errConfig, err)
-	}
-	if m.Version == "" || m.Package.URL == "" || m.Package.SHA256 == "" {
-		return fmt.Errorf("%w: manifest missing version/package url/sha256", errConfig)
-	}
-	if cfg.Channel != "" && m.Channel != "" && !strings.EqualFold(cfg.Channel, m.Channel) {
-		l.Logf("manifest channel %s does not match configured %s", m.Channel, cfg.Channel)
-		return errNoUpdate
-	}
-	if compareVersions(local, m.Version) >= 0 && !o.force {
-		l.Logf("already up to date: local %s >= remote %s", local, m.Version)
-		return errNoUpdate
-	}
-	l.Logf("update available: %s -> %s", local, m.Version)
-	if o.checkOnly {
-		showInfo("发现新版本 " + m.Version + "。运行更新器（不带 -check-only）即可安装。")
-		return nil
-	}
+	l.Logf("arch=%s install_dir=%s package=%s", resolveArch(cfg), installed.Dir, o.packagePath)
 
 	workDir, err := makeWorkDir(baseDir, state)
 	if err != nil {
@@ -254,63 +230,70 @@ func execute(o options, state *ResumeState, cfg Config, cfgPath, baseDir string,
 	}
 	l.Logf("work directory: %s", workDir)
 
-	pkgPath := filepath.Join(workDir, safeFileName(m.Package.Name))
-	if err := h.download(ctx, resolvePackageURL(cfg.ManifestURL, m.Package.URL), pkgPath, m.Package.Size); err != nil {
-		return fmt.Errorf("%w: package download: %v", errNetwork, err)
-	}
-	if err := verifyFileSHA256(pkgPath, m.Package.SHA256); err != nil {
+	if err := verifyFileSHA256(o.packagePath, o.sha256); err != nil {
 		return fmt.Errorf("%w: %v", errIntegrity, err)
 	}
 	l.Logf("package sha256 verified")
 
-	stage := filepath.Join(workDir, "stage")
-	if err := extractZip(pkgPath, stage, cfg.MaxExtractBytes, 10000); err != nil {
-		return fmt.Errorf("%w: %v", errExtract, err)
-	}
-	if m.Installer.Name != "" {
-		cfg.InstallerName = m.Installer.Name
-	}
-	setupPath, err := findInstaller(stage, cfg)
-	if err != nil {
-		return fmt.Errorf("%w: %v", errExtract, err)
-	}
-	l.Logf("installer located: %s", setupPath)
-	if m.Installer.SHA256 != "" {
-		if err := verifyFileSHA256(setupPath, m.Installer.SHA256); err != nil {
-			return fmt.Errorf("%w: %v", errIntegrity, err)
+	setupPath := o.packagePath
+	portableRoot := ""
+	if !strings.EqualFold(filepath.Ext(o.packagePath), ".exe") {
+		stage := filepath.Join(workDir, "stage")
+		if err := extractZip(o.packagePath, stage, cfg.MaxExtractBytes, 10000); err != nil {
+			return fmt.Errorf("%w: %v", errExtract, err)
 		}
-		l.Logf("installer sha256 verified")
+		setupPath, err = findInstaller(stage, cfg)
+		if err != nil {
+			// 无安装器的扁平便携包：走与主程序 Linux 自更新一致的
+			// 结束进程 + 原地覆盖流程。
+			portableRoot = findPayloadRoot(stage)
+			if portableRoot == "" {
+				return fmt.Errorf("%w: %v", errExtract, err)
+			}
+			l.Logf("portable application payload located: %s", portableRoot)
+		} else {
+			l.Logf("installer located: %s", setupPath)
+			scheduleUpdaterSelfUpdate(stage, baseDir, l)
+		}
 	}
+
+	if portableRoot != "" {
+		if err := installPortable(cfg, portableRoot, baseDir, l); err != nil {
+			return err
+		}
+	} else {
+		if err := runInstallerFlow(cfg, setupPath, installed, l); err != nil {
+			return err
+		}
+	}
+
+	if err := os.RemoveAll(workDir); err != nil {
+		l.Logf("WARNING: cleanup failed for %s: %v", workDir, err)
+	} else {
+		l.Logf("temporary files removed")
+	}
+	if state != nil {
+		if exe, err := os.Executable(); err == nil {
+			if err := scheduleDeletion(exe); err != nil {
+				l.Logf("WARNING: cannot schedule updater clone cleanup: %v", err)
+			} else {
+				l.Logf("updater clone scheduled for deletion on next reboot")
+			}
+		}
+		if o.resume != "" {
+			_ = os.Remove(o.resume)
+		}
+	}
+	return nil
+}
+
+// runInstallerFlow 是带安装器（Inno Setup）的安装路径。
+func runInstallerFlow(cfg Config, setupPath string, installed installedInfo, l *Logger) error {
 	if cfg.VerifyAuthenticode {
 		if err := verifyAuthenticode(setupPath); err != nil {
 			return fmt.Errorf("%w: %v", errIntegrity, err)
 		}
 		l.Logf("installer Authenticode signature verified")
-	}
-
-	if m.Updater.Name != "" {
-		stagedUpdater := findByName(stage, m.Updater.Name)
-		if stagedUpdater == "" {
-			l.Logf("WARNING: staged updater %q not found, self-update skipped", m.Updater.Name)
-		} else if m.Updater.SHA256 == "" {
-			l.Logf("WARNING: staged updater has no sha256, self-update skipped")
-		} else if err := verifyFileSHA256(stagedUpdater, m.Updater.SHA256); err != nil {
-			return fmt.Errorf("%w: %v", errIntegrity, err)
-		} else {
-			currentExe, err := os.Executable()
-			if err != nil {
-				return err
-			}
-			pending := filepath.Join(baseDir, "updater.pending.exe")
-			if err := copyFile(stagedUpdater, pending); err != nil {
-				return err
-			}
-			if err := scheduleReplacement(pending, currentExe); err != nil {
-				l.Logf("WARNING: delayed self-replacement not registered: %v", err)
-			} else {
-				l.Logf("updater self-replacement scheduled for next reboot")
-			}
-		}
 	}
 
 	if err := closeProcesses(cfg, installed.Dir, l); err != nil {
@@ -337,13 +320,9 @@ func execute(o options, state *ResumeState, cfg Config, cfgPath, baseDir string,
 	}
 
 	post := readInstalled(cfg)
-	if post.Version != "" && !versionEqual(post.Version, m.Version) {
-		l.Logf("WARNING: registry DisplayVersion=%s, manifest version=%s", post.Version, m.Version)
-	} else {
-		l.Logf("registry version verified: %s (dir %s)", post.Version, post.Dir)
-	}
+	l.Logf("installed version %s (dir %s)", post.Version, post.Dir)
 	if cfg.RestartAfter && post.Dir != "" {
-		exePath := filepath.Join(post.Dir, "snishaper.exe")
+		exePath := filepath.Join(post.Dir, appExeName)
 		if _, err := os.Stat(exePath); err == nil {
 			if _, err := shellExecute("open", exePath, "", post.Dir, false); err != nil {
 				l.Logf("WARNING: relaunch failed: %v", err)
@@ -352,24 +331,76 @@ func execute(o options, state *ResumeState, cfg Config, cfgPath, baseDir string,
 			}
 		}
 	}
-	if err := os.RemoveAll(workDir); err != nil {
-		l.Logf("WARNING: cleanup failed for %s: %v", workDir, err)
-	} else {
-		l.Logf("temporary files removed")
+	return nil
+}
+
+const appExeName = "snishaper.exe"
+
+// findPayloadRoot 返回包内应用主程序所在目录；扁平便携包即解压根目录。
+func findPayloadRoot(root string) string {
+	if p := findByName(root, appExeName); p != "" {
+		return filepath.Dir(p)
 	}
-	if state != nil {
-		if exe, err := os.Executable(); err == nil {
-			if err := scheduleDeletion(exe); err != nil {
-				l.Logf("WARNING: cannot schedule updater clone cleanup: %v", err)
-			} else {
-				l.Logf("updater clone scheduled for deletion on next reboot")
-			}
-		}
-		if o.resume != "" {
-			_ = os.Remove(o.resume)
+	return ""
+}
+
+// installPortable 与主程序 Linux 自更新同款流程：结束应用进程后把已
+// 通过整包 sha256 校验的负载原样覆盖到应用目录，再重新拉起主程序。
+func installPortable(cfg Config, payloadRoot, baseDir string, l *Logger) error {
+	if err := closeProcesses(cfg, "", l); err != nil {
+		return err
+	}
+	if err := overlayTree(payloadRoot, baseDir, l); err != nil {
+		return fmt.Errorf("%w: %v", errInstall, err)
+	}
+	l.Logf("application directory updated: %s", baseDir)
+	exePath := filepath.Join(baseDir, appExeName)
+	if _, err := os.Stat(exePath); err == nil {
+		if _, err := shellExecute("open", exePath, "", baseDir, false); err != nil {
+			l.Logf("WARNING: relaunch failed: %v", err)
+		} else {
+			l.Logf("relaunched %s", exePath)
 		}
 	}
 	return nil
+}
+
+// overlayTree 把 src 下所有文件覆盖到 dst，保留 dst 中 src 未包含的文件。
+// 目标被占用时短暂重试；覆盖到正在运行的更新器自身时先改名让位（运行
+// 中的 exe 可改名不可写），旧文件登记为重启后删除。
+func overlayTree(src, dst string, l *Logger) error {
+	self, _ := os.Executable()
+	return filepath.WalkDir(src, func(p string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		rel, err := filepath.Rel(src, p)
+		if err != nil {
+			return err
+		}
+		target := filepath.Join(dst, rel)
+		if d.IsDir() {
+			return os.MkdirAll(target, 0755)
+		}
+		if self != "" && strings.EqualFold(target, self) {
+			if err := os.Rename(self, self+".old"); err != nil {
+				return fmt.Errorf("rename running updater: %w", err)
+			}
+			if err := scheduleDeletion(self + ".old"); err != nil {
+				l.Logf("WARNING: cannot schedule removal of %s: %v", self+".old", err)
+			}
+			l.Logf("renamed running updater for self-replacement")
+		}
+		var cerr error
+		for i := 0; i < 5; i++ {
+			cerr = copyFile(p, target)
+			if cerr == nil {
+				return nil
+			}
+			time.Sleep(300 * time.Millisecond)
+		}
+		return fmt.Errorf("copy %s: %w", rel, cerr)
+	})
 }
 
 func exitCode(err error) int {
@@ -380,8 +411,6 @@ func exitCode(err error) int {
 		return 14
 	case errors.Is(err, errRestartRequired):
 		return 17
-	case errors.Is(err, errNetwork):
-		return 10
 	case errors.Is(err, errIntegrity):
 		return 11
 	case errors.Is(err, errExtract):
@@ -397,6 +426,10 @@ func exitCode(err error) int {
 
 func run() int {
 	o := parseOptions()
+	if o.packagePath == "" || o.sha256 == "" {
+		showInfo("更新器不负责下载更新。\n请在 SniShaper 主程序里检查并下载更新，再由主程序发起安装。")
+		return 2
+	}
 	var state *ResumeState
 	if o.resume != "" {
 		s, err := loadResumeState(o.resume)
@@ -413,7 +446,7 @@ func run() int {
 	}
 	l := NewLogger(logDir)
 	defer l.Close()
-	l.Logf("=== updater start pid=%d resume=%t ===", os.Getpid(), o.resume != "")
+	l.Logf("=== updater start pid=%d resume=%t package=%s ===", os.Getpid(), o.resume != "", o.packagePath)
 	cfgPath := resolveConfigPath(o, state, baseDir)
 	cfg, err := loadConfig(cfgPath)
 	if err != nil {
@@ -424,10 +457,6 @@ func run() int {
 	err = execute(o, state, cfg, cfgPath, baseDir, l)
 	if err == nil {
 		l.Logf("=== updater finished ===")
-		return 0
-	}
-	if errors.Is(err, errNoUpdate) {
-		l.Logf("=== no update ===")
 		return 0
 	}
 	l.Logf("FAILED: %v (work directory retained)", err)

@@ -23,13 +23,16 @@ var (
 	procShellExecuteW = modShell32.NewProc("ShellExecuteW")
 )
 
-func (a *App) installUpdateAsset(localPath string) error {
+// installUpdateAsset hands the already-downloaded, hash-verified update
+// package to the portable updater via -package/-sha256. The updater does no
+// downloading itself.
+func (a *App) installUpdateAsset(localPath, expectedSHA string) error {
 	updaterExe, err := portableUpdaterPath()
 	if err != nil {
 		return err
 	}
 	if updaterExe != "" {
-		return a.launchPortableUpdater(updaterExe)
+		return a.launchPortableUpdater(updaterExe, localPath, expectedSHA)
 	}
 	if message := archiveInstallError(localPath); message != "" {
 		return fmt.Errorf("%s", message)
@@ -60,16 +63,20 @@ func portableUpdaterInDir(dir string) string {
 	return ""
 }
 
-func updaterArgs(configPath string) string {
-	return `-config "` + configPath + `"`
+func updaterArgs(configPath, packagePath, sha256 string) string {
+	args := fmt.Sprintf(`-package "%s" -sha256 "%s"`, packagePath, sha256)
+	if configPath != "" {
+		args = fmt.Sprintf(`-config "%s" %s`, configPath, args)
+	}
+	return args
 }
 
-func (a *App) launchPortableUpdater(exe string) error {
+func (a *App) launchPortableUpdater(exe, packagePath, sha256 string) error {
 	dir := filepath.Dir(exe)
 	config := filepath.Join(dir, portableUpdaterConfig)
-	params := ""
+	params := updaterArgs("", packagePath, sha256)
 	if _, err := os.Stat(config); err == nil {
-		params = updaterArgs(config)
+		params = updaterArgs(config, packagePath, sha256)
 	}
 	a.appendLog("[update] Launching portable updater: " + exe)
 	return shellExecute("open", exe, params, dir)
