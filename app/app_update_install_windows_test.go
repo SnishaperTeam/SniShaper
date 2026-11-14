@@ -35,10 +35,15 @@ func TestPortableUpdaterInDir(t *testing.T) {
 }
 
 func TestUpdaterArgs(t *testing.T) {
-	got := updaterArgs(`C:\Program Files\Snishaper\updater.json`)
-	want := `-config "C:\Program Files\Snishaper\updater.json"`
+	got := updaterArgs(`C:\Program Files\Snishaper\updater.json`, `C:\Temp\Snishaper-Setup.exe`, "abc123")
+	want := `-config "C:\Program Files\Snishaper\updater.json" -package "C:\Temp\Snishaper-Setup.exe" -sha256 "abc123"`
 	if got != want {
 		t.Fatalf("updaterArgs = %s, want %s", got, want)
+	}
+	got = updaterArgs("", `C:\Temp\update.zip`, "abc123")
+	want = `-package "C:\Temp\update.zip" -sha256 "abc123"`
+	if got != want {
+		t.Fatalf("updaterArgs without config = %s, want %s", got, want)
 	}
 }
 

@@ -3,9 +3,7 @@
 package main
 
 import (
-	"crypto/ed25519"
 	"crypto/sha256"
-	"encoding/base64"
 	"encoding/hex"
 	"fmt"
 	"io"
@@ -40,35 +38,6 @@ func verifyFileSHA256(path, want string) error {
 	}
 	if !strings.EqualFold(got, want) {
 		return fmt.Errorf("sha256 mismatch for %s: got %s, want %s", path, got, want)
-	}
-	return nil
-}
-
-func decodePublicKey(s string) (ed25519.PublicKey, error) {
-	b, err := base64.StdEncoding.DecodeString(strings.TrimSpace(s))
-	if err != nil {
-		return nil, fmt.Errorf("invalid public key: %w", err)
-	}
-	if len(b) != ed25519.PublicKeySize {
-		return nil, fmt.Errorf("invalid public key length %d", len(b))
-	}
-	return ed25519.PublicKey(b), nil
-}
-
-func verifyManifestSignature(body []byte, sigText, pubB64 string) error {
-	pub, err := decodePublicKey(pubB64)
-	if err != nil {
-		return err
-	}
-	sig := []byte(sigText)
-	if decoded, err := base64.StdEncoding.DecodeString(strings.TrimSpace(sigText)); err == nil && len(decoded) == ed25519.SignatureSize {
-		sig = decoded
-	}
-	if len(sig) != ed25519.SignatureSize {
-		return fmt.Errorf("invalid manifest signature length %d", len(sig))
-	}
-	if !ed25519.Verify(pub, body, sig) {
-		return fmt.Errorf("manifest signature verification failed")
 	}
 	return nil
 }
