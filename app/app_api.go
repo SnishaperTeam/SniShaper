@@ -22,6 +22,7 @@ import (
 
 	"snishaper/common"
 	"snishaper/core"
+	"snishaper/pkg/sysproxy"
 	"github.com/SnishaperTeam/snishaper-core/certmanager"
 	"github.com/SnishaperTeam/snishaper-core/cfpool"
 	"github.com/SnishaperTeam/snishaper-core/dohresolver"
@@ -1565,7 +1566,10 @@ func (a *App) TestMigration(server string) (string, error) {
 	apiURL := fmt.Sprintf("%s?target=%s&ip=1.1.1.1", server, testTarget)
 	a.appendLog(fmt.Sprintf("[Migration] GET %s", apiURL))
 
-	httpClient := &http.Client{Timeout: 15 * time.Second}
+	httpClient := &http.Client{
+		Timeout:   15 * time.Second,
+		Transport: &http.Transport{Proxy: sysproxy.UpstreamProxyFunc()},
+	}
 	req, err := http.NewRequest(http.MethodGet, apiURL, nil)
 	if err != nil {
 		return "", err

@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/SnishaperTeam/snishaper-core/proxy"
+	"snishaper/pkg/sysproxy"
 )
 
 const rulesRemoteURL = "https://raw.githubusercontent.com/" + githubRepo + "/main/rules/config.json"
@@ -166,6 +167,7 @@ func (a *App) fetchOfficialRulesBlobSHA() (string, error) {
 	client := &http.Client{
 		Timeout: 8 * time.Second,
 		Transport: &http.Transport{
+			Proxy:           sysproxy.UpstreamProxyFunc(),
 			TLSClientConfig: &tls.Config{MinVersion: tls.VersionTLS12},
 		},
 	}
@@ -208,6 +210,7 @@ func (a *App) fetchRemoteRulesUpdatedAt() string {
 	client := &http.Client{
 		Timeout: 8 * time.Second,
 		Transport: &http.Transport{
+			Proxy:           sysproxy.UpstreamProxyFunc(),
 			TLSClientConfig: &tls.Config{MinVersion: tls.VersionTLS12},
 		},
 	}
@@ -250,6 +253,7 @@ func (a *App) rulesFetchCandidates() []rulesFetchCandidate {
 	direct := &http.Client{
 		Timeout: 12 * time.Second,
 		Transport: &http.Transport{
+			Proxy:           sysproxy.UpstreamProxyFunc(),
 			TLSClientConfig: &tls.Config{MinVersion: tls.VersionTLS12},
 		},
 	}

@@ -10,7 +10,7 @@ func TestFetchNoticesLive(t *testing.T) {
 		t.Skip("set SNISHAPER_LIVE_NOTICE_TEST=1 to run")
 	}
 	a := &App{}
-	source := noticeSource{name: "live", url: noticesEndpoint, proxy: os.Getenv("SNISHAPER_NOTICE_TEST_PROXY")}
+	source := noticeSource{name: "live", url: noticesEndpoint, direct: os.Getenv("SNISHAPER_NOTICE_TEST_DIRECT") == "1"}
 	payload, err := a.fetchNoticeSource(source)
 	if err != nil {
 		t.Fatalf("live fetch failed: %v", err)

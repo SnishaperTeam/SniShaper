@@ -7,11 +7,12 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
 	"time"
+
+	"snishaper/pkg/sysproxy"
 )
 
 const (
@@ -50,9 +51,9 @@ type NoticesPayload struct {
 }
 
 type noticeSource struct {
-	name  string
-	url   string
-	proxy string
+	name   string
+	url    string
+	direct bool // 不走系统代理
 }
 
 func (a *App) GetNotices(force bool) (*NoticesPayload, error) {
@@ -99,37 +100,12 @@ func (a *App) cachedNoticesSnapshot() *NoticesPayload {
 	return a.loadNoticesCache()
 }
 
-func (a *App) localProxyURL() string {
-	if a.core == nil && a.proxyServer == nil {
-		return ""
-	}
-	running := false
-	if a.core != nil {
-		running = a.core.IsProxyRunning()
-	} else if a.proxyServer != nil {
-		running = a.proxyServer.IsRunning()
-	}
-	if !running {
-		return ""
-	}
-	port := 8080
-	if a.ruleManager != nil {
-		port = a.GetListenPort()
-	}
-	if port <= 0 {
-		return ""
-	}
-	return fmt.Sprintf("http://127.0.0.1:%d", port)
-}
-
 func (a *App) noticeSources() []noticeSource {
-	sources := make([]noticeSource, 0, 3)
-	if proxy := a.localProxyURL(); proxy != "" {
-		sources = append(sources, noticeSource{name: "local-proxy", url: noticesEndpoint, proxy: proxy})
+	return []noticeSource{
+		{name: "system-proxy", url: noticesEndpoint},
+		{name: "direct", url: noticesEndpoint, direct: true},
+		{name: "mirror", url: noticesMirrorEndpoint},
 	}
-	sources = append(sources, noticeSource{name: "direct", url: noticesEndpoint})
-	sources = append(sources, noticeSource{name: "mirror", url: noticesMirrorEndpoint})
-	return sources
 }
 
 func (a *App) fetchNotices() (*NoticesPayload, error) {
@@ -154,12 +130,8 @@ func (a *App) fetchNoticeSource(source noticeSource) (*NoticesPayload, error) {
 		TLSHandshakeTimeout: 6 * time.Second,
 		ForceAttemptHTTP2:   true,
 	}
-	if source.proxy != "" {
-		proxyURL, err := url.Parse(source.proxy)
-		if err != nil {
-			return nil, err
-		}
-		transport.Proxy = http.ProxyURL(proxyURL)
+	if !source.direct {
+		transport.Proxy = sysproxy.UpstreamProxyFunc()
 	}
 	client := &http.Client{Timeout: noticesTimeout, Transport: transport}
 	defer transport.CloseIdleConnections()
