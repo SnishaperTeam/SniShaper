@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"encoding/xml"
 	"fmt"
 	"io"
 	"net"
@@ -18,6 +19,8 @@ import (
 	"time"
 
 	"github.com/admpub/go-download/v2"
+
+	"snishaper/pkg/sysproxy"
 )
 
 const (
@@ -188,7 +191,10 @@ func measureSourceLatency(name, prefix, probe string) DownloadSourceStatus {
 		target = prefix + probe
 	}
 	st := DownloadSourceStatus{Name: name, URL: target}
-	client := &http.Client{Timeout: 5 * time.Second}
+	client := &http.Client{
+		Timeout:   5 * time.Second,
+		Transport: &http.Transport{Proxy: sysproxy.UpstreamProxyFunc()},
+	}
 	start := time.Now()
 	req, err := http.NewRequest(http.MethodHead, target, nil)
 	if err != nil {
@@ -337,6 +343,30 @@ func (a *App) GetCurrentVersionFull() string {
 
 func (a *App) CheckUpdate() CheckUpdateResult {
 	channel := a.GetUpdateChannel()
+	// 免限流快路径：releases.atom 是 github.com 网页端点，不占 REST API
+	// 60 次/小时的配额。日常检查在「已是最新」时不再触发任何 API 请求。
+	if tags, err := fetchRecentReleaseTags(); err == nil {
+		if rel := resolveChannelRelease(atomReleases(tags), channel); rel != nil {
+			latestVersion := strings.TrimPrefix(rel.TagName, "v")
+			switch compareReleaseVersions(a.GetCurrentVersionFull(), a.GetReleaseChannel(), latestVersion, channelFromTag(rel.TagName)) {
+			case 0:
+				return CheckUpdateResult{
+					HasUpdate:     false,
+					LatestVersion: latestVersion,
+					Channel:       channel,
+					Message:       "up_to_date",
+				}
+			case 1:
+				return CheckUpdateResult{
+					HasUpdate:     false,
+					LatestVersion: latestVersion,
+					Channel:       channel,
+					Message:       "dev_version",
+				}
+			}
+			// case -1：有新版本，继续走 API 拿完整发布信息与资产列表。
+		}
+	}
 	releases, err := a.fetchGitHubReleases()
 	if err != nil {
 		a.appendLog("[update] Failed to fetch releases: " + err.Error())
@@ -397,15 +427,55 @@ func (a *App) CheckUpdate() CheckUpdateResult {
 
 func (a *App) fetchGitHubReleases() ([]githubRelease, error) {
 	apiURL := githubAPIBase + "/releases?per_page=100"
-	// Official API first; the mirror is only a fallback for listing releases.
+	// Official API first; mirrors are only a fallback for listing releases.
 	releases, err := fetchReleasesFromURL(apiURL)
 	if err == nil {
 		return releases, nil
 	}
-	if mirrorReleases, mirrorErr := fetchReleasesFromURL(githubProxyBase + apiURL); mirrorErr == nil {
+	if mirrorReleases := fetchReleasesFromMirrors(mirrorAPIPrefixes(), apiURL); len(mirrorReleases) > 0 {
 		return mirrorReleases, nil
 	}
 	return nil, err
+}
+
+// mirrorAPIPrefixes lists the gh-proxy prefixes tried when the official API is
+// unreachable. Every one of them can proxy api.github.com requests.
+func mirrorAPIPrefixes() []string {
+	prefixes := []string{githubProxyBase}
+	for _, name := range downloadSourceOrder {
+		if u, ok := downloadSources[name]; ok && u != "" {
+			prefixes = append(prefixes, u)
+		}
+	}
+	return prefixes
+}
+
+// fetchReleasesFromMirrors races the mirror prefixes in parallel and returns
+// the first successful response, so one dead or rate-limited mirror no longer
+// blocks the version check.
+//
+// Deliberately NO cache-bust query param: on the gh-proxy family a changed
+// query string makes Cloudflare BYPASS its cache and hit their backend, whose
+// shared GitHub token is rate-limited (403). The plain URL stays cache-hit
+// eligible, which is also the faster path.
+func fetchReleasesFromMirrors(prefixes []string, apiURL string) []githubRelease {
+	type outcome struct {
+		releases []githubRelease
+		ok       bool
+	}
+	ch := make(chan outcome, len(prefixes))
+	for _, prefix := range prefixes {
+		go func(p string) {
+			releases, err := fetchReleasesFromURL(p + apiURL)
+			ch <- outcome{releases, err == nil}
+		}(prefix)
+	}
+	for range prefixes {
+		if o := <-ch; o.ok {
+			return o.releases
+		}
+	}
+	return nil
 }
 
 func fetchReleasesFromURL(apiURL string) ([]githubRelease, error) {
@@ -415,7 +485,10 @@ func fetchReleasesFromURL(apiURL string) ([]githubRelease, error) {
 	}
 	req.Header.Set("User-Agent", updateUserAgent)
 	req.Header.Set("Accept", "application/vnd.github+json")
-	client := &http.Client{Timeout: 20 * time.Second}
+	client := &http.Client{
+		Timeout:   20 * time.Second,
+		Transport: &http.Transport{Proxy: sysproxy.UpstreamProxyFunc()},
+	}
 	resp, err := client.Do(req)
 	if err != nil {
 		return nil, err
@@ -438,6 +511,79 @@ func fetchReleasesFromURL(apiURL string) ([]githubRelease, error) {
 		return nil, err
 	}
 	return releases, nil
+}
+
+const githubReleasesAtom = "https://github.com/" + githubRepo + "/releases.atom"
+
+// releasesFeed 是 releases.atom 中更新检查需要的部分。真 tag 在 entry 的
+// <link href>（…/releases/tag/<tag>）里；<title> 是发布名（如
+// "SniShaper v1.30.2"），不是 tag——把它当版本解析会把 "SniShaper v1"
+// 解析成 0，导致旧发布反超新发布的错误排序，所以只认 link。
+type releasesFeed struct {
+	Entries []struct {
+		Links []struct {
+			Href string `xml:"href,attr"`
+		} `xml:"link"`
+	} `xml:"entry"`
+}
+
+// fetchRecentReleaseTags 读取 releases.atom（最近 ~10 个发布，含预发布）。
+// 该端点由 github.com 网页侧提供，不计入 REST API 配额，不会被限流。
+func fetchRecentReleaseTags() ([]string, error) {
+	client := &http.Client{
+		Timeout:   10 * time.Second,
+		Transport: &http.Transport{Proxy: sysproxy.UpstreamProxyFunc()},
+	}
+	req, err := http.NewRequest(http.MethodGet, githubReleasesAtom, nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("User-Agent", updateUserAgent)
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("http status %d", resp.StatusCode)
+	}
+	return parseReleasesFeed(resp.Body)
+}
+
+func parseReleasesFeed(r io.Reader) ([]string, error) {
+	var feed releasesFeed
+	if err := xml.NewDecoder(io.LimitReader(r, 1<<20)).Decode(&feed); err != nil {
+		return nil, err
+	}
+	const marker = "/releases/tag/"
+	tags := make([]string, 0, len(feed.Entries))
+	for _, e := range feed.Entries {
+		for _, l := range e.Links {
+			if i := strings.Index(l.Href, marker); i >= 0 {
+				if tag := strings.Trim(l.Href[i+len(marker):], "/"); tag != "" {
+					tags = append(tags, tag)
+					break
+				}
+			}
+		}
+	}
+	if len(tags) == 0 {
+		return nil, fmt.Errorf("no entries in releases feed")
+	}
+	return tags, nil
+}
+
+// atomReleases 把 feed 里的 tag 转成伪发布对象，让渠道选择与版本比较
+// 直接复用 API 路径的现有逻辑。
+func atomReleases(tags []string) []githubRelease {
+	releases := make([]githubRelease, 0, len(tags))
+	for _, tag := range tags {
+		releases = append(releases, githubRelease{
+			TagName:    tag,
+			Prerelease: channelFromTag(tag) != "stable",
+		})
+	}
+	return releases
 }
 
 // fetchOfficialAssetDigest resolves the expected SHA-256 of a release asset
@@ -919,6 +1065,7 @@ func (a *App) downloadFileWithProgress(url, dest, name string) error {
 		return a.ctx.Err()
 	}
 	transport := &http.Transport{
+		Proxy:                 sysproxy.UpstreamProxyFunc(),
 		DialContext:           (&net.Dialer{Timeout: 15 * time.Second, KeepAlive: 30 * time.Second}).DialContext,
 		ResponseHeaderTimeout: 30 * time.Second,
 	}
@@ -1046,7 +1193,7 @@ func (a *App) InstallUpdateAsset(localPath string) error {
 	if !strings.EqualFold(sum, expectedSHA) {
 		return fmt.Errorf("update file changed after download (sha256 mismatch), refusing to install")
 	}
-	err = a.installUpdateAsset(localPath)
+	err = a.installUpdateAsset(localPath, expectedSHA)
 	if err == nil {
 		a.SetPendingUpdate("")
 	}
