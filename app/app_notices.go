@@ -16,7 +16,7 @@ import (
 )
 
 const (
-	noticesEndpoint       = "https://jetcpp.ccwu.cc/api/notices?all=1"
+	noticesEndpoint       = "https://jetcpp.ccwu.cc/api/notices?all=1&product=snishaper"
 	noticesMirrorEndpoint = "https://cdn.jsdelivr.net/gh/SnishaperTeam/Website@main/build/vue-app/notices/notices.json"
 	noticesCacheTTL       = 10 * time.Minute
 	noticesTimeout        = 8 * time.Second
