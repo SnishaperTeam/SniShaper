@@ -1898,7 +1898,7 @@ jobs:
             pinned = $false
           }
           $noticeJson = $notice | ConvertTo-Json -Depth 6
-          $response = Invoke-RestMethod -Method Post -Uri "$base/api/notices" -Headers @{ Authorization = "Bearer $($login.token)" } -ContentType 'application/json; charset=utf-8' -Body ([System.Text.Encoding]::UTF8.GetBytes($noticeJson)) -TimeoutSec 30
+          $response = Invoke-RestMethod -Method Post -Uri "$base/api/notices?product=snishaper" -Headers @{ Authorization = "Bearer $($login.token)" } -ContentType 'application/json; charset=utf-8' -Body ([System.Text.Encoding]::UTF8.GetBytes($noticeJson)) -TimeoutSec 30
           if (-not $response.ok) { throw 'announcement publish failed' }
           Write-Host "::notice::announcement published for $tag (id release-$tag, link $link)"
 

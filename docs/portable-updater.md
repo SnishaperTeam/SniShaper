@@ -375,7 +375,7 @@ CI 侧由 `_release_pipeline.yml` 的 `build-windows` 任务负责三架构编�
 `publish` 任务在 release 创建、资产校验、贡献者列表补齐之后执行 `Publish release announcement`：
 
 1. `POST https://jetcpp.ccwu.cc/api/admin/session`，body `{email, password}`，取回 `token`。
-2. `POST https://jetcpp.ccwu.cc/api/notices`，`Authorization: Bearer <token>`，body 为公告对象。
+2. `POST https://jetcpp.ccwu.cc/api/notices?product=snishaper`，`Authorization: Bearer <token>`，body 为公告对象。`product` 为必填参数（`snishaper` / `flowweaver`），缺失时 API 返回 `product_required` 错误。
 3. 公告字段：`id = release-<tag>`（幂等，重复发版替换同一条）、`title` / `title_en` / `title_ru`、`body` / `body_en` / `body_ru`（本次更新内容取自 `RELEASE_NOTES.md` 的 Changes 段，三语各一份）、`level`（正式版 `important`，预发布 `info`）、`published_at`、`link` = 具体 release 页面 `https://github.com/<repo>/releases/tag/<tag>`、`link_text`、`pinned = false`。
 
 凭据走仓库 secret，缺失时整个 step 跳过，发版不受影响：
