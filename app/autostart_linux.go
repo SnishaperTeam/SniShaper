@@ -36,7 +36,9 @@ func autostartDir() string {
 }
 
 // setAutoStartEnabled writes or removes the XDG autostart .desktop entry.
-func setAutoStartEnabled(enabled bool, command string) error {
+// method is a Windows-only concept (task/service/registry) and is ignored
+// here; XDG autostart is the single mechanism on Linux.
+func setAutoStartEnabled(enabled bool, method, command string) error {
 	dir := autostartDir()
 	if err := os.MkdirAll(dir, 0755); err != nil {
 		return fmt.Errorf("create autostart dir: %w", err)

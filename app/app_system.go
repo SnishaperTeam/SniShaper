@@ -222,14 +222,7 @@ func (a *App) SetAutoStart(enabled bool) error {
 		a.appendLog(fmt.Sprintf("[error] SetAutoStart failed: %v", err))
 		return err
 	}
-	var command string
-	if enabled {
-		execPath, err := os.Executable()
-		if err == nil {
-			command = buildAutoStartCommand(execPath, a.GetShowMainWindowOnAutoStart(), a.GetAutoEnableProxyOnAutoStart())
-		}
-	}
-	if err := setAutoStartEnabled(enabled, command); err != nil {
+	if err := a.syncAutoStartRegistration(); err != nil {
 		a.appendLog(fmt.Sprintf("[error] SetAutoStart register failed: %v", err))
 		return err
 	}
@@ -239,14 +232,32 @@ func (a *App) SetAutoStart(enabled bool) error {
 
 func (a *App) syncAutoStartRegistration() error {
 	if !a.GetAutoStart() {
-		return setAutoStartEnabled(false, "")
+		return setAutoStartEnabled(false, a.GetAutoStartMethod(), "")
 	}
 	execPath, err := os.Executable()
 	if err != nil {
 		return fmt.Errorf("failed to resolve executable path")
 	}
 	command := buildAutoStartCommand(execPath, a.GetShowMainWindowOnAutoStart(), a.GetAutoEnableProxyOnAutoStart())
-	return setAutoStartEnabled(true, command)
+	return setAutoStartEnabled(true, a.GetAutoStartMethod(), command)
+}
+
+// GetAutoStartMethod returns the configured autostart mechanism: "task"
+// (Task Scheduler, default), "service" (Windows service host) or
+// "registry" (HKCU Run value).
+func (a *App) GetAutoStartMethod() string {
+	return a.ruleManager.GetAutoStartMethod()
+}
+
+// SetAutoStartMethod selects the autostart mechanism and re-registers the
+// entry under the new method, removing the previous one.
+func (a *App) SetAutoStartMethod(method string) error {
+	a.appendLog(fmt.Sprintf("[action] SetAutoStartMethod called: %s", method))
+	if err := a.ruleManager.SetAutoStartMethod(method); err != nil {
+		a.appendLog(fmt.Sprintf("[error] SetAutoStartMethod failed: %v", err))
+		return err
+	}
+	return a.syncAutoStartRegistration()
 }
 
 func (a *App) GetShowMainWindowOnAutoStart() bool {

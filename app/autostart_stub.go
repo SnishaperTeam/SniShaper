@@ -20,8 +20,9 @@ func buildAutoStartCommand(execPath string, showMainWindow, autoProxy bool) stri
 
 // setAutoStartEnabled reports the truth on platforms without an autostart
 // mechanism instead of accepting a setting that never takes effect. Disabling
-// stays a no-op, because there is never an entry to remove.
-func setAutoStartEnabled(enabled bool, command string) error {
+// stays a no-op, because there is never an entry to remove. method is a
+// Windows-only concept and is ignored here.
+func setAutoStartEnabled(enabled bool, method, command string) error {
 	if !enabled {
 		return nil
 	}

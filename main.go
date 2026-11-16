@@ -29,6 +29,18 @@ func main() {
 		return
 	}
 
+	// SniShaperAutostart service host (the autostart "service" method): the
+	// SCM starts this process with --service-host in session 0, so it must
+	// be handled before the desktop wait and the non-interactive CLI
+	// fallback below, which would otherwise swallow it (the service host
+	// command line can carry --startup too).
+	if app.HasLaunchArg("--service-host") {
+		if err := app.RunAutoStartServiceHost(); err != nil {
+			log.Fatal(err)
+		}
+		return
+	}
+
 	// Bounded wait for the interactive desktop during autostart. In the early
 	// logon phase, the shell may not be ready, causing OpenInputDesktop (inside
 	// NonInteractiveSession) to fail. Without this wait, the app would misjudge

@@ -6,7 +6,8 @@ import {
 } from '../lib/icons';
 import {
   GetListenPort, SetListenPort, GetCloseToTray, SetCloseToTray,
-  GetAutoStart, SetAutoStart, GetShowMainWindowOnAutoStart, SetShowMainWindowOnAutoStart,
+  GetAutoStart, SetAutoStart, GetAutoStartMethod, SetAutoStartMethod,
+  GetShowMainWindowOnAutoStart, SetShowMainWindowOnAutoStart,
   GetAutoEnableProxyOnAutoStart, SetAutoEnableProxyOnAutoStart,
   GetAutoEnableSysProxyOnAutoStart, SetAutoEnableSysProxyOnAutoStart,
   GetAutoUpdateRules, SetAutoUpdateRules,
@@ -96,6 +97,13 @@ const UPDATE_CHANNELS = [
   { value: 'stable', labelKey: 'about.channel_stable' },
 ];
 
+// 开机自启的注册方式；与后端 normalizeAutoStartMethod 的取值一致。
+const AUTO_START_METHODS = [
+  { value: 'task' },
+  { value: 'service' },
+  { value: 'registry' },
+];
+
 const DOWNLOAD_SOURCES = [
   { value: 'smart', labelKey: 'settings.download_source.smart' },
   { value: 'direct', labelKey: 'settings.download_source.direct' },
@@ -114,6 +122,7 @@ const Settings: React.FC<SettingsProps> = ({ cache, onCacheUpdate, currentThemeI
   const [port, setPort] = useState(String(cache.port ?? ''));
   const [closeToTray, setCloseToTray] = useState(cache.closeToTray);
   const [autoStart, setAutoStart] = useState(cache.autoStart);
+  const [autoStartMethod, setAutoStartMethod] = useState(cache.autoStartMethod);
   const [showMainOnAutoStart, setShowMainOnAutoStart] = useState(cache.showMainOnAutoStart);
   const [autoEnableProxyOnAutoStart, setAutoEnableProxyOnAutoStart] = useState(cache.autoEnableProxyOnAutoStart);
   const [autoEnableSysProxyOnAutoStart, setAutoEnableSysProxyOnAutoStart] = useState(cache.autoEnableSysProxyOnAutoStart);
@@ -383,6 +392,16 @@ const Settings: React.FC<SettingsProps> = ({ cache, onCacheUpdate, currentThemeI
     } catch (err: any) { setAutoStart(!val); toast.error(t('common.failed'), String(err)); }
   };
 
+  const handleSetAutoStartMethod = async (val: string) => {
+    const prev = autoStartMethod;
+    setAutoStartMethod(val);
+    try {
+      await SetAutoStartMethod(val);
+      onCacheUpdate({ autoStartMethod: val });
+      toast.success(t('settings.notifications.updated'));
+    } catch (err: any) { setAutoStartMethod(prev); toast.error(t('common.failed'), String(err)); }
+  };
+
   const handleToggleAutoEnableProxyOnAutoStart = async (val: boolean) => {
     setAutoEnableProxyOnAutoStart(val);
     try {
@@ -512,6 +531,10 @@ const Settings: React.FC<SettingsProps> = ({ cache, onCacheUpdate, currentThemeI
 
   const channelKey = 'settings.update_channel.' + updateChannel;
   const channelDesc = t(channelKey) === channelKey ? t('settings.update_channel.stable') : t(channelKey);
+
+  // 动态 key 缺失守卫：未知值回退到通用描述，避免渲染原始 key。
+  const methodDescKey = `settings.auto_start_method.${autoStartMethod}.desc`;
+  const autoStartMethodDesc = t(methodDescKey) === methodDescKey ? t('settings.auto_start_method.desc') : t(methodDescKey);
 
   // Render a single network interface option; shared by the outbound iface and exclude iface lists.
   const renderInterfaceOption = (nic: any) => (
@@ -1012,6 +1035,26 @@ const Settings: React.FC<SettingsProps> = ({ cache, onCacheUpdate, currentThemeI
                   label={t('settings.auto_start.title')}
                   sx={{ gap: 1, marginLeft: 0, marginRight: 0 }}
                 />
+              </SettingRowInline>
+              <SettingRowInline title={t('settings.auto_start_method.title')} desc={autoStartMethodDesc} icon={<Bolt size={18} />}>
+                <Box sx={{ width: 240, flexShrink: 0 }}>
+                  <FormControl fullWidth size="small">
+                    <InputLabel id="auto-start-method-label">{t('settings.auto_start_method.title')}</InputLabel>
+                    <Select
+                      labelId="auto-start-method-label"
+                      id="auto-start-method-select"
+                      value={AUTO_START_METHODS.some((m) => m.value === autoStartMethod) ? autoStartMethod : 'task'}
+                      label={t('settings.auto_start_method.title')}
+                      onChange={(e) => handleSetAutoStartMethod(e.target.value)}
+                    >
+                      {AUTO_START_METHODS.map((m) => (
+                        <MenuItem key={m.value} value={m.value}>
+                          {t(`settings.auto_start_method.${m.value}`)}
+                        </MenuItem>
+                      ))}
+                    </Select>
+                  </FormControl>
+                </Box>
               </SettingRowInline>
               <SettingRowInline title={t('settings.auto_proxy.title')} desc={t('settings.auto_proxy.desc')} icon={<Activity size={18} />}>
                 <FormControlLabel

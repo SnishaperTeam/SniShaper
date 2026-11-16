@@ -7,6 +7,8 @@ export const EventsOn = (eventName: string, callback: (data: any) => void) =>
 
 export const GetAutoStart = () => appCall('GetAutoStart');
 export const SetAutoStart = (enabled: boolean) => appCall('SetAutoStart', enabled);
+export const GetAutoStartMethod = () => appCall('GetAutoStartMethod');
+export const SetAutoStartMethod = (method: string) => appCall('SetAutoStartMethod', method);
 export const GetShowMainWindowOnAutoStart = () => appCall('GetShowMainWindowOnAutoStart');
 export const SetShowMainWindowOnAutoStart = (enabled: boolean) => appCall('SetShowMainWindowOnAutoStart', enabled);
 export const GetAutoEnableProxyOnAutoStart = () => appCall('GetAutoEnableProxyOnAutoStart');
