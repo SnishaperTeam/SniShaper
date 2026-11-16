@@ -506,6 +506,12 @@ jobs:
           go-version-file: go.mod
           cache-dependency-path: go.sum
 
+      # main.go embeds all:frontend/dist; vet/test compile the main package,
+      # which needs the pattern to match at least one file (contents unused).
+      - name: Create frontend/dist placeholder for embed
+        shell: bash
+        run: mkdir -p frontend/dist && echo placeholder > frontend/dist/index.html
+
       - name: go vet
         run: go vet -tags with_gvisor ./...
 
