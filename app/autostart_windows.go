@@ -4,6 +4,7 @@ package app
 
 import (
 	"encoding/xml"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -20,9 +21,11 @@ import (
 const (
 	// Legacy HKCU Run value written by older builds. Kept only so an upgrade
 	// can remove it: leaving it in place would start a second instance at
-	// logon alongside the task.
+	// logon alongside the task. The "registry" autostart method reuses the
+	// same value name deliberately, so switching methods replaces rather
+	// than duplicates the entry.
 	autoStartRegistryPath = `Software\Microsoft\Windows\CurrentVersion\Run`
-	autoStartValueName    = "SniShaper"
+	autoStartRunValueName = "SniShaper"
 
 	// Task name in the Task Scheduler library.
 	autoStartTaskName = "SniShaper"
@@ -47,16 +50,96 @@ func buildAutoStartCommand(execPath string, showMainWindow, autoProxy bool) stri
 	return cmd
 }
 
-// setAutoStartEnabled registers or removes the desktop autostart entry.
+// setAutoStartEnabled registers or removes the desktop autostart entry,
+// dispatching on the configured method:
 //
-// The entry is a Task Scheduler task, not an HKCU\...\Run value. A Run value
-// is always launched with the plain interactive token, so a program that needs
-// administrator rights either silently loses them or triggers UAC on every
-// logon. A task with RunLevel=HighestAvailable starts with the user's full
-// administrative token and no prompt.
-func setAutoStartEnabled(enabled bool, command string) error {
-	cleanupLegacyRunValue(autoStartValueName)
-	return setTaskAutoStart(autoStartTaskName, enabled, command)
+//   - "task":     Task Scheduler task with RunLevel=HighestAvailable, starts
+//     elevated at logon with no UAC prompt (previous default, issue #192).
+//   - "service":  the SniShaperAutostart Windows service launches the app in
+//     the user session with the elevated token, no UAC prompt.
+//   - "registry": plain HKCU Run value; starts with the interactive token,
+//     so the app self-elevates and shows one UAC prompt at logon.
+//
+// Exactly one mechanism stays registered: enabling a method removes the
+// others, and a disable removes all three.
+func setAutoStartEnabled(enabled bool, method, command string) error {
+	method = normalizeAutoStartMethod(method)
+	if !enabled {
+		// Remove every mechanism: a leftover entry from another method
+		// would start a second instance at logon.
+		if err := deleteTask(autoStartTaskName); err != nil {
+			return err
+		}
+		if err := deleteRegistryRunValue(autoStartRunValueName); err != nil {
+			return err
+		}
+		return removeAutoStartService()
+	}
+	if strings.TrimSpace(command) == "" {
+		return fmt.Errorf("autostart command is empty")
+	}
+	switch method {
+	case "registry":
+		if err := setRegistryAutoStart(command); err != nil {
+			return err
+		}
+		if err := deleteTask(autoStartTaskName); err != nil {
+			return err
+		}
+		return removeAutoStartService()
+	case "service":
+		if err := installAutoStartService(command); err != nil {
+			return err
+		}
+		if err := deleteTask(autoStartTaskName); err != nil {
+			return err
+		}
+		return deleteRegistryRunValue(autoStartRunValueName)
+	default: // "task"
+		if err := setTaskAutoStart(autoStartTaskName, true, command); err != nil {
+			return err
+		}
+		// Also clears the legacy Run value from older builds.
+		if err := deleteRegistryRunValue(autoStartRunValueName); err != nil {
+			return err
+		}
+		return removeAutoStartService()
+	}
+}
+
+// normalizeAutoStartMethod maps an unknown or empty method (hand-edited
+// settings, pre-migration config) to the task scheduler default.
+func normalizeAutoStartMethod(method string) string {
+	switch method {
+	case "service", "registry":
+		return method
+	default:
+		return "task"
+	}
+}
+
+// setRegistryAutoStart writes the HKCU Run value for the registry method.
+func setRegistryAutoStart(command string) error {
+	key, err := registry.OpenKey(registry.CURRENT_USER, autoStartRegistryPath, registry.SET_VALUE)
+	if err != nil {
+		return fmt.Errorf("open HKCU Run key: %w", err)
+	}
+	defer key.Close()
+	return key.SetStringValue(autoStartRunValueName, command)
+}
+
+// deleteRegistryRunValue removes the HKCU Run value; a missing key or value
+// is success, so it doubles as the legacy-cleanup path.
+func deleteRegistryRunValue(name string) error {
+	key, err := registry.OpenKey(registry.CURRENT_USER, autoStartRegistryPath, registry.SET_VALUE)
+	if err != nil {
+		return nil
+	}
+	defer key.Close()
+	if err := key.DeleteValue(name); err != nil && !errors.Is(err, registry.ErrNotExist) {
+		return fmt.Errorf("delete HKCU Run value: %w", err)
+	}
+	return nil
 }
 
 // SetNamedAutoStartEntry registers an extra autostart entry under its own task
@@ -66,7 +149,7 @@ func SetNamedAutoStartEntry(name string, enabled bool, command string) error {
 	if strings.TrimSpace(name) == "" {
 		return fmt.Errorf("autostart entry name is empty")
 	}
-	cleanupLegacyRunValue(name)
+	_ = deleteRegistryRunValue(name)
 	return setTaskAutoStart(autoStartTaskName+"-"+name, enabled, command)
 }
 
@@ -290,12 +373,7 @@ func isProcessElevated() bool {
 // Without this an upgrade would start two instances at logon: the leftover
 // Run entry and the new task.
 func cleanupLegacyRunValue(valueName string) {
-	key, err := registry.OpenKey(registry.CURRENT_USER, autoStartRegistryPath, registry.SET_VALUE)
-	if err != nil {
-		return
-	}
-	defer key.Close()
-	_ = key.DeleteValue(valueName)
+	_ = deleteRegistryRunValue(valueName)
 }
 
 func utf16LEWithBOM(s string) []byte {

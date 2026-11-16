@@ -540,6 +540,16 @@
       "title": "开机自动启动",
       "desc": "Windows 登录后自动在后台运行。"
     },
+    "auto_start_method": {
+      "title": "自启方式",
+      "desc": "开机自启的注册机制。",
+      "task": "任务计划程序",
+      "task_desc": "计划任务开机启动，以最高权限运行，无需 UAC 弹窗。",
+      "service": "Windows 服务",
+      "service_desc": "系统服务在登录时以最高权限拉起程序，无需 UAC 弹窗。",
+      "registry": "注册表",
+      "registry_desc": "注册表 Run 项开机启动，登录时会弹出一次 UAC 授权。"
+    },
     "auto_proxy": {
       "title": "启动时自动开启代理",
       "desc": "应用程序启动后立即进入代理工作态。"

@@ -540,6 +540,16 @@
       "title": "Start on Boot",
       "desc": "Run automatically in background after Windows login."
     },
+    "auto_start_method": {
+      "title": "Autostart Method",
+      "desc": "How the autostart entry is registered.",
+      "task": "Task Scheduler",
+      "task_desc": "Scheduled task launched at logon with highest privileges, no UAC prompt.",
+      "service": "Windows Service",
+      "service_desc": "A system service launches the app in your session with full privileges at logon, no UAC prompt.",
+      "registry": "Registry",
+      "registry_desc": "Registry Run entry launched at logon; one UAC prompt is shown."
+    },
     "auto_proxy": {
       "title": "Auto-enable proxy on startup",
       "desc": "Proxy will be enabled immediately after application starts."

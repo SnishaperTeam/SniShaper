@@ -24,6 +24,7 @@ var guiOnlyFirstArgs = map[string]bool{
 	"--startup":      true,
 	"--elevated":     true,
 	"--tray-rebuild": true,
+	"--service-host": true,
 }
 
 // cliVerbs lists every first argument the dispatcher understands, including

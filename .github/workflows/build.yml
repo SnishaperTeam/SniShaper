@@ -487,6 +487,46 @@ jobs:
             --row "SniShaper.app zip=build/bin/macos/SniShaper-macos-*.zip"
 
   # ------------------------------------------------------------------
+  # Static analysis + unit tests: go vet, go test and the frontend's
+  # authoritative tsc type check, independent of the build matrix so a
+  # red check fails fast (minutes) instead of after a full build.
+  # ------------------------------------------------------------------
+  test:
+    name: test & vet
+    needs: gate
+    if: >-
+      always() && !cancelled() &&
+      (github.event_name != 'pull_request' || needs.gate.outputs.proceed == 'true')
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: go.sum
+
+      - name: go vet
+        run: go vet -tags with_gvisor ./...
+
+      - name: go test
+        run: go test -tags with_gvisor ./...
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Frontend type check (tsc --noEmit)
+        working-directory: frontend
+        run: npx tsc --noEmit
+
+  # ------------------------------------------------------------------
   # Stable single-point summary used as the required status check in
   # branch protection ("ci"). Succeeds when every build job succeeded
   # or was skipped (gate-skipped PR runs skip the whole matrix); fails on
@@ -494,7 +534,7 @@ jobs:
   # ------------------------------------------------------------------
   ci:
     name: ci
-    needs: [gate, matrix-build, darwin]
+    needs: [gate, matrix-build, darwin, test]
     if: always() && !cancelled()
     runs-on: ubuntu-latest
     permissions:

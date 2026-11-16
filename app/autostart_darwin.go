@@ -35,7 +35,10 @@ func launchAgentPath() string {
 	return filepath.Join(home, "Library", "LaunchAgents", launchAgentLabel+".plist")
 }
 
-func setAutoStartEnabled(enabled bool, command string) error {
+// setAutoStartEnabled manages the per-user launch agent. method is a
+// Windows-only concept (task/service/registry) and is ignored here; the
+// LaunchAgent is the single mechanism on macOS.
+func setAutoStartEnabled(enabled bool, method, command string) error {
 	path := launchAgentPath()
 	if path == "" {
 		return fmt.Errorf("cannot resolve the home directory")
