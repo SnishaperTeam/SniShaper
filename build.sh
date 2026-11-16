@@ -961,7 +961,24 @@ fi
 log ""
 log "$(m BackStart)"
 log "$(m BackInstallDeps)"
-go mod download || { warn "$(m BackErrInstallDeps)"; exit 1; }
+# proxy.golang.org occasionally returns transient INTERNAL_ERROR stream
+# errors; retry instead of failing the whole build.
+deps_attempts=3
+deps_ok=0
+deps_i=1
+while [ "$deps_i" -le "$deps_attempts" ]; do
+    if go mod download; then
+        deps_ok=1
+        break
+    fi
+    warn "[go mod download] attempt $deps_i/$deps_attempts failed"
+    deps_i=$((deps_i + 1))
+    [ "$deps_i" -le "$deps_attempts" ] && sleep 5
+done
+if [ "$deps_ok" -ne 1 ]; then
+    warn "$(m BackErrInstallDeps)"
+    exit 1
+fi
 log "$(m BackBuildVersion "$MANIFEST_VERSION" "$MANIFEST_CHANNEL")"
 
 BUILT_OK=0

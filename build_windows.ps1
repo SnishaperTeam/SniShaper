@@ -1155,8 +1155,17 @@ if (-not $BuildBackend) {
 
 Write-Host (msg -Key "BackStart") -ForegroundColor Green
 Write-Host (msg -Key "BackInstallDeps") -ForegroundColor Green
-go mod download
-if ($LASTEXITCODE -ne 0) {
+# proxy.golang.org occasionally returns transient INTERNAL_ERROR stream
+# errors; retry instead of failing the whole build.
+$depsAttempts = 3
+$depsOk = $false
+for ($i = 1; $i -le $depsAttempts; $i++) {
+    go mod download
+    if ($LASTEXITCODE -eq 0) { $depsOk = $true; break }
+    Write-Host "[go mod download] attempt $i/$depsAttempts failed" -ForegroundColor Yellow
+    if ($i -lt $depsAttempts) { Start-Sleep -Seconds 5 }
+}
+if (-not $depsOk) {
     Write-Host (msg -Key "BackErrInstallDeps") -ForegroundColor Red
     exit 1
 }
