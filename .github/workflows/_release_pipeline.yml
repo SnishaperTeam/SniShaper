@@ -134,7 +134,17 @@ jobs:
               Write-Host "::error::msix_version '$identityVersion' is not a four part number (expected e.g. 1.29.0.0)"
               exit 1
             }
-            $version = ($identityVersion.Split('.')[0..2] -join '.')
+            $inputParts = $identityVersion.Split('.')
+            if ($inputParts[3] -ne '0') {
+              # Four part hotfix input (e.g. 1.30.3.2): the build part is
+              # significant, so it is both the release version and the tag,
+              # mirroring the manifest hotfix branch below - truncating it
+              # would collide the tag with the already-published base release
+              # and the run would skip as a duplicate.
+              $version = $identityVersion
+            } else {
+              $version = ($inputParts[0..2] -join '.')
+            }
           } else {
             $parts = $pkgVersion.Split('.')
             if ($parts.Count -eq 4 -and $parts[3] -eq '0') {
