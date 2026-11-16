@@ -79,12 +79,15 @@ jobs:
   mark-running:
     name: mark CI running
     needs: gate
-    # Dependabot-triggered runs receive no repo secrets, so the syntax-bot
-    # identity is unavailable there; skip the label state machine for those
-    # PRs (gate still lets the build matrix through).
+    # Dependabot-triggered runs and fork PRs receive no repo secrets, so the
+    # syntax-bot identity is unavailable there; skip the label state machine
+    # for those (gate still lets the build matrix through). Detected via
+    # head.repo.fork because the secrets context cannot be referenced in a
+    # job-level if (the workflow fails to start).
     if: >-
       needs.gate.outputs.proceed == 'true' &&
-      github.actor != 'dependabot[bot]'
+      github.actor != 'dependabot[bot]' &&
+      !github.event.pull_request.head.repo.fork
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -529,10 +532,13 @@ jobs:
   bot-report:
     name: Report CI result (syntax-bot)
     needs: [gate, ci]
+    # Same guard as mark-running: fork PRs get no repo secrets, so the
+    # syntax-bot App token cannot be minted there.
     if: >-
       always() && !cancelled() &&
       needs.gate.outputs.proceed == 'true' &&
-      github.actor != 'dependabot[bot]'
+      github.actor != 'dependabot[bot]' &&
+      !github.event.pull_request.head.repo.fork
     runs-on: ubuntu-latest
     permissions:
       # GITHUB_TOKEN grants for the diagnostic log download; comment and
