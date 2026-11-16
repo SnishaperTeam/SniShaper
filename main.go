@@ -29,6 +29,28 @@ func main() {
 		return
 	}
 
+	// Bounded wait for the interactive desktop during autostart. In the early
+	// logon phase, the shell may not be ready, causing OpenInputDesktop (inside
+	// NonInteractiveSession) to fail. Without this wait, the app would misjudge
+	// the environment, fall back to CLI mode, and exit silently, leaving no
+	// tray icon or proxy running. We only wait when explicitly launched via
+	// --startup to avoid affecting normal CLI invocations or session-0 services.
+	if app.HasLaunchArg("--startup") && app.NonInteractiveSession() {
+		log.Printf("[main] Early logon phase detected, waiting for interactive desktop...")
+		deadline := time.Now().Add(30 * time.Second)
+		for time.Now().Before(deadline) {
+			if !app.NonInteractiveSession() {
+				break // Desktop is ready, proceed to GUI
+			}
+			time.Sleep(500 * time.Millisecond)
+		}
+		if app.NonInteractiveSession() {
+			log.Printf("[main] Timeout waiting for desktop, falling back to CLI mode")
+		} else {
+			log.Printf("[main] Interactive desktop is ready, continuing to GUI")
+		}
+	}
+
 	// Bundled CLI mode. The desktop binary doubles as the headless CLI: an
 	// explicit marker (--cli, --serve, any CLI verb) or a launch without an
 	// interactive desktop (automation, services, winget's post-install
