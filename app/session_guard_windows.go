@@ -4,39 +4,65 @@ package app
 
 import (
 	"os"
+	"unsafe"
 
 	"golang.org/x/sys/windows"
 )
 
 var (
-	user32SessionGuard   = windows.NewLazySystemDLL("user32.dll")
-	procOpenInputDesktop = user32SessionGuard.NewProc("OpenInputDesktop")
-	procCloseDesktop     = user32SessionGuard.NewProc("CloseDesktop")
+	// Replaces the unreliable user32.dll OpenInputDesktop API with WTSAPI32.
+	wtsapi32                        = windows.NewLazySystemDLL("wtsapi32.dll")
+	procWTSQuerySessionInformationW = wtsapi32.NewProc("WTSQuerySessionInformationW")
+	procWTSFreeMemory               = wtsapi32.NewProc("WTSFreeMemory")
 
+	// kernel32Console remains in its original position.
 	kernel32Console   = windows.NewLazySystemDLL("kernel32.dll")
 	procAttachConsole = kernel32Console.NewProc("AttachConsole")
 )
 
+const (
+	wtsCurrentServerHandle = 0
+	wtsConnectState        = 8 // WTS_INFO_CLASS.WTSConnectState
+	wtsActive              = 0 // WTS_CONNECTSTATE_CLASS.WTSActive
+)
+
 // NonInteractiveSession reports whether the process runs without an
-// interactive desktop: session 0 (services, scheduled automation) or a
-// window station with no input desktop. A GUI cannot run there; the desktop
-// binary falls back to its bundled CLI mode instead of letting the window
-// toolkit panic in a headless context. winget's post-install executable
-// validation launches the installed binary in exactly such environments.
+// interactive desktop. This happens in session 0 (services, scheduled
+// automation) or when the user session is not yet fully active (e.g., during
+// the early logon phase).
+//
+// Using WTSQuerySessionInformation is far more reliable than OpenInputDesktop,
+// which frequently returns false negatives right after logon before the shell
+// finishes initializing, causing the GUI to incorrectly fall back to CLI mode.
 func NonInteractiveSession() bool {
 	var session uint32
 	if err := windows.ProcessIdToSessionId(windows.GetCurrentProcessId(), &session); err == nil && session == 0 {
 		return true
 	}
-	if err := procOpenInputDesktop.Find(); err != nil {
-		// API unavailable: cannot prove absence of a desktop, stay GUI.
-		return false
+
+	// Query the WTS connection state. If the session is not yet WTSActive
+	// (e.g., WTSConnected or WTSInitializing), the interactive desktop is
+	// not ready.
+	if err := procWTSQuerySessionInformationW.Find(); err == nil {
+		var pBuffer unsafe.Pointer
+		var bytesReturned uint32
+		r, _, _ := procWTSQuerySessionInformationW.Call(
+			uintptr(wtsCurrentServerHandle),
+			uintptr(session),
+			uintptr(wtsConnectState),
+			uintptr(unsafe.Pointer(&pBuffer)),
+			uintptr(unsafe.Pointer(&bytesReturned)),
+		)
+		if r != 0 && pBuffer != nil {
+			defer procWTSFreeMemory.Call(uintptr(pBuffer))
+			state := *(*uint32)(pBuffer)
+			return state != wtsActive
+		}
 	}
-	h, _, _ := procOpenInputDesktop.Call(0, 0, 0x0001) // DESKTOP_READOBJECTS
-	if h == 0 {
-		return true
-	}
-	procCloseDesktop.Call(h)
+
+	// If the WTS API fails (extremely unlikely on modern Windows), we cannot
+	// definitively prove the desktop is absent. Default to GUI mode to avoid
+	// killing the app silently.
 	return false
 }
 
