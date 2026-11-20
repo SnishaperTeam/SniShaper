@@ -5,7 +5,7 @@ import {
   AlertCircle, Sun, Moon, Wifi, FileText, Settings as SettingsIcon,
 } from '../lib/icons';
 import {
-  GetListenPort, SetListenPort, GetCloseToTray, SetCloseToTray,
+  GetListenPort, SetListenPort, GetListenAddress, SetListenAddress, GetCloseToTray, SetCloseToTray,
   GetAutoStart, SetAutoStart, GetAutoStartMethod, SetAutoStartMethod,
   GetShowMainWindowOnAutoStart, SetShowMainWindowOnAutoStart,
   GetAutoEnableProxyOnAutoStart, SetAutoEnableProxyOnAutoStart,
@@ -120,6 +120,7 @@ const Settings: React.FC<SettingsProps> = ({ cache, onCacheUpdate, currentThemeI
   const { t, language, setLanguage: setI18nLanguage } = useTranslation();
   const { mode, setMode } = useColorScheme();
   const [port, setPort] = useState(String(cache.port ?? ''));
+  const [listenAddress, setListenAddress] = useState(String(cache.address ?? '127.0.0.1'));
   const [closeToTray, setCloseToTray] = useState(cache.closeToTray);
   const [autoStart, setAutoStart] = useState(cache.autoStart);
   const [autoStartMethod, setAutoStartMethod] = useState(cache.autoStartMethod);
@@ -376,6 +377,37 @@ const Settings: React.FC<SettingsProps> = ({ cache, onCacheUpdate, currentThemeI
     toast.success(t('settings.notifications.updated'), `${t('settings.port_label')} ${parsed}`);
   };
 
+  // 空串合法（重置为默认 127.0.0.1）；IPv4 逐段校验，IPv6 做结构预检，
+  // 权威校验在后端 net.ParseIP。
+  const isValidListenAddress = (addr: string): boolean => {
+    const v = addr.trim();
+    if (!v) return true;
+    if (!v.includes(':')) {
+      const parts = v.split('.');
+      if (parts.length !== 4) return false;
+      return parts.every((p) => /^\d{1,3}$/.test(p) && Number(p) <= 255);
+    }
+    if (!/^[0-9a-fA-F:]+$/.test(v)) return false;
+    return v.replace(/::/g, ':').split(':').every((p) => /^[0-9a-fA-F]{0,4}$/.test(p));
+  };
+
+  const handleSaveListenAddress = async () => {
+    const addr = listenAddress.trim();
+    if (!isValidListenAddress(addr)) {
+      toast.error(t('common.failed'), t('settings.notifications.address_invalid'));
+      return;
+    }
+    try {
+      await SetListenAddress(addr);
+      const effective = addr || '127.0.0.1';
+      setListenAddress(effective);
+      onCacheUpdate({ address: effective });
+      toast.success(t('settings.notifications.updated'), `${t('settings.listen_address_label')} ${effective}`);
+    } catch (err: any) {
+      toast.error(t('common.failed'), String(err));
+    }
+  };
+
   const handleToggleTray = async (val: boolean) => {
     setCloseToTray(val);
     await SetCloseToTray(val);
@@ -587,6 +619,22 @@ const Settings: React.FC<SettingsProps> = ({ cache, onCacheUpdate, currentThemeI
                     sx={{ width: 120, '& input': { fontSize: '0.875rem', textAlign: 'center' } }}
                   />
                   <Button size="small" variant="contained" color="primary" onClick={handleSavePort}>
+                    {t('common.apply')}
+                  </Button>
+                </Stack>
+              </SettingRowInline>
+
+              <SettingRowInline icon={<Wifi size={18} />} title={t('settings.listen_address_title')} desc={t('settings.listen_address_desc')}>
+                <Stack direction="row" spacing={1.5} sx={{ alignItems: 'center' }}>
+                  <TextField
+                    label={t('settings.listen_address_label')}
+                    type="text"
+                    size="small"
+                    value={listenAddress}
+                    onChange={(e) => setListenAddress(e.target.value.trim())}
+                    sx={{ width: 180, '& input': { fontSize: '0.875rem', textAlign: 'center' } }}
+                  />
+                  <Button size="small" variant="contained" color="primary" onClick={handleSaveListenAddress}>
                     {t('common.apply')}
                   </Button>
                 </Stack>

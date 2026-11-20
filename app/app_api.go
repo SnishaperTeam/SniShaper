@@ -52,7 +52,7 @@ func NewApp() *App {
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
-	proxyServer := proxy.NewProxyServer("127.0.0.1:"+port, proxy.WithLogger(corelog.Std))
+	proxyServer := proxy.NewProxyServer(net.JoinHostPort(ruleManager.GetListenAddress(), port), proxy.WithLogger(corelog.Std))
 	proxyServer.SetRuleManager(ruleManager)
 	a := &App{
 		ctx:                    ctx,
@@ -264,12 +264,44 @@ func (a *App) SetListenPort(port int) error {
 	a.ruleManager.SetListenPort(strconv.Itoa(port))
 	_ = a.ruleManager.SaveConfig()
 
-	_ = a.proxyServer.SetListenAddr(fmt.Sprintf("127.0.0.1:%d", port))
+	_ = a.proxyServer.SetListenAddr(net.JoinHostPort(a.GetListenAddress(), strconv.Itoa(port)))
 
 	if a.IsProxyRunning() {
 		a.appendLog("[info] Port configuration updated. Restarting proxy to apply new port...")
 		if err := a.restartProxy(); err != nil {
 			a.appendLog("[error] Failed to restart proxy on new port: " + err.Error())
+			return err
+		}
+	} else {
+		if a.core != nil {
+			a.core.ReloadIfRunning()
+		}
+	}
+
+	return nil
+}
+
+func (a *App) GetListenAddress() string {
+	return a.ruleManager.GetListenAddress()
+}
+
+func (a *App) SetListenAddress(addr string) error {
+	a.appendLog(fmt.Sprintf("[action] SetListenAddress called: %s", addr))
+	if addr != "" && net.ParseIP(addr) == nil {
+		return fmt.Errorf("invalid listen address: %s", addr)
+	}
+
+	if err := a.ruleManager.SetListenAddress(addr); err != nil {
+		return err
+	}
+	_ = a.ruleManager.SaveConfig()
+
+	_ = a.proxyServer.SetListenAddr(net.JoinHostPort(a.GetListenAddress(), strconv.Itoa(a.GetListenPort())))
+
+	if a.IsProxyRunning() {
+		a.appendLog("[info] Listen address configuration updated. Restarting proxy to apply new address...")
+		if err := a.restartProxy(); err != nil {
+			a.appendLog("[error] Failed to restart proxy on new address: " + err.Error())
 			return err
 		}
 	} else {

@@ -20,6 +20,7 @@ package app
 import (
 	"encoding/json"
 	"fmt"
+	"net"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -279,7 +280,7 @@ func (a *App) SwitchProfile(name string) error {
 		return fmt.Errorf("reload configuration: %w", err)
 	}
 	if port := a.ruleManager.GetListenPort(); port != "" {
-		_ = a.proxyServer.SetListenAddr("127.0.0.1:" + port)
+		_ = a.proxyServer.SetListenAddr(net.JoinHostPort(a.GetListenAddress(), port))
 	}
 
 	writeActiveProfile(name)

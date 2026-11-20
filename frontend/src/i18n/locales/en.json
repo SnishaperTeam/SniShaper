@@ -573,6 +573,9 @@
     "port_title": "Proxy Port",
     "port_label": "Port",
     "port_desc": "HTTP and SOCKS5 share this port.",
+    "listen_address_title": "Listen Address",
+    "listen_address_label": "Address",
+    "listen_address_desc": "IP address the proxy listens on (IPv4/IPv6). Empty means 127.0.0.1; 0.0.0.0 listens on all interfaces.",
     "lan_sharing": {
       "title": "LAN Sharing",
       "desc": "Allow other devices in the local network to connect."
@@ -618,7 +621,8 @@
     },
     "notifications": {
       "updated": "Settings updated",
-      "port_invalid": "Please enter a valid port between 1 and 65535"
+      "port_invalid": "Please enter a valid port between 1 and 65535",
+      "address_invalid": "Please enter a valid IP address (IPv4/IPv6), or leave it empty"
     },
     "theme": {
       "label": "Color Scheme",

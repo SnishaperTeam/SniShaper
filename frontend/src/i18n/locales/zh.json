@@ -573,6 +573,9 @@
     "port_title": "代理端口",
     "port_label": "端口",
     "port_desc": "HTTP 与 SOCKS5 共用此端口。",
+    "listen_address_title": "监听地址",
+    "listen_address_label": "地址",
+    "listen_address_desc": "代理监听的 IP 地址（IPv4/IPv6），留空表示 127.0.0.1，设为 0.0.0.0 可监听所有网卡。",
     "lan_sharing": {
       "title": "局域网共享",
       "desc": "允许局域网内的其他设备连接该代理。"
@@ -618,7 +621,8 @@
     },
     "notifications": {
       "updated": "设置已更新",
-      "port_invalid": "请输入 1-65535 范围内的有效端口"
+      "port_invalid": "请输入 1-65535 范围内的有效端口",
+      "address_invalid": "请输入有效的 IP 地址（IPv4/IPv6），或留空"
     },
     "theme": {
       "label": "配色方案",

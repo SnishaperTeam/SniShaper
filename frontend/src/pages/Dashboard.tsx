@@ -17,6 +17,7 @@ import {
   IsProxyRunning,
   GetSystemProxyStatus,
   GetListenPort,
+  GetListenAddress,
   GetPortOccupant,
   KillPortOccupant,
   GetTUNConfig,
@@ -61,6 +62,7 @@ const Dashboard: React.FC = () => {
   const [sysProxyEnabled, setSysProxyEnabled] = useState(false);
   const [proxyMode, setProxyMode] = useState('MITM');
   const [port, setPort] = useState(8080);
+  const [address, setAddress] = useState('127.0.0.1');
   const [isOperating, setIsOperating] = useState(false);
   const operatingRef = useRef(false);
   const [isActive, setIsActive] = useState(true);
@@ -84,11 +86,12 @@ const Dashboard: React.FC = () => {
 
   const refresh = async () => {
     try {
-      const [running, sysStatus, m, p, ca, tunCfg, tunState] = await Promise.all([
+      const [running, sysStatus, m, p, addr, ca, tunCfg, tunState] = await Promise.all([
         IsProxyRunning(),
         GetSystemProxyStatus(),
         GetProxyMode(),
         GetListenPort(),
+        GetListenAddress(),
         GetCAInstallStatus(),
         GetTUNConfig(),
         GetTUNStatus()
@@ -97,6 +100,7 @@ const Dashboard: React.FC = () => {
       setSysProxyEnabled(sysStatus.Enabled);
       setProxyMode(m.toUpperCase());
       setPort(p);
+      setAddress(addr || '127.0.0.1');
       setCaStatus(ca || { Installed: false });
       const normalizedTunConfig = {
         mtu: Number(tunCfg?.mtu ?? tunCfg?.MTU ?? 9000),
@@ -588,7 +592,7 @@ const Dashboard: React.FC = () => {
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, p: 1.25, bgcolor: 'primary.main', border: 1, borderColor: 'primary.main', borderRadius: 2, minWidth: 0 }}>
                 <Bolt size={18} color="primary.contrastText" aria-hidden />
                 <Typography variant="body2" sx={{ fontWeight: 'bold', color: 'primary.contrastText', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '100%', py: 0.25, outline: '1px solid transparent' }}>
-                  127.0.0.1:{port}
+                  {address}:{port}
                 </Typography>
               </Box>
               <Box sx={{ display: 'flex', fontSize: '0.75rem', color: 'text.secondary', fontWeight: 'medium', px: 1, justifyContent: 'flex-end', alignItems: 'center' }}>

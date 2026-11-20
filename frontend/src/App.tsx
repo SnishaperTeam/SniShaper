@@ -8,7 +8,7 @@ import WindowControls from './components/WindowControls';
 import ToastProvider from './components/ToastProvider';
 import { appTheme, defaultTheme, availableThemes } from './theme';
 import {
-  GetListenPort, GetCloseToTray, GetAutoStart, GetAutoStartMethod,
+  GetListenPort, GetListenAddress, GetCloseToTray, GetAutoStart, GetAutoStartMethod,
   GetShowMainWindowOnAutoStart, GetAutoEnableProxyOnAutoStart, GetAutoEnableSysProxyOnAutoStart, GetAutoUpdateRules,
   GetTUNConfig, GetTUNStatus, GetCloudflareConfig,
   GetCAInstallStatus, GetInstalledCerts, GetCloudflareIPStats,
@@ -38,6 +38,7 @@ const Evolution = lazy(() => import('./pages/Evolution'));
 
 interface SettingsCache {
   port: number;
+  address: string;
   closeToTray: boolean;
   autoStart: boolean;
   autoStartMethod: string;
@@ -57,7 +58,7 @@ interface SettingsCache {
 }
 
 const defaultCache: SettingsCache = {
-  port: 8080, closeToTray: false, autoStart: false,
+  port: 8080, address: '127.0.0.1', closeToTray: false, autoStart: false,
   autoStartMethod: 'task',
   showMainOnAutoStart: true, autoEnableProxyOnAutoStart: false,
   autoEnableSysProxyOnAutoStart: true,
@@ -106,9 +107,9 @@ const App: React.FC = () => {
   useEffect(() => {
     const fastLoad = async () => {
       try {
-        const [language, port, closeToTray, autoStart, autoStartMethod,
+        const [language, port, address, closeToTray, autoStart, autoStartMethod,
           showMainOnAutoStart, autoEnableProxyOnAutoStart, autoEnableSysProxyOnAutoStart, autoUpdateRules, cfConfig, ipv6Available, savedThemeId] = await Promise.all([
-          GetLanguage(), GetListenPort(), GetCloseToTray(), GetAutoStart(), GetAutoStartMethod(),
+          GetLanguage(), GetListenPort(), GetListenAddress(), GetCloseToTray(), GetAutoStart(), GetAutoStartMethod(),
           GetShowMainWindowOnAutoStart(), GetAutoEnableProxyOnAutoStart(), GetAutoEnableSysProxyOnAutoStart(), GetAutoUpdateRules(), GetCloudflareConfig(), GetIPv6Available(), GetTheme()
         ]);
         if (language) {
@@ -128,6 +129,7 @@ const App: React.FC = () => {
           ...prev,
           language: (language as string) || '',
           port: port ?? prev.port,
+          address: typeof address === 'string' && address ? address : prev.address,
           closeToTray: closeToTray ?? prev.closeToTray,
           autoStart: autoStart ?? prev.autoStart,
           autoStartMethod: typeof autoStartMethod === 'string' && autoStartMethod ? autoStartMethod : prev.autoStartMethod,

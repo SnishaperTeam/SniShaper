@@ -2,6 +2,7 @@ package cliapp
 
 import (
 	"fmt"
+	"net"
 	"strconv"
 	"strings"
 	"time"
@@ -56,7 +57,7 @@ func opPort(args []string, out cmdOut) int {
 		if a == nil {
 			return 1
 		}
-		out(fmt.Sprintf("HTTP 监听端口: %d", a.GetListenPort()))
+		out(fmt.Sprintf("HTTP 监听: %s", net.JoinHostPort(a.GetListenAddress(), strconv.Itoa(a.GetListenPort()))))
 		return 0
 	case "set":
 		if len(args) < 2 {
@@ -134,7 +135,7 @@ func opPort(args []string, out cmdOut) int {
 
 func opSocks5(args []string, out cmdOut) int {
 	out("SOCKS5 与 HTTP 共用混合端口，随代理启停，不再单独配置。")
-	out(fmt.Sprintf("混合端口: 127.0.0.1:%s", listenPort()))
+	out(fmt.Sprintf("混合端口: %s", net.JoinHostPort(listenAddress(), listenPort())))
 	return 0
 }
 
