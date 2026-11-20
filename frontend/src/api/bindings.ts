@@ -63,6 +63,8 @@ export const GetECHProfiles = () => appCall('GetECHProfiles');
 export const GetInstalledCerts = () => appCall('GetInstalledCerts');
 export const IsLogCaptureEnabled = () => appCall('IsLogCaptureEnabled');
 export const GetListenPort = () => appCall('GetListenPort');
+export const GetListenAddress = () => appCall('GetListenAddress');
+export const SetListenAddress = (addr: string) => appCall('SetListenAddress', addr);
 export const GetPortOccupant = (port: number) => appCall('GetPortOccupant', port);
 export const KillPortOccupant = (port: number, pid: number) => appCall('KillPortOccupant', port, pid);
 export const OpenLogFile = (name: string) => appCall('OpenLogFile', name);

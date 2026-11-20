@@ -3,6 +3,7 @@ package cliapp
 import (
 	"encoding/json"
 	"fmt"
+	"net"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -40,6 +41,15 @@ func listenPort() string {
 	return port
 }
 
+// listenAddress 返回配置的监听地址（缺省 127.0.0.1）。
+func listenAddress() string {
+	settingsPath, _ := settingsPaths()
+	rm := proxy.NewRuleManager(settingsPath, "",
+		proxy.WithLogger(corelog.Std), proxy.WithRouterDebug(os.Getenv("SNISHAPER_ROUTER_DEBUG") == "1"))
+	_ = rm.LoadConfig()
+	return rm.GetListenAddress()
+}
+
 func opStartProxy(out cmdOut) int {
 	c := opRequireService(out)
 	if c == nil {
@@ -49,7 +59,7 @@ func opStartProxy(out cmdOut) int {
 		out("启动代理失败: " + err.Error())
 		return 1
 	}
-	out(fmt.Sprintf("代理已启动 (HTTP/SOCKS5 混合端口 127.0.0.1:%s)", listenPort()))
+	out(fmt.Sprintf("代理已启动 (HTTP/SOCKS5 混合端口 %s)", net.JoinHostPort(listenAddress(), listenPort())))
 	return 0
 }
 
@@ -82,11 +92,12 @@ func opEnableSysProxy(out cmdOut) int {
 	if err != nil || port < 1 {
 		port = 8080
 	}
-	if err := sysproxy.EnableSystemProxy(port); err != nil {
+	server := net.JoinHostPort(common.LocalProxyHost(listenAddress()), strconv.Itoa(port))
+	if err := sysproxy.SetSystemProxy(true, server); err != nil {
 		out("开启系统代理失败: " + err.Error())
 		return 1
 	}
-	out(fmt.Sprintf("系统代理已开启 (127.0.0.1:%d)", port))
+	out(fmt.Sprintf("系统代理已开启 (%s)", server))
 	return 0
 }
 
@@ -105,6 +116,7 @@ type statusJSON struct {
 	Service  bool   `json:"service"`
 	Proxy    *bool  `json:"proxy,omitempty"`
 	Port     string `json:"port,omitempty"`
+	Address  string `json:"address,omitempty"`
 	Mode     string `json:"mode,omitempty"`
 	TUN      *bool  `json:"tun,omitempty"`
 	TUNMsg   string `json:"tun_message,omitempty"`
@@ -123,7 +135,7 @@ func opStatus(args []string, out cmdOut) int {
 		}
 	}
 	if jsonOut {
-		st := statusJSON{Service: running, Port: listenPort()}
+		st := statusJSON{Service: running, Port: listenPort(), Address: listenAddress()}
 		if running {
 			proxyOn := c.IsProxyRunning()
 			st.Proxy = &proxyOn
@@ -149,7 +161,7 @@ func opStatus(args []string, out cmdOut) int {
 		return 0
 	}
 	out(fmt.Sprintf("代理: %s", map[bool]string{true: "开", false: "关"}[c.IsProxyRunning()]))
-	out(fmt.Sprintf("混合端口 (HTTP/SOCKS5): 127.0.0.1:%s", listenPort()))
+	out(fmt.Sprintf("混合端口 (HTTP/SOCKS5): %s", net.JoinHostPort(listenAddress(), listenPort())))
 	out("模式: " + c.GetProxyMode())
 	ts := c.GetTUNStatus()
 	out(fmt.Sprintf("TUN: %s (%s)", map[bool]string{true: "开", false: "关"}[ts.Running], ts.Message))
@@ -258,15 +270,17 @@ func opConfig(args []string, out cmdOut) int {
 			return 2
 		}
 		key, raw := args[1], args[2]
-		var val interface{}
-		if v, err := strconv.ParseBool(raw); err == nil {
-			val = v
-		} else if v, err := strconv.Atoi(raw); err == nil {
-			val = v
-		} else if v, err := strconv.ParseFloat(raw, 64); err == nil {
-			val = v
-		} else {
-			val = raw
+		val, err := parseConfigValue(key, raw, m)
+		if err != nil {
+			out("值类型不匹配: " + err.Error())
+			return 1
+		}
+		if err := validateConfigValue(key, val); err != nil {
+			out(err.Error())
+			return 1
+		}
+		if !proxy.IsKnownTopLevelKey(key) {
+			out("警告: 配置结构不认识键 " + key + "，仍将写入（前向兼容）")
 		}
 		m[key] = val
 		pretty, err := json.MarshalIndent(m, "", "  ")
@@ -298,6 +312,74 @@ func reloadCoreCert(out cmdOut) {
 		c.ReloadCertificateIfRunning()
 		out("运行中的服务已重载证书")
 	}
+}
+
+// parseConfigValue 解析 `config set` 的写入值：key 已存在于配置文件时，
+// 写入值强制对齐既有 JSON 类型（string→原样字符串；bool→严格 ParseBool；
+// number→严格数值解析），避免把字符串键写成数字导致加载失败；新键沿用
+// bool→int→float→string 的既有解析顺序。
+func parseConfigValue(key, raw string, m map[string]interface{}) (interface{}, error) {
+	if existing, ok := m[key]; ok {
+		switch existing.(type) {
+		case string:
+			return raw, nil
+		case bool:
+			v, err := strconv.ParseBool(raw)
+			if err != nil {
+				return nil, fmt.Errorf("键 %s 在配置中是布尔类型，无法把 %q 解析为布尔", key, raw)
+			}
+			return v, nil
+		case float64:
+			if v, err := strconv.Atoi(raw); err == nil {
+				return v, nil
+			}
+			if v, err := strconv.ParseFloat(raw, 64); err == nil {
+				return v, nil
+			}
+			return nil, fmt.Errorf("键 %s 在配置中是数字类型，无法把 %q 解析为数字", key, raw)
+		}
+	}
+	if v, err := strconv.ParseBool(raw); err == nil {
+		return v, nil
+	}
+	if v, err := strconv.Atoi(raw); err == nil {
+		return v, nil
+	}
+	if v, err := strconv.ParseFloat(raw, 64); err == nil {
+		return v, nil
+	}
+	return raw, nil
+}
+
+// validateConfigValue 对已知键做值校验，非法值直接拒绝写入。
+func validateConfigValue(key string, val interface{}) error {
+	switch key {
+	case "listen_port":
+		var s string
+		switch v := val.(type) {
+		case string:
+			s = v
+		case int:
+			s = strconv.Itoa(v)
+		case float64:
+			s = strconv.FormatFloat(v, 'f', -1, 64)
+		default:
+			return fmt.Errorf("listen_port 值类型无效")
+		}
+		n, err := strconv.Atoi(s)
+		if err != nil || n < 1 || n > 65535 {
+			return fmt.Errorf("listen_port 无效: %s（端口范围 1-65535）", s)
+		}
+	case "listen_address":
+		s, ok := val.(string)
+		if !ok {
+			return fmt.Errorf("listen_address 必须是字符串")
+		}
+		if s != "" && net.ParseIP(s) == nil {
+			return fmt.Errorf("listen_address 无效: %s（需为合法 IPv4/IPv6 地址，留空表示默认 127.0.0.1）", s)
+		}
+	}
+	return nil
 }
 
 func opCA(args []string, out cmdOut) int {

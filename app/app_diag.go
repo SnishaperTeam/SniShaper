@@ -137,7 +137,7 @@ func (a *App) ProxySelfCheck() ProxySelfCheckResult {
 	})
 
 	httpPort := a.GetListenPort()
-	httpAddr := fmt.Sprintf("127.0.0.1:%d", httpPort)
+	httpAddr := a.localProxyServer(httpPort)
 	listening := false
 	if ok, detail, elapsed := dialCheck(httpAddr, 2*time.Second); ok {
 		listening = true

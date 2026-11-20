@@ -129,6 +129,16 @@ func UserConfigPath(relPath string) string {
 	return filepath.Join(UserConfigDir(), relPath)
 }
 
+// LocalProxyHost returns the host local clients should use to reach the
+// proxy: wildcard listeners ("", "0.0.0.0", "::") are not dialable targets,
+// so they map to 127.0.0.1; any concrete listen address is returned as-is.
+func LocalProxyHost(listenAddr string) string {
+	if listenAddr == "" || listenAddr == "0.0.0.0" || listenAddr == "::" {
+		return "127.0.0.1"
+	}
+	return listenAddr
+}
+
 // EnsureUserConfig resolves a config file into the per-user config directory.
 // On first run the bundled default shipped next to the executable is copied
 // into the user directory so the user edits survive updates.
