@@ -27,7 +27,7 @@ Both projects take their proxy engine from the standalone **[snishaper-core](htt
 
 ## Community
 
-Join the QQ group **[Snishaper and FlowWeaver building](https://qm.qq.com/q/GtBOkAOiME)** to talk directly with SniShaper and FlowWeaver users and developers, report issues and send suggestions.
+Join the Matrix group **[Snishaper and FlowWeaver building](https://matrix.to/#/!j7cXGinN6v1-6-FyjGKxAfoZrVjzQWRgrOmc3l6zxj4?via=matrix.org)** to talk directly with SniShaper and FlowWeaver users and developers, report issues and send suggestions.
 
 ---
 
