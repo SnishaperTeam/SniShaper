@@ -145,6 +145,7 @@
         "linux.do",
         "fanbox.cc",
         "v2ex.com",
+        "x.com",
         "twitter.com",
         "t.co",
         "wallhaven.cc",
@@ -3712,27 +3713,11 @@
       "nat64_enabled": false
     },
     {
-      "id": "1787128258880662100",
-      "name": "X",
-      "mode": "tls-rf",
-      "domains": [
-        "x.com",
-        "twimg.com"
-      ],
-      "ech_enabled": false,
-      "use_cf_pool": false,
-      "cert_verify": {},
-      "website": "X",
-      "enabled": true,
-      "upstream": "abby.ns.cloudflare.com",
-      "nat64_enabled": false
-    },
-    {
       "id": "1787128458817310800",
       "name": "twimg",
       "mode": "tls-rf",
       "domains": [
-        "abs.twimg.com"
+        "twimg.com"
       ],
       "ech_enabled": false,
       "use_cf_pool": false,
