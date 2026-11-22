@@ -27,7 +27,7 @@
 
 ## Сообщество
 
-Присоединяйтесь к группе QQ **[Snishaper and FlowWeaver building](https://qm.qq.com/q/GtBOkAOiME)**, чтобы напрямую общаться с пользователями и разработчиками SniShaper и FlowWeaver, сообщать о проблемах и предлагать идеи.
+Присоединяйтесь к группе Matrix **[Snishaper and FlowWeaver building](https://matrix.to/#/!j7cXGinN6v1-6-FyjGKxAfoZrVjzQWRgrOmc3l6zxj4?via=matrix.org)**, чтобы напрямую общаться с пользователями и разработчиками SniShaper и FlowWeaver, сообщать о проблемах и предлагать идеи.
 
 ---
 

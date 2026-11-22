@@ -27,7 +27,7 @@
 
 ## 交流群组
 
-欢迎加入 QQ 群 **[Snishaper and FlowWeaver building](https://qm.qq.com/q/GtBOkAOiME)**，与 SniShaper 与 FlowWeaver 的用户和开发者直接交流、反馈问题与提交建议。
+欢迎加入 Matrix 群 **[Snishaper and FlowWeaver building](https://matrix.to/#/!j7cXGinN6v1-6-FyjGKxAfoZrVjzQWRgrOmc3l6zxj4?via=matrix.org)**，与 SniShaper 与 FlowWeaver 的用户和开发者直接交流、反馈问题与提交建议。
 
 ---
 
