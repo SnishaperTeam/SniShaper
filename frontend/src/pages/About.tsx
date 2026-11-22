@@ -83,13 +83,22 @@ const About: React.FC = () => {
   }, [refreshPending]);
 
   useEffect(() => {
+    // Show cached contributors immediately; refreshed below when GitHub is reachable.
+    try {
+      const cached = localStorage.getItem('about.contributors');
+      if (cached) setContributors(cached);
+    } catch { /* ignore */ }
     fetch('https://api.github.com/repos/SnishaperTeam/SniShaper/contributors?per_page=100')
       .then((r) => (r.ok ? r.json() : Promise.reject(r.status)))
       .then((list: { login: string; type: string }[]) => {
         const names = list.filter((c) => c.type !== 'Bot').map((c) => c.login);
-        if (names.length) setContributors(names.join(', '));
+        if (names.length) {
+          const joined = names.join(', ');
+          try { localStorage.setItem('about.contributors', joined); } catch { /* ignore */ }
+          setContributors(joined);
+        }
       })
-      .catch(() => { /* keep the static list */ });
+      .catch(() => { /* unreachable: keep cached or static list */ });
   }, []);
 
   useEffect(() => {
