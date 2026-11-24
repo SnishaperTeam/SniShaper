@@ -88,6 +88,10 @@ func newCoreRuntime() (*coreRuntime, error) {
 	}
 	// Initialize nativeTUN with DoH resolver
 	r.nativeTUN = singtun.NewManager(r.proxyServer.GetDoHResolver(), r.appendLog)
+	// TUN fake-ip UDP：按站点规则重写 QUIC Initial（CircumVolve QUIC rewrite）。
+	// MatchQUICStrategies 每次调用都读当前规则，规则热加载自动生效；
+	// 未命中重写策略的域名保持丢弃回退 TCP 的旧行为。
+	r.nativeTUN.SetQUICRewrite(r.ruleManager.MatchQUICStrategies)
 
 	if err := r.start(); err != nil {
 		return nil, err
