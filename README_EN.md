@@ -1,4 +1,4 @@
-# SniShaper
+﻿# SniShaper
 
 [中文](README.md) | [English](README_EN.md) | [Русский](README_RU.md)
 
@@ -28,12 +28,12 @@ Both projects take their proxy engine from the standalone **[snishaper-core](htt
 <tr>
 <td width="50%">
 
-[![FlowWeaver](https://github-readme-stats.vercel.app/api/pin/?username=SnishaperTeam&repo=FlowWeaver)](https://github.com/SnishaperTeam/FlowWeaver)
+[![FlowWeaver](https://githubcard.com/SnishaperTeam/FlowWeaver.svg)](https://githubcard.com/SnishaperTeam/FlowWeaver/card?utm_source=github&utm_medium=readme)
 
 </td>
 <td width="50%">
 
-[![snishaper-core](https://github-readme-stats.vercel.app/api/pin/?username=SnishaperTeam&repo=snishaper-core&show_owner=true)](https://github.com/SnishaperTeam/snishaper-core)
+[![snishaper-core](https://githubcard.com/SnishaperTeam/snishaper-core.svg)](https://githubcard.com/SnishaperTeam/snishaper-core/card?utm_source=github&utm_medium=readme)
 
 </td>
 </tr>
@@ -49,30 +49,26 @@ Companion projects around SniShaper, covering more platforms and scenarios:
 <div align="center">
 <table>
 <tr>
-<td width="50%">
+<td width="33%">
 
-[![Snishaper-Droid](https://github-readme-stats.vercel.app/api/pin/?username=SnishaperTeam&repo=Snishaper-Droid)](https://github.com/SnishaperTeam/Snishaper-Droid)
-
-</td>
-<td width="50%">
-
-[![SniShaper-Fast](https://github-readme-stats.vercel.app/api/pin/?username=SnishaperTeam&repo=SniShaper-Fast)](https://github.com/SnishaperTeam/SniShaper-Fast)
+[![Snishaper-Droid](https://githubcard.com/SnishaperTeam/Snishaper-Droid.svg)](https://githubcard.com/SnishaperTeam/Snishaper-Droid/card?utm_source=github&utm_medium=readme)
 
 </td>
-</tr>
-<tr>
-<td width="50%">
+<td width="33%">
 
-[![lumine-for-harmonyos](https://github-readme-stats.vercel.app/api/pin/?username=SnishaperTeam&repo=lumine-for-harmonyos)](https://github.com/SnishaperTeam/lumine-for-harmonyos)
+[![lumine-for-harmonyos](https://githubcard.com/SnishaperTeam/lumine-for-harmonyos.svg)](https://githubcard.com/SnishaperTeam/lumine-for-harmonyos/card?utm_source=github&utm_medium=readme)
 
 </td>
-<td width="50%">
+<td width="33%">
 
-[![lumine-for-android](https://github-readme-stats.vercel.app/api/pin/?username=SnishaperTeam&repo=lumine-for-android)](https://github.com/SnishaperTeam/lumine-for-android)
+[![lumine-for-android](https://githubcard.com/SnishaperTeam/lumine-for-android.svg)](https://githubcard.com/SnishaperTeam/lumine-for-android/card?utm_source=github&utm_medium=readme)
 
 </td>
 </tr>
 </table>
+
+**[SniShaper-Fast](https://github.com/SnishaperTeam/SniShaper-Fast)** — private repository, team members only
+
 </div>
 
 ---
@@ -140,20 +136,11 @@ We will complete a native GUI implementation in an upcoming stable release, to r
 This project has benefited from the inspiration of the following excellent open-source projects:
 
 <div align="center">
-<table>
-<tr>
-<td width="50%">
 
-[![DoH-ECH-Demo](https://github-readme-stats.vercel.app/api/pin/?username=0xCaner&repo=DoH-ECH-Demo&show_owner=true)](https://github.com/0xCaner/DoH-ECH-Demo)
+[![DoH-ECH-Demo](https://githubcard.com/0xCaner/DoH-ECH-Demo.svg)](https://githubcard.com/0xCaner/DoH-ECH-Demo/card?utm_source=github&utm_medium=readme)
 
-</td>
-<td width="50%">
+**lumine** — the original repository is gone; see the ports [lumine-for-harmonyos](https://github.com/SnishaperTeam/lumine-for-harmonyos) and [lumine-for-android](https://github.com/SnishaperTeam/lumine-for-android)
 
-[![lumine](https://github-readme-stats.vercel.app/api/pin/?username=moi-si&repo=lumine&show_owner=true)](https://github.com/moi-si/lumine)
-
-</td>
-</tr>
-</table>
 </div>
 
 ## Project Activity & Contributors
