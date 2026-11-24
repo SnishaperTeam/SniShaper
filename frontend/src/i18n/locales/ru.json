@@ -367,6 +367,17 @@
       "minorver": "Изменять minor version",
       "oob": "Внеполосная отправка (OOB)"
     },
+    "quic_rewrite": {
+      "title": "Перезапись QUIC",
+      "hint": "Только в режиме TUN: перезаписывает QUIC Initial-пакеты этой группы",
+      "enable": "Включить перезапись QUIC",
+      "reserved_bits": "Устанавливать reserved bits",
+      "prepend_ack": "ACK-кадр в начало",
+      "decoy_crypto": "Криптокадр-приманка Initial",
+      "fragment_crypto": "Разбивать CRYPTO-кадр",
+      "double_hello": "Дублировать ClientHello",
+      "punycode_sni": "Punycode SNI"
+    },
     "display": {
       "transparent": "Прозрачный",
       "direct": "Прямой",

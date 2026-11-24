@@ -367,6 +367,17 @@
       "minorver": "Modify minor version",
       "oob": "Out-of-band sending (OOB)"
     },
+    "quic_rewrite": {
+      "title": "QUIC Rewrite",
+      "hint": "TUN mode only: rewrites QUIC Initial packets sent to this group",
+      "enable": "Enable QUIC rewrite",
+      "reserved_bits": "Set reserved bits",
+      "prepend_ack": "Prepend ACK frame",
+      "decoy_crypto": "Decoy Initial CRYPTO frame",
+      "fragment_crypto": "Split CRYPTO frame",
+      "double_hello": "Duplicate ClientHello",
+      "punycode_sni": "Punycode SNI"
+    },
     "display": {
       "transparent": "Pass-through",
       "direct": "Direct",
