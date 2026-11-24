@@ -23,6 +23,23 @@ They keep separate codebases and evolve independently. Subscription and rule fil
 
 Both projects take their proxy engine from the standalone **[snishaper-core](https://github.com/SnishaperTeam/snishaper-core)** library: the proxy server, rule engine, DoH resolver, certificate manager and TUN data plane live there, while this repository keeps only the application layer (GUI, CLI, system integration and rule data).
 
+<div align="center">
+<table>
+<tr>
+<td width="50%">
+
+[![FlowWeaver](https://github-readme-stats.vercel.app/api/pin/?username=SnishaperTeam&repo=FlowWeaver)](https://github.com/SnishaperTeam/FlowWeaver)
+
+</td>
+<td width="50%">
+
+[![snishaper-core](https://github-readme-stats.vercel.app/api/pin/?username=SnishaperTeam&repo=snishaper-core&show_owner=true)](https://github.com/SnishaperTeam/snishaper-core)
+
+</td>
+</tr>
+</table>
+</div>
+
 ---
 
 ## Community
@@ -87,8 +104,22 @@ We will complete a native GUI implementation in an upcoming stable release, to r
 
 This project has benefited from the inspiration of the following excellent open-source projects:
 
-- [DoH-ECH-Demo](https://github.com/0xCaner/DoH-ECH-Demo)
-- [lumine](https://github.com/moi-si/lumine)
+<div align="center">
+<table>
+<tr>
+<td width="50%">
+
+[![DoH-ECH-Demo](https://github-readme-stats.vercel.app/api/pin/?username=0xCaner&repo=DoH-ECH-Demo&show_owner=true)](https://github.com/0xCaner/DoH-ECH-Demo)
+
+</td>
+<td width="50%">
+
+[![lumine](https://github-readme-stats.vercel.app/api/pin/?username=moi-si&repo=lumine&show_owner=true)](https://github.com/moi-si/lumine)
+
+</td>
+</tr>
+</table>
+</div>
 
 ## Project Activity & Contributors
 

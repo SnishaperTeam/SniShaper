@@ -11,8 +11,8 @@ export GH_REPO
 
 # ---------------------------------------------------------------------------
 # Exemption list (single source of truth).
-# Hit as PR author: skip the CLA gate. Hit as comment author: never trigger
-# the agreement detection (prevents bot self-trigger loops).
+# Hit as PR author: skip the guidelines hint comment (prevents bot
+# self-trigger loops).
 # ---------------------------------------------------------------------------
 EXEMPT_LOGINS=(
   "dependabot[bot]"
@@ -58,7 +58,7 @@ gh_retry() {
 # Delta sync of the PR state labels: adds only labels missing on the issue,
 # removes only labels that are present. Adding a label from a
 # mutual-exclusion group also removes the group's stale siblings
-# ({cla-pending, cla-signed}, {ci-running, ci-failed, ci-passed} and
+# ({ci-running, ci-failed, ci-passed} and
 # {changes-requested, approved}); a new CI round (adding ci-running) also
 # clears syntax-review, changes-requested and approved (new commits
 # invalidate the previous review state). Callers still pass explicit
@@ -66,9 +66,6 @@ gh_retry() {
 # ---------------------------------------------------------------------------
 _label_group_peers() {
   case "$1" in
-    cla-pending | cla-signed)
-      echo "cla-pending cla-signed"
-      ;;
     ci-running | ci-failed | ci-passed)
       echo "ci-running ci-failed ci-passed"
       ;;

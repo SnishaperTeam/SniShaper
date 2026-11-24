@@ -5,13 +5,11 @@ name: build
 # from inside the build itself).
 #
 #   push(main)                                -> build only
-#   pull_request(opened/synchronize/reopened) -> CLA gate + build + bots
+#   pull_request(opened/synchronize/reopened) -> build + bots (CI always
+#                                                runs; cla.yml only posts
+#                                                a contributor-guidelines
+#                                                hint comment)
 #   workflow_dispatch (manual)                -> build only
-#
-# After the contributor agreement is signed, cla.yml reruns the PR's
-# original pull_request run (a rerun keeps the pull_request event, so
-# the checks stay in the PR merge box); the gate then sees cla-signed
-# and lets the full matrix through.
 #
 # Bot label writes never re-trigger this workflow (labeled is not a trigger
 # type), so the labeled -> workflow -> label feedback loop of the previous
@@ -42,50 +40,17 @@ env:
 
 jobs:
   # ------------------------------------------------------------------
-  # CLA gate — only for pull requests. Direct pushes to main and
-  # manual dispatches skip it entirely.
-  # ------------------------------------------------------------------
-  gate:
-    name: gate
-    if: github.event_name == 'pull_request'
-    runs-on: ubuntu-latest
-    outputs:
-      proceed: ${{ steps.decide.outputs.proceed }}
-    steps:
-      - uses: actions/checkout@v7
-
-      - name: Decide CLA gate
-        id: decide
-        env:
-          GH_TOKEN: ${{ github.token }}
-          PR_NUMBER: ${{ github.event.pull_request.number }}
-          AUTHOR: ${{ github.event.pull_request.user.login }}
-        run: |
-          set -euo pipefail
-          source .github/scripts/bots/common.sh
-          proceed=false
-          if [ -n "${AUTHOR:-}" ] && is_exempt "$AUTHOR"; then
-            proceed=true
-          fi
-          labels="$(gh_retry gh api "repos/${GH_REPO}/issues/${PR_NUMBER}/labels" --jq '.[].name')"
-          if grep -qx 'cla-signed' <<<"$labels"; then
-            proceed=true
-          fi
-          echo "proceed=$proceed" >> "$GITHUB_OUTPUT"
-
-  # ------------------------------------------------------------------
-  # Mark the CI round as running as soon as the gate passes.
+  # Mark the CI round as running.
   # ------------------------------------------------------------------
   mark-running:
     name: mark CI running
-    needs: gate
     # Dependabot-triggered runs and fork PRs receive no repo secrets, so the
     # syntax-bot identity is unavailable there; skip the label state machine
-    # for those (gate still lets the build matrix through). Detected via
-    # head.repo.fork because the secrets context cannot be referenced in a
-    # job-level if (the workflow fails to start).
+    # for those (the build matrix still runs). Detected via head.repo.fork
+    # because the secrets context cannot be referenced in a job-level if
+    # (the workflow fails to start).
     if: >-
-      needs.gate.outputs.proceed == 'true' &&
+      github.event_name == 'pull_request' &&
       github.actor != 'dependabot[bot]' &&
       !github.event.pull_request.head.repo.fork
     runs-on: ubuntu-latest
@@ -125,16 +90,9 @@ jobs:
   # Every job also greps its build log for aarch64-linux-gnu / osxcross and
   # fails if a cross toolchain shows up. This workflow is build + smoke only:
   # packaging (MSIX / zip / tar.gz) happens in the release pipeline.
-  #
-  # Runs unconditionally for direct pushes / manual dispatches; for pull
-  # requests only when the gate passed.
   # ------------------------------------------------------------------
   matrix-build:
     name: GUI ${{ matrix.platform }}/${{ matrix.arch }} on ${{ matrix.runner }}
-    needs: gate
-    if: >-
-      always() && !cancelled() &&
-      (github.event_name != 'pull_request' || needs.gate.outputs.proceed == 'true')
     runs-on: ${{ matrix.runner }}
 
     strategy:
@@ -382,10 +340,6 @@ jobs:
   # ------------------------------------------------------------------
   darwin:
     name: darwin ${{ matrix.arch }} on ${{ matrix.runner }}
-    needs: gate
-    if: >-
-      always() && !cancelled() &&
-      (github.event_name != 'pull_request' || needs.gate.outputs.proceed == 'true')
     runs-on: ${{ matrix.runner }}
 
     strategy:
@@ -493,10 +447,6 @@ jobs:
   # ------------------------------------------------------------------
   test:
     name: test & vet
-    needs: gate
-    if: >-
-      always() && !cancelled() &&
-      (github.event_name != 'pull_request' || needs.gate.outputs.proceed == 'true')
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v7
@@ -535,12 +485,12 @@ jobs:
   # ------------------------------------------------------------------
   # Stable single-point summary used as the required status check in
   # branch protection ("ci"). Succeeds when every build job succeeded
-  # or was skipped (gate-skipped PR runs skip the whole matrix); fails on
-  # any real failure so a red build blocks the merge.
+  # or was skipped; fails on any real failure so a red build blocks
+  # the merge.
   # ------------------------------------------------------------------
   ci:
     name: ci
-    needs: [gate, matrix-build, darwin, test]
+    needs: [matrix-build, darwin, test]
     if: always() && !cancelled()
     runs-on: ubuntu-latest
     permissions:
@@ -572,17 +522,17 @@ jobs:
 
   # ------------------------------------------------------------------
   # Bots — invoked directly from the build (no separate listener
-  # workflow). Only for pull-request rounds that passed the gate; label
-  # writes never re-trigger this workflow, so there is no feedback loop.
+  # workflow). Only for pull-request rounds; label writes never
+  # re-trigger this workflow, so there is no feedback loop.
   # ------------------------------------------------------------------
   bot-report:
     name: Report CI result (syntax-bot)
-    needs: [gate, ci]
+    needs: [ci]
     # Same guard as mark-running: fork PRs get no repo secrets, so the
     # syntax-bot App token cannot be minted there.
     if: >-
       always() && !cancelled() &&
-      needs.gate.outputs.proceed == 'true' &&
+      github.event_name == 'pull_request' &&
       github.actor != 'dependabot[bot]' &&
       !github.event.pull_request.head.repo.fork
     runs-on: ubuntu-latest

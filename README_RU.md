@@ -23,6 +23,23 @@
 
 Оба проекта используют прокси-движок из отдельной библиотеки **[snishaper-core](https://github.com/SnishaperTeam/snishaper-core)**: прокси-сервер, движок правил, DoH-резолвер, менеджер сертификатов и плоскость данных TUN находятся в ней, а в этом репозитории остаётся только прикладной слой (GUI, CLI, системная интеграция и данные правил).
 
+<div align="center">
+<table>
+<tr>
+<td width="50%">
+
+[![FlowWeaver](https://github-readme-stats.vercel.app/api/pin/?username=SnishaperTeam&repo=FlowWeaver)](https://github.com/SnishaperTeam/FlowWeaver)
+
+</td>
+<td width="50%">
+
+[![snishaper-core](https://github-readme-stats.vercel.app/api/pin/?username=SnishaperTeam&repo=snishaper-core&show_owner=true)](https://github.com/SnishaperTeam/snishaper-core)
+
+</td>
+</tr>
+</table>
+</div>
+
 ---
 
 ## Сообщество
@@ -87,8 +104,22 @@
 
 Проект вдохновлен следующими отличными open-source проектами:
 
-- [DoH-ECH-Demo](https://github.com/0xCaner/DoH-ECH-Demo)
-- [lumine](https://github.com/moi-si/lumine)
+<div align="center">
+<table>
+<tr>
+<td width="50%">
+
+[![DoH-ECH-Demo](https://github-readme-stats.vercel.app/api/pin/?username=0xCaner&repo=DoH-ECH-Demo&show_owner=true)](https://github.com/0xCaner/DoH-ECH-Demo)
+
+</td>
+<td width="50%">
+
+[![lumine](https://github-readme-stats.vercel.app/api/pin/?username=moi-si&repo=lumine&show_owner=true)](https://github.com/moi-si/lumine)
+
+</td>
+</tr>
+</table>
+</div>
 
 ## Активность проекта и участники
 
