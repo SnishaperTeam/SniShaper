@@ -41,6 +41,24 @@ const fragFromBackend = (raw: any) => {
   };
 };
 
+const QUIC_REWRITE_FIELDS = [
+  'reserved_bits',
+  'prepend_ack',
+  'decoy_crypto',
+  'fragment_crypto',
+  'double_hello',
+  'punycode_sni'
+] as const;
+
+const quicFromBackend = (raw: any) => {
+  const r = raw || {};
+  const flags: Record<string, boolean> = {};
+  QUIC_REWRITE_FIELDS.forEach((f) => {
+    flags[f] = Boolean(r[f]);
+  });
+  return flags;
+};
+
 const normalizeCertVerify = (value: any) => {
   const next = {
     mode: '',
@@ -157,6 +175,7 @@ const RuleForm: React.FC<RuleFormProps> = ({ initialData, onSuccess, onCancel })
       data.process = String(data.process || '');
       setFormData(data);
       setFrag(fragFromBackend(data.frag));
+      setQuic(quicFromBackend(data.quic));
     }
   }, [initialData]);
 
@@ -185,7 +204,8 @@ const RuleForm: React.FC<RuleFormProps> = ({ initialData, onSuccess, onCancel })
       upstream: String(formData.upstream || '').trim().toUpperCase() === 'DIRECT'
         ? ''
         : String(formData.upstream || '').trim(),
-      frag: currentMode === 'tls-rf' ? buildFragPayload() : null
+      frag: currentMode === 'tls-rf' ? buildFragPayload() : null,
+      quic: buildQuicPayload()
     };
     try {
       if (formData.id) {
@@ -221,6 +241,7 @@ const RuleForm: React.FC<RuleFormProps> = ({ initialData, onSuccess, onCancel })
   const showFragment = currentMode === 'tls-rf';
 
   const [frag, setFrag] = useState<any>(fragFromBackend(null));
+  const [quic, setQuic] = useState<any>(quicFromBackend(null));
 
   const setFragField = (field: string, value: any) => {
     setFrag((prev: any) => ({ ...prev, [field]: value }));
@@ -248,6 +269,24 @@ const RuleForm: React.FC<RuleFormProps> = ({ initialData, onSuccess, onCancel })
     oob: Boolean(frag.oob),
     oob_ex: false
   });
+
+  const quicAnyEnabled = QUIC_REWRITE_FIELDS.some((f) => Boolean(quic[f]));
+  const toggleQuicAll = () => setQuic(() => {
+    const next: Record<string, boolean> = {};
+    QUIC_REWRITE_FIELDS.forEach((f) => {
+      next[f] = !quicAnyEnabled && f === 'reserved_bits';
+    });
+    return next;
+  });
+  const toggleQuicField = (field: string) => setQuic((prev: any) => ({ ...prev, [field]: !prev[field] }));
+  const buildQuicPayload = () => {
+    if (!QUIC_REWRITE_FIELDS.some((f) => Boolean(quic[f]))) return null;
+    const payload: Record<string, boolean> = {};
+    QUIC_REWRITE_FIELDS.forEach((f) => {
+      payload[f] = Boolean(quic[f]);
+    });
+    return payload;
+  };
 
   const splitListInput = (value: string) =>
     value
@@ -657,6 +696,38 @@ const RuleForm: React.FC<RuleFormProps> = ({ initialData, onSuccess, onCancel })
               </Box>
             </Box>
           )}
+
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5, p: 2, border: 1, borderColor: 'divider', bgcolor: 'background.paper', borderRadius: 2 }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, color: 'primary.main' }}>
+              <Globe size={16} />
+              <Typography variant="caption" sx={{ fontWeight: 'bold', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                {t('rules.quic_rewrite.title')}
+              </Typography>
+            </Box>
+            <Typography variant="caption" sx={{ fontSize: 10, color: 'text.secondary' }}>
+              {t('rules.quic_rewrite.hint')}
+            </Typography>
+
+            <Box onClick={toggleQuicAll} sx={cardSx(quicAnyEnabled, { row: true, inactiveBg: 'action.hover' })}>
+              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5, minWidth: 0 }}>
+                <Typography variant="caption" sx={{ fontWeight: 'bold', color: 'text.primary', py: 0.25 }}>
+                  {t('rules.quic_rewrite.enable')}
+                </Typography>
+              </Box>
+              <Switch size="small" checked={quicAnyEnabled} />
+            </Box>
+
+            <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: '1fr 1fr' }, gap: 1.5 }}>
+              {QUIC_REWRITE_FIELDS.map((f) => (
+                <Box key={f} onClick={() => toggleQuicField(f)} sx={cardSx(Boolean(quic[f]), { row: true, inactiveBg: 'action.hover' })}>
+                  <Typography variant="caption" sx={{ fontWeight: 'bold', color: 'text.primary', py: 0.25 }}>
+                    {t(`rules.quic_rewrite.${f}`)}
+                  </Typography>
+                  <Switch size="small" checked={Boolean(quic[f])} />
+                </Box>
+              ))}
+            </Box>
+          </Box>
 
           {showCertVerify && (
             <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5, p: 2, border: 1, borderColor: 'warning.main', bgcolor: 'background.paper', borderRadius: 2, position: 'relative' }}>

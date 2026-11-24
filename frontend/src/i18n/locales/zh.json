@@ -367,6 +367,17 @@
       "minorver": "修改 minor version",
       "oob": "带外发送（OOB）"
     },
+    "quic_rewrite": {
+      "title": "QUIC 重写",
+      "hint": "仅 TUN 模式生效：重写发往该分组的 QUIC Initial 包",
+      "enable": "启用 QUIC 重写",
+      "reserved_bits": "设置保留位",
+      "prepend_ack": "前置 ACK 帧",
+      "decoy_crypto": "伪装 Initial CRYPTO 帧",
+      "fragment_crypto": "拆分 CRYPTO 帧",
+      "double_hello": "重复 ClientHello",
+      "punycode_sni": "SNI 转 Punycode"
+    },
     "display": {
       "transparent": "透传",
       "direct": "直连",
