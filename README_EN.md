@@ -42,6 +42,41 @@ Both projects take their proxy engine from the standalone **[snishaper-core](htt
 
 ---
 
+## Ecosystem
+
+Companion projects around SniShaper, covering more platforms and scenarios:
+
+<div align="center">
+<table>
+<tr>
+<td width="50%">
+
+[![Snishaper-Droid](https://github-readme-stats.vercel.app/api/pin/?username=SnishaperTeam&repo=Snishaper-Droid)](https://github.com/SnishaperTeam/Snishaper-Droid)
+
+</td>
+<td width="50%">
+
+[![SniShaper-Fast](https://github-readme-stats.vercel.app/api/pin/?username=SnishaperTeam&repo=SniShaper-Fast)](https://github.com/SnishaperTeam/SniShaper-Fast)
+
+</td>
+</tr>
+<tr>
+<td width="50%">
+
+[![lumine-for-harmonyos](https://github-readme-stats.vercel.app/api/pin/?username=SnishaperTeam&repo=lumine-for-harmonyos)](https://github.com/SnishaperTeam/lumine-for-harmonyos)
+
+</td>
+<td width="50%">
+
+[![lumine-for-android](https://github-readme-stats.vercel.app/api/pin/?username=SnishaperTeam&repo=lumine-for-android)](https://github.com/SnishaperTeam/lumine-for-android)
+
+</td>
+</tr>
+</table>
+</div>
+
+---
+
 ## Community
 
 Join the Matrix group **[Snishaper and FlowWeaver building](https://matrix.to/#/!j7cXGinN6v1-6-FyjGKxAfoZrVjzQWRgrOmc3l6zxj4?via=matrix.org)** to talk directly with SniShaper and FlowWeaver users and developers, report issues and send suggestions.

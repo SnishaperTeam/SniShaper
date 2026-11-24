@@ -42,6 +42,41 @@
 
 ---
 
+## 生态项目
+
+围绕 SniShaper 的配套项目矩阵，覆盖更多平台与场景：
+
+<div align="center">
+<table>
+<tr>
+<td width="50%">
+
+[![Snishaper-Droid](https://github-readme-stats.vercel.app/api/pin/?username=SnishaperTeam&repo=Snishaper-Droid)](https://github.com/SnishaperTeam/Snishaper-Droid)
+
+</td>
+<td width="50%">
+
+[![SniShaper-Fast](https://github-readme-stats.vercel.app/api/pin/?username=SnishaperTeam&repo=SniShaper-Fast)](https://github.com/SnishaperTeam/SniShaper-Fast)
+
+</td>
+</tr>
+<tr>
+<td width="50%">
+
+[![lumine-for-harmonyos](https://github-readme-stats.vercel.app/api/pin/?username=SnishaperTeam&repo=lumine-for-harmonyos)](https://github.com/SnishaperTeam/lumine-for-harmonyos)
+
+</td>
+<td width="50%">
+
+[![lumine-for-android](https://github-readme-stats.vercel.app/api/pin/?username=SnishaperTeam&repo=lumine-for-android)](https://github.com/SnishaperTeam/lumine-for-android)
+
+</td>
+</tr>
+</table>
+</div>
+
+---
+
 ## 交流群组
 
 欢迎加入 Matrix 群 **[Snishaper and FlowWeaver building](https://matrix.to/#/!j7cXGinN6v1-6-FyjGKxAfoZrVjzQWRgrOmc3l6zxj4?via=matrix.org)**，与 SniShaper 与 FlowWeaver 的用户和开发者直接交流、反馈问题与提交建议。
