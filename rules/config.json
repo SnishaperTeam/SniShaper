@@ -4353,6 +4353,24 @@
       "name": "Meta",
       "config": "AEj+DQBEAQAgACAdd+scUi0IYFsXnUIU7ko2Nd9+F8M26pAGZVpz/KrWPgAEAAEAAWQVZWNoLXB1YmxpYy5hdG1ldGEuY29tAAA=",
       "auto_update": false
+    },
+    {
+      "id": "1795517521955000000",
+      "name": "Alibaba Cloud ESA",
+      "config": "AD7+DQA6AQAgACA1uEa4tR/3Y0hb0KMfZ82F1nvFN7JRuy6tfy7sAHmgYgAEAAEAAQALZXNhLWVjaC5jb20AAA=",
+      "auto_update": false
+    },
+    {
+      "id": "1795517521955000035",
+      "name": "Deflect",
+      "config": "AEr+DQBGPgAgACCkYjEhWTfxP4YmwhEmtflNWZ7dD95s1lSnLWxerIegawAMAAEAAQABAAIAAQADAA9kZWZsZWN0LndlYnNpdGUAAA==",
+      "auto_update": false
+    },
+    {
+      "id": "1795517521955000070",
+      "name": "DiamWall",
+      "config": "AEP+DQA/JwAgACDqIqD1aaNV60ChL06rTVEppzar9fp3VTu6Isi0NzLRQQAEAAEAAQAQZWNoLmRpYW13YWxsLmNvbQAA",
+      "auto_update": false
     }
   ],
   "nat64_profiles": [
