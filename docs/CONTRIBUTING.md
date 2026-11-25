@@ -100,9 +100,22 @@ Build outputs:
 - Avoid mixing unrelated formatting changes or large refactors into feature PRs
 - For significant changes, consider opening an Issue first for discussion
 
+### Commit Messages
+
+- Use [Conventional Commits](https://www.conventionalcommits.org) style,
+  e.g. `fix(proxy): ...`, `feat(rules): ...`, `docs(readme): ...`
+- Write commit messages in English
+
+## Contributor Agreement
+
+Please review the [Collaborator Agreement](COLLABORATOR_AGREEMENT.md) before
+submitting substantial contributions.
+
 ## Documentation and Rules
 
 - Technical details and usage guides are mainly maintained in the [GitHub Wiki](https://github.com/SnishaperTeam/SniShaper/wiki)
+- UI copy must go through `t()` and be added to all three locales (`zh`, `en`, `ru`) in the same change
+- Changes that add, rename, or remove files: request the reviewer to update the GitHub Wiki (zh + EN pages)
 - Improvements to rules can be submitted directly in the `rules` directory or via Issue/PR
 - Documentation improvements are also welcome
 
