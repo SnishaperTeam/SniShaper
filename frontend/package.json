@@ -10,8 +10,8 @@
   "devDependencies": {
     "@emnapi/core": "^1.11.3",
     "@emnapi/runtime": "^1.11.3",
-    "@types/node": "^26.6.6",
-    "@types/react": "^19.3.0",
+    "@types/node": "^26.6.10",
+    "@types/react": "^19.3.2",
     "@types/react-dom": "^19.3.0",
     "@vitejs/plugin-react-swc": "^4.3.3",
     "typescript": "^7.0.2",
@@ -20,13 +20,13 @@
   "dependencies": {
     "@emotion/react": "^11.14.0",
     "@emotion/styled": "^11.14.1",
-    "@iconify-icons/material-symbols": "^2.0.7",
+    "@iconify-icons/material-symbols": "^2.0.11",
     "@iconify-icons/mdi": "^2.0.0",
     "@iconify/react": "^6.0.4",
     "@mui/material": "^9.6.0",
     "@wailsio/runtime": "^3.1.0",
     "react": "^19.3.1",
     "react-dom": "^19.3.1",
-    "react-router-dom": "^7.18.6"
+    "react-router-dom": "^7.18.7"
   }
 }
