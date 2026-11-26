@@ -66,3 +66,39 @@ We consider good-faith security research to be in the public interest. We
 will not pursue legal action against researchers who act with respect for
 user privacy and avoid service degradation, data destruction, and data
 exposure.
+
+## Incident Record: exposed development CA key (resolved 2026-11-26)
+
+On 2026-06-13 a local backup commit accidentally introduced a development
+certificate authority (`CN=SniShaper CA`, RSA-2048) **including its private
+key** into `build/cert/`. The file was deleted on 2026-08-15, but until the
+history rewrite below it remained recoverable from git history and was
+present in the auto-generated **source archives of tags v1.27 and v1.28**.
+
+Impact assessment:
+
+- Static analysis of every commit between introduction and deletion shows
+  **no code ever referenced `build/cert/`**; the key was never loaded by
+  the application, never shipped inside any binary, and never used to sign
+  any release artifact.
+- The app's MITM root CA is generated per-user at first run and stored
+  under the per-user config directory — it is a different key and is
+  unaffected.
+- The MSIX signing certificate (`devcert.pfx`) is unrelated to the exposed
+  key.
+
+Resolution (2026-11-26):
+
+- The entire repository history was rewritten with `git filter-repo` to
+  purge the key; all tags were re-pushed. Old commit hashes no longer
+  resolve in this repository.
+- The exposed CA is treated as **burned**: no SniShaper code trusts it,
+  and it must never be reused.
+- Release v1.30.3.3 ships the hardened CI pipeline (SHA-pinned actions,
+  per-asset SHA-256 checksums).
+
+**User action:** the application never asks you to import a certificate
+named "SniShaper CA" from a repository download. If you manually imported
+such a root certificate while experimenting with v1.27/v1.28-era sources,
+remove it from your OS/browser trust store and update to the latest
+release. No other user action is required.
