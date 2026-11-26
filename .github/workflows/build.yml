@@ -55,9 +55,9 @@ jobs:
       !github.event.pull_request.head.repo.fork
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - uses: actions/create-github-app-token@v3
+      - uses: actions/create-github-app-token@f418cff399f7aef4c2f0ad47e25ca7a6abbdd6fc # v3.4.0
         id: syntax_token
         with:
           app-id: ${{ secrets.SYNTAX_BOT_APP_ID }}
@@ -121,9 +121,9 @@ jobs:
             script: sh
 
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - uses: actions/setup-go@v7
+      - uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5 # v7.1.0
         id: go
         with:
           go-version-file: go.mod
@@ -133,7 +133,7 @@ jobs:
       # is what makes a rebuild of the same tree cheap, and it survives between
       # runs only when it is cached explicitly.
       - name: Cache Go build cache
-        uses: actions/cache@v6
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: |
             ~/AppData/Local/go-build
@@ -144,7 +144,7 @@ jobs:
             go-build-${{ runner.os }}-${{ matrix.arch }}-
             go-build-${{ runner.os }}-
 
-      - uses: actions/setup-node@v7
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 24
           cache: npm
@@ -160,7 +160,7 @@ jobs:
       # key whenever the package list below changes.
       - name: Cache apt packages (Linux)
         if: runner.os == 'Linux'
-        uses: actions/cache@v6
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ${{ runner.temp }}/apt-archives
           key: apt-${{ matrix.runner }}-v1
@@ -354,16 +354,16 @@ jobs:
             arch: arm64
 
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - uses: actions/setup-go@v7
+      - uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5 # v7.1.0
         id: go
         with:
           go-version-file: go.mod
           cache-dependency-path: go.sum
 
       - name: Cache Go build cache
-        uses: actions/cache@v6
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: |
             ~/AppData/Local/go-build
@@ -449,9 +449,9 @@ jobs:
     name: test & vet
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - uses: actions/setup-go@v7
+      - uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5 # v7.1.0
         with:
           go-version-file: go.mod
           cache-dependency-path: go.sum
@@ -468,7 +468,7 @@ jobs:
       - name: go test
         run: go test -tags with_gvisor ./...
 
-      - uses: actions/setup-node@v7
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 24
           cache: npm
@@ -497,7 +497,7 @@ jobs:
       actions: read
       contents: read
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Assert build outcome
         env:
@@ -542,9 +542,9 @@ jobs:
       actions: read
       contents: read
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - uses: actions/create-github-app-token@v3
+      - uses: actions/create-github-app-token@f418cff399f7aef4c2f0ad47e25ca7a6abbdd6fc # v3.4.0
         id: syntax_token
         with:
           app-id: ${{ secrets.SYNTAX_BOT_APP_ID }}

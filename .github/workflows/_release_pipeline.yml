@@ -83,21 +83,21 @@ jobs:
         id: bot
         if: env.RELEASE_BOT_READY == 'true'
         continue-on-error: true
-        uses: actions/create-github-app-token@v3
+        uses: actions/create-github-app-token@f418cff399f7aef4c2f0ad47e25ca7a6abbdd6fc # v3.4.0
         with:
           app-id: ${{ secrets.RELEASE_BOT_APP_ID }}
           private-key: ${{ secrets.RELEASE_BOT_PRIVATE_KEY }}
           permission-contents: write
 
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
           token: ${{ steps.bot.outputs.token || github.token }}
 
       - name: Import release bot signing key
         if: env.SIGNING_READY == 'true'
-        uses: crazy-max/ghaction-import-gpg@v7
+        uses: crazy-max/ghaction-import-gpg@2dc316deee8e90f13e1a351ab510b4d5bc0c82cd # v7.0.0
         with:
           gpg_private_key: ${{ secrets.GPG_PRIVATE_KEY }}
           passphrase: ${{ secrets.GPG_PASSPHRASE }}
@@ -301,13 +301,13 @@ jobs:
       UPDATER_ED25519_SEED: ${{ secrets.UPDATER_ED25519_SEED }}
     steps:
       - name: Checkout full history
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
 
       - name: Setup Go
         id: go
-        uses: actions/setup-go@v7
+        uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5 # v7.1.0
         with:
           go-version-file: go.mod
           cache-dependency-path: go.sum
@@ -372,7 +372,7 @@ jobs:
           Remove-Item Env:GOOS, Env:GOARCH, Env:CGO_ENABLED -ErrorAction SilentlyContinue
 
       - name: Cache Go build cache
-        uses: actions/cache@v6
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: |
             ~/AppData/Local/go-build
@@ -384,7 +384,7 @@ jobs:
             go-build-${{ runner.os }}-
 
       - name: Setup Node
-        uses: actions/setup-node@v7
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 24
           cache: npm
@@ -424,6 +424,13 @@ jobs:
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
+          # A certificate restored from the secret cannot be opened without
+          # its password; fail fast instead of falling through to the
+          # ephemeral-cert 'password' default further down the pipeline.
+          if ($env:MSIX_PFX_BASE64 -and -not $env:MSIX_PFX_PASSWORD) {
+            Write-Host "::error::MSIX_PFX_BASE64 is set but MSIX_PFX_PASSWORD is empty; cannot open the signing certificate"
+            exit 1
+          }
           $certPath = Join-Path $env:GITHUB_WORKSPACE 'devcert.pfx'
           if ($env:MSIX_PFX_BASE64) {
             [IO.File]::WriteAllBytes($certPath, [Convert]::FromBase64String($env:MSIX_PFX_BASE64))
@@ -799,7 +806,7 @@ jobs:
           Write-Host "::notice::signed $($manifests.Count) updater manifest(s)"
 
       - name: Upload Windows artifacts
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: windows-artifacts
           path: staging/
@@ -845,19 +852,19 @@ jobs:
             arch: arm64
     steps:
       - name: Checkout full history
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
 
       - name: Setup Go
         id: go
-        uses: actions/setup-go@v7
+        uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5 # v7.1.0
         with:
           go-version-file: go.mod
           cache-dependency-path: go.sum
 
       - name: Cache Go build cache
-        uses: actions/cache@v6
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: |
             ~/AppData/Local/go-build
@@ -869,14 +876,14 @@ jobs:
             go-build-${{ runner.os }}-
 
       - name: Setup Node
-        uses: actions/setup-node@v7
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 24
           cache: npm
           cache-dependency-path: frontend/package-lock.json
 
       - name: Cache apt packages
-        uses: actions/cache@v6
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ${{ runner.temp }}/apt-archives
           key: apt-${{ matrix.runner }}-v1
@@ -973,7 +980,7 @@ jobs:
           echo "::notice::$ARCHIVE ready"
 
       - name: Upload Linux artifacts
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: linux-artifacts-${{ matrix.arch }}
           path: |
@@ -1021,19 +1028,19 @@ jobs:
             arch: arm64
     steps:
       - name: Checkout full history
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
 
       - name: Setup Go
         id: go
-        uses: actions/setup-go@v7
+        uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5 # v7.1.0
         with:
           go-version-file: go.mod
           cache-dependency-path: go.sum
 
       - name: Cache Go build cache
-        uses: actions/cache@v6
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: |
             ~/AppData/Local/go-build
@@ -1104,7 +1111,7 @@ jobs:
           echo "::notice::$ARCHIVE ready"
 
       - name: Upload macOS artifacts
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: macos-artifacts-${{ matrix.arch }}
           path: |
@@ -1155,19 +1162,19 @@ jobs:
             path_arch: arm64
     steps:
       - name: Checkout full history
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
 
       - name: Setup Go
         id: go
-        uses: actions/setup-go@v7
+        uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5 # v7.1.0
         with:
           go-version-file: go.mod
           cache-dependency-path: go.sum
 
       - name: Cache Go build cache
-        uses: actions/cache@v6
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: |
             ~/AppData/Local/go-build
@@ -1179,14 +1186,14 @@ jobs:
             go-build-${{ runner.os }}-
 
       - name: Setup Node
-        uses: actions/setup-node@v7
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 24
           cache: npm
           cache-dependency-path: frontend/package-lock.json
 
       - name: Cache apt packages
-        uses: actions/cache@v6
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ${{ runner.temp }}/apt-archives
           key: apt-${{ runner.os }}-v1
@@ -1263,7 +1270,7 @@ jobs:
           done
 
       - name: Upload Linux package artifacts
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: linux-packages-${{ matrix.arch }}
           path: build/dist/linux/${{ matrix.arch }}/
@@ -1307,39 +1314,39 @@ jobs:
         id: bot
         if: env.RELEASE_BOT_READY == 'true'
         continue-on-error: true
-        uses: actions/create-github-app-token@v3
+        uses: actions/create-github-app-token@f418cff399f7aef4c2f0ad47e25ca7a6abbdd6fc # v3.4.0
         with:
           app-id: ${{ secrets.RELEASE_BOT_APP_ID }}
           private-key: ${{ secrets.RELEASE_BOT_PRIVATE_KEY }}
           permission-contents: write
 
       - name: Checkout full history
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
 
       - name: Download Windows artifacts
-        uses: actions/download-artifact@v8
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: windows-artifacts
           path: staging
 
       - name: Download Linux artifacts (every architecture)
-        uses: actions/download-artifact@v8
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           pattern: linux-artifacts-*
           path: staging
           merge-multiple: true
 
       - name: Download macOS artifacts (every architecture)
-        uses: actions/download-artifact@v8
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           pattern: macos-artifacts-*
           path: staging
           merge-multiple: true
 
       - name: Download Linux package artifacts (every architecture)
-        uses: actions/download-artifact@v8
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           pattern: linux-packages-*
           path: staging
@@ -1416,7 +1423,7 @@ jobs:
 
       - name: Cache Ollama (binary + models)
         if: env.LLM_CONFIGURED != 'true'
-        uses: actions/cache@v6
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: |
             ~/AppData/Local/Programs/Ollama
@@ -1522,6 +1529,27 @@ jobs:
           Write-Host "::notice::Release notes written to $notesPath"
           Copy-Item $notesPath (Join-Path $env:GITHUB_WORKSPACE 'staging\RELEASE_NOTES.md') -Force
 
+      - name: Generate SHA-256 checksums
+        shell: pwsh
+        run: |
+          # Sidecar .sha256 files so users can verify every asset offline
+          # (sha256sum -c <asset>.sha256) without trusting the download
+          # channel or the release notes table.
+          $ErrorActionPreference = 'Stop'
+          $assetsDir = Join-Path $env:GITHUB_WORKSPACE 'staging'
+          $assets = Get-ChildItem -Path $assetsDir -File |
+                    Where-Object { $_.Name -ne 'RELEASE_NOTES.md' }
+          if (-not $assets) {
+            Write-Host "::error::nothing staged to checksum"
+            exit 1
+          }
+          foreach ($f in $assets) {
+            $h = (Get-FileHash -LiteralPath $f.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+            "$h  $($f.Name)" | Set-Content -LiteralPath (Join-Path $assetsDir "$($f.Name).sha256") -Encoding ascii
+            Write-Host "sha256 $($f.Name): $h"
+          }
+          Write-Host "::notice::wrote $($assets.Count) checksum sidecars"
+
       - name: Append asset manifest to release notes
         shell: pwsh
         run: |
@@ -1612,6 +1640,9 @@ jobs:
                 }
                 '^updater-public-key\.txt$' {
                     return 'Base64 Ed25519 public key for verifying updater manifests (set as public_key in updater.json)'
+                }
+                '\.sha256$' {
+                    return 'SHA-256 checksum sidecar for the matching asset (sha256sum -c)'
                 }
                 default { return 'Release artifact' }
             }
@@ -1708,7 +1739,8 @@ jobs:
             (Join-Path $assetsDir 'SniShaperUpdater-*.exe'),
             (Join-Path $assetsDir 'snishaper-*-windows-*-update.zip'),
             (Join-Path $assetsDir 'updater-manifest-*.json*'),
-            (Join-Path $assetsDir 'updater-public-key.txt')
+            (Join-Path $assetsDir 'updater-public-key.txt'),
+            (Join-Path $assetsDir '*.sha256')
           )
           $matched = @()
           foreach ($pattern in $patterns) {
@@ -1926,7 +1958,7 @@ jobs:
       actions: read
       contents: read
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Write run summary
         continue-on-error: true
