@@ -17,6 +17,7 @@ import (
 	"snishaper/core"
 	"github.com/SnishaperTeam/snishaper-core/certmanager"
 	"github.com/SnishaperTeam/snishaper-core/evolution"
+	corelog "github.com/SnishaperTeam/snishaper-core/log"
 	"github.com/SnishaperTeam/snishaper-core/netiface"
 	"github.com/SnishaperTeam/snishaper-core/proxy"
 )
@@ -282,7 +283,13 @@ func (a *App) startupV3() {
 			a.launchedAtStartup, a.autoProxyAtStartup, a.GetAutoEnableProxyOnAutoStart()))
 	}
 
-	if cm, cmErr := certmanager.InitCertManager(a.certPath); cmErr != nil {
+	if cm, cmErr := certmanager.InitCertManager(a.certPath, certmanager.WithLogger(
+		corelog.Func(func(format string, args ...any) {
+			msg := fmt.Sprintf(format, args...)
+			a.appendLog(msg)
+			log.Print(msg)
+		}),
+	)); cmErr != nil {
 		a.appendLog("[startup] Failed to init cert manager: " + cmErr.Error())
 	} else {
 		a.setCertManager(cm)
