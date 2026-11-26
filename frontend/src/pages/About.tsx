@@ -60,7 +60,7 @@ const About: React.FC = () => {
   const [downloadTotal, setDownloadTotal] = useState<number>(0);
   const [pendingUpdate, setPendingUpdate] = useState<string | null>(null);
   const [releaseChannel, setReleaseChannel] = useState<string>('stable');
-  const [contributors, setContributors] = useState<string>('mechrevo, dongzheyu, JetCPP-dongle');
+  const [contributors, setContributors] = useState<string>('wuguo13842, Calvin1-tech, lzpls');
   const downloadingRef = useRef<string | null>(null);
 
   const refreshPending = useCallback(async () => {
@@ -123,7 +123,6 @@ const About: React.FC = () => {
 
   const handleOpenWebsite = () => OpenURL('https://jetcpp.ccwu.cc');
   const handleOpenGitHub = () => OpenURL('https://github.com/SnishaperTeam/SniShaper');
-  const handleOpenBeta = () => OpenURL('https://github.com/SnishaperTeam/SniShaper/actions');
   const handleOpenAdaptation = () => OpenURL('https://github.com/SnishaperTeam/SniShaper/issues/195');
   const handleOpenDevPlan = () => OpenURL('https://github.com/SnishaperTeam/SniShaper/blob/main/todo.md');
   const handleOpenMatrix = () => OpenURL('https://matrix.to/#/!j7cXGinN6v1-6-FyjGKxAfoZrVjzQWRgrOmc3l6zxj4?via=matrix.org');
@@ -218,8 +217,7 @@ const About: React.FC = () => {
     { icon: <Heart size={22} />, title: t('about.contributors'), value: contributors, color: 'success.main', valueColor: 'text.primary' },
     { icon: <Users size={22} />, title: t('about.maintainers'), value: 'JetCPP Team, SniShaper Team', color: 'warning.main', valueColor: 'text.primary' },
     { icon: <Globe size={22} />, title: t('about.website'), value: 'jetcpp.ccwu.cc', color: 'primary.main', valueColor: 'primary.main', onClick: handleOpenWebsite },
-    { icon: <RefreshCcw size={22} />, title: 'GitHub', value: 'SnishaperTeam/SniShaper', color: 'text.primary', valueColor: 'text.primary', onClick: handleOpenGitHub },
-    { icon: <Download size={22} />, title: t('about.latest_beta'), value: t('about.actions_build'), color: 'warning.main', valueColor: 'warning.main', onClick: handleOpenBeta },
+    { icon: <RefreshCcw size={22} />, title: 'GitHub', value: 'SnishaperTeam/SniShaper', color: 'text.primary', valueColor: 'text.primary', onClick: handleOpenGitHub }
   ];
 
   return (
