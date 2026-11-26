@@ -12,8 +12,8 @@ github.com/RyuaNerin/go-krypto v1.3.0 h1:smavTzSMAx8iuVlGb4pEwl9MD2qicqMzuXR2QWp
 github.com/RyuaNerin/go-krypto v1.3.0/go.mod h1:9R9TU936laAIqAmjcHo/LsaXYOZlymudOAxjaBf62UM=
 github.com/RyuaNerin/testingutil v0.1.0 h1:IYT6JL57RV3U2ml3dLHZsVtPOP6yNK7WUVdzzlpNrss=
 github.com/RyuaNerin/testingutil v0.1.0/go.mod h1:yTqj6Ta/ycHMPJHRyO12Mz3VrvTloWOsy23WOZH19AA=
-github.com/SnishaperTeam/snishaper-core v0.8.6 h1:NLmPv8swqwD9z4seA4ND0q7sIUKFlecKJsmx75Wbn3w=
-github.com/SnishaperTeam/snishaper-core v0.8.6/go.mod h1:R+4jX54Gndgqxmikhsx4Tf5rGE+Hp7+G4JFVEcCy//Q=
+github.com/SnishaperTeam/snishaper-core v0.8.7-security.1 h1:NV1OA9MepvE5ZBvtT71AeFig8FVDllYagFOEN0rjWxk=
+github.com/SnishaperTeam/snishaper-core v0.8.7-security.1/go.mod h1:R+4jX54Gndgqxmikhsx4Tf5rGE+Hp7+G4JFVEcCy//Q=
 github.com/Yawning/aez v0.0.0-20211027044916-e49e68abd344 h1:cDVUiFo+npB0ZASqnw4q90ylaVAbnYyx0JYqK4YcGok=
 github.com/Yawning/aez v0.0.0-20211027044916-e49e68abd344/go.mod h1:9pIqrY6SXNL8vjRQE5Hd/OL5GyK/9MrGUWs87z/eFfk=
 github.com/admpub/fsnotify v1.7.0 h1:pI04ANljHE5cS3fr+uXMgDG4/Cv3iye40nH/oZE8pB0=
