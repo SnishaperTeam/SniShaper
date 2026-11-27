@@ -10,12 +10,12 @@
   "devDependencies": {
     "@emnapi/core": "^1.11.3",
     "@emnapi/runtime": "^1.11.3",
-    "@types/node": "^26.6.10",
+    "@types/node": "^26.6.11",
     "@types/react": "^19.3.3",
     "@types/react-dom": "^19.3.0",
     "@vitejs/plugin-react-swc": "^4.3.3",
     "typescript": "^7.0.2",
-    "vite": "^8.3.8"
+    "vite": "^8.4.0"
   },
   "dependencies": {
     "@emotion/react": "^11.14.0",
