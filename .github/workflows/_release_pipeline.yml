@@ -226,10 +226,11 @@ jobs:
 
       # ------------------------------------------------------------------
       # Every channel stamps the resolved version/channel into
-      # Package.appxmanifest and pushes it, so the repository state always
-      # mirrors the release that is being built. The build jobs inject the
-      # same values locally, so a rejected push cannot produce a package
-      # with stale release metadata.
+      # Package.appxmanifest (and the matching Supported Versions table
+      # into docs/SECURITY.md) and pushes both, so the repository state
+      # always mirrors the release that is being built. The build jobs
+      # inject the same values locally, so a rejected push cannot
+      # produce a package with stale release metadata.
       # ------------------------------------------------------------------
       - name: Inject release metadata into manifest
         if: steps.release-check.outputs.skip != 'true'
@@ -259,26 +260,26 @@ jobs:
           git config user.name "$RELEASE_BOT_NAME"
           git config user.email "$RELEASE_BOT_EMAIL"
           echo "::notice::committing as $RELEASE_BOT_NAME <$RELEASE_BOT_EMAIL> (gpg=$SIGNING_READY)"
-          git add Package.appxmanifest
+          git add Package.appxmanifest docs/SECURITY.md
           if git diff --cached --quiet; then
-            echo "::notice::Package.appxmanifest is already at $RELEASE_VERSION ($RELEASE_CHANNEL), nothing to push"
+            echo "::notice::Package.appxmanifest and docs/SECURITY.md are already at $RELEASE_VERSION ($RELEASE_CHANNEL), nothing to push"
             exit 0
           fi
-          git commit -m "chore(release): sync Package.appxmanifest to $RELEASE_VERSION ($RELEASE_CHANNEL) [skip ci]"
+          git commit -m "chore(release): sync Package.appxmanifest and docs/SECURITY.md to $RELEASE_VERSION ($RELEASE_CHANNEL) [skip ci]"
           for attempt in 1 2 3; do
             if git push origin "HEAD:$TARGET_BRANCH"; then
-              echo "::notice::Package.appxmanifest pushed to $TARGET_BRANCH"
+              echo "::notice::release metadata pushed to $TARGET_BRANCH"
               exit 0
             fi
             echo "::warning::push attempt $attempt rejected, rebasing on origin/$TARGET_BRANCH"
             git fetch origin "$TARGET_BRANCH" || true
             if ! git rebase "origin/$TARGET_BRANCH"; then
               git rebase --abort || true
-              echo "::error::cannot rebase the manifest commit onto origin/$TARGET_BRANCH (concurrent release edit?)"
+              echo "::error::cannot rebase the release metadata commit onto origin/$TARGET_BRANCH (concurrent release edit?)"
               exit 1
             fi
           done
-          echo "::error::could not push Package.appxmanifest to $TARGET_BRANCH after 3 attempts"
+          echo "::error::could not push the release metadata commit to $TARGET_BRANCH after 3 attempts"
           exit 1
 
   # ------------------------------------------------------------------
