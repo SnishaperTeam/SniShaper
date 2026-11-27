@@ -321,8 +321,10 @@ const Settings: React.FC<SettingsProps> = ({ cache, onCacheUpdate, currentThemeI
       }
     }).catch(() => {});
     const ipTimer = setInterval(async () => {
-      const stats = await GetCloudflareIPStats();
-      if (stats) setIpStats(stats);
+      try {
+        const stats = await GetCloudflareIPStats();
+        if (stats) setIpStats(stats);
+      } catch { /* proxy restarting */ }
     }, 5000);
     return () => clearInterval(ipTimer);
   }, []);
@@ -372,9 +374,14 @@ const Settings: React.FC<SettingsProps> = ({ cache, onCacheUpdate, currentThemeI
       toast.error(t('common.failed'), t('settings.notifications.port_invalid'));
       return;
     }
-    await SetListenPort(parsed);
-    onCacheUpdate({ port: parsed });
-    toast.success(t('settings.notifications.updated'), `${t('settings.port_label')} ${parsed}`);
+    try {
+      await SetListenPort(parsed);
+      onCacheUpdate({ port: parsed });
+      toast.success(t('settings.notifications.updated'), `${t('settings.port_label')} ${parsed}`);
+    } catch (err: any) {
+      setPort(String(cache.port ?? ''));
+      toast.error(t('common.failed'), String(err));
+    }
   };
 
   // 空串合法（重置为默认 127.0.0.1）；IPv4 逐段校验，IPv6 做结构预检，
@@ -410,9 +417,11 @@ const Settings: React.FC<SettingsProps> = ({ cache, onCacheUpdate, currentThemeI
 
   const handleToggleTray = async (val: boolean) => {
     setCloseToTray(val);
-    await SetCloseToTray(val);
-    onCacheUpdate({ closeToTray: val });
-    toast.success(t('settings.notifications.updated'));
+    try {
+      await SetCloseToTray(val);
+      onCacheUpdate({ closeToTray: val });
+      toast.success(t('settings.notifications.updated'));
+    } catch (err: any) { setCloseToTray(!val); toast.error(t('common.failed'), String(err)); }
   };
 
   const handleToggleAutoStart = async (val: boolean) => {
@@ -471,10 +480,12 @@ const Settings: React.FC<SettingsProps> = ({ cache, onCacheUpdate, currentThemeI
   };
 
   const handleLanguageChange = async (lang: string) => {
-    await SetLanguage(lang);
-    setI18nLanguage(lang as any);
-    onCacheUpdate({ language: lang });
-    toast.success(t('common.success'));
+    try {
+      await SetLanguage(lang);
+      setI18nLanguage(lang as any);
+      onCacheUpdate({ language: lang });
+      toast.success(t('common.success'));
+    } catch (err: any) { toast.error(t('common.failed'), String(err)); }
   };
 
   const handleFetchIPs = async () => {
@@ -505,6 +516,7 @@ const Settings: React.FC<SettingsProps> = ({ cache, onCacheUpdate, currentThemeI
       window.setTimeout(() => { void reloadCriticalData(); }, 1200);
       window.setTimeout(() => { void reloadCriticalData(); }, 3000);
       toast.info(t('common.loading'));
+    } catch (err: any) { toast.error(t('common.failed'), String(err));
     } finally { window.setTimeout(() => setIsCheckingHealth(false), 1200); }
   };
 
