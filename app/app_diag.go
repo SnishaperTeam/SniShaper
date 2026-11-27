@@ -10,7 +10,6 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
-	"strings"
 	"time"
 
 	"snishaper/common"
@@ -193,13 +192,6 @@ func dialCheck(addr string, timeout time.Duration) (bool, string, int64) {
 	}
 	_ = conn.Close()
 	return true, "", elapsed
-}
-
-func detailOr(detail, fallback string) string {
-	if strings.TrimSpace(detail) == "" {
-		return fallback
-	}
-	return detail
 }
 
 // httpThroughProxy fetches a small endpoint through the local proxy, which is
