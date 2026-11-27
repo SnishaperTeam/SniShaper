@@ -1530,8 +1530,11 @@ func (a *App) DeleteNAT64Profile(id string) error {
 
 func (a *App) TestNAT64Profile(prefix string) (int64, error) {
 	ips, err := net.LookupIP("www.cloudflare.com")
-	if err != nil || len(ips) == 0 {
+	if err != nil {
 		return 0, fmt.Errorf("DNS lookup failed: %w", err)
+	}
+	if len(ips) == 0 {
+		return 0, fmt.Errorf("DNS lookup returned no addresses")
 	}
 
 	var mappedIP string
