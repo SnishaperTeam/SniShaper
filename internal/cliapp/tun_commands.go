@@ -113,6 +113,16 @@ func tunStart(out cmdOut) int {
 
 	if err := c.StartTUN(); err != nil {
 		out("启动 TUN 失败: " + err.Error())
+		// 与应用层 StartTUN 的回滚一致：启动失败必须还原刚关掉的系统代理，
+		// 否则用户同时失去 TUN 与系统代理两条通路，表现为彻底断网。
+		if tunRestorePending() {
+			if re := a.EnableSystemProxy(); re != nil {
+				out("还原系统代理失败: " + re.Error() + "，可手动执行: snishaper sysproxy on")
+			} else if waitForSystemProxy(true, 3*time.Second) {
+				clearTunRestorePending()
+				out("已还原之前关闭的系统代理")
+			}
+		}
 		return 1
 	}
 	return tunStatus(out)
