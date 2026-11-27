@@ -152,6 +152,44 @@ func TestProfileLifecycle(t *testing.T) {
 	}
 }
 
+func TestDeleteProfile(t *testing.T) {
+	a := newProfileTestApp(t)
+
+	if _, err := a.CreateProfile("work"); err != nil {
+		t.Fatalf("create work: %v", err)
+	}
+	if _, err := a.CreateProfile("home"); err != nil {
+		t.Fatalf("create home: %v", err)
+	}
+	if err := a.SwitchProfile("work"); err != nil {
+		t.Fatalf("switch: %v", err)
+	}
+
+	// The active profile must not be deletable.
+	if err := a.DeleteProfile("work"); err == nil {
+		t.Fatal("deleting the active profile must fail")
+	}
+
+	// Deleting an inactive profile removes it and keeps the active marker.
+	if err := a.DeleteProfile("home"); err != nil {
+		t.Fatalf("delete: %v", err)
+	}
+	if _, err := os.Stat(profileDir("home")); !os.IsNotExist(err) {
+		t.Fatalf("profile dir still exists: %v", err)
+	}
+	if act := a.GetActiveProfile(); act != "work" {
+		t.Fatalf("active = %q, want work", act)
+	}
+
+	// Unknown and path-hostile names are rejected.
+	if err := a.DeleteProfile("missing"); err == nil {
+		t.Fatal("deleting a missing profile must fail")
+	}
+	if err := a.DeleteProfile("../escape"); err == nil {
+		t.Fatal("path-hostile names must fail validation")
+	}
+}
+
 func TestImportProfileRejectsInvalidBundle(t *testing.T) {
 	a := newProfileTestApp(t)
 

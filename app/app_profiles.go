@@ -235,6 +235,27 @@ func snapshotDirInto(srcDir, dstDir string) error {
 	return nil
 }
 
+// DeleteProfile removes a stored profile. The active profile is refused: its
+// files mirror the live configuration, so it must be switched away from (or
+// renamed) before deletion.
+func (a *App) DeleteProfile(name string) error {
+	if err := validateProfileName(name); err != nil {
+		return err
+	}
+	if a.GetActiveProfile() == name {
+		return fmt.Errorf("cannot delete the active profile %q — switch to another profile first", name)
+	}
+	dir := profileDir(name)
+	if _, err := os.Stat(dir); err != nil {
+		return fmt.Errorf("profile %q does not exist", name)
+	}
+	if err := os.RemoveAll(dir); err != nil {
+		return err
+	}
+	a.appendLog(fmt.Sprintf("[profiles] deleted profile %q", name))
+	return nil
+}
+
 // SwitchProfile activates a stored profile. Safe behavior while connections
 // are active: the proxy (and with it TUN/system proxy and every live
 // connection) is stopped first; the outgoing profile's edits are snapshotted

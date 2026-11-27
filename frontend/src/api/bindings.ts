@@ -93,6 +93,7 @@ export const GetActiveProfile = () => appCall('GetActiveProfile');
 export const CreateProfile = (name: string) => appCall('CreateProfile', name);
 export const RenameProfile = (oldName: string, newName: string) => appCall('RenameProfile', oldName, newName);
 export const DuplicateProfile = (srcName: string, dstName: string) => appCall('DuplicateProfile', srcName, dstName);
+export const DeleteProfile = (name: string) => appCall('DeleteProfile', name);
 export const SwitchProfile = (name: string) => appCall('SwitchProfile', name);
 export const ExportProfile = (name: string) => appCall('ExportProfile', name);
 export const ImportProfile = (bundleJson: string) => appCall('ImportProfile', bundleJson);

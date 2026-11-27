@@ -88,7 +88,10 @@ const mocks: Record<string, unknown> = {
   ],
 
   // ---- Profiles ----
-  ListProfiles: ['Default', 'Work'],
+  ListProfiles: [
+    { name: 'Default', updated_at: '2026-11-27T22:00:00+08:00', active: true },
+    { name: 'Work', updated_at: '2026-11-20T09:30:00+08:00', active: false },
+  ],
   GetActiveProfile: 'Default',
 
   // ---- Diagnostics / misc ----

@@ -4,12 +4,12 @@ import {
   Grid, Chip, Typography, CircularProgress,
 } from '@mui/material';
 import { alpha } from '@mui/material/styles';
-import { Plus, Edit, Copy, RefreshCw, Download, CheckCircle, Map } from '../lib/icons';
+import { Plus, Edit, Copy, RefreshCw, Download, CheckCircle, Map, Delete } from '../lib/icons';
 import { toast } from '../lib/toast';
 import { useTranslation } from '../i18n/I18nContext';
 import {
   ListProfiles, GetActiveProfile, CreateProfile, RenameProfile, DuplicateProfile,
-  SwitchProfile, ExportProfile, ImportProfile, RevealProfileExport,
+  SwitchProfile, ExportProfile, ImportProfile, RevealProfileExport, DeleteProfile,
 } from '../api/bindings';
 
 // 配置文件管理页：命名快照（settings + rules）的创建 / 重命名 / 复制 /
@@ -23,6 +23,8 @@ const Profiles: React.FC = () => {
   const [loading, setLoading] = useState(true);
   // 切换确认
   const [switchTarget, setSwitchTarget] = useState<string | null>(null);
+  // 删除确认
+  const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
   // 名称输入对话框（create / rename / duplicate 共用）
   const [nameDialog, setNameDialog] = useState<{ mode: 'create' | 'rename' | 'duplicate'; source?: string } | null>(null);
   const [nameInput, setNameInput] = useState('');
@@ -87,6 +89,13 @@ const Profiles: React.FC = () => {
       toast.error(t('profiles.action_failed'), String(e || ''));
       setBusy(false);
     }
+  };
+
+  const confirmDelete = () => {
+    const target = deleteTarget;
+    setDeleteTarget(null);
+    if (!target) return;
+    runAction(async () => { await DeleteProfile(target); }, 'profiles.deleted');
   };
 
   const handleImportFile = async (file: File | undefined) => {
@@ -217,6 +226,15 @@ const Profiles: React.FC = () => {
                     >
                       {t('profiles.export')}
                     </Button>
+                    <Button
+                      size="small"
+                      color="error"
+                      disabled={busy || p.name === active}
+                      onClick={() => setDeleteTarget(p.name)}
+                      startIcon={<Delete size={14} />}
+                    >
+                      {t('common.delete')}
+                    </Button>
                   </Box>
                 </Box>
               </Grid>
@@ -234,6 +252,18 @@ const Profiles: React.FC = () => {
         <DialogActions>
           <Button onClick={() => setSwitchTarget(null)}>{t('common.cancel')}</Button>
           <Button variant="contained" color="primary" onClick={confirmSwitch}>{t('profiles.switch')}</Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* 删除确认：不可撤销的破坏性操作 */}
+      <Dialog open={!!deleteTarget} onClose={() => setDeleteTarget(null)}>
+        <DialogTitle>{t('profiles.delete_confirm_title')}</DialogTitle>
+        <DialogContent>
+          <Typography>{t('profiles.delete_confirm_desc', { name: deleteTarget || '' })}</Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setDeleteTarget(null)}>{t('common.cancel')}</Button>
+          <Button variant="contained" color="error" onClick={confirmDelete}>{t('common.delete')}</Button>
         </DialogActions>
       </Dialog>
 

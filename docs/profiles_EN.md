@@ -27,6 +27,11 @@ A configuration profile is a **named snapshot of the configuration** (one `setti
 4. The in-app rule manager and the core subprocess each reload; the listen port follows the target profile.
 5. **The proxy is never restarted automatically**: the user starts it manually after the switch (the UI states this in the confirmation dialog).
 
+## Delete semantics
+
+- A non-active profile can be deleted after a confirmation dialog; its `profiles/<name>/` directory is removed from disk.
+- The active profile cannot be deleted (its snapshots mirror the live configuration) — switch to another profile first.
+
 ## Export / import format
 
 An export is a single JSON file (written under the log directory's `profile-exports/`):
