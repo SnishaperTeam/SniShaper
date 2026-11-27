@@ -44,7 +44,7 @@
 
 ## 生态项目
 
-围绕 SniShaper 的配套项目矩阵，覆盖更多平台与场景：
+围绕 SniShaper 的配套项目矩阵，覆盖更多平台与场景。其中 **[Snishaper-Droid](https://github.com/SnishaperTeam/Snishaper-Droid)** 是 SniShaper 的 Android 客户端，复用桌面端前端与 snishaper-core 引擎：
 
 <div align="center">
 <table>

@@ -44,7 +44,7 @@ Both projects take their proxy engine from the standalone **[snishaper-core](htt
 
 ## Ecosystem
 
-Companion projects around SniShaper, covering more platforms and scenarios:
+Companion projects around SniShaper, covering more platforms and scenarios. Among them, **[Snishaper-Droid](https://github.com/SnishaperTeam/Snishaper-Droid)** is the Android client of SniShaper, reusing the desktop frontend and the snishaper-core engine:
 
 <div align="center">
 <table>

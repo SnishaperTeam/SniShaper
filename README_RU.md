@@ -44,7 +44,7 @@
 
 ## Экосистема
 
-Сопутствующие проекты SniShaper, охватывающие больше платформ и сценариев:
+Сопутствующие проекты SniShaper, охватывающие больше платформ и сценариев. Среди них **[Snishaper-Droid](https://github.com/SnishaperTeam/Snishaper-Droid)** — Android-клиент SniShaper, переиспользующий фронтенд десктопа и движок snishaper-core:
 
 <div align="center">
 <table>
