@@ -275,27 +275,41 @@ const DNS: React.FC = () => {
   const [testResults, setTestResults] = useState<Record<string, any>>({});
   const [testingIds, setTestingIds] = useState<Set<string>>(new Set());
 
-  const loadData = async () => { setNodes((await GetDNSNodes()) || []); };
-  useEffect(() => { loadData(); }, []);
+  const loadData = async () => {
+    try {
+      setNodes((await GetDNSNodes()) || []);
+    } catch { /* backend busy */ }
+  };
+  useEffect(() => { void loadData(); }, []);
 
   const handleAdd = () => { setEditingNode(null); setIsModalOpen(true); };
   const handleEdit = (node: DNSNode) => { setEditingNode(node); setIsModalOpen(true); };
   const handleFormSubmit = async (data: any) => {
-    if (editingNode?.id) await UpdateDNSNode({ ...data, id: editingNode.id });
-    else await AddDNSNode(data);
-    setIsModalOpen(false);
-    await loadData();
-    toast.success(editingNode ? t('dns.notifications.updated') : t('dns.notifications.added'));
+    try {
+      if (editingNode?.id) await UpdateDNSNode({ ...data, id: editingNode.id });
+      else await AddDNSNode(data);
+      setIsModalOpen(false);
+      await loadData();
+      toast.success(editingNode ? t('dns.notifications.updated') : t('dns.notifications.added'));
+    } catch (err: any) { toast.error(t('common.failed'), String(err)); }
   };
   const handleDelete = async () => {
     if (!pendingDeleteNode?.id) return;
-    await DeleteDNSNode(pendingDeleteNode.id);
-    setPendingDeleteNode(null);
-    await loadData();
-    toast.success(t('dns.notifications.deleted'));
+    try {
+      await DeleteDNSNode(pendingDeleteNode.id);
+      setPendingDeleteNode(null);
+      await loadData();
+      toast.success(t('dns.notifications.deleted'));
+    } catch (err: any) { toast.error(t('common.failed'), String(err)); }
   };
-  const handleMoveUp = async (id: string, idx: number) => { if (idx <= 0) return; await SetDNSNodePriority(id, idx - 1); await loadData(); };
-  const handleMoveDown = async (id: string, idx: number) => { if (idx >= nodes.length - 1) return; await SetDNSNodePriority(id, idx + 1); await loadData(); };
+  const handleMoveUp = async (id: string, idx: number) => {
+    if (idx <= 0) return;
+    try { await SetDNSNodePriority(id, idx - 1); await loadData(); } catch (err: any) { toast.error(t('common.failed'), String(err)); }
+  };
+  const handleMoveDown = async (id: string, idx: number) => {
+    if (idx >= nodes.length - 1) return;
+    try { await SetDNSNodePriority(id, idx + 1); await loadData(); } catch (err: any) { toast.error(t('common.failed'), String(err)); }
+  };
   const handleTest = async (id: string) => {
     setTestingIds(prev => new Set(prev).add(id));
     try { const result = await TestDNSNode(id); setTestResults(prev => ({ ...prev, [id]: result })); }

@@ -88,21 +88,25 @@ const Logs: React.FC = () => {
   }, []);
 
   const fetchLogs = useCallback(async () => {
-    const text = await GetRecentLogs(400);
-    const key = text || '';
-    if (key === prevRef.current) return;
-    prevRef.current = key;
-    setLines(key ? key.split('\n').filter(Boolean) : []);
-    setNewSinceAway(prev => atBottom ? 0 : prev + 1);
+    try {
+      const text = await GetRecentLogs(400);
+      const key = text || '';
+      if (key === prevRef.current) return;
+      prevRef.current = key;
+      setLines(key ? key.split('\n').filter(Boolean) : []);
+      setNewSinceAway(prev => atBottom ? 0 : prev + 1);
+    } catch { /* backend busy */ }
   }, [atBottom]);
 
   useEffect(() => {
     let mounted = true;
     const init = async () => {
-      const enabled = await IsLogCaptureEnabled();
-      if (!mounted) return;
-      setCaptureEnabled(enabled);
-      if (enabled) await fetchLogs();
+      try {
+        const enabled = await IsLogCaptureEnabled();
+        if (!mounted) return;
+        setCaptureEnabled(enabled);
+        if (enabled) await fetchLogs();
+      } catch { /* backend busy */ }
     };
     void init();
     return () => { mounted = false; };
@@ -127,6 +131,7 @@ const Logs: React.FC = () => {
     try {
       if (captureEnabled) { await StopLogCapture(); setCaptureEnabled(false); }
       else { await StartLogCapture(); setCaptureEnabled(true); setIsPaused(false); await fetchLogs(); }
+    } catch (err: any) { toast.error(t('common.failed'), String(err));
     } finally { setIsTogglingCapture(false); }
   };
 
@@ -135,7 +140,13 @@ const Logs: React.FC = () => {
     [lines, deferredSearch]
   );
 
-  const handleClear = async () => { await ClearLogs(); setLines([]); prevRef.current = ''; };
+  const handleClear = async () => {
+    try {
+      await ClearLogs();
+      setLines([]);
+      prevRef.current = '';
+    } catch (err: any) { toast.error(t('common.failed'), String(err)); }
+  };
   const handleScrollTop = () => { if (scrollRef.current) scrollRef.current.scrollTop = 0; };
 
   const handleExport = () => {
