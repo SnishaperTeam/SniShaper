@@ -1,9 +1,12 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react-swc'
 import path from 'path'
+import { wailsMockPlugin } from './mock/wails-mock'
 
 export default defineConfig({
-  plugins: [react()],
+  // SNISHAPER_MOCK=1 npm run dev -> serve /wails/runtime from mock/wails-mock.ts,
+  // so the UI can be previewed in a plain browser without the Go backend.
+  plugins: [react(), ...(process.env.SNISHAPER_MOCK ? [wailsMockPlugin()] : [])],
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './src'),
