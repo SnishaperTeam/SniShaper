@@ -154,11 +154,3 @@ func isPE(path string) bool {
 	}
 	return hdr[0] == 'M' && hdr[1] == 'Z'
 }
-
-func safeFileName(name string) string {
-	name = filepath.Base(strings.ReplaceAll(name, "\\", "/"))
-	if name == "." || name == ".." || name == "" || name == string(os.PathSeparator) {
-		return "update-package.bin"
-	}
-	return name
-}

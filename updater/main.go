@@ -253,7 +253,12 @@ func execute(o options, state *ResumeState, cfg Config, cfgPath, baseDir string,
 			l.Logf("portable application payload located: %s", portableRoot)
 		} else {
 			l.Logf("installer located: %s", setupPath)
-			scheduleUpdaterSelfUpdate(stage, baseDir, l)
+			// 重定位克隆在 execute 末尾被登记为重启后删除；若在这里以克隆为
+			// 替换目标，重启时新更新器先落到克隆上再被一并删除。安装目录里
+			// 的原更新器进程已退出、未被锁定，安装器会直接替换它。
+			if state == nil {
+				scheduleUpdaterSelfUpdate(stage, baseDir, l)
+			}
 		}
 	}
 

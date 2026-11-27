@@ -216,7 +216,7 @@ func maybeRelocate(cfg Config, cfgPath, baseDir string, l *Logger) (bool, error)
 }
 ```
 
-更新器位于安装目录时，先把自身复制到 `%TEMP%` 并以 `--resume` 启动独立进程，原进程立即退出，安装目录不再被更新器占用；更新成功后删除 `state.json`，并用 `MoveFileExW(path, NULL, MOVEFILE_DELAY_UNTIL_REBOOT)` 把运行中的临时副本注册为重启后删除（运行中的 exe 无法当场删除）。若清单带 `updater.name` + `sha256`，校验后复制到同目录 `updater.pending.exe`，用 `MoveFileExW(MOVEFILE_REPLACE_EXISTING|MOVEFILE_DELAY_UNTIL_REBOOT)` 注册重启替换（`updater/winapi.go` 的 `scheduleReplacement` / `scheduleDeletion`）。
+更新器位于安装目录时，先把自身复制到 `%TEMP%` 并以 `--resume` 启动独立进程，原进程立即退出，安装目录不再被更新器占用；更新成功后删除 `state.json`，并用 `MoveFileExW(path, NULL, MOVEFILE_DELAY_UNTIL_REBOOT)` 把运行中的临时副本注册为重启后删除（运行中的 exe 无法当场删除）。若解压包内带新版 `SniShaperUpdater.exe`，校验整包 sha256 后复制到同目录 `updater.pending.exe`，用 `MoveFileExW(MOVEFILE_REPLACE_EXISTING|MOVEFILE_DELAY_UNTIL_REBOOT)` 注册重启替换（`updater/winapi.go` 的 `scheduleReplacement` / `scheduleDeletion`）；仅在未重定位的直跑流程注册——重定位克隆自身已被登记为重启删除，再以它为替换目标会让新更新器随克隆一并删除，而安装目录里的原更新器未被锁定，由安装器直接替换。
 
 ## 5. 配置与发布清单
 
