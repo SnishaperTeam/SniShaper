@@ -60,17 +60,30 @@ func TestUsableSystemProxyCacheRespectsTTL(t *testing.T) {
 	upstreamMu.Lock()
 	upstreamServer, upstreamURL, upstreamOK, upstreamAt = "cached-host", proxyURL, true, time.Now()
 	upstreamMu.Unlock()
+	t.Cleanup(func() {
+		upstreamMu.Lock()
+		upstreamServer = ""
+		upstreamMu.Unlock()
+	})
 
-	// System proxy disabled on this machine: cache must not be consulted.
+	// System proxy disabled: cache must not be consulted.
+	stubSystemProxyStatus(t, SystemProxyStatus{Enabled: false})
 	if got := usableSystemProxy(); got != nil {
 		t.Fatalf("disabled system proxy must yield nil, got %v", got)
 	}
 
-	// Fresh cache entry under an enabled status stub is out of scope here
-	// (registry reading is covered by core's own tests).
-	upstreamMu.Lock()
-	upstreamServer = ""
-	upstreamMu.Unlock()
+	// Enabled + fresh cache entry for the same server: returned without probing.
+	stubSystemProxyStatus(t, SystemProxyStatus{Enabled: true, Server: "cached-host"})
+	if got := usableSystemProxy(); got != proxyURL {
+		t.Fatalf("fresh cache entry must hit, got %v", got)
+	}
+}
+
+// stubSystemProxyStatus 替换状态读取函数，避免单测读宿主机注册表。
+func stubSystemProxyStatus(t *testing.T, status SystemProxyStatus) {
+	prev := systemProxyStatus
+	systemProxyStatus = func() SystemProxyStatus { return status }
+	t.Cleanup(func() { systemProxyStatus = prev })
 }
 
 func TestCachedUpstreamTTLs(t *testing.T) {

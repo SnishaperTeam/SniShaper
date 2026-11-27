@@ -31,6 +31,10 @@ var (
 	upstreamAt     time.Time
 )
 
+// systemProxyStatus 读取系统代理状态；变量化是为了让单测能桩掉
+// 宿主机注册表依赖（机器自身开着系统代理时测试结果不受影响）。
+var systemProxyStatus = manager.Status
+
 // UpstreamProxyFunc 返回供 http.Transport.Proxy 使用的代理函数。
 func UpstreamProxyFunc() func(*http.Request) (*url.URL, error) {
 	u := usableSystemProxy()
@@ -52,7 +56,7 @@ func proxyVia(u *url.URL) func(*http.Request) (*url.URL, error) {
 
 // usableSystemProxy 返回探测通过的系统代理地址；系统代理未开启或不可达时返回 nil。
 func usableSystemProxy() *url.URL {
-	status := manager.Status()
+	status := systemProxyStatus()
 	if !status.Enabled {
 		return nil
 	}
